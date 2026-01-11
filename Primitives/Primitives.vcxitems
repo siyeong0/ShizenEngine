@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <ItemsProjectGuid>{f62f584c-db47-468f-b345-c6bf71c41a19}</ItemsProjectGuid>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectCapability Include="SourceItemsFromImports" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)Align.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)BasicTypes.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)CheckBaseStructAlignment.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Common.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)CommonDefinitions.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)DataBlob.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)DebugOutput.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)DebugUtilities.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Errors.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FileStream.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FlagEnum.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FormatString.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)InterfaceID.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)IMemoryAllocator.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Object.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)ReferenceCounters.h" />
+  </ItemGroup>
+</Project>

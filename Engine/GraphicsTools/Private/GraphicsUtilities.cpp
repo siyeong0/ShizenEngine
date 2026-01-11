@@ -1,0 +1,787 @@
+﻿/*
+ *  Copyright 2019-2025 Diligent Graphics LLC
+ *  Copyright 2015-2019 Egor Yusov
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  In no event and under no legal theory, whether in tort (including negligence),
+ *  contract, or otherwise, unless required by applicable law (such as deliberate
+ *  and grossly negligent acts) or agreed to in writing, shall any Contributor be
+ *  liable for any damages, including any direct, indirect, special, incidental,
+ *  or consequential damages of any character arising as a result of this License or
+ *  out of the use or inability to use the software (including but not limited to damages
+ *  for loss of goodwill, work stoppage, computer failure or malfunction, or any and
+ *  all other commercial damages or losses), even if such Contributor has been advised
+ *  of the possibility of such damages.
+ */
+
+#include "pch.h"
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <atomic>
+
+#include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
+#include "Primitives/DebugUtilities.hpp"
+#include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
+#include "Engine/GraphicsUtils/Public/ColorConversion.h"
+#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
+
+#define PI_F 3.1415926f
+
+namespace shz
+{
+#if D3D12_SUPPORTED
+	int64_t        GetNativeTextureFormatD3D12(TEXTURE_FORMAT TexFormat);
+	TEXTURE_FORMAT GetTextureFormatFromNativeD3D12(int64_t NativeFormat);
+	IDXCompiler* GetDeviceDXCompilerD3D12(IRenderDevice* pDevice);
+#endif
+
+	void CreateUniformBuffer(IRenderDevice* pDevice,
+		uint64           Size,
+		const Char* Name,
+		IBuffer** ppBuffer,
+		USAGE            Usage,
+		BIND_FLAGS       BindFlags,
+		CPU_ACCESS_FLAGS CPUAccessFlags,
+		void* pInitialData)
+	{
+		if (Usage == USAGE_DEFAULT || Usage == USAGE_IMMUTABLE)
+			CPUAccessFlags = CPU_ACCESS_NONE;
+
+		BufferDesc CBDesc;
+		CBDesc.Name = Name;
+		CBDesc.Size = Size;
+		CBDesc.Usage = Usage;
+		CBDesc.BindFlags = BindFlags;
+		CBDesc.CPUAccessFlags = CPUAccessFlags;
+
+		BufferData InitialData;
+		if (pInitialData != nullptr)
+		{
+			InitialData.pData = pInitialData;
+			InitialData.DataSize = Size;
+		}
+		pDevice->CreateBuffer(CBDesc, pInitialData != nullptr ? &InitialData : nullptr, ppBuffer);
+	}
+
+	template <class TConverter>
+	void GenerateCheckerBoardPatternInternal(uint32 Width, uint32 Height, TEXTURE_FORMAT Fmt, uint32 HorzCells, uint32 VertCells, uint8* pData, uint64 StrideInBytes, TConverter Converter)
+	{
+		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Fmt);
+		for (uint32 y = 0; y < Height; ++y)
+		{
+			for (uint32 x = 0; x < Width; ++x)
+			{
+				float horzWave = std::sin((static_cast<float>(x) + 0.5f) / static_cast<float>(Width) * PI_F * static_cast<float>(HorzCells));
+				float vertWave = std::sin((static_cast<float>(y) + 0.5f) / static_cast<float>(Height) * PI_F * static_cast<float>(VertCells));
+				float val = horzWave * vertWave;
+				val = std::max(std::min(val * 20.f, +1.f), -1.f);
+				val = val * 0.5f + 1.f;
+				val = val * 0.5f + 0.25f;
+				uint8* pDstTexel = pData + x * size_t{ FmtAttribs.NumComponents } *size_t{ FmtAttribs.ComponentSize } + y * StrideInBytes;
+				Converter(pDstTexel, uint32{ FmtAttribs.NumComponents }, val);
+			}
+		}
+	}
+
+	void GenerateCheckerBoardPattern(uint32 Width, uint32 Height, TEXTURE_FORMAT Fmt, uint32 HorzCells, uint32 VertCells, uint8* pData, uint64 StrideInBytes)
+	{
+		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Fmt);
+		switch (FmtAttribs.ComponentType)
+		{
+		case COMPONENT_TYPE_UINT:
+		case COMPONENT_TYPE_UNORM:
+			GenerateCheckerBoardPatternInternal(
+				Width, Height, Fmt, HorzCells, VertCells, pData, StrideInBytes,
+				[](uint8* pDstTexel, uint32 NumComponents, float fVal) //
+				{
+					uint8 uVal = static_cast<uint8>(fVal * 255.f);
+					for (uint32 c = 0; c < NumComponents; ++c)
+						pDstTexel[c] = uVal;
+				} //
+			);
+			break;
+
+		case COMPONENT_TYPE_UNORM_SRGB:
+			GenerateCheckerBoardPatternInternal(
+				Width, Height, Fmt, HorzCells, VertCells, pData, StrideInBytes,
+				[](uint8* pDstTexel, uint32 NumComponents, float fVal) //
+				{
+					uint8 uVal = static_cast<uint8>(FastLinearToGamma(fVal) * 255.f);
+					for (uint32 c = 0; c < NumComponents; ++c)
+						pDstTexel[c] = uVal;
+				} //
+			);
+			break;
+
+		case COMPONENT_TYPE_FLOAT:
+			GenerateCheckerBoardPatternInternal(
+				Width, Height, Fmt, HorzCells, VertCells, pData, StrideInBytes,
+				[](uint8* pDstTexel, uint32 NumComponents, float fVal) //
+				{
+					for (uint32 c = 0; c < NumComponents; ++c)
+						(reinterpret_cast<float*>(pDstTexel))[c] = fVal;
+				} //
+			);
+			break;
+
+		default:
+			UNSUPPORTED("Unsupported component type");
+			return;
+		}
+	}
+
+
+
+	template <typename ChannelType>
+	ChannelType SRGBAverage(ChannelType c0, ChannelType c1, ChannelType c2, ChannelType c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		static_assert(std::numeric_limits<ChannelType>::is_integer && !std::numeric_limits<ChannelType>::is_signed, "Unsigned integers are expected");
+
+		static constexpr float MaxVal = static_cast<float>(std::numeric_limits<ChannelType>::max());
+		static constexpr float MaxValInv = 1.f / MaxVal;
+
+		float fc0 = static_cast<float>(c0) * MaxValInv;
+		float fc1 = static_cast<float>(c1) * MaxValInv;
+		float fc2 = static_cast<float>(c2) * MaxValInv;
+		float fc3 = static_cast<float>(c3) * MaxValInv;
+
+		float fLinearAverage = (FastGammaToLinear(fc0) + FastGammaToLinear(fc1) + FastGammaToLinear(fc2) + FastGammaToLinear(fc3)) * 0.25f;
+		float fSRGBAverage = FastLinearToGamma(fLinearAverage) * MaxVal;
+
+		// Clamping on both ends is essential because fast SRGB math is imprecise
+		fSRGBAverage = std::max(fSRGBAverage, 0.f);
+		fSRGBAverage = std::min(fSRGBAverage, MaxVal);
+
+		return static_cast<ChannelType>(fSRGBAverage);
+	}
+
+	template <typename ChannelType>
+	ChannelType LinearAverage(ChannelType c0, ChannelType c1, ChannelType c2, ChannelType c3, uint32 /*col*/, uint32 /*row*/);
+
+	template <>
+	uint8 LinearAverage<uint8>(uint8 c0, uint8 c1, uint8 c2, uint8 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return static_cast<uint8>((uint32{ c0 } + uint32{ c1 } + uint32{ c2 } + uint32{ c3 }) >> 2);
+	}
+
+	template <>
+	uint16 LinearAverage<uint16>(uint16 c0, uint16 c1, uint16 c2, uint16 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return static_cast<uint16>((uint32{ c0 } + uint32{ c1 } + uint32{ c2 } + uint32{ c3 }) >> 2);
+	}
+
+	template <>
+	uint32 LinearAverage<uint32>(uint32 c0, uint32 c1, uint32 c2, uint32 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return (c0 + c1 + c2 + c3) >> 2;
+	}
+
+	template <>
+	int8 LinearAverage<int8>(int8 c0, int8 c1, int8 c2, int8 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return static_cast<int8>((int32{ c0 } + int32{ c1 } + int32{ c2 } + int32{ c3 }) / 4);
+	}
+
+	template <>
+	int16 LinearAverage<int16>(int16 c0, int16 c1, int16 c2, int16 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return static_cast<int16>((int32{ c0 } + int32{ c1 } + int32{ c2 } + int32{ c3 }) / 4);
+	}
+
+	template <>
+	int32 LinearAverage<int32>(int32 c0, int32 c1, int32 c2, int32 c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return (c0 + c1 + c2 + c3) / 4;
+	}
+
+	template <>
+	float LinearAverage<float>(float c0, float c1, float c2, float c3, uint32 /*col*/, uint32 /*row*/)
+	{
+		return (c0 + c1 + c2 + c3) * 0.25f;
+	}
+
+
+	template <typename ChannelType>
+	ChannelType MostFrequentSelector(ChannelType c0, ChannelType c1, ChannelType c2, ChannelType c3, uint32 col, uint32 row)
+	{
+		//  c2      c3
+		//   *      *
+		//
+		//   *      *
+		//  c0      c1
+		const auto _01 = c0 == c1;
+		const auto _02 = c0 == c2;
+		const auto _03 = c0 == c3;
+		const auto _12 = c1 == c2;
+		const auto _13 = c1 == c3;
+		const auto _23 = c2 == c3;
+		if (_01)
+		{
+			//      2     3
+			//      *-----*
+			//                Use row to pseudo-randomly make selection
+			//      *-----*
+			//      0     1
+			return (!_23 || (row & 0x01) != 0) ? c0 : c2;
+		}
+		if (_02)
+		{
+			//      2     3
+			//      *     *
+			//      |     |   Use col to pseudo-randomly make selection
+			//      *     *
+			//      0     1
+			return (!_13 || (col & 0x01) != 0) ? c0 : c1;
+		}
+		if (_03)
+		{
+			//      2     3
+			//      *.   .*
+			//        '.'
+			//       .' '.
+			//      *     *
+			//      0     1
+			return (!_12 || ((col + row) & 0x01) != 0) ? c0 : c1;
+		}
+		if (_12 || _13)
+		{
+			//      2     3         2     3
+			//      *.    *         *     *
+			//        '.                  |
+			//          '.                |
+			//      *     *         *     *
+			//      0     1         0     1
+			return c1;
+		}
+		if (_23)
+		{
+			//      2     3
+			//      *-----*
+			//
+			//      *     *
+			//      0     1
+			return c2;
+		}
+
+		// Select pseudo-random element
+		//      2     3
+		//      *     *
+		//
+		//      *     *
+		//      0     1
+		switch ((col + row) % 4)
+		{
+		case 0: return c0;
+		case 1: return c1;
+		case 2: return c2;
+		case 3: return c3;
+		default:
+			UNEXPECTED("Unexpected index");
+			return c0;
+		}
+	}
+
+	template <typename ChannelType,
+		typename FilterType>
+	void FilterMipLevel(const ComputeMipLevelAttribs& Attribs, uint32 NumChannels, FilterType Filter)
+	{
+		VERIFY_EXPR(Attribs.FineMipWidth > 0 && Attribs.FineMipHeight > 0);
+		DEV_CHECK_ERR(Attribs.FineMipHeight == 1 || Attribs.FineMipStride >= Attribs.FineMipWidth * sizeof(ChannelType) * NumChannels, "Fine mip level stride is too small");
+
+		const uint32 CoarseMipWidth = std::max(Attribs.FineMipWidth / uint32{ 2 }, uint32{ 1 });
+		const uint32 CoarseMipHeight = std::max(Attribs.FineMipHeight / uint32{ 2 }, uint32{ 1 });
+
+		VERIFY(CoarseMipHeight == 1 || Attribs.CoarseMipStride >= CoarseMipWidth * sizeof(ChannelType) * NumChannels, "Coarse mip level stride is too small");
+
+		for (uint32 row = 0; row < CoarseMipHeight; ++row)
+		{
+			uint32 src_row0 = row * 2;
+			uint32 src_row1 = std::min(row * 2 + 1, Attribs.FineMipHeight - 1);
+
+			const ChannelType* pSrcRow0 = reinterpret_cast<const ChannelType*>(reinterpret_cast<const uint8*>(Attribs.pFineMipData) + src_row0 * Attribs.FineMipStride);
+			const ChannelType* pSrcRow1 = reinterpret_cast<const ChannelType*>(reinterpret_cast<const uint8*>(Attribs.pFineMipData) + src_row1 * Attribs.FineMipStride);
+
+			for (uint32 col = 0; col < CoarseMipWidth; ++col)
+			{
+				uint32 src_col0 = col * 2;
+				uint32 src_col1 = std::min(col * 2 + 1, Attribs.FineMipWidth - 1);
+
+				for (uint32 c = 0; c < NumChannels; ++c)
+				{
+					const ChannelType Chnl00 = pSrcRow0[src_col0 * NumChannels + c];
+					const ChannelType Chnl10 = pSrcRow0[src_col1 * NumChannels + c];
+					const ChannelType Chnl01 = pSrcRow1[src_col0 * NumChannels + c];
+					const ChannelType Chnl11 = pSrcRow1[src_col1 * NumChannels + c];
+
+					ChannelType& DstCol = reinterpret_cast<ChannelType*>(reinterpret_cast<uint8*>(Attribs.pCoarseMipData) + row * Attribs.CoarseMipStride)[col * NumChannels + c];
+
+					DstCol = Filter(Chnl00, Chnl10, Chnl01, Chnl11, col, row);
+				}
+			}
+		}
+	}
+
+	void RemapAlpha(const ComputeMipLevelAttribs& Attribs, uint32 NumChannels, uint32 AlphaChannelInd)
+	{
+		const uint32 CoarseMipWidth = std::max(Attribs.FineMipWidth / uint32{ 2 }, uint32{ 1 });
+		const uint32 CoarseMipHeight = std::max(Attribs.FineMipHeight / uint32{ 2 }, uint32{ 1 });
+		for (uint32 row = 0; row < CoarseMipHeight; ++row)
+		{
+			for (uint32 col = 0; col < CoarseMipWidth; ++col)
+			{
+				uint8& Alpha = (reinterpret_cast<uint8*>(Attribs.pCoarseMipData) + row * Attribs.CoarseMipStride)[col * NumChannels + AlphaChannelInd];
+
+				// Remap alpha channel using the following formula to improve mip maps:
+				//
+				//      A_new = max(A_old; 1/3 * A_old + 2/3 * CutoffThreshold)
+				//
+				// https://asawicki.info/articles/alpha_test.php5
+
+				float AlphaNew = std::min((static_cast<float>(Alpha) + 2.f * (Attribs.AlphaCutoff * 255.f)) / 3.f, 255.f);
+
+				Alpha = std::max(Alpha, static_cast<uint8>(AlphaNew));
+			}
+		}
+	}
+
+	template <typename ChannelType>
+	void ComputeMipLevelInternal(const ComputeMipLevelAttribs& Attribs, const TextureFormatAttribs& FmtAttribs)
+	{
+		MIP_FILTER_TYPE FilterType = Attribs.FilterType;
+		if (FilterType == MIP_FILTER_TYPE_DEFAULT)
+		{
+			FilterType = FmtAttribs.ComponentType == COMPONENT_TYPE_UINT || FmtAttribs.ComponentType == COMPONENT_TYPE_SINT ?
+				MIP_FILTER_TYPE_MOST_FREQUENT :
+				MIP_FILTER_TYPE_BOX_AVERAGE;
+		}
+
+		FilterMipLevel<ChannelType>(Attribs, FmtAttribs.NumComponents,
+			FilterType == MIP_FILTER_TYPE_BOX_AVERAGE ?
+			LinearAverage<ChannelType> :
+			MostFrequentSelector<ChannelType>);
+	}
+
+	void ComputeMipLevel(const ComputeMipLevelAttribs& Attribs)
+	{
+		DEV_CHECK_ERR(Attribs.Format != TEX_FORMAT_UNKNOWN, "Format must not be unknown");
+		DEV_CHECK_ERR(Attribs.FineMipWidth != 0, "Fine mip width must not be zero");
+		DEV_CHECK_ERR(Attribs.FineMipHeight != 0, "Fine mip height must not be zero");
+		DEV_CHECK_ERR(Attribs.pFineMipData != nullptr, "Fine level data must not be null");
+		DEV_CHECK_ERR(Attribs.pCoarseMipData != nullptr, "Coarse level data must not be null");
+
+		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Attribs.Format);
+
+		VERIFY_EXPR(Attribs.AlphaCutoff >= 0 && Attribs.AlphaCutoff <= 1);
+		VERIFY(Attribs.AlphaCutoff == 0 || FmtAttribs.NumComponents == 4 && FmtAttribs.ComponentSize == 1,
+			"Alpha remapping is only supported for 4-channel 8-bit textures");
+
+		switch (FmtAttribs.ComponentType)
+		{
+		case COMPONENT_TYPE_UNORM_SRGB:
+			VERIFY(FmtAttribs.ComponentSize == 1, "Only 8-bit sRGB formats are expected");
+			FilterMipLevel<uint8>(Attribs, FmtAttribs.NumComponents,
+				Attribs.FilterType == MIP_FILTER_TYPE_MOST_FREQUENT ?
+				MostFrequentSelector<uint8> :
+				SRGBAverage<uint8>);
+			if (Attribs.AlphaCutoff > 0)
+			{
+				RemapAlpha(Attribs, FmtAttribs.NumComponents, FmtAttribs.NumComponents - 1);
+			}
+			break;
+
+		case COMPONENT_TYPE_UNORM:
+		case COMPONENT_TYPE_UINT:
+			switch (FmtAttribs.ComponentSize)
+			{
+			case 1:
+				ComputeMipLevelInternal<uint8>(Attribs, FmtAttribs);
+				if (Attribs.AlphaCutoff > 0)
+				{
+					RemapAlpha(Attribs, FmtAttribs.NumComponents, FmtAttribs.NumComponents - 1);
+				}
+				break;
+
+			case 2:
+				ComputeMipLevelInternal<uint16>(Attribs, FmtAttribs);
+				break;
+
+			case 4:
+				ComputeMipLevelInternal<uint32>(Attribs, FmtAttribs);
+				break;
+
+			default:
+				UNEXPECTED("Unexpected component size (", FmtAttribs.ComponentSize, ") for UNORM/UINT texture format");
+			}
+			break;
+
+		case COMPONENT_TYPE_SNORM:
+		case COMPONENT_TYPE_SINT:
+			switch (FmtAttribs.ComponentSize)
+			{
+			case 1:
+				ComputeMipLevelInternal<int8>(Attribs, FmtAttribs);
+				break;
+
+			case 2:
+				ComputeMipLevelInternal<int16>(Attribs, FmtAttribs);
+				break;
+
+			case 4:
+				ComputeMipLevelInternal<int32>(Attribs, FmtAttribs);
+				break;
+
+			default:
+				UNEXPECTED("Unexpected component size (", FmtAttribs.ComponentSize, ") for UINT/SINT texture format");
+			}
+			break;
+
+		case COMPONENT_TYPE_FLOAT:
+			VERIFY(FmtAttribs.ComponentSize == 4, "Only 32-bit float formats are currently supported");
+			ComputeMipLevelInternal<float32>(Attribs, FmtAttribs);
+			break;
+
+		default:
+			UNEXPECTED("Unsupported component type");
+		}
+	}
+
+#if !METAL_SUPPORTED
+	void CreateSparseTextureMtl(
+		IRenderDevice* pDevice,
+		const TextureDesc& TexDesc,
+		IDeviceMemory* pMemory,
+		ITexture** ppTexture)
+	{
+	}
+#endif
+
+	inline ITextureView* ExtractTextureView(ITexture* pTexture, TEXTURE_VIEW_TYPE ViewType)
+	{
+		return pTexture != nullptr ? pTexture->GetDefaultView(ViewType) : nullptr;
+	}
+
+	inline IBufferView* ExtractBufferView(IBuffer* pBuffer, BUFFER_VIEW_TYPE ViewType)
+	{
+		return pBuffer != nullptr ? pBuffer->GetDefaultView(ViewType) : nullptr;
+	}
+
+	ITextureView* GetDefaultSRV(ITexture* pTexture)
+	{
+		return ExtractTextureView(pTexture, TEXTURE_VIEW_SHADER_RESOURCE);
+	}
+
+	ITextureView* GetDefaultRTV(ITexture* pTexture)
+	{
+		return ExtractTextureView(pTexture, TEXTURE_VIEW_RENDER_TARGET);
+	}
+
+	ITextureView* GetDefaultDSV(ITexture* pTexture)
+	{
+		return ExtractTextureView(pTexture, TEXTURE_VIEW_DEPTH_STENCIL);
+	}
+
+	ITextureView* GetDefaultUAV(ITexture* pTexture)
+	{
+		return ExtractTextureView(pTexture, TEXTURE_VIEW_UNORDERED_ACCESS);
+	}
+
+	IBufferView* GetDefaultSRV(IBuffer* pBuffer)
+	{
+		return ExtractBufferView(pBuffer, BUFFER_VIEW_SHADER_RESOURCE);
+	}
+
+	IBufferView* GetDefaultUAV(IBuffer* pBuffer)
+	{
+		return ExtractBufferView(pBuffer, BUFFER_VIEW_UNORDERED_ACCESS);
+	}
+
+	ITextureView* GetTextureDefaultSRV(IObject* pTexture)
+	{
+		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		return GetDefaultSRV(static_cast<ITexture*>(pTexture));
+	}
+
+	ITextureView* GetTextureDefaultRTV(IObject* pTexture)
+	{
+		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		return GetDefaultRTV(static_cast<ITexture*>(pTexture));
+	}
+
+	ITextureView* GetTextureDefaultDSV(IObject* pTexture)
+	{
+		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		return GetDefaultDSV(static_cast<ITexture*>(pTexture));
+	}
+
+	ITextureView* GetTextureDefaultUAV(IObject* pTexture)
+	{
+		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		return GetDefaultUAV(static_cast<ITexture*>(pTexture));
+	}
+
+	IBufferView* GetBufferDefaultSRV(IObject* pBuffer)
+	{
+		DEV_CHECK_ERR(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
+		return GetDefaultSRV(static_cast<IBuffer*>(pBuffer));
+	}
+
+	IBufferView* GetBufferDefaultUAV(IObject* pBuffer)
+	{
+		DEV_CHECK_ERR(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
+		return GetDefaultUAV(static_cast<IBuffer*>(pBuffer));
+	}
+
+#if !WEBGPU_SUPPORTED
+	const char* GetWebGPUEmulatedArrayIndexSuffix(IShader* pShader)
+	{
+		return nullptr;
+	}
+#endif
+
+	int64_t GetNativeTextureFormat(TEXTURE_FORMAT TexFormat, RENDER_DEVICE_TYPE DeviceType)
+	{
+		static_assert(RENDER_DEVICE_TYPE_COUNT == 8, "Please handle the new device type below");
+		switch (DeviceType)
+		{
+
+#if D3D12_SUPPORTED
+		case RENDER_DEVICE_TYPE_D3D12:
+			return GetNativeTextureFormatD3D12(TexFormat);
+#endif
+
+		default:
+			UNSUPPORTED("Unsupported device type");
+			return 0;
+		}
+	}
+
+	TEXTURE_FORMAT GetTextureFormatFromNative(int64_t NativeFormat, RENDER_DEVICE_TYPE DeviceType)
+	{
+		static_assert(RENDER_DEVICE_TYPE_COUNT == 8, "Please handle the new device type below");
+		switch (DeviceType)
+		{
+#if D3D12_SUPPORTED
+		case RENDER_DEVICE_TYPE_D3D12:
+			return GetTextureFormatFromNativeD3D12(NativeFormat);
+#endif
+
+		default:
+			UNSUPPORTED("Unsupported device type");
+			return TEX_FORMAT_UNKNOWN;
+		}
+	}
+
+	void CreateGeometryPrimitiveBuffers(
+		IRenderDevice* pDevice,
+		const GeometryPrimitiveAttributes& Attribs,
+		const GeometryPrimitiveBuffersCreateInfo* pBufferCI,
+		IBuffer** ppVertices,
+		IBuffer** ppIndices,
+		GeometryPrimitiveInfo* pInfo)
+	{
+		static_assert(GEOMETRY_PRIMITIVE_TYPE_COUNT == 3, "Please handle the new primitive type");
+
+		RefCntAutoPtr<IDataBlob> pVertexData;
+		RefCntAutoPtr<IDataBlob> pIndexData;
+		CreateGeometryPrimitive(
+			Attribs,
+			ppVertices != nullptr ? pVertexData.RawDblPtr() : nullptr,
+			ppIndices != nullptr ? pIndexData.RawDblPtr() : nullptr,
+			pInfo);
+
+		static constexpr GeometryPrimitiveBuffersCreateInfo DefaultCI{};
+		if (pBufferCI == nullptr)
+			pBufferCI = &DefaultCI;
+
+		const char* PrimTypeStr = "";
+		switch (Attribs.Type)
+		{
+		case GEOMETRY_PRIMITIVE_TYPE_CUBE: PrimTypeStr = "Cube"; break;
+		case GEOMETRY_PRIMITIVE_TYPE_SPHERE: PrimTypeStr = "Sphere"; break;
+		default: UNEXPECTED("Unexpected primitive type");
+		}
+
+		static std::atomic<int> PrimCounter{ 0 };
+		const int               PrimId = PrimCounter.fetch_add(1);
+		if (pVertexData)
+		{
+			const std::string Name = std::string{ "Geometry primitive " } + std::to_string(PrimId) + " (" + PrimTypeStr + ")";
+
+			BufferDesc VBDesc;
+			VBDesc.Name = Name.c_str();
+			VBDesc.Size = pVertexData->GetSize();
+			VBDesc.BindFlags = pBufferCI->VertexBufferBindFlags;
+			VBDesc.Usage = pBufferCI->VertexBufferUsage;
+			VBDesc.CPUAccessFlags = pBufferCI->VertexBufferCPUAccessFlags;
+			VBDesc.Mode = pBufferCI->VertexBufferMode;
+			if (VBDesc.Mode != BUFFER_MODE_UNDEFINED)
+			{
+				VBDesc.ElementByteStride = GetGeometryPrimitiveVertexSize(Attribs.VertexFlags);
+			}
+
+			BufferData VBData{ pVertexData->GetDataPtr(), pVertexData->GetSize() };
+			pDevice->CreateBuffer(VBDesc, &VBData, ppVertices);
+		}
+
+		if (pIndexData)
+		{
+			const std::string Name = std::string{ "Geometry primitive " } + std::to_string(PrimId) + " (" + PrimTypeStr + ")";
+
+			BufferDesc IBDesc;
+			IBDesc.Name = Name.c_str();
+			IBDesc.Size = pIndexData->GetSize();
+			IBDesc.BindFlags = pBufferCI->IndexBufferBindFlags;
+			IBDesc.Usage = pBufferCI->IndexBufferUsage;
+			IBDesc.CPUAccessFlags = pBufferCI->IndexBufferCPUAccessFlags;
+			IBDesc.Mode = pBufferCI->IndexBufferMode;
+			if (IBDesc.Mode != BUFFER_MODE_UNDEFINED)
+			{
+				IBDesc.ElementByteStride = sizeof(uint32);
+			}
+
+			BufferData IBData{ pIndexData->GetDataPtr(), pIndexData->GetSize() };
+			pDevice->CreateBuffer(IBDesc, &IBData, ppIndices);
+		}
+	}
+
+
+	IDXCompiler* GetDeviceDXCompiler(IRenderDevice* pDevice)
+	{
+		if (pDevice == nullptr)
+		{
+			return nullptr;
+		}
+
+		const RENDER_DEVICE_TYPE DeviceType = pDevice->GetDeviceInfo().Type;
+		static_assert(RENDER_DEVICE_TYPE_COUNT == 8, "Please handle the new device type below");
+		switch (DeviceType)
+		{
+
+#if D3D12_SUPPORTED
+		case RENDER_DEVICE_TYPE_D3D12:
+			return GetDeviceDXCompilerD3D12(pDevice);
+#endif
+
+		default:
+			UNSUPPORTED("Unsupported device type");
+			return nullptr;
+		}
+	}
+
+} // namespace shz
+
+
+extern "C"
+{
+	void Shizen_CreateUniformBuffer(
+		shz::IRenderDevice* pDevice,
+		shz::uint64           Size,
+		const shz::Char* Name,
+		shz::IBuffer** ppBuffer,
+		shz::USAGE            Usage,
+		shz::BIND_FLAGS       BindFlags,
+		shz::CPU_ACCESS_FLAGS CPUAccessFlags,
+		void* pInitialData)
+	{
+		shz::CreateUniformBuffer(pDevice, Size, Name, ppBuffer, Usage, BindFlags, CPUAccessFlags, pInitialData);
+	}
+
+	void Shizen_GenerateCheckerBoardPattern(
+		shz::uint32         Width,
+		shz::uint32         Height,
+		shz::TEXTURE_FORMAT Fmt,
+		shz::uint32         HorzCells,
+		shz::uint32         VertCells,
+		shz::uint8* pData,
+		shz::uint64         StrideInBytes)
+	{
+		shz::GenerateCheckerBoardPattern(Width, Height, Fmt, HorzCells, VertCells, pData, StrideInBytes);
+	}
+
+	void Shizen_ComputeMipLevel(const shz::ComputeMipLevelAttribs& Attribs)
+	{
+		shz::ComputeMipLevel(Attribs);
+	}
+
+	void Shizen_CreateSparseTextureMtl(shz::IRenderDevice* pDevice,
+		const shz::TextureDesc& TexDesc,
+		shz::IDeviceMemory* pMemory,
+		shz::ITexture** ppTexture)
+	{
+		shz::CreateSparseTextureMtl(pDevice, TexDesc, pMemory, ppTexture);
+	}
+
+
+	shz::ITextureView* Shizen_GetTextureDefaultSRV(shz::IObject* pTexture)
+	{
+		return shz::GetTextureDefaultSRV(pTexture);
+	}
+
+	shz::ITextureView* Shizen_GetTextureDefaultRTV(shz::IObject* pTexture)
+	{
+		return shz::GetTextureDefaultRTV(pTexture);
+	}
+
+	shz::ITextureView* Shizen_GetTextureDefaultDSV(shz::IObject* pTexture)
+	{
+		return shz::GetTextureDefaultDSV(pTexture);
+	}
+
+	shz::ITextureView* Shizen_GetTextureDefaultUAV(shz::IObject* pTexture)
+	{
+		return shz::GetTextureDefaultUAV(pTexture);
+	}
+
+	shz::IBufferView* Shizen_GetBufferDefaultSRV(shz::IObject* pBuffer)
+	{
+		return shz::GetBufferDefaultSRV(pBuffer);
+	}
+
+	shz::IBufferView* ShizenGetBufferDefaultRTV(shz::IObject* pBuffer)
+	{
+		return shz::GetBufferDefaultUAV(pBuffer);
+	}
+
+	const char* ShizenGetWebGPUEmulatedArrayIndexSuffix(shz::IShader* pShader)
+	{
+		return shz::GetWebGPUEmulatedArrayIndexSuffix(pShader);
+	}
+
+	int64_t ShizenGetNativeTextureFormat(shz::TEXTURE_FORMAT TexFormat, shz::RENDER_DEVICE_TYPE DeviceType)
+	{
+		return shz::GetNativeTextureFormat(TexFormat, DeviceType);
+	}
+
+	shz::TEXTURE_FORMAT ShizenGetTextureFormatFromNative(int64_t NativeFormat, shz::RENDER_DEVICE_TYPE DeviceType)
+	{
+		return shz::GetTextureFormatFromNative(NativeFormat, DeviceType);
+	}
+
+	void Shizen_CreateGeometryPrimitiveBuffers(
+		shz::IRenderDevice* pDevice,
+		const shz::GeometryPrimitiveAttributes& Attribs,
+		const shz::GeometryPrimitiveBuffersCreateInfo* pBufferCI,
+		shz::IBuffer** ppVertices,
+		shz::IBuffer** ppIndices,
+		shz::GeometryPrimitiveInfo* pInfo)
+	{
+		shz::CreateGeometryPrimitiveBuffers(pDevice, Attribs, pBufferCI, ppVertices, ppIndices, pInfo);
+	}
+
+	shz::IDXCompiler* Shizen_GetDeviceDXCompiler(shz::IRenderDevice* pDevice)
+	{
+		return shz::GetDeviceDXCompiler(pDevice);
+	}
+}

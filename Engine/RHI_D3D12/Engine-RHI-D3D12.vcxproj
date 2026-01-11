@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{3e258117-8c7c-494f-9d61-1629a0f7400d}</ProjectGuid>
+    <RootNamespace>EngineRHID3D12</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+    <Import Project="..\..\Platforms\Common\Platforms-Common.vcxitems" Label="Shared" />
+    <Import Project="..\..\Primitives\Primitives.vcxitems" Label="Shared" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsGammaCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsGammaOddCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsGammaOddXCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsGammaOddYCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsLinearCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsLinearOddCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsLinearOddXCS.h" />
+    <ClInclude Include="CompiledShaders\GenerateMips\GenerateMipsLinearOddYCS.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Private\BottomLevelASD3D12Impl.hpp" />
+    <ClInclude Include="Private\BufferD3D12Impl.hpp" />
+    <ClInclude Include="Private\BufferViewD3D12Impl.hpp" />
+    <ClInclude Include="Private\CommandContext.hpp" />
+    <ClInclude Include="Private\CommandListD3D12Impl.hpp" />
+    <ClInclude Include="Private\CommandListManager.hpp" />
+    <ClInclude Include="Private\CommandQueueD3D12Impl.hpp" />
+    <ClInclude Include="Private\D3D12DynamicHeap.hpp" />
+    <ClInclude Include="Private\D3D12Loader.hpp" />
+    <ClInclude Include="Private\D3D12ResourceBase.hpp" />
+    <ClInclude Include="Private\D3D12TileMappingHelper.hpp" />
+    <ClInclude Include="Private\D3D12TypeConversions.hpp" />
+    <ClInclude Include="Private\D3D12TypeDefinitions.h" />
+    <ClInclude Include="Private\D3D12Utils.h" />
+    <ClInclude Include="Private\d3dx12_win.h" />
+    <ClInclude Include="Private\DearchiverD3D12Impl.hpp" />
+    <ClInclude Include="Private\DescriptorHeap.hpp" />
+    <ClInclude Include="Private\DeviceContextD3D12Impl.hpp" />
+    <ClInclude Include="Private\DeviceMemoryD3D12Impl.hpp" />
+    <ClInclude Include="Private\DeviceObjectArchiveD3D12.hpp" />
+    <ClInclude Include="Private\EngineD3D12ImplTraits.hpp" />
+    <ClInclude Include="Private\FenceD3D12Impl.hpp" />
+    <ClInclude Include="Private\FramebufferD3D12Impl.hpp" />
+    <ClInclude Include="Private\GenerateMips.hpp" />
+    <ClInclude Include="Private\PipelineResourceAttribsD3D12.hpp" />
+    <ClInclude Include="Private\PipelineResourceSignatureD3D12Impl.hpp" />
+    <ClInclude Include="Private\PipelineStateCacheD3D12Impl.hpp" />
+    <ClInclude Include="Private\PipelineStateD3D12Impl.hpp" />
+    <ClInclude Include="Private\QueryD3D12Impl.hpp" />
+    <ClInclude Include="Private\QueryManagerD3D12.hpp" />
+    <ClInclude Include="Private\RenderDeviceD3D12Impl.hpp" />
+    <ClInclude Include="Private\RenderPassD3D12Impl.hpp" />
+    <ClInclude Include="Private\RootParamsManager.hpp" />
+    <ClInclude Include="Private\RootSignature.hpp" />
+    <ClInclude Include="Private\SamplerD3D12Impl.hpp" />
+    <ClInclude Include="Private\ShaderBindingTableD3D12Impl.hpp" />
+    <ClInclude Include="Private\ShaderD3D12Impl.hpp" />
+    <ClInclude Include="Private\ShaderResourceBindingD3D12Impl.hpp" />
+    <ClInclude Include="Private\ShaderResourceCacheD3D12.hpp" />
+    <ClInclude Include="Private\ShaderResourcesD3D12.hpp" />
+    <ClInclude Include="Private\ShaderVariableManagerD3D12.hpp" />
+    <ClInclude Include="Private\SwapChainD3D12Impl.hpp" />
+    <ClInclude Include="Private\TextureD3D12Impl.hpp" />
+    <ClInclude Include="Private\TextureViewD3D12Impl.hpp" />
+    <ClInclude Include="Private\TopLevelASD3D12Impl.hpp" />
+    <ClInclude Include="Public\IBottomLevelASD3D12.h" />
+    <ClInclude Include="Public\BottomLevelASD3D12Impl.hpp" />
+    <ClInclude Include="Public\IBufferD3D12.h" />
+    <ClInclude Include="Public\BufferD3D12Impl.hpp" />
+    <ClInclude Include="Public\IBufferViewD3D12.h" />
+    <ClInclude Include="Public\BufferViewD3D12Impl.hpp" />
+    <ClInclude Include="Public\CommandContext.hpp" />
+    <ClInclude Include="Public\CommandListD3D12Impl.hpp" />
+    <ClInclude Include="Public\CommandListManager.hpp" />
+    <ClInclude Include="Public\ICommandQueueD3D12.h" />
+    <ClInclude Include="Public\CommandQueueD3D12Impl.hpp" />
+    <ClInclude Include="Public\D3D12DynamicHeap.hpp" />
+    <ClInclude Include="Public\D3D12Loader.hpp" />
+    <ClInclude Include="Public\D3D12ResourceBase.hpp" />
+    <ClInclude Include="Public\D3D12TileMappingHelper.hpp" />
+    <ClInclude Include="Public\D3D12TypeConversions.hpp" />
+    <ClInclude Include="Public\D3D12TypeDefinitions.h" />
+    <ClInclude Include="Public\D3D12Utils.h" />
+    <ClInclude Include="Public\d3dx12_win.h" />
+    <ClInclude Include="Public\DearchiverD3D12Impl.hpp" />
+    <ClInclude Include="Public\DescriptorHeap.hpp" />
+    <ClInclude Include="Public\IDeviceContextD3D12.h" />
+    <ClInclude Include="Public\DeviceContextD3D12Impl.hpp" />
+    <ClInclude Include="Public\IDeviceMemoryD3D12.h" />
+    <ClInclude Include="Public\DeviceMemoryD3D12Impl.hpp" />
+    <ClInclude Include="Public\DeviceObjectArchiveD3D12.hpp" />
+    <ClInclude Include="Public\EngineD3D12ImplTraits.hpp" />
+    <ClInclude Include="Public\IEngineFactoryD3D12.h" />
+    <ClInclude Include="Public\IFenceD3D12.h" />
+    <ClInclude Include="Public\FenceD3D12Impl.hpp" />
+    <ClInclude Include="Public\FramebufferD3D12Impl.hpp" />
+    <ClInclude Include="Public\GenerateMips.hpp" />
+    <ClInclude Include="Public\PipelineResourceAttribsD3D12.hpp" />
+    <ClInclude Include="Public\PipelineResourceSignatureD3D12Impl.hpp" />
+    <ClInclude Include="Public\IPipelineStateCacheD3D12.h" />
+    <ClInclude Include="Public\PipelineStateCacheD3D12Impl.hpp" />
+    <ClInclude Include="Public\IPipelineStateD3D12.h" />
+    <ClInclude Include="Public\PipelineStateD3D12Impl.hpp" />
+    <ClInclude Include="Public\IQueryD3D12.h" />
+    <ClInclude Include="Public\QueryD3D12Impl.hpp" />
+    <ClInclude Include="Public\QueryManagerD3D12.hpp" />
+    <ClInclude Include="Public\IRenderDeviceD3D12.h" />
+    <ClInclude Include="Public\RenderDeviceD3D12Impl.hpp" />
+    <ClInclude Include="Public\RenderPassD3D12Impl.hpp" />
+    <ClInclude Include="Public\RootParamsManager.hpp" />
+    <ClInclude Include="Public\RootSignature.hpp" />
+    <ClInclude Include="Public\ISamplerD3D12.h" />
+    <ClInclude Include="Public\SamplerD3D12Impl.hpp" />
+    <ClInclude Include="Public\IShaderBindingTableD3D12.h" />
+    <ClInclude Include="Public\ShaderBindingTableD3D12Impl.hpp" />
+    <ClInclude Include="Public\IShaderD3D12.h" />
+    <ClInclude Include="Public\ShaderD3D12Impl.hpp" />
+    <ClInclude Include="Public\IShaderResourceBindingD3D12.h" />
+    <ClInclude Include="Public\ShaderResourceBindingD3D12Impl.hpp" />
+    <ClInclude Include="Public\ShaderResourceCacheD3D12.hpp" />
+    <ClInclude Include="Public\ShaderResourcesD3D12.hpp" />
+    <ClInclude Include="Public\ShaderVariableManagerD3D12.hpp" />
+    <ClInclude Include="Public\ISwapChainD3D12.h" />
+    <ClInclude Include="Public\SwapChainD3D12Impl.hpp" />
+    <ClInclude Include="Public\ITextureD3D12.h" />
+    <ClInclude Include="Public\TextureD3D12Impl.hpp" />
+    <ClInclude Include="Public\ITextureViewD3D12.h" />
+    <ClInclude Include="Public\TextureViewD3D12Impl.hpp" />
+    <ClInclude Include="Public\ITopLevelASD3D12.h" />
+    <ClInclude Include="Public\TopLevelASD3D12Impl.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Private\BottomLevelASD3D12Impl.cpp" />
+    <ClCompile Include="Private\BufferD3D12Impl.cpp" />
+    <ClCompile Include="Private\BufferViewD3D12Impl.cpp" />
+    <ClCompile Include="Private\CommandContext.cpp" />
+    <ClCompile Include="Private\CommandListManager.cpp" />
+    <ClCompile Include="Private\CommandQueueD3D12Impl.cpp" />
+    <ClCompile Include="Private\D3D12DynamicHeap.cpp" />
+    <ClCompile Include="Private\D3D12Loader.cpp" />
+    <ClCompile Include="Private\D3D12TypeConversions.cpp" />
+    <ClCompile Include="Private\D3D12Utils.cpp" />
+    <ClCompile Include="Private\DearchiverD3D12Impl.cpp" />
+    <ClCompile Include="Private\DescriptorHeap.cpp" />
+    <ClCompile Include="Private\DeviceContextD3D12Impl.cpp" />
+    <ClCompile Include="Private\DeviceMemoryD3D12Impl.cpp" />
+    <ClCompile Include="Private\DeviceObjectArchiveD3D12.cpp" />
+    <ClCompile Include="Private\DLLMain.cpp" />
+    <ClCompile Include="Private\EngineFactoryD3D12.cpp" />
+    <ClCompile Include="Private\FenceD3D12Impl.cpp" />
+    <ClCompile Include="Private\FramebufferD3D12Impl.cpp" />
+    <ClCompile Include="Private\GenerateMips.cpp" />
+    <ClCompile Include="Private\PipelineResourceSignatureD3D12Impl.cpp" />
+    <ClCompile Include="Private\PipelineStateCacheD3D12Impl.cpp" />
+    <ClCompile Include="Private\PipelineStateD3D12Impl.cpp" />
+    <ClCompile Include="Private\QueryD3D12Impl.cpp" />
+    <ClCompile Include="Private\QueryManagerD3D12.cpp" />
+    <ClCompile Include="Private\RenderDeviceD3D12Impl.cpp" />
+    <ClCompile Include="Private\RenderPassD3D12Impl.cpp" />
+    <ClCompile Include="Private\RootParamsManager.cpp" />
+    <ClCompile Include="Private\RootSignature.cpp" />
+    <ClCompile Include="Private\SamplerD3D12Impl.cpp" />
+    <ClCompile Include="Private\ShaderBindingTableD3D12Impl.cpp" />
+    <ClCompile Include="Private\ShaderD3D12Impl.cpp" />
+    <ClCompile Include="Private\ShaderResourceBindingD3D12Impl.cpp" />
+    <ClCompile Include="Private\ShaderResourceCacheD3D12.cpp" />
+    <ClCompile Include="Private\ShaderResourcesD3D12.cpp" />
+    <ClCompile Include="Private\ShaderVariableManagerD3D12.cpp" />
+    <ClCompile Include="Private\SwapChainD3D12Impl.cpp" />
+    <ClCompile Include="Private\TextureD3D12Impl.cpp" />
+    <ClCompile Include="Private\TextureViewD3D12Impl.cpp" />
+    <ClCompile Include="Private\TopLevelASD3D12Impl.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Engine-Core.vcxproj">
+      <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

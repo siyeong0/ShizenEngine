@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{d00159aa-bdd4-46e5-9f2a-ee4574b45379}</ProjectGuid>
+    <RootNamespace>EngineGraphicsTools</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+    <Import Project="..\..\Platforms\Common\Platforms-Common.vcxitems" Label="Shared" />
+    <Import Project="..\..\Primitives\Primitives.vcxitems" Label="Shared" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Private\AsyncPipelineState.hpp" />
+    <ClInclude Include="Private\ProxyPipelineState.hpp" />
+    <ClInclude Include="Private\ReloadablePipelineState.hpp" />
+    <ClInclude Include="Private\ReloadableShader.hpp" />
+    <ClInclude Include="Private\RenderStateCacheImpl.hpp" />
+    <ClInclude Include="Public\BufferSuballocator.h" />
+    <ClInclude Include="Public\BytecodeCache.h" />
+    <ClInclude Include="Public\CommonlyUsedStates.h" />
+    <ClInclude Include="Public\DurationQueryHelper.hpp" />
+    <ClInclude Include="Public\DynamicBuffer.hpp" />
+    <ClInclude Include="Public\DynamicTextureArray.hpp" />
+    <ClInclude Include="Public\DynamicTextureAtlas.h" />
+    <ClInclude Include="Public\GPUCompletionAwaitQueue.hpp" />
+    <ClInclude Include="Public\GraphicsUtilities.h" />
+    <ClInclude Include="Public\MapHelper.hpp" />
+    <ClInclude Include="Public\OffScreenSwapChain.hpp" />
+    <ClInclude Include="Public\RenderStateCache.h" />
+    <ClInclude Include="Public\RenderStateCache.hpp" />
+    <ClInclude Include="Public\ResourceRegistry.hpp" />
+    <ClInclude Include="Public\ScopedDebugGroup.hpp" />
+    <ClInclude Include="Public\ScopedQueryHelper.hpp" />
+    <ClInclude Include="Public\ScreenCapture.hpp" />
+    <ClInclude Include="Public\ShaderMacroHelper.hpp" />
+    <ClInclude Include="Public\ShaderSourceFactoryUtils.h" />
+    <ClInclude Include="Public\ShaderSourceFactoryUtils.hpp" />
+    <ClInclude Include="Public\StreamingBuffer.hpp" />
+    <ClInclude Include="Public\TextureUploader.hpp" />
+    <ClInclude Include="Public\TextureUploaderBase.hpp" />
+    <ClInclude Include="Public\TextureUploaderD3D12_Vk.hpp" />
+    <ClInclude Include="Public\VertexPool.h" />
+    <ClInclude Include="Public\VertexPoolX.hpp" />
+    <ClInclude Include="Public\XXH128Hasher.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Private\AsyncPipelineState.cpp" />
+    <ClCompile Include="Private\BufferSuballocator.cpp" />
+    <ClCompile Include="Private\BytecodeCache.cpp" />
+    <ClCompile Include="Private\DurationQueryHelper.cpp" />
+    <ClCompile Include="Private\DynamicBuffer.cpp" />
+    <ClCompile Include="Private\DynamicTextureArray.cpp" />
+    <ClCompile Include="Private\DynamicTextureAtlas.cpp" />
+    <ClCompile Include="Private\GraphicsUtilities.cpp" />
+    <ClCompile Include="Private\GraphicsUtilitiesD3D12.cpp" />
+    <ClCompile Include="Private\GraphicsUtilitiesGL.cpp" />
+    <ClCompile Include="Private\OffScreenSwapChain.cpp" />
+    <ClCompile Include="Private\ReloadablePipelineState.cpp" />
+    <ClCompile Include="Private\ReloadableShader.cpp" />
+    <ClCompile Include="Private\RenderStateCacheImpl.cpp" />
+    <ClCompile Include="Private\ScopedQueryHelper.cpp" />
+    <ClCompile Include="Private\ScreenCapture.cpp" />
+    <ClCompile Include="Private\ShaderSourceFactoryUtils.cpp" />
+    <ClCompile Include="Private\TextureUploader.cpp" />
+    <ClCompile Include="Private\TextureUploaderD3D12_Vk.cpp" />
+    <ClCompile Include="Private\VertexPool.cpp" />
+    <ClCompile Include="Private\XXH128Hasher.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Private\GraphicsUtilitiesMtl.mm" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Engine-Core.vcxproj">
+      <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

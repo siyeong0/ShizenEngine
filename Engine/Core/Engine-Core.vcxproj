@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{c901be66-8350-4df9-8576-50ce5f052836}</ProjectGuid>
+    <RootNamespace>EngineCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+    <Import Project="..\..\Primitives\Primitives.vcxitems" Label="Shared" />
+    <Import Project="..\..\Platforms\Common\Platforms-Common.vcxitems" Label="Shared" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Math\AdvancedMath.h" />
+    <ClInclude Include="Common\Public\Array2DTools.hpp" />
+    <ClInclude Include="Common\Public\AsyncInitializer.hpp" />
+    <ClInclude Include="Common\Public\BasicFileStream.hpp" />
+    <ClInclude Include="Common\Public\BasicFileSystem.hpp" />
+    <ClInclude Include="Common\Public\BasicPlatformDebug.hpp" />
+    <ClInclude Include="Common\Public\BasicPlatformMisc.hpp" />
+    <ClInclude Include="Common\Public\CallbackWrapper.hpp" />
+    <ClInclude Include="Common\Public\Cast.hpp" />
+    <ClInclude Include="Memory\Public\DataBlobImpl.hpp" />
+    <ClInclude Include="Memory\Public\DefaultRawMemoryAllocator.hpp" />
+    <ClInclude Include="Common\Public\DummyReferenceCounters.hpp" />
+    <ClInclude Include="Memory\Public\DynamicLinearAllocator.hpp" />
+    <ClInclude Include="Memory\Public\EngineMemory.h" />
+    <ClInclude Include="Common\Public\FastRand.hpp" />
+    <ClInclude Include="Common\Public\FileWrapper.hpp" />
+    <ClInclude Include="Common\Public\FilteringTools.hpp" />
+    <ClInclude Include="Memory\Public\FixedBlockMemoryAllocator.hpp" />
+    <ClInclude Include="Memory\Public\FixedLinearAllocator.hpp" />
+    <ClInclude Include="Common\Public\GeometryPrimitives.h" />
+    <ClInclude Include="Common\Public\HashUtils.hpp" />
+    <ClInclude Include="Common\Public\ImageTools.h" />
+    <ClInclude Include="Common\Public\LRUCache.hpp" />
+    <ClInclude Include="Common\Public\MemoryFileStream.hpp" />
+    <ClInclude Include="Common\Public\ObjectBase.hpp" />
+    <ClInclude Include="Common\Public\ObjectsRegistry.hpp" />
+    <ClInclude Include="Common\Public\ParsingTools.hpp" />
+    <ClInclude Include="Common\Public\ProxyDataBlob.hpp" />
+    <ClInclude Include="Common\Public\RefCntAutoPtr.hpp" />
+    <ClInclude Include="Common\Public\RefCntContainer.hpp" />
+    <ClInclude Include="Common\Public\RefCountedObjectImpl.hpp" />
+    <ClInclude Include="Common\Public\Serializer.hpp" />
+    <ClInclude Include="Common\Public\SpinLock.hpp" />
+    <ClInclude Include="Common\Public\StandardFile.hpp" />
+    <ClInclude Include="Memory\Public\STDAllocator.hpp" />
+    <ClInclude Include="Common\Public\StringDataBlobImpl.hpp" />
+    <ClInclude Include="Common\Public\StringPool.hpp" />
+    <ClInclude Include="Common\Public\StringTools.h" />
+    <ClInclude Include="Common\Public\StringTools.hpp" />
+    <ClInclude Include="Common\Public\ThreadPool.h" />
+    <ClInclude Include="Common\Public\ThreadPool.hpp" />
+    <ClInclude Include="Common\Public\ThreadSignal.hpp" />
+    <ClInclude Include="Common\Public\Timer.hpp" />
+    <ClInclude Include="Common\Public\UniqueIdentifier.hpp" />
+    <ClInclude Include="Math\Math.h" />
+    <ClInclude Include="Math\Public\Constants.h" />
+    <ClInclude Include="Math\Public\Matrix3x3.h" />
+    <ClInclude Include="Math\Public\Matrix4x3.h" />
+    <ClInclude Include="Math\Public\Matrix4x4.h" />
+    <ClInclude Include="Math\Public\Quaternion.h" />
+    <ClInclude Include="Math\Public\Common.h" />
+    <ClInclude Include="Math\Public\Vector2.h" />
+    <ClInclude Include="Math\Public\Vector3.h" />
+    <ClInclude Include="Math\Public\Vector4.h" />
+    <ClInclude Include="Math\Public\XMatrix.h" />
+    <ClInclude Include="Math\Public\XVector.h" />
+    <ClInclude Include="Math\Public\XVector_SSE.h" />
+    <ClInclude Include="Memory\Public\ArenaAllocator.h" />
+    <ClInclude Include="Memory\Public\ObjectPool.h" />
+    <ClInclude Include="Memory\Public\PagedMemoryPool.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Runtime\Public\AppBase.h" />
+    <ClInclude Include="Runtime\Public\AppBaseWin64.h" />
+    <ClInclude Include="Runtime\Public\CommandLineParser.hpp" />
+    <ClInclude Include="Runtime\Public\InputController.h" />
+    <ClInclude Include="Runtime\Public\InputControllerBase.h" />
+    <ClInclude Include="Runtime\Public\InputControllerWin64.h" />
+    <ClInclude Include="Runtime\Public\NativeAppBase.hpp" />
+    <ClInclude Include="Runtime\Public\SampleApp.h" />
+    <ClInclude Include="Runtime\Public\SampleBase.h" />
+    <ClInclude Include="Runtime\Resources\Win64AppResource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Common\Private\Array2DTools.cpp" />
+    <ClCompile Include="Common\Private\BasicFileStream.cpp" />
+    <ClCompile Include="Common\Private\BasicFileSystem.cpp" />
+    <ClCompile Include="Common\Private\BasicPlatformDebug.cpp" />
+    <ClCompile Include="Common\Private\BasicPlatformMisc.cpp" />
+    <ClCompile Include="Memory\Private\DataBlobImpl.cpp" />
+    <ClCompile Include="Memory\Private\DefaultRawMemoryAllocator.cpp" />
+    <ClCompile Include="Memory\Private\EngineMemory.cpp" />
+    <ClCompile Include="Common\Private\FileWrapper.cpp" />
+    <ClCompile Include="Memory\Private\FixedBlockMemoryAllocator.cpp" />
+    <ClCompile Include="Common\Private\GeometryPrimitives.cpp" />
+    <ClCompile Include="Common\Private\ImageTools.cpp" />
+    <ClCompile Include="Common\Private\MemoryFileStream.cpp" />
+    <ClCompile Include="Common\Private\Serializer.cpp" />
+    <ClCompile Include="Common\Private\SpinLock.cpp" />
+    <ClCompile Include="Common\Private\StandardFile.cpp" />
+    <ClCompile Include="Common\Private\ThreadPool.cpp" />
+    <ClCompile Include="Common\Private\Timer.cpp" />
+    <ClCompile Include="Memory\Private\ArenaAllocator.cpp" />
+    <ClCompile Include="Memory\Private\PagedMemoryPool.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Runtime\Private\InputControllerWin64.cpp" />
+    <ClCompile Include="Runtime\Private\SampleApp.cpp" />
+    <ClCompile Include="Runtime\Private\SampleAppWin64.cpp" />
+    <ClCompile Include="Runtime\Private\SampleBase.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Common\Public\SearchRecursive.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Runtime\Resources\directx11-logo.bmp" />
+    <Image Include="Runtime\Resources\directx12-logo.bmp" />
+    <Image Include="Runtime\Resources\opengl-logo.bmp" />
+    <Image Include="Runtime\Resources\vulkan-logo.bmp" />
+    <Image Include="Runtime\Resources\webgpu-logo.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Runtime\Resources\Win64AppResource.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

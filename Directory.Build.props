@@ -1,0 +1,98 @@
+﻿<Project>
+
+	<!-- ========================================================= -->
+	<!-- Resolve solution root (fallback for non-sln builds)       -->
+	<!-- ========================================================= -->
+	<PropertyGroup>
+		<!-- Use $(SolutionDir) when building from a solution -->
+		<_SolutionRoot Condition="'$(SolutionDir)' != ''">$(SolutionDir)</_SolutionRoot>
+
+		<!-- Fallback for project-only / CI builds -->
+		<_SolutionRoot Condition="'$(_SolutionRoot)' == ''">$(MSBuildStartupDirectory)\</_SolutionRoot>
+	</PropertyGroup>
+
+	<!-- ========================================================= -->
+	<!-- Common output directory layout                            -->
+	<!-- ========================================================= -->
+	<PropertyGroup>
+		<!-- Intermediate files (obj, pch, etc.)
+         Example: ProjectDir\x64\Debug\ -->
+		<IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
+
+		<!-- Final outputs (exe, dll, lib, pdb, etc.)
+         Example: SolutionDir\x64\Debug\ -->
+		<OutDir>$(_SolutionRoot)$(Platform)\$(Configuration)\</OutDir>
+	</PropertyGroup>
+
+	<!-- ========================================================= -->
+	<!-- Common compiler and linker settings (all configurations)  -->
+	<!-- ========================================================= -->
+	<ItemDefinitionGroup>
+
+		<!-- C/C++ compiler settings -->
+		<ClCompile>
+			<!-- Use C++17 -->
+			<LanguageStandard>stdcpp17</LanguageStandard>
+
+			<!-- High warning level and strict checks -->
+			<WarningLevel>Level4</WarningLevel>
+			<SDLCheck>true</SDLCheck>
+			<TreatWarningAsError>true</TreatWarningAsError>
+
+			<!-- Platform-wide preprocessor definitions -->
+			<PreprocessorDefinitions>
+				PLATFORM_WIN32;
+				D3D12_SUPPORTED;
+				SHZ_DEBUG;
+				%(PreprocessorDefinitions)
+			</PreprocessorDefinitions>
+
+			<!-- Additional include directories (project convention) -->
+			<AdditionalIncludeDirectories>$(_SolutionRoot);$(ProjectDir);$(ProjectDir)Public;$(ProjectDir)Private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+
+			<!-- Recommended build settings -->
+			<MultiProcessorCompilation>true</MultiProcessorCompilation>
+			<ConformanceMode>true</ConformanceMode>
+		</ClCompile>
+
+		<!-- Linker settings -->
+		<Link>
+			<!-- Add final output directory to library search paths
+           (where .lib files are placed) -->
+			<AdditionalLibraryDirectories>
+				$(OutDir);
+				$(SolutionDir)ThirdParty\$(Platform);
+				%(AdditionalLibraryDirectories)
+			</AdditionalLibraryDirectories>
+		</Link>
+
+	</ItemDefinitionGroup>
+
+
+	<!-- Additional linker dependencies for **Samples** projects -->
+	<ItemDefinitionGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\'))">
+		<Link>
+			<AdditionalDependencies>
+				Engine-Core.lib;
+				Engine-GraphicsArchiver.lib;
+				Engine-GraphicsTools.lib;
+				Engine-GraphicsUtils.lib;
+				Engine-ImGui.lib;
+				Engine-RHI.lib;
+				Engine-RHI-D3DBase.lib;
+				Engine-RHI-D3D12.lib;
+				Engine-ShaderTools.lib;
+				Platforms-Basic.lib;
+				Platforms-Win64.lib;
+				Tools-Image.lib;
+				d3d12.lib;
+				dxgi.lib;
+				dxguid.lib;
+				d3dcompiler.lib;
+				imgui.lib;
+				%(AdditionalDependencies)
+			</AdditionalDependencies>
+		</Link>
+	</ItemDefinitionGroup>
+
+</Project>
