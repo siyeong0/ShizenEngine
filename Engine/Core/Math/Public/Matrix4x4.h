@@ -8,10 +8,13 @@ namespace shz
 {
 	// ------------------------------------------------------------
 	// Matrix4x4
-	// - Row-major storage
+	// - Row-major storage (m[row][col])
 	// - Row vector convention (v' = v * M)
-	// - Pre-multiplication friendly: v * (A * B) == (v * A) * B
 	// - Translation lives in the last row (m30,m31,m32)
+	//
+	// IMPORTANT:
+	// Your MulVector4() computes dot(v, columnN),
+	// therefore basis extraction must be COLUMN-based to be consistent.
 	// ------------------------------------------------------------
 	struct Matrix4x4 final
 	{
@@ -57,7 +60,7 @@ namespace shz
 
 		// --------------------------------------------------------
 		// Conversion
-		// s--------------------------------------------------------
+		// --------------------------------------------------------
 		explicit constexpr operator Matrix3x3() const noexcept
 		{
 			return Matrix3x3(
@@ -141,38 +144,40 @@ namespace shz
 				0, 0, 0, 1);
 		}
 
-		// 3D Rotation matrix for an arbitrary axis specified by x, y and z
+		// Arbitrary axis rotation (Rodrigues) - consistent with row-major storage.
 		static inline Matrix4x4 RotationArbitrary(Vector3 axis, float32 angleInRadians)
 		{
 			axis = Vector3::Normalize(axis);
 
-			float32 sinAngle = std::sin(angleInRadians);
-			float32 cosAngle = std::cos(angleInRadians);
-			float32 oneMinusCosAngle = 1 - cosAngle;
+			const float32 s = (float32)std::sin(angleInRadians);
+			const float32 c = (float32)std::cos(angleInRadians);
+			const float32 t = 1.0f - c;
 
-			Matrix4x4 mOut;
+			Matrix4x4 r = Identity();
 
-			mOut._m00 = 1 + oneMinusCosAngle * (axis.x * axis.x - 1);
-			mOut._m01 = axis.z * sinAngle + oneMinusCosAngle * axis.x * axis.y;
-			mOut._m02 = -axis.y * sinAngle + oneMinusCosAngle * axis.x * axis.z;
-			mOut._m30 = 0;
+			// Row-major, pure rotation in upper 3x3
+			r._m00 = t * axis.x * axis.x + c;
+			r._m01 = t * axis.x * axis.y + s * axis.z;
+			r._m02 = t * axis.x * axis.z - s * axis.y;
+			r._m03 = 0.0f;
 
-			mOut._m10 = -axis.z * sinAngle + oneMinusCosAngle * axis.y * axis.x;
-			mOut._m11 = 1 + oneMinusCosAngle * (axis.y * axis.y - 1);
-			mOut._m12 = axis.x * sinAngle + oneMinusCosAngle * axis.y * axis.z;
-			mOut._m13 = 0;
+			r._m10 = t * axis.y * axis.x - s * axis.z;
+			r._m11 = t * axis.y * axis.y + c;
+			r._m12 = t * axis.y * axis.z + s * axis.x;
+			r._m13 = 0.0f;
 
-			mOut._m20 = axis.y * sinAngle + oneMinusCosAngle * axis.z * axis.x;
-			mOut._m21 = -axis.x * sinAngle + oneMinusCosAngle * axis.z * axis.y;
-			mOut._m22 = 1 + oneMinusCosAngle * (axis.z * axis.z - 1);
-			mOut._m23 = 0;
+			r._m20 = t * axis.z * axis.x + s * axis.y;
+			r._m21 = t * axis.z * axis.y - s * axis.x;
+			r._m22 = t * axis.z * axis.z + c;
+			r._m23 = 0.0f;
 
-			mOut._m30 = 0;
-			mOut._m31 = 0;
-			mOut._m32 = 0;
-			mOut._m33 = 1;
+			// translation stays in last row (0,0,0,1)
+			r._m30 = 0.0f;
+			r._m31 = 0.0f;
+			r._m32 = 0.0f;
+			r._m33 = 1.0f;
 
-			return mOut;
+			return r;
 		}
 
 		static inline Matrix4x4 TRS(const Vector3& translation, const Vector3& rotationEuler, const Vector3& scale)
@@ -189,24 +194,109 @@ namespace shz
 		}
 
 		// --------------------------------------------------------
-		// Camera (row-vector, LH)
+		// Extract (CONSISTENT with MulVector4: columns are basis)
+		// --------------------------------------------------------
+		inline Vector3 ExtractTranslation() const { return Vector3(_m30, _m31, _m32); }
+
+		// Columns (because MulVector4 uses dot(v, columnN))
+		inline Vector3 ExtractAxisX() const { return Vector3(_m00, _m10, _m20); } // column0
+		inline Vector3 ExtractAxisY() const { return Vector3(_m01, _m11, _m21); } // column1
+		inline Vector3 ExtractAxisZ() const { return Vector3(_m02, _m12, _m22); } // column2
+
+		// --------------------------------------------------------
+		// Remove components (row-major, row-vector, column-basis)
+		// --------------------------------------------------------
+		static inline Matrix4x4 RemoveTranslation(const Matrix4x4& in)
+		{
+			Matrix4x4 r = in;
+			r._m30 = 0.0f;
+			r._m31 = 0.0f;
+			r._m32 = 0.0f;
+			return r;
+		}
+
+		static inline Matrix4x4 RemoveScale(const Matrix4x4& in)
+		{
+			// Normalize basis COLUMNS => remove scale, keep rotation + translation.
+			Matrix4x4 r = in;
+
+			const Vector3 x = in.ExtractAxisX();
+			const Vector3 y = in.ExtractAxisY();
+			const Vector3 z = in.ExtractAxisZ();
+
+			const float32 sx = x.Length();
+			const float32 sy = y.Length();
+			const float32 sz = z.Length();
+
+			const float32 eps = 1e-12f;
+
+			if (sx > eps)
+			{
+				r._m00 /= sx; r._m10 /= sx; r._m20 /= sx;
+			}
+			if (sy > eps)
+			{
+				r._m01 /= sy; r._m11 /= sy; r._m21 /= sy;
+			}
+			if (sz > eps)
+			{
+				r._m02 /= sz; r._m12 /= sz; r._m22 /= sz;
+			}
+
+			return r;
+		}
+
+		static inline Matrix4x4 RemoveRotation(const Matrix4x4& in)
+		{
+			// Keep only per-axis scale (from column lengths) + translation.
+			Matrix4x4 r = in;
+
+			const float32 sx = in.ExtractAxisX().Length();
+			const float32 sy = in.ExtractAxisY().Length();
+			const float32 sz = in.ExtractAxisZ().Length();
+
+			// upper 3x3 = diagonal scale, no rotation
+			r._m00 = sx;   r._m01 = 0.0f; r._m02 = 0.0f; r._m03 = 0.0f;
+			r._m10 = 0.0f; r._m11 = sy;   r._m12 = 0.0f; r._m13 = 0.0f;
+			r._m20 = 0.0f; r._m21 = 0.0f; r._m22 = sz;   r._m23 = 0.0f;
+
+			// keep translation (last row) + homogeneous
+			r._m33 = 1.0f;
+			return r;
+		}
+
+		// --------------------------------------------------------
+		// Camera (row-vector, LH) - FIXED
 		// --------------------------------------------------------
 		static inline Matrix4x4 LookAtLH(const Vector3& eye, const Vector3& at, const Vector3& up)
 		{
-			const Vector3 zaxis = (at - eye).Normalized();
-			const Vector3 xaxis = up.Cross(zaxis).Normalized();
-			const Vector3 yaxis = zaxis.Cross(xaxis);
+			const Vector3 zaxis = (at - eye).Normalized();         // forward
+			const Vector3 xaxis = up.Cross(zaxis).Normalized();    // right
+			const Vector3 yaxis = zaxis.Cross(xaxis);              // up
 
+			// Row-vector convention requires basis to be placed in COLUMNS
+			// because MulVector4 does dot(v, columnN).
 			return Matrix4x4(
-				xaxis.x, xaxis.y, xaxis.z, 0,
-				yaxis.x, yaxis.y, yaxis.z, 0,
-				zaxis.x, zaxis.y, zaxis.z, 0,
-				-xaxis.Dot(eye), -yaxis.Dot(eye), -zaxis.Dot(eye), 1);
+				xaxis.x, yaxis.x, zaxis.x, 0.0f,
+				xaxis.y, yaxis.y, zaxis.y, 0.0f,
+				xaxis.z, yaxis.z, zaxis.z, 0.0f,
+				-xaxis.Dot(eye), -yaxis.Dot(eye), -zaxis.Dot(eye), 1.0f
+			);
+		}
+
+		static inline Matrix4x4 ViewFromBasis(const Vector3& xAxis, const Vector3& yAxis, const Vector3& zAxis)
+		{
+			// Same rule as LookAtLH: basis goes into COLUMNS.
+			return Matrix4x4(
+				xAxis.x, yAxis.x, zAxis.x, 0.0f,
+				xAxis.y, yAxis.y, zAxis.y, 0.0f,
+				xAxis.z, yAxis.z, zAxis.z, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
 		}
 
 		static inline Matrix4x4 PerspectiveFovLH(float32 fovY, float32 aspect, float32 zn, float32 zf)
 		{
-			// DirectX LH perspective (depth 0..1) for row-vector convention.
 			ASSERT(fovY > 0.0f && aspect > 0.0f);
 			ASSERT(zf > zn);
 
@@ -220,7 +310,8 @@ namespace shz
 				xScale, 0, 0, 0,
 				0, yScale, 0, 0,
 				0, 0, A, 1,
-				0, 0, B, 0);
+				0, 0, B, 0
+			);
 		}
 
 		void SetNearFarClipPlanes(float32 zNear, float32 zFar, bool NegativeOneToOneZ)
@@ -230,21 +321,6 @@ namespace shz
 				// Perspective projection
 				if (NegativeOneToOneZ)
 				{
-					// https://www.opengl.org/sdk/docs/man2/xhtml/gluPerspective.xml
-					// http://www.terathon.com/gdc07_lengyel.pdf
-					// Note that OpenGL uses right-handed coordinate system, where
-					// camera is looking in negative z direction:
-					//   OO
-					//  |__|<--------------------
-					//         -z             +z
-					// Consequently, OpenGL projection matrix given by these two
-					// references inverts z axis.
-
-					// We do not need to do this, because we use DX coordinate
-					// system for the camera space. Thus we need to invert the
-					// sign of the values in the third column in the matrix
-					// from the references:
-
 					_m22 = -(-(zFar + zNear) / (zFar - zNear));
 					_m32 = -2 * zNear * zFar / (zFar - zNear);
 					_m23 = -(-1);
@@ -273,7 +349,8 @@ namespace shz
 				v.x * _m00 + v.y * _m10 + v.z * _m20 + v.w * _m30,
 				v.x * _m01 + v.y * _m11 + v.z * _m21 + v.w * _m31,
 				v.x * _m02 + v.y * _m12 + v.z * _m22 + v.w * _m32,
-				v.x * _m03 + v.y * _m13 + v.z * _m23 + v.w * _m33);
+				v.x * _m03 + v.y * _m13 + v.z * _m23 + v.w * _m33
+			);
 		}
 
 		inline Vector3 TransformPosition(const Vector3& p) const
@@ -288,14 +365,6 @@ namespace shz
 			const Vector4 r = MulVector4(Vector4(d.x, d.y, d.z, 0.0f));
 			return Vector3(r.x, r.y, r.z);
 		}
-
-		// --------------------------------------------------------
-		// Extract (UE/DX style)
-		// --------------------------------------------------------
-		inline Vector3 ExtractTranslation() const { return Vector3(_m30, _m31, _m32); }
-		inline Vector3 ExtractAxisX() const { return Vector3(_m00, _m01, _m02); } // row0
-		inline Vector3 ExtractAxisY() const { return Vector3(_m10, _m11, _m12); } // row1
-		inline Vector3 ExtractAxisZ() const { return Vector3(_m20, _m21, _m22); } // row2
 
 		// --------------------------------------------------------
 		// Algebra
@@ -332,13 +401,11 @@ namespace shz
 
 		inline Matrix4x4 Inversed() const
 		{
-			// General 4x4 inverse (Gauss-Jordan). Stable enough for engine use.
 			Matrix4x4 a = *this;
 			Matrix4x4 inv = Identity();
 
 			for (int col = 0; col < 4; ++col)
 			{
-				// Find pivot.
 				int pivotRow = col;
 				float32 pivotAbs = (float32)std::fabs(a.m[pivotRow][col]);
 				for (int r = col + 1; r < 4; ++r)
@@ -353,7 +420,6 @@ namespace shz
 
 				ASSERT(pivotAbs > 1e-12f);
 
-				// Swap rows if needed.
 				if (pivotRow != col)
 				{
 					for (int c = 0; c < 4; ++c)
@@ -363,7 +429,6 @@ namespace shz
 					}
 				}
 
-				// Normalize pivot row.
 				const float32 pivot = a.m[col][col];
 				const float32 invPivot = 1.0f / pivot;
 				for (int c = 0; c < 4; ++c)
@@ -372,19 +437,14 @@ namespace shz
 					inv.m[col][c] *= invPivot;
 				}
 
-				// Eliminate other rows.
 				for (int r = 0; r < 4; ++r)
 				{
 					if (r == col)
-					{
 						continue;
-					}
 
 					const float32 f = a.m[r][col];
 					if (std::fabs(f) < 1e-12f)
-					{
 						continue;
-					}
 
 					for (int c = 0; c < 4; ++c)
 					{
@@ -399,7 +459,6 @@ namespace shz
 
 		inline Matrix4x4 InverseAffineFast() const
 		{
-			// Assumes affine: last column is [0 0 0 1]^T
 			ASSERT(std::fabs(_m03) < 1e-6f && std::fabs(_m13) < 1e-6f && std::fabs(_m23) < 1e-6f);
 			ASSERT(std::fabs(_m33 - 1.0f) < 1e-6f);
 
@@ -407,18 +466,18 @@ namespace shz
 			const Matrix3x3 invL = L.Inversed();
 			const Vector3 t = ExtractTranslation();
 
-			// inv([L 0; t 1]) = [invL 0; -t*invL 1]
 			const Vector3 invT = invL.MulVector(Vector3(-t.x, -t.y, -t.z));
 
 			Matrix4x4 r = Identity();
 			r._m00 = invL._m00; r._m01 = invL._m01; r._m02 = invL._m02;
 			r._m10 = invL._m10; r._m11 = invL._m11; r._m12 = invL._m12;
 			r._m20 = invL._m20; r._m21 = invL._m21; r._m22 = invL._m22;
-			r._m30 = invT.x;   r._m31 = invT.y;   r._m32 = invT.z;
+			r._m30 = invT.x;    r._m31 = invT.y;    r._m32 = invT.z;
 			r._m33 = 1.0f;
 			return r;
 		}
 	};
+
 	static_assert(sizeof(Matrix4x4) == sizeof(float32) * 16, "Matrix4x4 size is incorrect.");
 	static_assert(alignof(Matrix4x4) == alignof(float32), "Matrix4x4 alignment is incorrect.");
 

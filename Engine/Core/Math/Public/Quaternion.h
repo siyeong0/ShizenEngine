@@ -65,6 +65,17 @@ namespace shz
 			return Quaternion(a.x * s, a.y * s, a.z * s, c);
 		}
 
+		inline void GetAxisAngle(Vector3& outAxis, float32& outAngle) const
+		{
+			const float32 sina2 = (float32)std::sqrt(x * x + y * y + z * z);
+			outAngle = 2.0f * (float32)std::atan2(sina2, w);
+
+			const float32 r = (sina2 > 0.0f) ? (1.0f / sina2) : 0.0f;
+			outAxis.x = r * x;
+			outAxis.y = r * y;
+			outAxis.z = r * z;
+		}
+
 		// Euler (radians), explicit XYZ intrinsic order:
 		// q = qZ * qY * qX  (apply X then Y then Z)
 		static inline Quaternion FromEulerXYZ(float32 xRad, float32 yRad, float32 zRad)
@@ -176,8 +187,6 @@ namespace shz
 			*this = (*this) * r;
 			return *this;
 		}
-
-		friend inline Quaternion operator*(float32 s, const Quaternion& q);
 
 		// -----------------------------
 		// Rotate vector (active rotation)
