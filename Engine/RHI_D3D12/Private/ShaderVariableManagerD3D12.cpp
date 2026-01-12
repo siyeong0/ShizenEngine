@@ -45,7 +45,8 @@ namespace shz
 {
 
 	template <typename HandlerType>
-	void ProcessSignatureResources(const PipelineResourceSignatureD3D12Impl& Signature,
+	void ProcessSignatureResources(
+		const PipelineResourceSignatureD3D12Impl& Signature,
 		const SHADER_RESOURCE_VARIABLE_TYPE* AllowedVarTypes,
 		uint32                                    NumAllowedTypes,
 		SHADER_TYPE                               ShaderStages,
@@ -66,7 +67,8 @@ namespace shz
 			});
 	}
 
-	size_t ShaderVariableManagerD3D12::GetRequiredMemorySize(const PipelineResourceSignatureD3D12Impl& Signature,
+	size_t ShaderVariableManagerD3D12::GetRequiredMemorySize(
+		const PipelineResourceSignatureD3D12Impl& Signature,
 		const SHADER_RESOURCE_VARIABLE_TYPE* AllowedVarTypes,
 		uint32                                    NumAllowedTypes,
 		SHADER_TYPE                               ShaderStages,
@@ -86,7 +88,8 @@ namespace shz
 	}
 
 	// Creates shader variable for every resource from Signature whose type is one of AllowedVarTypes
-	void ShaderVariableManagerD3D12::Initialize(const PipelineResourceSignatureD3D12Impl& Signature,
+	void ShaderVariableManagerD3D12::Initialize(
+		const PipelineResourceSignatureD3D12Impl& Signature,
 		IMemoryAllocator& Allocator,
 		const SHADER_RESOURCE_VARIABLE_TYPE* AllowedVarTypes,
 		uint32                                    NumAllowedTypes,

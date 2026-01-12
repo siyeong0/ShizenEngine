@@ -162,15 +162,14 @@
     </ClCompile>
     <ClCompile Include="Private\ArchiverFactory.cpp" />
     <ClCompile Include="Private\ArchiverImpl.cpp" />
-    <ClCompile Include="Private\Archiver_D3D12.cpp" />
+    <ClCompile Include="Private\Archiver_D3D12.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Private\SerializationDeviceImpl.cpp" />
     <ClCompile Include="Private\SerializedPipelineStateImpl.cpp" />
     <ClCompile Include="Private\SerializedRenderPassImpl.cpp" />
     <ClCompile Include="Private\SerializedResourceSignatureImpl.cpp" />
     <ClCompile Include="Private\SerializedShaderImpl.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Private\Archiver_Mtl.mm" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\Engine-Core.vcxproj">

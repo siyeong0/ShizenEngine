@@ -57,8 +57,8 @@ namespace shz
 		CubePsoCI.RTVFormat = m_pSwapChain->GetDesc().ColorBufferFormat;
 		CubePsoCI.DSVFormat = m_pSwapChain->GetDesc().DepthBufferFormat;
 		CubePsoCI.pShaderSourceFactory = pShaderSourceFactory;
-		CubePsoCI.VSFilePath = "Assets\\cube.vsh";
-		CubePsoCI.PSFilePath = "Assets\\cube.psh";
+		CubePsoCI.VSFilePath = "cube.vsh";
+		CubePsoCI.PSFilePath = "cube.psh";
 		CubePsoCI.Components = GEOMETRY_PRIMITIVE_VERTEX_FLAG_ALL;
 
 		m_pCubePSO = TexturedCube::CreatePipelineState(CubePsoCI, m_ConvertPSOutputToGamma);
@@ -110,7 +110,7 @@ namespace shz
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
 			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Cube Shadow VS";
-			ShaderCI.FilePath = "Assets/cube_shadow.vsh";
+			ShaderCI.FilePath = "cube_shadow.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pShadowVS);
 		}
 		PSOCreateInfo.pVS = pShadowVS;
@@ -210,7 +210,7 @@ namespace shz
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
 			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Plane VS";
-			ShaderCI.FilePath = "Assets/plane.vsh";
+			ShaderCI.FilePath = "plane.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pPlaneVS);
 		}
 
@@ -220,7 +220,7 @@ namespace shz
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
 			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Plane PS";
-			ShaderCI.FilePath = "Assets/plane.psh";
+			ShaderCI.FilePath = "plane.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPlanePS);
 		}
 
@@ -313,7 +313,7 @@ namespace shz
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
 			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Shadow Map Vis VS";
-			ShaderCI.FilePath = "Assets/shadow_map_vis.vsh";
+			ShaderCI.FilePath = "shadow_map_vis.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pShadowMapVisVS);
 		}
 
@@ -323,7 +323,7 @@ namespace shz
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
 			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Shadow Map Vis PS";
-			ShaderCI.FilePath = "Assets/shadow_map_vis.psh";
+			ShaderCI.FilePath = "shadow_map_vis.psh";
 			m_pDevice->CreateShader(ShaderCI, &pShadowMapVisPS);
 		}
 

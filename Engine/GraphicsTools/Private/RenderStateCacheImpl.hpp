@@ -63,26 +63,22 @@ namespace shz
 		virtual bool SHZ_CALL_TYPE CreateShader(const ShaderCreateInfo& ShaderCI,
 			IShader** ppShader) override final;
 
-		virtual bool SHZ_CALL_TYPE CreateGraphicsPipelineState(
-			const GraphicsPipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
+		virtual bool SHZ_CALL_TYPE CreateGraphicsPipelineState(const GraphicsPipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
 		{
 			return CreatePipelineState(PSOCreateInfo, ppPipelineState);
 		}
 
-		virtual bool SHZ_CALL_TYPE CreateComputePipelineState(
-			const ComputePipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
+		virtual bool SHZ_CALL_TYPE CreateComputePipelineState(const ComputePipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
 		{
 			return CreatePipelineState(PSOCreateInfo, ppPipelineState);
 		}
 
-		virtual bool SHZ_CALL_TYPE CreateRayTracingPipelineState(
-			const RayTracingPipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
+		virtual bool SHZ_CALL_TYPE CreateRayTracingPipelineState(const RayTracingPipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
 		{
 			return CreatePipelineState(PSOCreateInfo, ppPipelineState);
 		}
 
-		virtual bool SHZ_CALL_TYPE CreateTilePipelineState(
-			const TilePipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
+		virtual bool SHZ_CALL_TYPE CreateTilePipelineState(const TilePipelineStateCreateInfo& PSOCreateInfo, IPipelineState** ppPipelineState) override final
 		{
 			return CreatePipelineState(PSOCreateInfo, ppPipelineState);
 		}

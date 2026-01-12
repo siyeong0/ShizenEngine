@@ -92,9 +92,19 @@
     <ClCompile Include="Private\ShaderToolsCommon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Private\SPIRVShaderResources.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\SPIRVTools.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\SPIRVUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Public\HLSLDefinitions.fxh" />
     <None Include="Public\HLSLDefinitions_inc.fxh" />
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

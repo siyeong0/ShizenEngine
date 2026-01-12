@@ -30,49 +30,49 @@
 namespace shz
 {
 
-namespace Parsing
-{
+	namespace Parsing
+	{
 
-HLSLTokenizer::HLSLTokenizer()
-{
-    // Populate HLSL keywords hash map
+		HLSLTokenizer::HLSLTokenizer()
+		{
+			// Populate HLSL keywords hash map
 #define DEFINE_KEYWORD(keyword) m_Keywords.insert(std::make_pair(#keyword, HLSLTokenInfo(HLSLTokenType::kw_##keyword, #keyword)));
-    ITERATE_HLSL_KEYWORDS(DEFINE_KEYWORD)
+			ITERATE_HLSL_KEYWORDS(DEFINE_KEYWORD)
 #undef DEFINE_KEYWORD
-}
+		}
 
-HLSLTokenizer::TokenListType HLSLTokenizer::Tokenize(const String& Source) const
-{
-    try
-    {
-        size_t TokenIdx = 0;
-        return Parsing::Tokenize<HLSLTokenInfo, TokenListType>(
-            Source.begin(), Source.end(),
-            [&TokenIdx](HLSLTokenType                      Type,
-                        const std::string::const_iterator& DelimStart,
-                        const std::string::const_iterator& DelimEnd,
-                        const std::string::const_iterator& LiteralStart,
-                        const std::string::const_iterator& LiteralEnd) //
-            {
-                return HLSLTokenInfo::Create(Type, DelimStart, DelimEnd, LiteralStart, LiteralEnd, TokenIdx++);
-            },
-            [&](const std::string::const_iterator& Start, const std::string::const_iterator& End) //
-            {
-                auto KeywordIt = m_Keywords.find(HashMapStringKey{std::string{Start, End}});
-                if (KeywordIt != m_Keywords.end())
-                {
-                    VERIFY(std::string(Start, End) == KeywordIt->second.Literal, "Inconsistent literal");
-                    return KeywordIt->second.Type;
-                }
-                return HLSLTokenType::Identifier;
-            });
-    }
-    catch (...)
-    {
-        return {};
-    }
-}
+		HLSLTokenizer::TokenListType HLSLTokenizer::Tokenize(const String& Source) const
+		{
+			try
+			{
+				size_t TokenIdx = 0;
+				return Parsing::Tokenize<HLSLTokenInfo, TokenListType>(
+					Source.begin(), Source.end(),
+					[&TokenIdx](HLSLTokenType                      Type,
+						const std::string::const_iterator& DelimStart,
+						const std::string::const_iterator& DelimEnd,
+						const std::string::const_iterator& LiteralStart,
+						const std::string::const_iterator& LiteralEnd) //
+					{
+						return HLSLTokenInfo::Create(Type, DelimStart, DelimEnd, LiteralStart, LiteralEnd, TokenIdx++);
+					},
+					[&](const std::string::const_iterator& Start, const std::string::const_iterator& End) //
+					{
+						auto KeywordIt = m_Keywords.find(HashMapStringKey{ std::string{Start, End} });
+						if (KeywordIt != m_Keywords.end())
+						{
+							VERIFY(std::string(Start, End) == KeywordIt->second.Literal, "Inconsistent literal");
+							return KeywordIt->second.Type;
+						}
+						return HLSLTokenType::Identifier;
+					});
+			}
+			catch (...)
+			{
+				return {};
+			}
+		}
 
-} // namespace Parsing
+	} // namespace Parsing
 
 } // namespace shz

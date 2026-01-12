@@ -694,7 +694,8 @@ namespace shz
 	}
 
 
-	void DXCompilerImpl::Compile(const ShaderCreateInfo& ShaderCI,
+	void DXCompilerImpl::Compile(
+		const ShaderCreateInfo& ShaderCI,
 		ShaderVersion           ShaderModel,
 		const char* Preamble,
 		IDxcBlob** ppByteCodeBlob,

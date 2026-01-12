@@ -1,5 +1,6 @@
-﻿/*
+/*
  *  Copyright 2019-2022 Diligent Graphics LLC
+ *  Copyright 2015-2019 Egor Yusov
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -24,30 +25,15 @@
  *  of the possibility of such damages.
  */
 
-#pragma once
-
-#include <vector>
-
-#include "Primitives/FlagEnum.h"
-
-#include <spirv-tools/libspirv.h>
+#include "pch.h"
+#include "DXCompiler.hpp"
 
 namespace shz
 {
 
-	enum SPIRV_OPTIMIZATION_FLAGS : uint32
+	std::unique_ptr<IDXCompiler> CreateDXCompiler(DXCompilerTarget Target, uint32 APIVersion, const char* pLibraryName)
 	{
-		SPIRV_OPTIMIZATION_FLAG_NONE = 0u,
-		SPIRV_OPTIMIZATION_FLAG_LEGALIZATION = 1u << 0u,
-		SPIRV_OPTIMIZATION_FLAG_PERFORMANCE = 1u << 1u,
-		SPIRV_OPTIMIZATION_FLAG_STRIP_REFLECTION = 1u << 2u
-	};
-	DEFINE_FLAG_ENUM_OPERATORS(SPIRV_OPTIMIZATION_FLAGS);
-
-
-	std::vector<uint32_t> OptimizeSPIRV(
-		const std::vector<uint32_t>& SrcSPIRV,
-		spv_target_env               TargetEnv,
-		SPIRV_OPTIMIZATION_FLAGS     Passes);
+		return {};
+	}
 
 } // namespace shz

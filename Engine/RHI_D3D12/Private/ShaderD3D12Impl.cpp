@@ -133,6 +133,7 @@ namespace shz
 		}
 		, m_EntryPoint{ ShaderCI.EntryPoint }
 	{
+
 	}
 
 	ShaderD3D12Impl::~ShaderD3D12Impl()

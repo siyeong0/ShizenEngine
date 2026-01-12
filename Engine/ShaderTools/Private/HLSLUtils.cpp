@@ -33,67 +33,67 @@ namespace shz
 {
 
 
-static constexpr char g_HLSLDefinitions[] =
-{
-#include "HLSLDefinitions_inc.fxh"
-};
+	static constexpr char g_HLSLDefinitions[] =
+	{
+	#include "HLSLDefinitions_inc.fxh"
+	};
 
 
 
-String BuildHLSLSourceString(const ShaderCreateInfo& ShaderCI) noexcept(false)
-{
-    String HLSLSource;
+	String BuildHLSLSourceString(const ShaderCreateInfo& ShaderCI) noexcept(false)
+	{
+		String HLSLSource;
 
-    HLSLSource.append(g_HLSLDefinitions);
-    AppendShaderTypeDefinitions(HLSLSource, ShaderCI.Desc.ShaderType);
+		HLSLSource.append(g_HLSLDefinitions);
+		AppendShaderTypeDefinitions(HLSLSource, ShaderCI.Desc.ShaderType);
 
-    if (ShaderCI.Macros)
-    {
-        HLSLSource += '\n';
-        AppendShaderMacros(HLSLSource, ShaderCI.Macros);
-    }
+		if (ShaderCI.Macros)
+		{
+			HLSLSource += '\n';
+			AppendShaderMacros(HLSLSource, ShaderCI.Macros);
+		}
 
-    AppendLine1Marker(HLSLSource, ShaderCI.FilePath != nullptr ? ShaderCI.FilePath : ShaderCI.Desc.Name);
-    AppendShaderSourceCode(HLSLSource, ShaderCI);
+		AppendLine1Marker(HLSLSource, ShaderCI.FilePath != nullptr ? ShaderCI.FilePath : ShaderCI.Desc.Name);
+		AppendShaderSourceCode(HLSLSource, ShaderCI);
 
-    return HLSLSource;
-}
+		return HLSLSource;
+	}
 
-String GetHLSLProfileString(SHADER_TYPE ShaderType, ShaderVersion ShaderModel)
-{
-    String strShaderProfile;
+	String GetHLSLProfileString(SHADER_TYPE ShaderType, ShaderVersion ShaderModel)
+	{
+		String strShaderProfile;
 
-    static_assert(SHADER_TYPE_LAST == 0x4000, "Please update the switch below to handle the new shader type");
-    switch (ShaderType)
-    {
-        
-        case SHADER_TYPE_VERTEX:           strShaderProfile = "vs"; break;
-        case SHADER_TYPE_PIXEL:            strShaderProfile = "ps"; break;
-        case SHADER_TYPE_GEOMETRY:         strShaderProfile = "gs"; break;
-        case SHADER_TYPE_HULL:             strShaderProfile = "hs"; break;
-        case SHADER_TYPE_DOMAIN:           strShaderProfile = "ds"; break;
-        case SHADER_TYPE_COMPUTE:          strShaderProfile = "cs"; break;
-        case SHADER_TYPE_AMPLIFICATION:    strShaderProfile = "as"; break;
-        case SHADER_TYPE_MESH:             strShaderProfile = "ms"; break;
-        case SHADER_TYPE_RAY_GEN:
-        case SHADER_TYPE_RAY_MISS:
-        case SHADER_TYPE_RAY_CLOSEST_HIT:
-        case SHADER_TYPE_RAY_ANY_HIT:
-        case SHADER_TYPE_RAY_INTERSECTION:
-        case SHADER_TYPE_CALLABLE:         strShaderProfile = "lib"; break;
-        case SHADER_TYPE_TILE:
-            UNSUPPORTED("Unsupported shader type");
-            break;
-        
-        default: UNEXPECTED("Unknown shader type");
-    }
+		static_assert(SHADER_TYPE_LAST == 0x4000, "Please update the switch below to handle the new shader type");
+		switch (ShaderType)
+		{
 
-    strShaderProfile += "_";
-    strShaderProfile += std::to_string(ShaderModel.Major);
-    strShaderProfile += "_";
-    strShaderProfile += std::to_string(ShaderModel.Minor);
+		case SHADER_TYPE_VERTEX:           strShaderProfile = "vs"; break;
+		case SHADER_TYPE_PIXEL:            strShaderProfile = "ps"; break;
+		case SHADER_TYPE_GEOMETRY:         strShaderProfile = "gs"; break;
+		case SHADER_TYPE_HULL:             strShaderProfile = "hs"; break;
+		case SHADER_TYPE_DOMAIN:           strShaderProfile = "ds"; break;
+		case SHADER_TYPE_COMPUTE:          strShaderProfile = "cs"; break;
+		case SHADER_TYPE_AMPLIFICATION:    strShaderProfile = "as"; break;
+		case SHADER_TYPE_MESH:             strShaderProfile = "ms"; break;
+		case SHADER_TYPE_RAY_GEN:
+		case SHADER_TYPE_RAY_MISS:
+		case SHADER_TYPE_RAY_CLOSEST_HIT:
+		case SHADER_TYPE_RAY_ANY_HIT:
+		case SHADER_TYPE_RAY_INTERSECTION:
+		case SHADER_TYPE_CALLABLE:         strShaderProfile = "lib"; break;
+		case SHADER_TYPE_TILE:
+			UNSUPPORTED("Unsupported shader type");
+			break;
 
-    return strShaderProfile;
-}
+		default: UNEXPECTED("Unknown shader type");
+		}
+
+		strShaderProfile += "_";
+		strShaderProfile += std::to_string(ShaderModel.Major);
+		strShaderProfile += "_";
+		strShaderProfile += std::to_string(ShaderModel.Minor);
+
+		return strShaderProfile;
+	}
 
 } // namespace shz
