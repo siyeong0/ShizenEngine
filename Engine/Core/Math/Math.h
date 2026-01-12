@@ -6,6 +6,7 @@
 #include "Engine/Core/Math/Public/Vector3.h"
 #include "Engine/Core/Math/Public/Vector4.h"
 
+#include "Engine/Core/Math/Public/Matrix2x2.h"
 #include "Engine/Core/Math/Public/Matrix3x3.h"
 #include "Engine/Core/Math/Public/Matrix4x3.h"
 #include "Engine/Core/Math/Public/Matrix4x4.h"
@@ -23,6 +24,7 @@
 MATH_STATIC_ASSERT_PODLIKE(shz::Vector2);
 MATH_STATIC_ASSERT_PODLIKE(shz::Vector3);
 MATH_STATIC_ASSERT_PODLIKE(shz::Vector4);
+MATH_STATIC_ASSERT_PODLIKE(shz::Matrix2x2);
 MATH_STATIC_ASSERT_PODLIKE(shz::Matrix3x3);
 MATH_STATIC_ASSERT_PODLIKE(shz::Matrix4x3);
 MATH_STATIC_ASSERT_PODLIKE(shz::Matrix4x4);
@@ -38,7 +40,7 @@ namespace shz
 
 	using float4x4 = Matrix4x4;
 	using float3x3 = Matrix3x3;
-
+	using float2x2 = Matrix2x2;
 
 	constexpr inline uint32 BitInterleave16(uint16 _x, uint16 _y)
 	{
