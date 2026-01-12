@@ -144,6 +144,7 @@
     <ClInclude Include="Public\ImGuiImplShizen.hpp" />
     <ClInclude Include="Public\ImGuiImplWin64.hpp" />
     <ClInclude Include="Public\ImGuiUtils.hpp" />
+    <ClInclude Include="Public\imGuIZMO.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -156,6 +157,7 @@
     <ClCompile Include="Private\ImGuiImplShizen.cpp" />
     <ClCompile Include="Private\ImGuiImplWin64.cpp" />
     <ClCompile Include="Private\ImGuiUtils.cpp" />
+    <ClCompile Include="Private\imGuIZMO.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">

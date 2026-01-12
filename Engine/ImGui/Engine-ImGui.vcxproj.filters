@@ -30,6 +30,9 @@
     <ClInclude Include="Public\ImGuiUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\imGuIZMO.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -45,6 +48,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\ImGuiUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\imGuIZMO.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -26,6 +26,7 @@
  */
 
 #include "pch.h"
+#include "ThirdParty/imgui/imgui.h"
 #include "Platforms/Win64/Public/WinHPreface.h"
 #include <Windows.h>
 #include "Platforms/Win64/Public/WinHPostface.h"

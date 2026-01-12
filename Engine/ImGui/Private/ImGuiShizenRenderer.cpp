@@ -26,6 +26,7 @@
  */
 
 #include "pch.h"
+#include "ThirdParty/imgui/imgui.h"
 #include <cstddef>
 #include "ImGuiShizenRenderer.hpp"
 #include "ImGuiImplShizen.hpp"

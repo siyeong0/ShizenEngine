@@ -6,5 +6,7 @@
 
 #ifndef PCH_H
 #define PCH_H
-#include <imgui.h>
+
+#define IMGUI_DEFINE_MATH_OPERATORS
+
 #endif //PCH_H
