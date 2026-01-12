@@ -41,14 +41,16 @@ namespace shz
 
 	// =========================== Depth-stencil states ===========================
 
-	static constexpr DepthStencilStateDesc DSS_Default{};
+	static constexpr DepthStencilStateDesc DSS_Default = {};
 
-	static constexpr DepthStencilStateDesc DSS_DisableDepth{
+	static constexpr DepthStencilStateDesc DSS_DisableDepth
+	{
 		false, // DepthEnable
 		false  // DepthWriteEnable
 	};
 
-	static constexpr DepthStencilStateDesc DSS_EnableDepthNoWrites{
+	static constexpr DepthStencilStateDesc DSS_EnableDepthNoWrites
+	{
 		true, // DepthEnable
 		false // DepthWriteEnable
 	};
@@ -56,46 +58,54 @@ namespace shz
 
 	// ============================ Rasterizer states =============================
 
-	static constexpr RasterizerStateDesc RS_Default{};
+	static constexpr RasterizerStateDesc RS_Default = {};
 
-	static constexpr RasterizerStateDesc RS_SolidFillNoCull{
+	static constexpr RasterizerStateDesc RS_SolidFillNoCull
+	{
 		FILL_MODE_SOLID,
 		CULL_MODE_NONE,
 	};
 
-	static constexpr RasterizerStateDesc RS_SolidFillCullBack{
+	static constexpr RasterizerStateDesc RS_SolidFillCullBack
+	{
 		FILL_MODE_SOLID,
 		CULL_MODE_BACK,
 	};
 
-	static constexpr RasterizerStateDesc RS_SolidFillCullFront{
+	static constexpr RasterizerStateDesc RS_SolidFillCullFront
+	{
 		FILL_MODE_SOLID,
 		CULL_MODE_FRONT,
 	};
 
-	static constexpr RasterizerStateDesc RS_SolidFillCullBackCCW{
+	static constexpr RasterizerStateDesc RS_SolidFillCullBackCCW
+	{
 		FILL_MODE_SOLID,
 		CULL_MODE_BACK,
 		true,
 	};
 
-	static constexpr RasterizerStateDesc RS_SolidFillCullFrontCCW{
+	static constexpr RasterizerStateDesc RS_SolidFillCullFrontCCW
+	{
 		FILL_MODE_SOLID,
 		CULL_MODE_FRONT,
 		true,
 	};
 
-	static constexpr RasterizerStateDesc RS_WireFillNoCull{
+	static constexpr RasterizerStateDesc RS_WireFillNoCull
+	{
 		FILL_MODE_WIREFRAME,
 		CULL_MODE_NONE,
 	};
 
-	static constexpr RasterizerStateDesc RS_WireFillCullBack{
+	static constexpr RasterizerStateDesc RS_WireFillCullBack
+	{
 		FILL_MODE_WIREFRAME,
 		CULL_MODE_BACK,
 	};
 
-	static constexpr RasterizerStateDesc RS_WireFillCullFront{
+	static constexpr RasterizerStateDesc RS_WireFillCullFront
+	{
 		FILL_MODE_WIREFRAME,
 		CULL_MODE_FRONT,
 	};
@@ -103,9 +113,10 @@ namespace shz
 
 	// =============================== Blend states ===============================
 
-	static constexpr BlendStateDesc BS_Default{};
+	static constexpr BlendStateDesc BS_Default = {};
 
-	static constexpr BlendStateDesc BS_AlphaBlend{
+	static constexpr BlendStateDesc BS_AlphaBlend
+	{
 		false,                // AlphaToCoverageEnable
 		false,                // IndependentBlendEnable
 		RenderTargetBlendDesc // Render Target 0
@@ -121,7 +132,8 @@ namespace shz
 		},
 	};
 
-	static constexpr BlendStateDesc BS_PremultipliedAlphaBlend{
+	static constexpr BlendStateDesc BS_PremultipliedAlphaBlend
+	{
 		false,                // AlphaToCoverageEnable
 		false,                // IndependentBlendEnable
 		RenderTargetBlendDesc // Render Target 0
@@ -137,7 +149,8 @@ namespace shz
 		},
 	};
 
-	static constexpr BlendStateDesc BS_AdditiveBlend{
+	static constexpr BlendStateDesc BS_AdditiveBlend
+	{
 		false,                // AlphaToCoverageEnable
 		false,                // IndependentBlendEnable
 		RenderTargetBlendDesc // Render Target 0
@@ -156,7 +169,8 @@ namespace shz
 
 	// ================================= Samplers =================================
 
-	static constexpr SamplerDesc Sam_LinearClamp{
+	static constexpr SamplerDesc Sampler_LinearClamp
+	{
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
@@ -165,7 +179,8 @@ namespace shz
 		TEXTURE_ADDRESS_CLAMP,
 	};
 
-	static constexpr SamplerDesc Sam_PointClamp{
+	static constexpr SamplerDesc Sampler_PointClamp
+	{
 		FILTER_TYPE_POINT,
 		FILTER_TYPE_POINT,
 		FILTER_TYPE_POINT,
@@ -174,7 +189,8 @@ namespace shz
 		TEXTURE_ADDRESS_CLAMP,
 	};
 
-	static constexpr SamplerDesc Sam_LinearMirror{
+	static constexpr SamplerDesc Sampler_LinearMirror
+	{
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
@@ -183,7 +199,8 @@ namespace shz
 		TEXTURE_ADDRESS_MIRROR,
 	};
 
-	static constexpr SamplerDesc Sam_PointWrap{
+	static constexpr SamplerDesc Sampler_PointWrap
+	{
 		FILTER_TYPE_POINT,
 		FILTER_TYPE_POINT,
 		FILTER_TYPE_POINT,
@@ -192,7 +209,8 @@ namespace shz
 		TEXTURE_ADDRESS_WRAP,
 	};
 
-	static constexpr SamplerDesc Sam_LinearWrap{
+	static constexpr SamplerDesc Sampler_LinearWrap
+	{
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
 		FILTER_TYPE_LINEAR,
@@ -201,7 +219,8 @@ namespace shz
 		TEXTURE_ADDRESS_WRAP,
 	};
 
-	static constexpr SamplerDesc Sam_ComparisonLinearClamp{
+	static constexpr SamplerDesc Sampler_ComparisonLinearClamp
+	{
 		FILTER_TYPE_COMPARISON_LINEAR,
 		FILTER_TYPE_COMPARISON_LINEAR,
 		FILTER_TYPE_COMPARISON_LINEAR,
@@ -213,7 +232,8 @@ namespace shz
 		COMPARISON_FUNC_LESS,
 	};
 
-	static constexpr SamplerDesc Sam_Aniso2xClamp{
+	static constexpr SamplerDesc Sampler_Aniso2xClamp
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -224,7 +244,8 @@ namespace shz
 		2    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso4xClamp{
+	static constexpr SamplerDesc Sampler_Aniso4xClamp
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -235,7 +256,8 @@ namespace shz
 		4    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso8xClamp{
+	static constexpr SamplerDesc Sampler_Aniso8xClamp
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -246,7 +268,8 @@ namespace shz
 		8    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso16xClamp{
+	static constexpr SamplerDesc Sampler_Aniso16xClamp
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -257,7 +280,8 @@ namespace shz
 		16   // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso2xWrap{
+	static constexpr SamplerDesc Sampler_Aniso2xWrap
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -268,7 +292,8 @@ namespace shz
 		2    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso4xWrap{
+	static constexpr SamplerDesc Sampler_Aniso4xWrap
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -279,7 +304,8 @@ namespace shz
 		4    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso8xWrap{
+	static constexpr SamplerDesc Sampler_Aniso8xWrap
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
@@ -290,7 +316,8 @@ namespace shz
 		8    // MaxAnisotropy
 	};
 
-	static constexpr SamplerDesc Sam_Aniso16xWrap{
+	static constexpr SamplerDesc Sampler_Aniso16xWrap
+	{
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,
 		FILTER_TYPE_ANISOTROPIC,

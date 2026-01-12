@@ -80,6 +80,8 @@ Global
 		Primitives\Primitives.vcxitems*{a5e4fc5e-76f4-4b6b-827a-e3e4e22b7a3e}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{c6788123-cf0c-4ef4-9f66-53c5be58f8b8}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{c6788123-cf0c-4ef4-9f66-53c5be58f8b8}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{c9600621-e50e-4e3b-95a8-7e1ebc9a258d}*SharedItemsImports = 4

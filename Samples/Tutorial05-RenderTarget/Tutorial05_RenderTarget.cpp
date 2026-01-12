@@ -184,7 +184,7 @@ namespace shz
         // Define immutable sampler for g_Texture. Immutable samplers should be used whenever possible
         ImmutableSamplerDesc ImtblSamplers[] =
         {
-            { SHADER_TYPE_PIXEL, "g_Texture", Sam_LinearClamp }
+            { SHADER_TYPE_PIXEL, "g_Texture", Sampler_LinearClamp }
         };
         
         RTPSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers = ImtblSamplers;
