@@ -89,10 +89,10 @@ namespace shz
             for (size_t row = 0; row < size_t{ Attribs.Height }; ++row)
             {
                 size_t src_row = Attribs.FlipVertically ? size_t{ Attribs.Height } - row - 1 : row;
-                // clang-format off
+                
                 const SrcChannelType* pSrcRow = reinterpret_cast<const SrcChannelType*>((static_cast<const uint8*>(Attribs.pSrcPixels) + size_t{ Attribs.SrcStride } *src_row));
                 DstChannelType* pDstRow = reinterpret_cast<DstChannelType*>((static_cast<uint8*>(Attribs.pDstPixels) + size_t{ Attribs.DstStride } *row));
-                // clang-format on
+                
                 Handler(pSrcRow, pDstRow);
             }
             };
@@ -141,7 +141,7 @@ namespace shz
                 int SrcCompOffset = SrcCompOffset_ZERO;
                 switch (Swizzle)
                 {
-                    // clang-format off
+                    
                 case TEXTURE_COMPONENT_SWIZZLE_IDENTITY: SrcCompOffset = IdentityOffset;     break;
                 case TEXTURE_COMPONENT_SWIZZLE_ZERO:     SrcCompOffset = SrcCompOffset_ZERO; break;
                 case TEXTURE_COMPONENT_SWIZZLE_ONE:      SrcCompOffset = SrcCompOffset_ONE;  break;
@@ -149,7 +149,7 @@ namespace shz
                 case TEXTURE_COMPONENT_SWIZZLE_G:        SrcCompOffset = 1;                  break;
                 case TEXTURE_COMPONENT_SWIZZLE_B:        SrcCompOffset = 2;                  break;
                 case TEXTURE_COMPONENT_SWIZZLE_A:        SrcCompOffset = 3;                  break;
-                    // clang-format on
+                    
                 default:
                     UNEXPECTED("Unexpected swizzle value");
                 }

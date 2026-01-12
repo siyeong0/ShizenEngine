@@ -26,8 +26,6 @@
  */
 #pragma once
 
- // clang-format off
-
 #if PLATFORM_WIN32
 
 #include "AppBaseWin64.h"

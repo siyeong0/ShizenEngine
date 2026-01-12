@@ -39,7 +39,7 @@ namespace shz
 
 	SampleBase* CreateSample()
 	{
-		return new Tutorial11_ResourceUpdates();
+		return new Tutorial04_ResourceUpdate();
 	}
 
 	namespace
@@ -69,7 +69,7 @@ namespace shz
 		//        (-1,-1,-1)       (+1,-1,-1)
 		//
 
-		// clang-format off
+		
 		const Vertex CubeVerts[] =
 		{
 			{float3(-1,-1,-1), float2(0,1)},
@@ -102,11 +102,11 @@ namespace shz
 			{float3(+1,+1,+1), float2(0,0)},
 			{float3(-1,+1,+1), float2(1,0)}
 		};
-		// clang-format on
+		
 
 	} // namespace
 
-	void Tutorial11_ResourceUpdates::CreatePipelineStates()
+	void Tutorial04_ResourceUpdate::CreatePipelineStates()
 	{
 		// Pipeline state object encompasses configuration of all GPU stages
 
@@ -119,7 +119,7 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
+		
 		// This tutorial will render to a single render target
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
 		// Set render target format which is the format of the swap chain's color buffer
@@ -132,7 +132,7 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
 		// Enable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-		// clang-format on
+		
 
 		ShaderCreateInfo ShaderCI;
 		// Tell the system that the shader source code is in HLSL.
@@ -179,7 +179,7 @@ namespace shz
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 		}
 
-		// clang-format off
+		
 		// Define vertex shader input layout
 		LayoutElement LayoutElems[] =
 		{
@@ -188,7 +188,7 @@ namespace shz
 			// Attribute 1 - texture coordinates
 			LayoutElement{1, 0, 2, VT_FLOAT32, false}
 		};
-		// clang-format on
+		
 
 		PSOCreateInfo.pVS = pVS;
 		PSOCreateInfo.pPS = pPS;
@@ -199,7 +199,7 @@ namespace shz
 		// Define variable type that will be used by default
 		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		// clang-format off
+		
 		// Shader variables should typically be mutable, which means they are expected
 		// to change on a per-instance basis
 		ShaderResourceVariableDesc Vars[] =
@@ -219,7 +219,7 @@ namespace shz
 		{
 			{SHADER_TYPE_PIXEL, "g_Texture", SamLinearClampDesc}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers = ImtblSamplers;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pPSO);
@@ -234,7 +234,7 @@ namespace shz
 		m_pPSO_NoCull->GetStaticVariableByName(SHADER_TYPE_VERTEX, "Constants")->Set(m_VSConstants);
 	}
 
-	void Tutorial11_ResourceUpdates::CreateVertexBuffers()
+	void Tutorial04_ResourceUpdate::CreateVertexBuffers()
 	{
 		for (uint32 i = 0; i < _countof(m_CubeVertexBuffer); ++i)
 		{
@@ -262,9 +262,9 @@ namespace shz
 		}
 	}
 
-	void Tutorial11_ResourceUpdates::CreateIndexBuffer()
+	void Tutorial04_ResourceUpdate::CreateIndexBuffer()
 	{
-		// clang-format off
+		
 		uint32 Indices[] =
 		{
 			2,0,1,     2,3,0,
@@ -274,7 +274,7 @@ namespace shz
 			16,18,17,  16,19,18,
 			20,21,22,  20,22,23
 		};
-		// clang-format on
+		
 
 		// Create index buffer
 		BufferDesc IndBuffDesc;
@@ -288,7 +288,7 @@ namespace shz
 		m_pDevice->CreateBuffer(IndBuffDesc, &IBData, &m_CubeIndexBuffer);
 	}
 
-	void Tutorial11_ResourceUpdates::LoadTextures()
+	void Tutorial04_ResourceUpdate::LoadTextures()
 	{
 		for (size_t i = 0; i < m_Textures.size(); ++i)
 		{
@@ -327,7 +327,7 @@ namespace shz
 	}
 
 
-	void Tutorial11_ResourceUpdates::Initialize(const SampleInitInfo& InitInfo)
+	void Tutorial04_ResourceUpdate::Initialize(const SampleInitInfo& InitInfo)
 	{
 		SampleBase::Initialize(InitInfo);
 
@@ -347,7 +347,7 @@ namespace shz
 		}
 	}
 
-	void Tutorial11_ResourceUpdates::DrawCube(const float4x4& WVPMatrix, shz::IBuffer* pVertexBuffer, shz::IShaderResourceBinding* pSRB)
+	void Tutorial04_ResourceUpdate::DrawCube(const float4x4& WVPMatrix, shz::IBuffer* pVertexBuffer, shz::IShaderResourceBinding* pSRB)
 	{
 		// Bind vertex buffer
 		IBuffer* pBuffs[] = { pVertexBuffer };
@@ -373,7 +373,7 @@ namespace shz
 	}
 
 	// Render a frame
-	void Tutorial11_ResourceUpdates::Render()
+	void Tutorial04_ResourceUpdate::Render()
 	{
 		ITextureView* pRTV = m_pSwapChain->GetCurrentBackBufferRTV();
 		ITextureView* pDSV = m_pSwapChain->GetDepthBufferDSV();
@@ -410,7 +410,7 @@ namespace shz
 		DrawCube(CubeRotation * float4x4::Translation({ +4.f, +2.f, 0.f }) * ViewProj, m_CubeVertexBuffer[2], m_SRBs[1]);
 	}
 
-	void Tutorial11_ResourceUpdates::WriteStripPattern(uint8* pData, uint32 Width, uint32 Height, uint64 Stride)
+	void Tutorial04_ResourceUpdate::WriteStripPattern(uint8* pData, uint32 Width, uint32 Height, uint64 Stride)
 	{
 		uint32 x_scale = std::uniform_int_distribution<uint32>{ 1, 8 }(m_gen);
 		uint32 y_scale = std::uniform_int_distribution<uint32>{ 1, 8 }(m_gen);
@@ -425,7 +425,7 @@ namespace shz
 		}
 	}
 
-	void Tutorial11_ResourceUpdates::WriteDiamondPattern(uint8* pData, uint32 Width, uint32 Height, uint64 Stride)
+	void Tutorial04_ResourceUpdate::WriteDiamondPattern(uint8* pData, uint32 Width, uint32 Height, uint64 Stride)
 	{
 		uint32 x_scale = std::uniform_int_distribution<uint32>{ 1, 8 }(m_gen);
 		uint32 y_scale = std::uniform_int_distribution<uint32>{ 1, 8 }(m_gen);
@@ -440,7 +440,7 @@ namespace shz
 		}
 	}
 
-	void Tutorial11_ResourceUpdates::UpdateTexture(uint32 TexIndex)
+	void Tutorial04_ResourceUpdate::UpdateTexture(uint32 TexIndex)
 	{
 		ITexture& Texture = *m_Textures[TexIndex];
 
@@ -470,7 +470,7 @@ namespace shz
 		}
 	}
 
-	void Tutorial11_ResourceUpdates::MapTexture(uint32 TexIndex, bool MapEntireTexture)
+	void Tutorial04_ResourceUpdate::MapTexture(uint32 TexIndex, bool MapEntireTexture)
 	{
 		ITexture& Texture = *m_Textures[TexIndex];
 		const TextureDesc& TexDesc = m_Textures[2]->GetDesc();
@@ -498,7 +498,7 @@ namespace shz
 		m_pImmediateContext->UnmapTextureSubresource(&Texture, 0, 0);
 	}
 
-	void Tutorial11_ResourceUpdates::UpdateBuffer(uint32 BufferIndex)
+	void Tutorial04_ResourceUpdate::UpdateBuffer(uint32 BufferIndex)
 	{
 		uint32 NumVertsToUpdate = std::uniform_int_distribution<uint32>{ 2, 8 }(m_gen);
 		uint32 FirstVertToUpdate = std::uniform_int_distribution<uint32>{ 0, static_cast<uint32>(_countof(CubeVerts)) - NumVertsToUpdate }(m_gen);
@@ -518,7 +518,7 @@ namespace shz
 			RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 	}
 
-	void Tutorial11_ResourceUpdates::MapDynamicBuffer(uint32 BufferIndex)
+	void Tutorial04_ResourceUpdate::MapDynamicBuffer(uint32 BufferIndex)
 	{
 		// Map the buffer and write current world-view-projection matrix
 		MapHelper<Vertex> Vertices(m_pImmediateContext, m_CubeVertexBuffer[BufferIndex], MAP_WRITE, MAP_FLAG_DISCARD);
@@ -531,7 +531,7 @@ namespace shz
 	}
 
 
-	void Tutorial11_ResourceUpdates::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
+	void Tutorial04_ResourceUpdate::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
 	{
 		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
 

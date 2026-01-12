@@ -56,6 +56,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "imgui", "ThirdParty\imgui\i
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tutorial04-ResourceUpdate", "Samples\Tutorial04-ResourceUpdate\Tutorial04-ResourceUpdate.vcxproj", "{4FBEF7DA-A1DB-4295-ACB2-B05C609CCAB8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tutorial05-RenderTarget", "Samples\Tutorial05-RenderTarget\Tutorial05-RenderTarget.vcxproj", "{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}"
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		Platforms\Common\Platforms-Common.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
@@ -232,6 +234,14 @@ Global
 		{4FBEF7DA-A1DB-4295-ACB2-B05C609CCAB8}.Release|x64.Build.0 = Release|x64
 		{4FBEF7DA-A1DB-4295-ACB2-B05C609CCAB8}.Release|x86.ActiveCfg = Release|Win32
 		{4FBEF7DA-A1DB-4295-ACB2-B05C609CCAB8}.Release|x86.Build.0 = Release|Win32
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Debug|x64.ActiveCfg = Debug|x64
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Debug|x64.Build.0 = Debug|x64
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Debug|x86.ActiveCfg = Debug|Win32
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Debug|x86.Build.0 = Debug|Win32
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Release|x64.ActiveCfg = Release|x64
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Release|x64.Build.0 = Release|x64
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Release|x86.ActiveCfg = Release|Win32
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -255,6 +265,7 @@ Global
 		{C9600621-E50E-4E3B-95A8-7E1EBC9A258D} = {4B94ECC0-DD89-4416-9C93-8008347B16D1}
 		{C754F36D-ACDB-4092-A591-29998B76D79D} = {9A094062-AFE7-4875-8F38-158B6883D32F}
 		{4FBEF7DA-A1DB-4295-ACB2-B05C609CCAB8} = {4B94ECC0-DD89-4416-9C93-8008347B16D1}
+		{C6788123-CF0C-4EF4-9F66-53C5BE58F8B8} = {4B94ECC0-DD89-4416-9C93-8008347B16D1}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {18FF0238-B1F0-41F5-B348-E7D538FEA02E}

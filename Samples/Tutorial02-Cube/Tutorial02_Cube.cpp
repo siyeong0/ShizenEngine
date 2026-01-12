@@ -51,7 +51,7 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
+		
 		// This tutorial will render to a single render target
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
 		// Set render target format which is the format of the swap chain's color buffer
@@ -64,7 +64,7 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
 		// Enable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-		// clang-format on
+		
 
 		ShaderCreateInfo ShaderCI;
 		// Tell the system that the shader source code is in HLSL.
@@ -118,7 +118,7 @@ namespace shz
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 		}
 
-		// clang-format off
+		
 		// Define vertex shader input layout
 		LayoutElement LayoutElems[] =
 		{
@@ -127,7 +127,7 @@ namespace shz
 			// Attribute 1 - vertex color
 			LayoutElement{1, 0, 4, VT_FLOAT32, false}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
 		PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
 
@@ -201,7 +201,7 @@ namespace shz
 
 	void Tutorial02_Cube::CreateIndexBuffer()
 	{
-		// clang-format off
+		
 		constexpr uint32 Indices[] =
 		{
 			2,0,1, 2,3,0,
@@ -211,7 +211,7 @@ namespace shz
 			1,5,2, 5,6,2,
 			3,6,7, 3,2,6
 		};
-		// clang-format on
+		
 
 		BufferDesc IndBuffDesc;
 		IndBuffDesc.Name = "Cube index buffer";

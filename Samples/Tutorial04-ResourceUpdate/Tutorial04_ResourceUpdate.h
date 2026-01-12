@@ -35,7 +35,7 @@
 namespace shz
 {
 
-	class Tutorial11_ResourceUpdates final : public SampleBase
+	class Tutorial04_ResourceUpdate final : public SampleBase
 	{
 	public:
 		virtual void Initialize(const SampleInitInfo& InitInfo) override final;

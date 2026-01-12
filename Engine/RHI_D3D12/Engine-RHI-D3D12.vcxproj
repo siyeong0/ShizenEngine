@@ -309,6 +309,12 @@
     <ProjectReference Include="..\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\RHI\Engine-RHI.vcxproj">
+      <Project>{945ab006-8bd2-442f-822d-2b72abf5ed6c}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\RHI_D3DBase\Engine-RHI-D3DBase.vcxproj">
+      <Project>{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

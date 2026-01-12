@@ -52,7 +52,7 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
+		
 		// This tutorial will render to a single render target
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
 		// Set render target format which is the format of the swap chain's color buffer
@@ -65,7 +65,7 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
 		// Enable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-		// clang-format on
+		
 
 		ShaderCreateInfo ShaderCI;
 		// Tell the system that the shader source code is in HLSL.
@@ -112,7 +112,7 @@ namespace shz
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 		}
 
-		// clang-format off
+		
 		// Define vertex shader input layout
 		LayoutElement LayoutElems[] =
 		{
@@ -121,7 +121,7 @@ namespace shz
 			// Attribute 1 - texture coordinates
 			LayoutElement{1, 0, 2, VT_FLOAT32, false}
 		};
-		// clang-format on
+		
 
 		PSOCreateInfo.pVS = pVS;
 		PSOCreateInfo.pPS = pPS;
@@ -132,18 +132,18 @@ namespace shz
 		// Define variable type that will be used by default
 		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		// clang-format off
+		
 		// Shader variables should typically be mutable, which means they are expected
 		// to change on a per-instance basis
 		ShaderResourceVariableDesc Vars[] =
 		{
 			{SHADER_TYPE_PIXEL, "g_Texture", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
-		// clang-format off
+		
 		// Define immutable sampler for g_Texture. Immutable samplers should be used whenever possible
 		SamplerDesc SamLinearClampDesc
 		{
@@ -154,7 +154,7 @@ namespace shz
 		{
 			{SHADER_TYPE_PIXEL, "g_Texture", SamLinearClampDesc}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers = ImtblSamplers;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
 
@@ -244,7 +244,7 @@ namespace shz
 
 	void Tutorial03_Texturing::CreateIndexBuffer()
 	{
-		// clang-format off
+		
 		constexpr uint32 Indices[] =
 		{
 			2,0,1,    2,3,0,
@@ -254,7 +254,7 @@ namespace shz
 			16,18,17, 16,19,18,
 			20,21,22, 20,22,23
 		};
-		// clang-format on
+		
 
 		BufferDesc IndBuffDesc;
 		IndBuffDesc.Name = "Cube index buffer";

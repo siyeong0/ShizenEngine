@@ -214,7 +214,7 @@ namespace shz
 			}
 
 			return AdapterId;
-			};
+		};
 #endif
 
 		std::vector<IDeviceContext*> ppContexts;
@@ -575,7 +575,6 @@ namespace shz
 
 			if (m_pDevice->GetDeviceInfo().IsD3DDevice())
 			{
-				// clang-format off
 				std::pair<uint32, const char*> FrameLatencies[] =
 				{
 					{1, "1"},
@@ -589,7 +588,6 @@ namespace shz
 					{9, "9"},
 					{10, "10"}
 				};
-				// clang-format on
 
 				if (SCDesc.BufferCount <= _countof(FrameLatencies) && m_MaxFrameLatency <= _countof(FrameLatencies))
 				{
@@ -786,10 +784,10 @@ namespace shz
 				m_DeviceType = RENDER_DEVICE_TYPE_GL;
 #endif
 			}
-		}
+			}
 
 		return m_TheSample->ProcessCommandLine(ArgsParser.ArgC(), ArgsParser.ArgV());
-	}
+		}
 
 	void SampleApp::WindowResize(int width, int height)
 	{
@@ -1056,4 +1054,4 @@ namespace shz
 		}
 	}
 
-} // namespace shz
+	} // namespace shz

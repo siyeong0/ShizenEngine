@@ -45,7 +45,7 @@
  // http://go.microsoft.com/fwlink/?LinkId=248929
  //--------------------------------------------------------------------------------------
 
- // clang-format off
+ 
 
 #include "pch.h"
 #include "TextureLoaderImpl.hpp"
@@ -828,7 +828,7 @@ namespace
 		return DXGI_FORMAT_UNKNOWN;
 	}
 
-	// clang-format on
+	
 
 	//--------------------------------------------------------------------------------------
 	static void FillInitData(

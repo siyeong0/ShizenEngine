@@ -43,12 +43,12 @@ public:
 
     LRESULT Win32_ProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-    // clang-format off
+    
     ImGuiImplWin64             (const ImGuiImplWin64&)  = delete;
     ImGuiImplWin64             (      ImGuiImplWin64&&) = delete;
     ImGuiImplWin64& operator = (const ImGuiImplWin64&)  = delete;
     ImGuiImplWin64& operator = (      ImGuiImplWin64&&) = delete;
-    // clang-format on
+    
 
     virtual void NewFrame(uint32 RenderSurfaceWidth, uint32 RenderSurfaceHeight, SURFACE_TRANSFORM SurfacePreTransform) override final;
 };

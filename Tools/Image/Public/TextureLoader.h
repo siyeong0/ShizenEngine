@@ -178,7 +178,7 @@ namespace shz
 	static constexpr struct INTERFACE_ID IID_TextureLoader =
 	{ 0xe04fe6d5, 0x8665, 0x4183, {0xa8, 0x72, 0x85, 0x2e, 0xf, 0x7c, 0xe2, 0x42} };
 
-	// clang-format off
+	
 
 	/// Texture loader object.
 	struct SHZ_INTERFACE ITextureLoader : public IObject

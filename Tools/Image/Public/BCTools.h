@@ -65,6 +65,6 @@ namespace shz
 	///                           Must be greater than 2.
 	void DecompressBC5Block(const uint8* Bits, uint8* DstBuffer, uint32 DstChannels = 2);
 
-	// clang-format on
+	
 
 } // namespace shz

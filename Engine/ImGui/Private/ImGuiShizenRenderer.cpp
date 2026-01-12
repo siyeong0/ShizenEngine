@@ -263,8 +263,6 @@ fn main(in: PSInput) -> @location(0) vec4f {
 }
 )";
 
-	// clang-format off
-
 	// glslangValidator.exe -V -e main --vn VertexShader_SPIRV ImGUI.vert
 
 	static constexpr uint32_t VertexShader_SPIRV[] =
@@ -433,8 +431,6 @@ fn main(in: PSInput) -> @location(0) vec4f {
 		0x00000079,0x000100fd,0x00010038
 	};
 
-	// clang-format on
-
 
 	static constexpr char ShadersMSL[] = R"(
 #include <metal_stdlib>
@@ -490,14 +486,14 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 )";
 
 	ImGuiShizenRenderer::ImGuiShizenRenderer(const ImGuiShizenCreateInfo& CI) :
-		// clang-format off
+		
 		m_pDevice{ CI.pDevice },
 		m_BackBufferFmt{ CI.BackBufferFmt },
 		m_DepthBufferFmt{ CI.DepthBufferFmt },
 		m_VertexBufferSize{ CI.InitialVertexBufferSize },
 		m_IndexBufferSize{ CI.InitialIndexBufferSize },
 		m_ColorConversionMode{ CI.ColorConversion }
-		// clang-format on
+		
 	{
 		//Check base vertex support
 		m_BaseVertexSupported = m_pDevice->GetAdapterInfo().DrawCommand.CapFlags & DRAW_COMMAND_CAP_FLAG_BASE_VERTEX;
@@ -1002,7 +998,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 			float T = pDrawData->DisplayPos.y;
 			float B = pDrawData->DisplayPos.y + pDrawData->DisplaySize.y;
 
-			// clang-format off
+			
 			float4x4 Projection
 			{
 				2.0f / (R - L),                  0.0f,   0.0f,   0.0f,
@@ -1010,7 +1006,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 				0.0f,                            0.0f,   0.5f,   0.0f,
 				(R + L) / (L - R),  (T + B) / (B - T),   0.5f,   1.0f
 			};
-			// clang-format on
+			
 
 			// Bake pre-transform into projection
 			switch (m_SurfacePreTransform)

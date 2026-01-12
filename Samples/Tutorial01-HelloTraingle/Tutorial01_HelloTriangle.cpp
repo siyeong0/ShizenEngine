@@ -94,7 +94,7 @@ void main(in  PSInput  PSIn,
         // This is a graphics pipeline
         PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-        // clang-format off
+        
         // This tutorial will render to a single render target
         PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
         // Set render target format which is the format of the swap chain's color buffer
@@ -107,7 +107,7 @@ void main(in  PSInput  PSIn,
         PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
         // Disable depth testing
         PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
-        // clang-format on
+        
 
         ShaderCreateInfo ShaderCI;
         // Tell the system that the shader source code is in HLSL.

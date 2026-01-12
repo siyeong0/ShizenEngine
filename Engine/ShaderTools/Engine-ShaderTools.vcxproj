@@ -178,6 +178,11 @@
     <None Include="Public\HLSLDefinitions.fxh" />
     <None Include="Public\HLSLDefinitions_inc.fxh" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Engine-Core.vcxproj">
+      <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -228,6 +228,9 @@
     <ClInclude Include="Runtime\Resources\Win64AppResource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Math\Public\Matrix2x2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

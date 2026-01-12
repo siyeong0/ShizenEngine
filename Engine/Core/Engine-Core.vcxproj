@@ -148,6 +148,7 @@
     <ClInclude Include="Common\Public\BasicPlatformMisc.hpp" />
     <ClInclude Include="Common\Public\CallbackWrapper.hpp" />
     <ClInclude Include="Common\Public\Cast.hpp" />
+    <ClInclude Include="Math\Public\Matrix2x2.h" />
     <ClInclude Include="Memory\Public\DataBlobImpl.hpp" />
     <ClInclude Include="Memory\Public\DefaultRawMemoryAllocator.hpp" />
     <ClInclude Include="Common\Public\DummyReferenceCounters.hpp" />

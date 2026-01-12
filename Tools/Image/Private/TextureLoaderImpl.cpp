@@ -358,7 +358,7 @@ namespace shz
 
 							const T* SrcPtr = static_cast<const T*>(SubResData.pData);
 							const size_t SrcStride = static_cast<size_t>(SubResData.Stride) / sizeof(T);
-							// clang-format off
+							
 							BlockData =
 							{
 								SrcPtr[col0 + SrcStride * row0], SrcPtr[col1 + SrcStride * row0], SrcPtr[col2 + SrcStride * row0], SrcPtr[col3 + SrcStride * row0],
@@ -366,7 +366,7 @@ namespace shz
 								SrcPtr[col0 + SrcStride * row2], SrcPtr[col1 + SrcStride * row2], SrcPtr[col2 + SrcStride * row2], SrcPtr[col3 + SrcStride * row2],
 								SrcPtr[col0 + SrcStride * row3], SrcPtr[col1 + SrcStride * row3], SrcPtr[col2 + SrcStride * row3], SrcPtr[col3 + SrcStride * row3]
 							};
-							// clang-format on
+							
 							return reinterpret_cast<const unsigned char*>(BlockData.data());
 							};
 

@@ -108,7 +108,7 @@ namespace shz
 		{
 			switch (GLInternalFormat)
 			{
-				// clang-format off
+				
 			case GL_RGBA32F:        return TEX_FORMAT_RGBA32_FLOAT;
 			case GL_RGBA32UI:       return TEX_FORMAT_RGBA32_UINT;
 			case GL_RGBA32I:        return TEX_FORMAT_RGBA32_SINT;
@@ -185,7 +185,7 @@ namespace shz
 			case GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT:   return TEX_FORMAT_BC6H_SF16;
 			case GL_COMPRESSED_RGBA_BPTC_UNORM:         return TEX_FORMAT_BC7_UNORM;
 			case GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM:   return TEX_FORMAT_BC7_UNORM_SRGB;
-				// clang-format on
+				
 			default:
 				UNSUPPORTED("Unsupported internal format");
 				return TEX_FORMAT_UNKNOWN;
