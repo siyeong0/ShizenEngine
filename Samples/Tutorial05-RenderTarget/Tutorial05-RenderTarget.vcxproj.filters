@@ -62,11 +62,9 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Assets\cube.psh" />
-    <FxCompile Include="Assets\rendertarget.psh" />
-    <FxCompile Include="Assets\rendertarget.vsh" />
-  </ItemGroup>
-  <ItemGroup>
     <CustomBuild Include="Assets\cube.vsh" />
+    <CustomBuild Include="Assets\cube.psh" />
+    <CustomBuild Include="Assets\rendertarget.psh" />
+    <CustomBuild Include="Assets\rendertarget.vsh" />
   </ItemGroup>
 </Project>

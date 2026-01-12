@@ -246,4 +246,4 @@ namespace shz
 
     extern SampleBase* CreateSample();
 
-} // namespace Diligent
+} // namespace shz

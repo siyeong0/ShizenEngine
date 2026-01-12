@@ -88,7 +88,7 @@ namespace shz
         }
 
     protected:
-        void InitializeDiligentEngine(const NativeWindow* pWindow);
+        void InitializeShizenEngine(const NativeWindow* pWindow);
         void InitializeSample();
         void UpdateAdaptersDialog();
         void UpdateAppSettings(bool IsInitialization);
@@ -122,7 +122,11 @@ namespace shz
 
         int          m_InitialWindowWidth = 0;
         int          m_InitialWindowHeight = 0;
+#    ifdef SHZ_DEBUG
+        int          m_ValidationLevel = 2;
+#    else
         int          m_ValidationLevel = -1;
+#    endif
         std::string  m_AppTitle;
         uint32       m_AdapterId = DEFAULT_ADAPTER_ID;
         ADAPTER_TYPE m_AdapterType = ADAPTER_TYPE_UNKNOWN;

@@ -1,4 +1,4 @@
-/*
+﻿/*
  *  Copyright 2019-2025 Diligent Graphics LLC
  *  Copyright 2015-2019 Egor Yusov
  *
@@ -97,9 +97,9 @@ namespace shz
 		RefCntAutoPtr<IShader> pVS;
 		{
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-			ShaderCI.EntryPoint = "VS_MAIN";
+			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Cube VS";
-			ShaderCI.FilePath = "cube.hlsl";
+			ShaderCI.FilePath = "cube.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pVS);
 			VERIFY_EXPR(pVS != nullptr);
 		}
@@ -108,9 +108,9 @@ namespace shz
 		RefCntAutoPtr<IShader> pPS;
 		{
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-			ShaderCI.EntryPoint = "PS_MAIN";
+			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Cube PS";
-			ShaderCI.FilePath = "cube.hlsl";
+			ShaderCI.FilePath = "cube.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 			VERIFY_EXPR(pPS != nullptr);
 		}
@@ -203,9 +203,9 @@ namespace shz
 		RefCntAutoPtr<IShader> pVS;
 		{
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-			ShaderCI.EntryPoint = "VS_MAIN";
+			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Light volume VS";
-			ShaderCI.FilePath = "light_volume_integrate.hlsl";
+			ShaderCI.FilePath = "light_volume.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pVS);
 			VERIFY_EXPR(pVS != nullptr);
 		}
@@ -215,9 +215,9 @@ namespace shz
 		{
 			ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-			ShaderCI.EntryPoint = "PS_MAIN";
+			ShaderCI.EntryPoint = "main";
 			ShaderCI.Desc.Name = "Light volume PS";
-			ShaderCI.FilePath = "light_volume_integrate.hlsl";
+			ShaderCI.FilePath = "light_volume.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 			VERIFY_EXPR(pPS != nullptr);
 		}

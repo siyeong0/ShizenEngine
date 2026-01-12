@@ -63,6 +63,9 @@
     <ClInclude Include="Public\SPIRVUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\DXBCChecksum.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -99,6 +102,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\SPIRVUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\DXBCChecksum.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

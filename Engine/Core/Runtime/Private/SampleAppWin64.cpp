@@ -44,7 +44,8 @@ namespace
         EnableWindow(hButton, Enable);
     }
 
-    INT_PTR CALLBACK SelectDeviceTypeDialogProc(HWND   hwndDlg,
+    INT_PTR CALLBACK SelectDeviceTypeDialogProc(
+        HWND   hwndDlg,
         UINT   message,
         WPARAM wParam,
         LPARAM lParam)
@@ -187,7 +188,7 @@ namespace shz
             try
             {
                 Win64NativeWindow Window{ hWnd };
-                InitializeDiligentEngine(&Window);
+                InitializeShizenEngine(&Window);
 
                 // Initialize Dear ImGUI
                 const auto& SCDesc = m_pSwapChain->GetDesc();

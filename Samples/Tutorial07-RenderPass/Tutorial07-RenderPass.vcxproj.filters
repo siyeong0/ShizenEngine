@@ -69,7 +69,5 @@
     <CustomBuild Include="Assets\cube.psh" />
     <CustomBuild Include="Assets\cube.vsh" />
     <CustomBuild Include="Assets\light_volume.vsh" />
-    <CustomBuild Include="Assets\light_volume_integrate.hlsl" />
-    <CustomBuild Include="Assets\cube.hlsl" />
   </ItemGroup>
 </Project>

@@ -659,7 +659,6 @@ namespace shz
 
 #endif // SHZ_DEBUG
 
-
 	template <typename PSOCreateInfoType>
 	void PipelineStateD3D12Impl::InitInternalObjects(const PSOCreateInfoType& CreateInfo,
 		TShaderStages& ShaderStages,
@@ -680,7 +679,6 @@ namespace shz
 
 		InitRootSignature(CreateInfo, ShaderStages, pLocalRootSig);
 	}
-
 
 	void PipelineStateD3D12Impl::InitializePipeline(const GraphicsPipelineStateCreateInfo& CreateInfo)
 	{

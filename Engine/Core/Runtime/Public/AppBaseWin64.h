@@ -66,4 +66,4 @@ namespace shz
 		}
 	};
 
-} // namespace Diligent
+} // namespace shz

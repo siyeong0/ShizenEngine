@@ -59,15 +59,13 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Assets\cube.psh" />
-    <FxCompile Include="Assets\cube.vsh" />
-    <FxCompile Include="Assets\cube_shadow.vsh" />
-    <FxCompile Include="Assets\plane.vsh" />
-    <FxCompile Include="Assets\shadow_map_vis.psh" />
-    <FxCompile Include="Assets\shadow_map_vis.vsh" />
-  </ItemGroup>
-  <ItemGroup>
     <CustomBuild Include="Assets\plane.psh" />
+    <CustomBuild Include="Assets\cube.psh" />
+    <CustomBuild Include="Assets\cube.vsh" />
+    <CustomBuild Include="Assets\cube_shadow.vsh" />
+    <CustomBuild Include="Assets\plane.vsh" />
+    <CustomBuild Include="Assets\shadow_map_vis.psh" />
+    <CustomBuild Include="Assets\shadow_map_vis.vsh" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\structures.hlsli" />

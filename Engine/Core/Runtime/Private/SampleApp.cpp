@@ -123,7 +123,7 @@ namespace shz
 			m_bShowAdaptersDialog = DesiredSettings.ShowAdaptersDialog;
 	}
 
-	void SampleApp::InitializeDiligentEngine(const NativeWindow* pWindow)
+	void SampleApp::InitializeShizenEngine(const NativeWindow* pWindow)
 	{
 		if (m_ScreenCaptureInfo.AllowCapture)
 			m_SwapChainInitDesc.Usage |= SWAP_CHAIN_USAGE_COPY_SOURCE;
@@ -230,7 +230,7 @@ namespace shz
 			EngineD3D11CreateInfo EngineCI;
 			EngineCI.GraphicsAPIVersion = { 11, 0 };
 
-#    ifdef DILIGENT_DEBUG
+#    ifdef SHZ_DEBUG
 			EngineCI.SetValidationLevel(VALIDATION_LEVEL_2);
 #    endif
 			if (m_ValidationLevel >= 0)
@@ -288,7 +288,7 @@ namespace shz
 #    if D3D11_SUPPORTED
 				LOG_ERROR_MESSAGE("Failed to find Direct3D12-compatible hardware adapters. Attempting to initialize the engine in Direct3D11 mode.");
 				m_DeviceType = RENDER_DEVICE_TYPE_D3D11;
-				InitializeDiligentEngine(pWindow);
+				InitializeShizenEngine(pWindow);
 				return;
 #    else
 				throw;
@@ -335,10 +335,6 @@ namespace shz
 			EngineGLCreateInfo EngineCI;
 			EngineCI.Window = *pWindow;
 
-#    if PLATFORM_WEB
-			EngineCI.WebGLAttribs.Alpha = false;
-			EngineCI.WebGLAttribs.PowerPreference = WEBGL_POWER_PREFERENCE_HIGH_PERFORMANCE;
-#    endif
 			if (m_ValidationLevel >= 0)
 				EngineCI.SetValidationLevel(static_cast<VALIDATION_LEVEL>(m_ValidationLevel));
 

@@ -35,7 +35,7 @@
 #include "Platforms/Win64/Public/WinHPostface.h"
 
 #include "DXBCUtils.hpp"
- // #include "ThirdParty/GPUOpenShaderUtils/DXBCChecksum.h"
+#include "DXBCChecksum.h"
 
 namespace shz
 {
@@ -1756,9 +1756,10 @@ namespace shz
 	namespace DXBCUtils
 	{
 
-		RefCntAutoPtr<IDataBlob> RemapResourceBindings(const TResourceBindingMap& ResourceMap,
+		RefCntAutoPtr<IDataBlob> RemapResourceBindings(
+			const TResourceBindingMap& ResourceMap,
 			const void* pBytecode,
-			size_t                     Size)
+			size_t Size)
 		{
 			if (pBytecode == nullptr)
 			{
@@ -1782,14 +1783,14 @@ namespace shz
 
 #ifdef SHZ_DEBUG
 			{
-				/*   DWORD Checksum[4] = {};
+				   DWORD Checksum[4] = {};
 				   CalculateDXBCChecksum(static_cast<const BYTE*>(pBytecode), static_cast<DWORD>(Size), Checksum);
 
 				   DEV_CHECK_ERR((Checksum[0] == Header.Checksum[0] &&
 								  Checksum[1] == Header.Checksum[1] &&
 								  Checksum[2] == Header.Checksum[2] &&
 								  Checksum[3] == Header.Checksum[3]),
-								 "Unexpected checksum. The byte code may be corrupted or the container format may have changed.");*/
+								 "Unexpected checksum. The byte code may be corrupted or the container format may have changed.");
 			}
 #endif
 
@@ -1866,7 +1867,6 @@ namespace shz
 							LOG_ERROR_MESSAGE("Unexpected shader model: ", RDEFHeader.MajorVersion, '.', RDEFHeader.MinorVersion);
 						}
 					}
-
 					if (Chunk.Magic == SHDRFourCC || Chunk.Magic == SHEXFourCC)
 					{
 						ShaderBytecodeRemapper Remapper{ RemappedBytecode, ChunkOffset, ExtResourceMap, BindingsPerType };
@@ -1907,12 +1907,12 @@ namespace shz
 			DXBCHeader& DstHeader = *reinterpret_cast<DXBCHeader*>(RemappedBytecode.data());
 			DstHeader.TotalSize = static_cast<uint32>(RemappedBytecode.size());
 
-			/// update checksum
-			//DWORD Checksum[4] = {};
-			//CalculateDXBCChecksum(reinterpret_cast<BYTE*>(RemappedBytecode.data()), static_cast<DWORD>(RemappedBytecode.size()), Checksum);
+			// update checksum
+			DWORD Checksum[4] = {};
+			CalculateDXBCChecksum(reinterpret_cast<BYTE*>(RemappedBytecode.data()), static_cast<DWORD>(RemappedBytecode.size()), Checksum);
 
-			//static_assert(sizeof(Header.Checksum) == sizeof(Checksum), "Unexpected checksum size");
-			//memcpy(DstHeader.Checksum, Checksum, sizeof(Header.Checksum));
+			static_assert(sizeof(Header.Checksum) == sizeof(Checksum), "Unexpected checksum size");
+			memcpy(DstHeader.Checksum, Checksum, sizeof(Header.Checksum));
 
 			return DataBlobImpl::Create(std::move(RemappedBytecode));
 		}
