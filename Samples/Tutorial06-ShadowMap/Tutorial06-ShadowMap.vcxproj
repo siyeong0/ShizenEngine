@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{c6788123-cf0c-4ef4-9f66-53c5be58f8b8}</ProjectGuid>
-    <RootNamespace>Tutorial05RenderTarget</RootNamespace>
+    <ProjectGuid>{cda59c63-0245-47c8-ae6c-fa5e0df8cdfa}</ProjectGuid>
+    <RootNamespace>Tutorial06ShadowMap</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -56,8 +56,6 @@
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
-    <Import Project="..\..\Primitives\Primitives.vcxitems" Label="Shared" />
-    <Import Project="..\..\Platforms\Common\Platforms-Common.vcxitems" Label="Shared" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -145,76 +143,48 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TexturedCube.h" />
-    <ClInclude Include="Tutorial05_RenderTarget.h" />
+    <ClInclude Include="Tutorial06_ShadowMap.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="TexturedCube.cpp" />
-    <ClCompile Include="Tutorial05_RenderTarget.cpp" />
+    <ClCompile Include="Tutorial06_ShadowMap.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial05-RenderTarget.rc" />
+    <ResourceCompile Include="Tutorial06-ShadowMap.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Assets\DGLogo.png" />
     <Image Include="Assets\pearl_abyss_logo.png" />
     <Image Include="small.ico" />
-    <Image Include="Tutorial05-RenderTarget.ico" />
+    <Image Include="Tutorial06-ShadowMap.ico" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Assets\cube.psh">
-      <FileType>HLSL</FileType>
+      <FileType>Document</FileType>
     </CustomBuild>
     <CustomBuild Include="Assets\cube.vsh">
-      <FileType>HLSL</FileType>
+      <FileType>Document</FileType>
     </CustomBuild>
-    <CustomBuild Include="Assets\rendertarget.psh">
-      <FileType>HLSL</FileType>
+    <CustomBuild Include="Assets\cube_shadow.vsh">
+      <FileType>Document</FileType>
     </CustomBuild>
-    <CustomBuild Include="Assets\rendertarget.vsh">
-      <FileType>HLSL</FileType>
+    <CustomBuild Include="Assets\plane.psh">
+      <FileType>Document</FileType>
+    </CustomBuild>
+    <CustomBuild Include="Assets\plane.vsh">
+      <FileType>Document</FileType>
+    </CustomBuild>
+    <CustomBuild Include="Assets\shadow_map_vis.psh">
+      <FileType>Document</FileType>
+    </CustomBuild>
+    <CustomBuild Include="Assets\shadow_map_vis.vsh">
+      <FileType>Document</FileType>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Engine\Core\Engine-Core.vcxproj">
-      <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\GraphicsArchiver\Engine-GraphicsArchiver.vcxproj">
-      <Project>{56281a9e-af63-4c08-acee-3e619e8ea440}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\GraphicsTools\Engine-GraphicsTools.vcxproj">
-      <Project>{d00159aa-bdd4-46e5-9f2a-ee4574b45379}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\GraphicsUtils\Engine-GraphicsUtils.vcxproj">
-      <Project>{5bd3cd7e-f27f-43b2-8bca-b9ce3047b507}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\ImGui\Engine-ImGui.vcxproj">
-      <Project>{7f85a29a-8214-48e6-9531-db5a4d102df5}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\RHI\Engine-RHI.vcxproj">
-      <Project>{945ab006-8bd2-442f-822d-2b72abf5ed6c}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\RHI_D3D12\Engine-RHI-D3D12.vcxproj">
-      <Project>{3e258117-8c7c-494f-9d61-1629a0f7400d}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\RHI_D3DBase\Engine-RHI-D3DBase.vcxproj">
-      <Project>{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Engine\ShaderTools\Engine-ShaderTools.vcxproj">
-      <Project>{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Platforms\Basic\Platforms-Basic.vcxproj">
-      <Project>{9064164c-970f-4494-88c6-4cb710c1d714}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Platforms\Win64\Platforms-Win64.vcxproj">
-      <Project>{33e167c2-6555-4601-b556-df06e1328c1b}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">
-      <Project>{c754f36d-acdb-4092-a591-29998b76d79d}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Tools\Image\Tools-Image.vcxproj">
-      <Project>{5b44506a-9b58-4488-a48f-52044bfd19c8}</Project>
-    </ProjectReference>
+    <None Include="Assets\structures.hlsli">
+      <FileType>Document</FileType>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
