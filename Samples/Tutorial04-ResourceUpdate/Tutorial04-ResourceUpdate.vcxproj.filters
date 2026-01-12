@@ -13,9 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Assets">
-      <UniqueIdentifier>{7b25481a-21c0-4f3f-8bcb-50a39add1613}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -27,12 +24,12 @@
     <ClInclude Include="Resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tutorial03_Texturing.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="Tutorial04_ResourceUpdate.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Tutorial03_Texturing.cpp">
+    <ClCompile Include="Tutorial04_ResourceUpdate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
@@ -40,7 +37,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial03-Texturing.rc">
+    <ResourceCompile Include="Tutorial04-ResourceUpdate.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
@@ -48,10 +45,19 @@
     <Image Include="small.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="Tutorial03-Texturing.ico">
+    <Image Include="Tutorial04-ResourceUpdate.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="Assets\pearl_abyss_logo.png">
+    <Image Include="Assets\KittyCraft0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Assets\KittyCraft1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Assets\KittyCraft2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Assets\KittyCraft3.png">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

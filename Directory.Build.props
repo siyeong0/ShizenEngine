@@ -69,7 +69,9 @@
 	</ItemDefinitionGroup>
 
 
-	<!-- Additional linker dependencies for **Samples** projects -->
+	<!-- ========================================================= -->
+	<!-- Additional linker dependencies for **Samples** projects   -->
+	<!-- ========================================================= -->
 	<ItemDefinitionGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\'))">
 		<Link>
 			<AdditionalDependencies>
@@ -94,5 +96,4 @@
 			</AdditionalDependencies>
 		</Link>
 	</ItemDefinitionGroup>
-
 </Project>

@@ -97,14 +97,14 @@ namespace shz
 		public:
 			PrimitiveTopology_To_D3D12_PRIMITIVE_TOPOLOGY_TYPE()
 			{
-				
+
 				m_Map[PRIMITIVE_TOPOLOGY_UNDEFINED] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_UNDEFINED;
 				m_Map[PRIMITIVE_TOPOLOGY_TRIANGLE_LIST] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 				m_Map[PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 				m_Map[PRIMITIVE_TOPOLOGY_POINT_LIST] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 				m_Map[PRIMITIVE_TOPOLOGY_LINE_LIST] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 				m_Map[PRIMITIVE_TOPOLOGY_LINE_STRIP] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
-				
+
 				for (int t = static_cast<int>(PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST); t < static_cast<int>(PRIMITIVE_TOPOLOGY_NUM_TOPOLOGIES); ++t)
 					m_Map[t] = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
 			}
@@ -118,7 +118,8 @@ namespace shz
 			std::array<D3D12_PRIMITIVE_TOPOLOGY_TYPE, PRIMITIVE_TOPOLOGY_NUM_TOPOLOGIES> m_Map;
 		};
 
-		void BuildRTPipelineDescription(const RayTracingPipelineStateCreateInfo& CreateInfo,
+		void BuildRTPipelineDescription(
+			const RayTracingPipelineStateCreateInfo& CreateInfo,
 			std::vector<D3D12_STATE_SUBOBJECT>& Subobjects,
 			DynamicLinearAllocator& TempPool,
 			PipelineStateD3D12Impl::TShaderStages& ShaderStages) noexcept(false)
@@ -186,7 +187,7 @@ namespace shz
 				}
 				else
 					return it_inserted.first->second;
-				};
+			};
 
 			for (uint32 i = 0; i < CreateInfo.GeneralShaderCount; ++i)
 			{
@@ -237,7 +238,8 @@ namespace shz
 		}
 
 		template <typename TNameToGroupIndexMap>
-		void GetShaderIdentifiers(ID3D12DeviceChild* pSO,
+		void GetShaderIdentifiers(
+			ID3D12DeviceChild* pSO,
 			const RayTracingPipelineStateCreateInfo& CreateInfo,
 			const TNameToGroupIndexMap& NameToGroupIndex,
 			uint8* ShaderData,
@@ -400,9 +402,10 @@ namespace shz
 		return SignDesc;
 	}
 
-	void PipelineStateD3D12Impl::RemapOrVerifyShaderResources(TShaderStages& ShaderStages,
+	void PipelineStateD3D12Impl::RemapOrVerifyShaderResources(
+		TShaderStages& ShaderStages,
 		const RefCntAutoPtr<PipelineResourceSignatureD3D12Impl>* pSignatures,
-		uint32                                                   SignatureCount,
+		uint32 SignatureCount,
 		const RootSignatureD3D12& RootSig,
 		IDXCompiler* pDxCompiler,
 		LocalRootSignatureD3D12* pLocalRootSig,
@@ -500,7 +503,8 @@ namespace shz
 		}
 	}
 
-	void PipelineStateD3D12Impl::InitRootSignature(const PipelineStateCreateInfo& CreateInfo,
+	void PipelineStateD3D12Impl::InitRootSignature(
+		const PipelineStateCreateInfo& CreateInfo,
 		TShaderStages& ShaderStages,
 		LocalRootSignatureD3D12* pLocalRootSig) noexcept(false)
 	{
@@ -508,7 +512,12 @@ namespace shz
 		if (m_UsingImplicitSignature && (InternalFlags & PSO_CREATE_INTERNAL_FLAG_IMPLICIT_SIGNATURE0) == 0)
 		{
 			const PipelineResourceSignatureDescWrapper SignDesc =
-				GetDefaultResourceSignatureDesc(ShaderStages, m_Desc.Name, m_Desc.ResourceLayout, m_Desc.SRBAllocationGranularity, pLocalRootSig);
+				GetDefaultResourceSignatureDesc(
+					ShaderStages,
+					m_Desc.Name,
+					m_Desc.ResourceLayout,
+					m_Desc.SRBAllocationGranularity,
+					pLocalRootSig);
 
 			// Always initialize default resource signature as internal device object.
 			// This is necessary to avoid cyclic references from GenerateMips.
@@ -531,9 +540,9 @@ namespace shz
 		const bool RemapResources = (CreateInfo.Flags & PSO_CREATE_FLAG_DONT_REMAP_SHADER_RESOURCES) == 0;
 
 		const auto ValidateBindings = [this](const ShaderD3D12Impl* pShader, const ResourceBinding::TMap& BindingsMap) //
-			{
-				ValidateShaderResourceBindings(m_Desc.Name, *pShader->GetShaderResources(), BindingsMap);
-			};
+		{
+			ValidateShaderResourceBindings(m_Desc.Name, *pShader->GetShaderResources(), BindingsMap);
+		};
 		const TValidateShaderBindingsFn ValidateBindingsFn = !RemapResources && (InternalFlags & PSO_CREATE_INTERNAL_FLAG_NO_SHADER_REFLECTION) == 0 ?
 			TValidateShaderBindingsFn{ ValidateBindings } :
 			TValidateShaderBindingsFn{ nullptr };
@@ -695,13 +704,13 @@ namespace shz
 				D3D12_SHADER_BYTECODE* pd3d12ShaderBytecode = nullptr;
 				switch (Stage.Type)
 				{
-					
+
 				case SHADER_TYPE_VERTEX:   pd3d12ShaderBytecode = &d3d12PSODesc.VS; break;
 				case SHADER_TYPE_PIXEL:    pd3d12ShaderBytecode = &d3d12PSODesc.PS; break;
 				case SHADER_TYPE_GEOMETRY: pd3d12ShaderBytecode = &d3d12PSODesc.GS; break;
 				case SHADER_TYPE_HULL:     pd3d12ShaderBytecode = &d3d12PSODesc.HS; break;
 				case SHADER_TYPE_DOMAIN:   pd3d12ShaderBytecode = &d3d12PSODesc.DS; break;
-					
+
 				default: UNEXPECTED("Unexpected shader type");
 				}
 
@@ -813,11 +822,11 @@ namespace shz
 				D3D12_SHADER_BYTECODE* pd3d12ShaderBytecode = nullptr;
 				switch (Stage.Type)
 				{
-					
+
 				case SHADER_TYPE_AMPLIFICATION: pd3d12ShaderBytecode = &d3d12PSODesc.AS; break;
 				case SHADER_TYPE_MESH:          pd3d12ShaderBytecode = &d3d12PSODesc.MS; break;
 				case SHADER_TYPE_PIXEL:         pd3d12ShaderBytecode = &d3d12PSODesc.PS; break;
-					
+
 				default: UNEXPECTED("Unexpected shader type");
 				}
 
@@ -974,7 +983,7 @@ namespace shz
 	PipelineStateD3D12Impl::PipelineStateD3D12Impl(
 		IReferenceCounters* pRefCounters,
 		RenderDeviceD3D12Impl* pDeviceD3D12,
-		const GraphicsPipelineStateCreateInfo& CreateInfo) 
+		const GraphicsPipelineStateCreateInfo& CreateInfo)
 		: TPipelineStateBase{ pRefCounters, pDeviceD3D12, CreateInfo }
 	{
 		Construct<ShaderD3D12Impl>(CreateInfo);
@@ -983,7 +992,7 @@ namespace shz
 	PipelineStateD3D12Impl::PipelineStateD3D12Impl(
 		IReferenceCounters* pRefCounters,
 		RenderDeviceD3D12Impl* pDeviceD3D12,
-		const ComputePipelineStateCreateInfo& CreateInfo) 
+		const ComputePipelineStateCreateInfo& CreateInfo)
 		: TPipelineStateBase{ pRefCounters, pDeviceD3D12, CreateInfo }
 	{
 		Construct<ShaderD3D12Impl>(CreateInfo);
@@ -992,7 +1001,7 @@ namespace shz
 	PipelineStateD3D12Impl::PipelineStateD3D12Impl(
 		IReferenceCounters* pRefCounters,
 		RenderDeviceD3D12Impl* pDeviceD3D12,
-		const RayTracingPipelineStateCreateInfo& CreateInfo) 
+		const RayTracingPipelineStateCreateInfo& CreateInfo)
 		: TPipelineStateBase{ pRefCounters, pDeviceD3D12, CreateInfo }
 	{
 		Construct<ShaderD3D12Impl>(CreateInfo);
