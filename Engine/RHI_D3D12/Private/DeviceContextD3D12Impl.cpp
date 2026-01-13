@@ -1883,7 +1883,7 @@ namespace shz
 	void DeviceContextD3D12Impl::UpdateTexture(ITexture* pTexture,
 		uint32                         MipLevel,
 		uint32                         Slice,
-		const Box& DstBox,
+		const IBox& DstBox,
 		const TextureSubResData& SubresData,
 		RESOURCE_STATE_TRANSITION_MODE SrcBufferTransitionMode,
 		RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode)
@@ -1896,9 +1896,9 @@ namespace shz
 		DEV_CHECK_ERR(Desc.Usage == USAGE_DEFAULT || Desc.Usage == USAGE_SPARSE,
 			"Only USAGE_DEFAULT or USAGE_SPARSE textures should be updated with UpdateData()");
 
-		Box                         BlockAlignedBox;
+		IBox                         BlockAlignedBox;
 		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Desc.Format);
-		const Box* pBox = nullptr;
+		const IBox* pBox = nullptr;
 		if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
 		{
 			// Align update region by the compressed block size
@@ -1947,7 +1947,7 @@ namespace shz
 		const TextureDesc& DstTexDesc = pDstTexD3D12->GetDesc();
 
 		D3D12_BOX D3D12SrcBox, * pD3D12SrcBox = nullptr;
-		if (const Box* pSrcBox = CopyAttribs.pSrcBox)
+		if (const IBox* pSrcBox = CopyAttribs.pSrcBox)
 		{
 			D3D12SrcBox.left = pSrcBox->MinX;
 			D3D12SrcBox.right = pSrcBox->MaxX;
@@ -2056,7 +2056,7 @@ namespace shz
 		uint64                         BufferSize,
 		TextureD3D12Impl& TextureD3D12,
 		uint32                         DstSubResIndex,
-		const Box& DstBox,
+		const IBox& DstBox,
 		RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode)
 	{
 		const TextureDesc& TexDesc = TextureD3D12.GetDesc();
@@ -2142,7 +2142,7 @@ namespace shz
 		uint64                         SrcDepthStride,
 		class TextureD3D12Impl& TextureD3D12,
 		uint32                         DstSubResIndex,
-		const Box& DstBox,
+		const IBox& DstBox,
 		RESOURCE_STATE_TRANSITION_MODE BufferTransitionMode,
 		RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode)
 	{
@@ -2171,7 +2171,7 @@ namespace shz
 	}
 
 	DeviceContextD3D12Impl::TextureUploadSpace DeviceContextD3D12Impl::AllocateTextureUploadSpace(TEXTURE_FORMAT TexFmt,
-		const Box& Region)
+		const IBox& Region)
 	{
 		TextureUploadSpace UploadSpace;
 		VERIFY_EXPR(Region.IsValid());
@@ -2209,7 +2209,7 @@ namespace shz
 		uint64                         SrcDepthStride,
 		TextureD3D12Impl& TextureD3D12,
 		uint32                         DstSubResIndex,
-		const Box& DstBox,
+		const IBox& DstBox,
 		RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode)
 	{
 		const TextureDesc& TexDesc = TextureD3D12.GetDesc();
@@ -2252,7 +2252,7 @@ namespace shz
 		uint32                    ArraySlice,
 		MAP_TYPE                  MapType,
 		MAP_FLAGS                 MapFlags,
-		const Box* pMapRegion,
+		const IBox* pMapRegion,
 		MappedTextureSubresource& MappedData)
 	{
 		TDeviceContextBase::MapTextureSubresource(pTexture, MipLevel, ArraySlice, MapType, MapFlags, pMapRegion, MappedData);
@@ -2272,7 +2272,7 @@ namespace shz
 			if ((MapFlags & (MAP_FLAG_DISCARD | MAP_FLAG_NO_OVERWRITE)) != 0)
 				LOG_INFO_MESSAGE_ONCE("Mapping textures with flags MAP_FLAG_DISCARD or MAP_FLAG_NO_OVERWRITE has no effect in D3D12 backend");
 
-			Box FullExtentBox;
+			IBox FullExtentBox;
 			if (pMapRegion == nullptr)
 			{
 				FullExtentBox.MaxX = std::max(TexDesc.Width >> MipLevel, 1u);

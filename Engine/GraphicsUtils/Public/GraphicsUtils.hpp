@@ -775,10 +775,10 @@ namespace shz
 		uint64 MemorySize = 0;
 
 		// Texture region
-		Box Region;
+		IBox Region;
 	};
 	BufferToTextureCopyInfo GetBufferToTextureCopyInfo(TEXTURE_FORMAT Format,
-		const Box& Region,
+		const IBox& Region,
 		uint32         RowStrideAlignment);
 
 
@@ -882,7 +882,7 @@ namespace shz
 	SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& TexDesc);
 
 	// Returns the number of sparse memory tiles in the given box region
-	inline uint3 GetNumSparseTilesInBox(const Box& Region, const uint32 TileSize[3])
+	inline uint3 GetNumSparseTilesInBox(const IBox& Region, const uint32 TileSize[3])
 	{
 		return uint3
 		{
@@ -899,7 +899,7 @@ namespace shz
 	{
 		// Texture dimensions may not be multiples of the tile size
 		const MipLevelProperties MipProps = GetMipLevelProperties(Desc, MipLevel);
-		return GetNumSparseTilesInBox(Box{ 0, MipProps.StorageWidth, 0, MipProps.StorageHeight, 0, MipProps.Depth }, TileSize);
+		return GetNumSparseTilesInBox(IBox{ 0, MipProps.StorageWidth, 0, MipProps.StorageHeight, 0, MipProps.Depth }, TileSize);
 	}
 
 	// Returns true if the Mapping defines an identity texture component swizzle

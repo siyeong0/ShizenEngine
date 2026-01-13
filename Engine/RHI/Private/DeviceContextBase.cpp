@@ -1227,7 +1227,7 @@ bool VerifyBindSparseResourceMemoryAttribs(const IRenderDevice* pDevice, const B
         for (uint32 r = 0; r < Bind.NumRanges; ++r)
         {
             const SparseTextureMemoryBindRange& Range     = Bind.pRanges[r];
-            const Box&                          Region    = Range.Region;
+            const IBox&                          Region    = Range.Region;
             const MipLevelProperties            MipProps  = GetMipLevelProperties(Desc, Range.MipLevel);
             const uint32                        MipWidth  = MipProps.StorageWidth;
             const uint32                        MipHeight = MipProps.StorageHeight;
@@ -1268,7 +1268,7 @@ bool VerifyBindSparseResourceMemoryAttribs(const IRenderDevice* pDevice, const B
             }
             else
             {
-                CHECK_BIND_SPARSE_ATTRIBS(Region == Box{},
+                CHECK_BIND_SPARSE_ATTRIBS(Region == IBox{},
                                           "pTextureBinds[", i, "].pRanges[", r, "].Region must be default when Range.MipLevel is a tail mip");
                 CHECK_BIND_SPARSE_ATTRIBS(Range.OffsetInMipTail + Range.MemorySize <= TexSparseProps.MipTailSize,
                                           "pTextureBinds[", i, "].pRanges[", r, "] specifies OffsetInMipTail (", Range.OffsetInMipTail,

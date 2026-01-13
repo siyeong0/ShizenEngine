@@ -200,7 +200,7 @@ namespace shz
 			ITexture* pTexture,
 			uint32 MipLevel,
 			uint32 Slice,
-			const Box& DstBox,
+			const IBox& DstBox,
 			const TextureSubResData& SubresData,
 			RESOURCE_STATE_TRANSITION_MODE SrcBufferTransitionMode,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode) override final;
@@ -215,7 +215,7 @@ namespace shz
 			uint32 ArraySlice,
 			MAP_TYPE MapType,
 			MAP_FLAGS MapFlags,
-			const Box* pMapRegion,
+			const IBox* pMapRegion,
 			MappedTextureSubresource& MappedData) override final;
 
 		// Implementation of IDeviceContext::UnmapTextureSubresource() in Direct3D12 backend.
@@ -340,7 +340,7 @@ namespace shz
 			uint64                         SrcDepthStride,
 			class TextureD3D12Impl& TextureD3D12,
 			uint32                         DstSubResIndex,
-			const Box& DstBox,
+			const IBox& DstBox,
 			RESOURCE_STATE_TRANSITION_MODE BufferTransitionMode,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode);
 
@@ -352,7 +352,7 @@ namespace shz
 			uint64                         BufferSize,
 			class TextureD3D12Impl& TextureD3D12,
 			uint32                         DstSubResIndex,
-			const Box& DstBox,
+			const IBox& DstBox,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode);
 
 		void UpdateTextureRegion(
@@ -361,7 +361,7 @@ namespace shz
 			uint64                         SrcDepthStride,
 			class TextureD3D12Impl& TextureD3D12,
 			uint32                         DstSubResIndex,
-			const Box& DstBox,
+			const IBox& DstBox,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode);
 
 		virtual void SHZ_CALL_TYPE GenerateMips(ITextureView* pTexView) override final;
@@ -459,10 +459,10 @@ namespace shz
 			uint64                 DepthStride = 0;
 			uint64                 RowSize = 0;
 			uint32                 RowCount = 0;
-			Box                    Region;
+			IBox                    Region;
 		};
 		TextureUploadSpace AllocateTextureUploadSpace(TEXTURE_FORMAT TexFmt,
-			const Box& Region);
+			const IBox& Region);
 
 
 		friend class SwapChainD3D12Impl;

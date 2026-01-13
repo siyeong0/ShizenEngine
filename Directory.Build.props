@@ -72,7 +72,8 @@
 	<!-- ========================================================= -->
 	<!-- Additional linker dependencies for **Samples** projects   -->
 	<!-- ========================================================= -->
-	<ItemDefinitionGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\'))">
+	<ItemDefinitionGroup
+	  Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\')) Or '$(MSBuildProjectName)' == 'ShizenEngine'">
 		<Link>
 			<AdditionalDependencies>
 				Engine-Core.lib;
@@ -80,6 +81,7 @@
 				Engine-GraphicsTools.lib;
 				Engine-GraphicsUtils.lib;
 				Engine-ImGui.lib;
+				Engine-Renderer.lib;
 				Engine-RHI.lib;
 				Engine-RHI-D3DBase.lib;
 				Engine-RHI-D3D12.lib;

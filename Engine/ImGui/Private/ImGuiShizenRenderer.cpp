@@ -888,7 +888,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 		}
 		else if (pTexData->Status == ImTextureStatus_WantUpdates && pTexture != nullptr)
 		{
-			Box dstBox{
+			IBox dstBox{
 				static_cast<uint32>(pTexData->UpdateRect.x),
 				static_cast<uint32>(pTexData->UpdateRect.x + pTexData->UpdateRect.w),
 				static_cast<uint32>(pTexData->UpdateRect.y),

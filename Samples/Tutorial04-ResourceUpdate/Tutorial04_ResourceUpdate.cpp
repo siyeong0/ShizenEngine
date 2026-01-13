@@ -455,7 +455,7 @@ namespace shz
 			std::vector<uint8> Data(size_t{ Width } *size_t{ Height } *4u);
 			WriteStripPattern(Data.data(), Width, Height, size_t{ Width } *4u);
 
-			Box UpdateBox;
+			IBox UpdateBox;
 			UpdateBox.MinX = std::uniform_int_distribution<uint32>{ 0, TexDesc.Width - Width }(m_gen);
 			UpdateBox.MinY = std::uniform_int_distribution<uint32>{ 0, TexDesc.Height - Height }(m_gen);
 			UpdateBox.MaxX = UpdateBox.MinX + Width;
@@ -476,7 +476,7 @@ namespace shz
 		const TextureDesc& TexDesc = m_Textures[2]->GetDesc();
 
 		MappedTextureSubresource MappedSubres;
-		Box                      MapRegion;
+		IBox                      MapRegion;
 		if (MapEntireTexture)
 		{
 			MapRegion.MaxX = TexDesc.Width;

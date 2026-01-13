@@ -1106,7 +1106,7 @@ namespace shz
 		uint32                         SrcSlice = 0;
 
 		// Source region to copy. Use nullptr to copy the entire subresource.
-		const Box* pSrcBox = nullptr;
+		const IBox* pSrcBox = nullptr;
 
 		// Source texture state transition mode (see shz::RESOURCE_STATE_TRANSITION_MODE).
 		RESOURCE_STATE_TRANSITION_MODE SrcTextureTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
@@ -2035,7 +2035,7 @@ namespace shz
 		// and `OffsetInMipTail` is used instead.
 		//
 		// If `Region` contains multiple tiles, they are bound in the row-major order.
-		Box Region = {};
+		IBox Region = {};
 
 		// Offset in mip tail in bytes.
 
@@ -3242,7 +3242,7 @@ namespace shz
 			ITexture* pTexture,
 			uint32 MipLevel,
 			uint32 Slice,
-			const Box& DstBox,
+			const IBox& DstBox,
 			const TextureSubResData& SubresData,
 			RESOURCE_STATE_TRANSITION_MODE SrcBufferTransitionMode,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode) = 0;
@@ -3278,7 +3278,7 @@ namespace shz
 			uint32 ArraySlice,
 			MAP_TYPE MapType,
 			MAP_FLAGS MapFlags,
-			const Box* pMapRegion,
+			const IBox* pMapRegion,
 			MappedTextureSubresource& MappedData) = 0;
 
 

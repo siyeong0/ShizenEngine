@@ -4134,7 +4134,7 @@ namespace shz
 	};
 
 	// Box
-	struct Box
+	struct IBox
 	{
 		uint32 MinX = 0; ///< Minimal X coordinate. Default value is 0
 		uint32 MaxX = 0; ///< Maximal X coordinate. Default value is 0
@@ -4143,7 +4143,7 @@ namespace shz
 		uint32 MinZ = 0; ///< Minimal Z coordinate. Default value is 0
 		uint32 MaxZ = 1; ///< Maximal Z coordinate. Default value is 1
 
-		constexpr Box(uint32 _MinX, uint32 _MaxX, uint32 _MinY, uint32 _MaxY, uint32 _MinZ, uint32 _MaxZ) noexcept
+		constexpr IBox(uint32 _MinX, uint32 _MaxX, uint32 _MinY, uint32 _MaxY, uint32 _MinZ, uint32 _MaxZ) noexcept
 			: MinX{ _MinX }
 			, MaxX{ _MaxX }
 			, MinY{ _MinY }
@@ -4153,17 +4153,17 @@ namespace shz
 		{
 		}
 
-		constexpr Box(uint32 _MinX, uint32 _MaxX, uint32 _MinY, uint32 _MaxY) noexcept
-			: Box{ _MinX, _MaxX, _MinY, _MaxY, 0, 1 }
+		constexpr IBox(uint32 _MinX, uint32 _MaxX, uint32 _MinY, uint32 _MaxY) noexcept
+			: IBox{ _MinX, _MaxX, _MinY, _MaxY, 0, 1 }
 		{
 		}
 
-		constexpr Box(uint32 _MinX, uint32 _MaxX) noexcept
-			: Box{ _MinX, _MaxX, 0, 0, 0, 1 }
+		constexpr IBox(uint32 _MinX, uint32 _MaxX) noexcept
+			: IBox{ _MinX, _MaxX, 0, 0, 0, 1 }
 		{
 		}
 
-		Box() noexcept {}
+		IBox() noexcept {}
 
 		constexpr uint32 Width()   const { return MaxX - MinX; }
 		constexpr uint32 Height()  const { return MaxY - MinY; }
@@ -4171,7 +4171,7 @@ namespace shz
 
 		constexpr bool   IsValid() const { return MaxX > MinX && MaxY > MinY && MaxZ > MinZ; }
 
-		constexpr bool operator==(const Box& rhs) const
+		constexpr bool operator==(const IBox& rhs) const
 		{
 			return MinX == rhs.MinX && MaxX == rhs.MaxX &&
 				MinY == rhs.MinY && MaxY == rhs.MaxY &&

@@ -320,7 +320,7 @@ void ValidateTextureDesc(const TextureDesc& Desc, const IRenderDevice* pDevice) 
 }
 
 
-void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const Box& Box)
+void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const IBox& Box)
 {
 #define VERIFY_TEX_PARAMS(Expr, ...)                                                          \
     do                                                                                        \
@@ -389,7 +389,7 @@ void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 S
 #endif
 }
 
-void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const Box& DstBox, const TextureSubResData& SubresData)
+void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const IBox& DstBox, const TextureSubResData& SubresData)
 {
     VERIFY((SubresData.pData != nullptr) ^ (SubresData.pSrcBuffer != nullptr), "Either CPU data pointer (pData) or GPU buffer (pSrcBuffer) must not be null, but not both.");
     ValidateTextureRegion(TexDesc, MipLevel, Slice, DstBox);
@@ -430,10 +430,10 @@ void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, ui
 void ValidateCopyTextureParams(const CopyTextureAttribs& CopyAttribs)
 {
     VERIFY_EXPR(CopyAttribs.pSrcTexture != nullptr && CopyAttribs.pDstTexture != nullptr);
-    Box                SrcBox;
+    IBox                SrcBox;
     const TextureDesc& SrcTexDesc = CopyAttribs.pSrcTexture->GetDesc();
     const TextureDesc& DstTexDesc = CopyAttribs.pDstTexture->GetDesc();
-    const Box*         pSrcBox    = CopyAttribs.pSrcBox;
+    const IBox*         pSrcBox    = CopyAttribs.pSrcBox;
     if (pSrcBox == nullptr)
     {
         MipLevelProperties MipLevelAttribs = GetMipLevelProperties(SrcTexDesc, CopyAttribs.SrcMipLevel);
@@ -445,7 +445,7 @@ void ValidateCopyTextureParams(const CopyTextureAttribs& CopyAttribs)
     }
     ValidateTextureRegion(SrcTexDesc, CopyAttribs.SrcMipLevel, CopyAttribs.SrcSlice, *pSrcBox);
 
-    Box DstBox;
+    IBox DstBox;
     DstBox.MinX = CopyAttribs.DstX;
     DstBox.MinY = CopyAttribs.DstY;
     DstBox.MinZ = CopyAttribs.DstZ;
@@ -460,7 +460,7 @@ void ValidateMapTextureParams(const TextureDesc& TexDesc,
                               uint32             ArraySlice,
                               MAP_TYPE           MapType,
                               uint32             MapFlags,
-                              const Box*         pMapRegion)
+                              const IBox*         pMapRegion)
 {
     VERIFY_TEX_PARAMS(MipLevel < TexDesc.MipLevels, "Mip level (", MipLevel, ") is out of allowed range [0, ", TexDesc.MipLevels - 1, "].");
     if (TexDesc.IsArray())

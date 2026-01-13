@@ -70,7 +70,7 @@ namespace shz
 		size_t EngineD3D12CreateInfoSize = 0;
 		size_t EngineVkCreateInfoSize = 0;
 		size_t EngineMtlCreateInfoSize = 0;
-		size_t BoxSize = 0;
+		size_t IBoxSize = 0;
 		size_t TextureFormatAttribsSize = 0;
 		size_t TextureFormatInfoSize = 0;
 		size_t TextureFormatInfoExtSize = 0;

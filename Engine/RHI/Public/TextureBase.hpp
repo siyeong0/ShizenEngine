@@ -53,7 +53,7 @@ namespace shz
 	void ValidatedAndCorrectTextureViewDesc(const TextureDesc& TexDesc, TextureViewDesc& ViewDesc) noexcept(false);
 
 	// Validates update texture command parameters.
-	void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const Box& DstBox, const TextureSubResData& SubresData);
+	void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const IBox& DstBox, const TextureSubResData& SubresData);
 
 	// Validates copy texture command parameters.
 	void ValidateCopyTextureParams(const CopyTextureAttribs& CopyAttribs);
@@ -65,7 +65,7 @@ namespace shz
 		uint32             ArraySlice,
 		MAP_TYPE           MapType,
 		uint32             MapFlags,
-		const Box* pMapRegion);
+		const IBox* pMapRegion);
 
 	// Base implementation of the ITexture interface
 

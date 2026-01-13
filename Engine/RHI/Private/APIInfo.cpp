@@ -80,7 +80,7 @@ static APIInfo InitAPIInfo()
     INIT_STRUCTURE_SIZE(EngineD3D12CreateInfo);
     INIT_STRUCTURE_SIZE(EngineVkCreateInfo);
     INIT_STRUCTURE_SIZE(EngineMtlCreateInfo);
-    INIT_STRUCTURE_SIZE(Box);
+    INIT_STRUCTURE_SIZE(IBox);
     INIT_STRUCTURE_SIZE(TextureFormatAttribs);
     INIT_STRUCTURE_SIZE(TextureFormatInfo);
     INIT_STRUCTURE_SIZE(TextureFormatInfoExt);

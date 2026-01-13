@@ -243,7 +243,7 @@ namespace shz
 			ITexture* pTexture,
 			uint32 MipLevel,
 			uint32 Slice,
-			const Box& DstBox,
+			const IBox& DstBox,
 			const TextureSubResData& SubresData,
 			RESOURCE_STATE_TRANSITION_MODE SrcBufferTransitionMode,
 			RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode) override = 0;
@@ -258,7 +258,7 @@ namespace shz
 			uint32 ArraySlice,
 			MAP_TYPE MapType,
 			MAP_FLAGS MapFlags,
-			const Box* pMapRegion,
+			const IBox* pMapRegion,
 			MappedTextureSubresource& MappedData) override = 0;
 
 		// Base implementation of IDeviceContext::UnmapTextureSubresource()
@@ -1836,7 +1836,7 @@ namespace shz
 		ITexture* pTexture,
 		uint32 MipLevel,
 		uint32 Slice,
-		const Box& DstBox,
+		const IBox& DstBox,
 		const TextureSubResData& SubresData,
 		RESOURCE_STATE_TRANSITION_MODE SrcBufferTransitionMode,
 		RESOURCE_STATE_TRANSITION_MODE TextureTransitionMode)
@@ -1868,7 +1868,7 @@ namespace shz
 		uint32                    ArraySlice,
 		MAP_TYPE                  MapType,
 		MAP_FLAGS                 MapFlags,
-		const Box* pMapRegion,
+		const IBox* pMapRegion,
 		MappedTextureSubresource& MappedData)
 	{
 		DEV_CHECK_ERR(pTexture, "pTexture must not be null");

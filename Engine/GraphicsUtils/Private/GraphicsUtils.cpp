@@ -2417,7 +2417,7 @@ uint64 GetStagingTextureLocationOffset(const TextureDesc& TexDesc,
 }
 
 BufferToTextureCopyInfo GetBufferToTextureCopyInfo(TEXTURE_FORMAT Format,
-                                                   const Box&     Region,
+                                                   const IBox&     Region,
                                                    uint32         RowStrideAlignment)
 {
     BufferToTextureCopyInfo CopyInfo;
@@ -2979,7 +2979,7 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
         }
         else
         {
-            const uint3 NumTilesInMip = GetNumSparseTilesInBox(Box{0, MipWidth, 0, MipHeight, 0, MipDepth}, Props.TileSize);
+            const uint3 NumTilesInMip = GetNumSparseTilesInBox(IBox{0, MipWidth, 0, MipHeight, 0, MipDepth}, Props.TileSize);
             SliceSize += uint64{NumTilesInMip.x} * NumTilesInMip.y * NumTilesInMip.z * SparseBlockSize;
         }
     }

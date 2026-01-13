@@ -231,6 +231,9 @@
     <ClInclude Include="Math\Public\Matrix2x2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Math\Public\Box.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

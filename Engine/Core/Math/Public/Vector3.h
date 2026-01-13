@@ -34,8 +34,8 @@ namespace shz
 		static inline constexpr Vector3 UnitY() { return Vector3{ 0.f, 1.f, 0.f }; }
 		static inline constexpr Vector3 UnitZ() { return Vector3{ 0.f, 0.f, 1.f }; }
 
-		static inline Vector3 FMaxValue() { constexpr float32 v = std::numeric_limits<float32>::max(); return Vector3{ v, v, v }; }
-		static inline Vector3 FMinValue() { constexpr float32 v = std::numeric_limits<float32>::lowest(); return Vector3{ v, v, v }; }
+		static inline constexpr Vector3 FMaxValue() { constexpr float32 v = std::numeric_limits<float32>::max(); return Vector3{ v, v, v }; }
+		static inline constexpr Vector3 FMinValue() { constexpr float32 v = std::numeric_limits<float32>::lowest(); return Vector3{ v, v, v }; }
 
 		// Direction aliases (same as your previous version)
 		static inline constexpr Vector3 Up() { return Vector3{ 0.f,  1.f,  0.f }; }

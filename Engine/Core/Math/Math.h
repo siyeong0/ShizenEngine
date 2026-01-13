@@ -16,6 +16,8 @@
 #include "Engine/Core/Math/Public/XVector.h"
 #include "Engine/Core/Math/Public/XMatrix.h"
 
+#include "Engine/Core/Math/Public/Box.h"
+
 #define MATH_STATIC_ASSERT_PODLIKE(T) \
     static_assert(std::is_standard_layout_v<T>,      #T " must have standard layout."); \
     static_assert(std::is_trivially_copyable_v<T>,   #T " must be trivially copyable."); \

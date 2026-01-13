@@ -367,7 +367,7 @@ namespace shz
 					else
 					{
 						MipLevelProperties MipLevelProps = GetMipLevelProperties(TexDesc, Operation.DstMip + Mip);
-						Box                DstBox;
+						IBox                DstBox;
 						DstBox.MaxX = MipLevelProps.LogicalWidth;
 						DstBox.MaxY = MipLevelProps.LogicalHeight;
 

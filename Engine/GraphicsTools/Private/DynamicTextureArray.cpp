@@ -292,7 +292,7 @@ namespace shz
 
 					range_it->ArraySlice = Slice;
 					range_it->MipLevel = Mip;
-					range_it->Region = Box{ 0, MipProps.StorageWidth, 0, MipProps.StorageHeight, 0, MipProps.Depth };
+					range_it->Region = IBox{ 0, MipProps.StorageWidth, 0, MipProps.StorageHeight, 0, MipProps.Depth };
 
 					if (Slice >= m_Desc.ArraySize)
 					{
