@@ -53,19 +53,179 @@ namespace shz
 
 	SampleBase* CreateSample()
 	{
-		return new Tutorial19_RenderPasses();
+		return new Tutorial07_RenderPass();
 	}
 
-	void Tutorial19_RenderPasses::ModifyEngineInitInfo(const ModifyEngineInitInfoAttribs& Attribs)
+	void Tutorial07_RenderPass::ModifyEngineInitInfo(const ModifyEngineInitInfoAttribs& attribs)
 	{
-		SampleBase::ModifyEngineInitInfo(Attribs);
+		SampleBase::ModifyEngineInitInfo(attribs);
 
 		// We do not need the depth buffer from the swap chain in this sample
-		Attribs.SCDesc.DepthBufferFormat = TEX_FORMAT_UNKNOWN;
+		attribs.SCDesc.DepthBufferFormat = TEX_FORMAT_UNKNOWN;
 	}
 
+	void Tutorial07_RenderPass::Initialize(const SampleInitInfo& InitInfo)
+	{
+		SampleBase::Initialize(InitInfo);
 
-	void Tutorial19_RenderPasses::CreateCubePSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
+		CreateUniformBuffer(m_pDevice, sizeof(HLSL::Constants), "Shader constants CB", &m_pShaderConstantsCB);
+
+		// Load textured cube
+		m_CubeVertexBuffer = TexturedCube::CreateVertexBuffer(m_pDevice, GEOMETRY_PRIMITIVE_VERTEX_FLAG_POS_TEX);
+		m_CubeIndexBuffer = TexturedCube::CreateIndexBuffer(m_pDevice);
+		m_CubeTextureSRV = TexturedCube::LoadTexture(m_pDevice, "Assets/pearl_abyss_logo.png")->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+		createRenderPass();
+		createLightsBuffer();
+		initLights();
+
+		// Create a shader source stream factory to load shaders from files.
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+		m_pEngineFactory->CreateDefaultShaderSourceStreamFactory("Assets", &pShaderSourceFactory);
+
+		createCubePSO(pShaderSourceFactory);
+		createLightVolumePSO(pShaderSourceFactory);
+		createAmbientLightPSO(pShaderSourceFactory);
+
+		// Transition all resources to required states as no transitions are allowed within the render pass.
+		StateTransitionDesc barriers[] = //
+		{
+			{m_pShaderConstantsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+			{m_CubeVertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+			{m_CubeIndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+			{m_pLightsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
+			{m_CubeTextureSRV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE} //
+		};
+
+		m_pImmediateContext->TransitionResourceStates(_countof(barriers), barriers);
+	}
+
+	void Tutorial07_RenderPass::Render()
+	{
+		const SwapChainDesc& swapChainDesc = m_pSwapChain->GetDesc();
+
+		// Update constant buffer
+		{
+			MapHelper<HLSL::Constants> constants(m_pImmediateContext, m_pShaderConstantsCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			constants->ViewProj = m_CameraViewProjMatrix;
+			constants->ViewProjInv = m_CameraViewProjInvMatrix;
+			constants->ViewportSize = float4{
+				static_cast<float>(swapChainDesc.Width),
+				static_cast<float>(swapChainDesc.Height),
+				1.f / static_cast<float>(swapChainDesc.Width),
+				1.f / static_cast<float>(swapChainDesc.Height) //
+			};
+			constants->ShowLightVolumes = m_bShowLightVolumes ? 1 : 0;
+		}
+
+		IFramebuffer* framebuffer = getCurrentFramebuffer();
+
+		BeginRenderPassAttribs renderPassBeginInfo;
+		renderPassBeginInfo.pRenderPass = m_pRenderPass;
+		renderPassBeginInfo.pFramebuffer = framebuffer;
+
+		OptimizedClearValue clearValues[4];
+		// Color
+		clearValues[0].Color[0] = 0.f;
+		clearValues[0].Color[1] = 0.f;
+		clearValues[0].Color[2] = 0.f;
+		clearValues[0].Color[3] = 0.f;
+
+		// Depth Z
+		clearValues[1].Color[0] = 1.f;
+		clearValues[1].Color[1] = 1.f;
+		clearValues[1].Color[2] = 1.f;
+		clearValues[1].Color[3] = 1.f;
+
+		// Depth buffer
+		clearValues[2].DepthStencil.Depth = 1.f;
+
+		// Final color buffer
+		clearValues[3].Color[0] = 0.0625f;
+		clearValues[3].Color[1] = 0.0625f;
+		clearValues[3].Color[2] = 0.0625f;
+		clearValues[3].Color[3] = 1.f;
+		if (m_ConvertPSOutputToGamma)
+		{
+			for (size_t i = 0; i < 3; ++i)
+			{
+				clearValues[3].Color[i] = LinearToGamma(clearValues[3].Color[i]);
+			}
+		}
+
+		renderPassBeginInfo.pClearValues = clearValues;
+		renderPassBeginInfo.ClearValueCount = _countof(clearValues);
+		renderPassBeginInfo.StateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+		m_pImmediateContext->BeginRenderPass(renderPassBeginInfo);
+		{
+			drawScene();
+			m_pImmediateContext->NextSubpass();
+			applyLighting();
+		}
+		m_pImmediateContext->EndRenderPass();
+
+		if (m_pDevice->GetDeviceInfo().IsGLDevice())
+		{
+			// In OpenGL we now have to copy our off-screen buffer to the default framebuffer
+			ITexture* pOffscreenRenderTarget = framebuffer->GetDesc().ppAttachments[3]->GetTexture();
+			ITexture* pBackBuffer = m_pSwapChain->GetCurrentBackBufferRTV()->GetTexture();
+
+			CopyTextureAttribs CopyAttribs{ pOffscreenRenderTarget, RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
+										   pBackBuffer, RESOURCE_STATE_TRANSITION_MODE_TRANSITION };
+			m_pImmediateContext->CopyTexture(CopyAttribs);
+		}
+	}
+
+	void Tutorial07_RenderPass::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
+	{
+		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
+
+		if (m_bAnimateLights)
+			updateLights(static_cast<float>(ElapsedTime));
+
+		float4x4 view = float4x4::Translation({ 0.0f, 0.0f, 25.0f });
+
+		// Get pretransform matrix that rotates the scene according the surface orientation
+		float4x4 srfPreTransform = GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
+
+		// Get projection matrix adjusted to the current screen orientation
+		float4x4 proj = GetAdjustedProjectionMatrix(PI / 4.0f, 0.1f, 100.f);
+
+		// Compute world-view-projection matrix
+		m_CameraViewProjMatrix = view * srfPreTransform * proj;
+		m_CameraViewProjInvMatrix = m_CameraViewProjMatrix.Inversed();
+	}
+
+	void Tutorial07_RenderPass::ReleaseSwapChainBuffers()
+	{
+		m_FramebufferCache.clear();
+	}
+
+	void Tutorial07_RenderPass::WindowResize(uint32 Width, uint32 Height)
+	{
+		releaseWindowResources();
+	}
+
+	void Tutorial07_RenderPass::UpdateUI()
+	{
+		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			if (ImGui::InputInt("Lights count", &m_LightsCount, 100, 1000, ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				m_LightsCount = std::max(m_LightsCount, 100);
+				m_LightsCount = std::min(m_LightsCount, 50000);
+				initLights();
+				createLightsBuffer();
+			}
+
+			ImGui::Checkbox("Show light volumes", &m_bShowLightVolumes);
+			ImGui::Checkbox("Animate lights", &m_bAnimateLights);
+		}
+		ImGui::End();
+	}
+
+	void Tutorial07_RenderPass::createCubePSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
 	{
 		GraphicsPipelineStateCreateInfo PSOCreateInfo;
 		PipelineStateDesc& PSODesc = PSOCreateInfo.PSODesc;
@@ -160,7 +320,7 @@ namespace shz
 		m_pCubeSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Texture")->Set(m_CubeTextureSRV);
 	}
 
-	void Tutorial19_RenderPasses::CreateLightVolumePSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
+	void Tutorial07_RenderPass::createLightVolumePSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
 	{
 		GraphicsPipelineStateCreateInfo PSOCreateInfo;
 		PipelineStateDesc& PSODesc = PSOCreateInfo.PSODesc;
@@ -254,7 +414,7 @@ namespace shz
 		m_pLightVolumePSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "ShaderConstants")->Set(m_pShaderConstantsCB);
 	}
 
-	void Tutorial19_RenderPasses::CreateAmbientLightPSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
+	void Tutorial07_RenderPass::createAmbientLightPSO(IShaderSourceInputStreamFactory* pShaderSourceFactory)
 	{
 		GraphicsPipelineStateCreateInfo PSOCreateInfo;
 		PipelineStateDesc& PSODesc = PSOCreateInfo.PSODesc;
@@ -309,13 +469,13 @@ namespace shz
 
 		PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		
+
 		ShaderResourceVariableDesc Vars[] =
 		{
 			{SHADER_TYPE_PIXEL, "g_SubpassInputColor", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
 			{SHADER_TYPE_PIXEL, "g_SubpassInputDepthZ", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
 		};
-		
+
 		PSODesc.ResourceLayout.Variables = Vars;
 		PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
@@ -324,7 +484,7 @@ namespace shz
 	}
 
 
-	void Tutorial19_RenderPasses::CreateRenderPass()
+	void Tutorial07_RenderPass::createRenderPass()
 	{
 		// Attachment 0 - Color buffer
 		// Attachment 1 - Depth Z
@@ -333,6 +493,7 @@ namespace shz
 		constexpr uint32 NumAttachments = 4;
 
 		// Prepare render pass attachment descriptions
+		// Attachment 0 - Color buffer
 		RenderPassAttachmentDesc Attachments[NumAttachments];
 		Attachments[0].Format = TEX_FORMAT_RGBA8_UNORM;
 		Attachments[0].InitialState = RESOURCE_STATE_RENDER_TARGET;
@@ -340,6 +501,7 @@ namespace shz
 		Attachments[0].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 		Attachments[0].StoreOp = ATTACHMENT_STORE_OP_DISCARD; // We will not need the result after the end of the render pass
 
+		// Attachment 1 - Depth Z
 		for (TEXTURE_FORMAT Fmt : {TEX_FORMAT_R32_FLOAT, TEX_FORMAT_R16_UNORM, TEX_FORMAT_R16_FLOAT})
 		{
 			if (m_pDevice->GetTextureFormatInfoExt(Fmt).BindFlags & BIND_RENDER_TARGET)
@@ -348,6 +510,7 @@ namespace shz
 				break;
 			}
 		}
+
 		if (Attachments[1].Format == TEX_FORMAT_UNKNOWN)
 		{
 			LOG_WARNING_MESSAGE("This device does not support rendering to any of R32_FLOAT, R16_UNORM or R16_FLOAT formats. Using R8 as fallback.");
@@ -359,12 +522,14 @@ namespace shz
 		Attachments[1].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 		Attachments[1].StoreOp = ATTACHMENT_STORE_OP_DISCARD; // We will not need the result after the end of the render pass
 
-		Attachments[2].Format = DepthBufferFormat;
+		// Attachment 2 - Depth buffer
+		Attachments[2].Format = DEPTH_BUFFER_FORMAT;
 		Attachments[2].InitialState = RESOURCE_STATE_DEPTH_WRITE;
 		Attachments[2].FinalState = RESOURCE_STATE_DEPTH_WRITE;
 		Attachments[2].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 		Attachments[2].StoreOp = ATTACHMENT_STORE_OP_DISCARD; // We will not need the result after the end of the render pass
 
+		// Attachment 3 - Final color buffer
 		Attachments[3].Format = m_pSwapChain->GetDesc().ColorBufferFormat;
 		Attachments[3].InitialState = RESOURCE_STATE_RENDER_TARGET;
 		Attachments[3].FinalState = RESOURCE_STATE_RENDER_TARGET;
@@ -375,17 +540,14 @@ namespace shz
 		// Subpass 2 - Lighting
 		constexpr uint32 NumSubpasses = 2;
 
-		// Prepar subpass descriptions
 		SubpassDesc Subpasses[NumSubpasses];
 
-		
 		// Subpass 0 attachments - 2 render targets and depth buffer
 		AttachmentReference RTAttachmentRefs0[] =
 		{
 			{0, RESOURCE_STATE_RENDER_TARGET},
 			{1, RESOURCE_STATE_RENDER_TARGET}
 		};
-
 		AttachmentReference DepthAttachmentRef0 = { 2, RESOURCE_STATE_DEPTH_WRITE };
 
 		// Subpass 1 attachments - 1 render target, depth buffer, 2 input attachments
@@ -393,15 +555,12 @@ namespace shz
 		{
 			{3, RESOURCE_STATE_RENDER_TARGET}
 		};
-
 		AttachmentReference DepthAttachmentRef1 = { 2, RESOURCE_STATE_DEPTH_WRITE };
-
 		AttachmentReference InputAttachmentRefs1[] =
 		{
 			{0, RESOURCE_STATE_INPUT_ATTACHMENT},
 			{1, RESOURCE_STATE_INPUT_ATTACHMENT}
 		};
-		
 
 		Subpasses[0].RenderTargetAttachmentCount = _countof(RTAttachmentRefs0);
 		Subpasses[0].pRenderTargetAttachments = RTAttachmentRefs0;
@@ -436,99 +595,7 @@ namespace shz
 		VERIFY_EXPR(m_pRenderPass != nullptr);
 	}
 
-	void Tutorial19_RenderPasses::CreateLightsBuffer()
-	{
-		m_pLightsBuffer.Release();
-
-		BufferDesc VertBuffDesc;
-		VertBuffDesc.Name = "Lights instances buffer";
-		VertBuffDesc.Usage = USAGE_DYNAMIC;
-		VertBuffDesc.BindFlags = BIND_VERTEX_BUFFER;
-		VertBuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-		VertBuffDesc.Size = sizeof(LightAttribs) * m_LightsCount;
-
-		m_pDevice->CreateBuffer(VertBuffDesc, nullptr, &m_pLightsBuffer);
-	}
-
-	void Tutorial19_RenderPasses::UpdateUI()
-	{
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-		{
-			if (ImGui::InputInt("Lights count", &m_LightsCount, 100, 1000, ImGuiInputTextFlags_EnterReturnsTrue))
-			{
-				m_LightsCount = std::max(m_LightsCount, 100);
-				m_LightsCount = std::min(m_LightsCount, 50000);
-				InitLights();
-				CreateLightsBuffer();
-			}
-
-			ImGui::Checkbox("Show light volumes", &m_ShowLightVolumes);
-			ImGui::Checkbox("Animate lights", &m_AnimateLights);
-		}
-		ImGui::End();
-	}
-
-	void Tutorial19_RenderPasses::Initialize(const SampleInitInfo& InitInfo)
-	{
-		SampleBase::Initialize(InitInfo);
-
-		CreateUniformBuffer(m_pDevice, sizeof(HLSL::Constants), "Shader constants CB", &m_pShaderConstantsCB);
-
-		// Load textured cube
-		m_CubeVertexBuffer = TexturedCube::CreateVertexBuffer(m_pDevice, GEOMETRY_PRIMITIVE_VERTEX_FLAG_POS_TEX);
-		m_CubeIndexBuffer = TexturedCube::CreateIndexBuffer(m_pDevice);
-		m_CubeTextureSRV = TexturedCube::LoadTexture(m_pDevice, "Assets/pearl_abyss_logo.png")->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-
-		CreateRenderPass();
-		CreateLightsBuffer();
-		InitLights();
-
-		// Create a shader source stream factory to load shaders from files.
-		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
-		m_pEngineFactory->CreateDefaultShaderSourceStreamFactory("Assets", &pShaderSourceFactory);
-
-		CreateCubePSO(pShaderSourceFactory);
-		CreateLightVolumePSO(pShaderSourceFactory);
-		CreateAmbientLightPSO(pShaderSourceFactory);
-
-		// Transition all resources to required states as no transitions are allowed within the render pass.
-		StateTransitionDesc Barriers[] = //
-		{
-			{m_pShaderConstantsCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
-			{m_CubeVertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
-			{m_CubeIndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
-			{m_pLightsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE},
-			{m_CubeTextureSRV->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE} //
-		};
-
-		m_pImmediateContext->TransitionResourceStates(_countof(Barriers), Barriers);
-	}
-
-	void Tutorial19_RenderPasses::ReleaseWindowResources()
-	{
-		m_GBuffer = {};
-		m_FramebufferCache.clear();
-		m_pLightVolumeSRB.Release();
-		m_pAmbientLightSRB.Release();
-	}
-
-	void Tutorial19_RenderPasses::ReleaseSwapChainBuffers()
-	{
-		// In Direct3D11, all references to the swap chain must be released
-		// before the swap chain can be resized. WindowResize() is called
-		// after the swap chain has been resized.
-		m_FramebufferCache.clear();
-	}
-
-	void Tutorial19_RenderPasses::WindowResize(uint32 Width, uint32 Height)
-	{
-		// On Android, ReleaseSwapChainBuffers() is never called because
-		// there is no robust way to detect window size change.
-		ReleaseWindowResources();
-	}
-
-	RefCntAutoPtr<IFramebuffer> Tutorial19_RenderPasses::CreateFramebuffer(ITextureView* pDstRenderTarget)
+	RefCntAutoPtr<IFramebuffer> Tutorial07_RenderPass::createFramebuffer(ITextureView* pDstRenderTarget)
 	{
 		const RenderPassDesc& RPDesc = m_pRenderPass->GetDesc();
 		const SwapChainDesc& SCDesc = m_pSwapChain->GetDesc();
@@ -557,18 +624,6 @@ namespace shz
 
 		if (!m_GBuffer.pColorBuffer)
 			m_pDevice->CreateTexture(TexDesc, nullptr, &m_GBuffer.pColorBuffer);
-
-		// OpenGL does not allow combining swap chain render target with any
-		// other render target, so we have to create an auxiliary texture.
-		if (pDstRenderTarget == nullptr)
-		{
-			TexDesc.Name = "OpenGL Offscreen Render Target";
-			TexDesc.Format = SCDesc.ColorBufferFormat;
-			TexDesc.MiscFlags = MISC_TEXTURE_FLAG_NONE;
-			m_pDevice->CreateTexture(TexDesc, nullptr, &m_GBuffer.pOpenGLOffsreenColorBuffer);
-			pDstRenderTarget = m_GBuffer.pOpenGLOffsreenColorBuffer->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-		}
-
 
 		TexDesc.Name = "Depth Z G-buffer";
 		TexDesc.Format = RPDesc.pAttachments[1].Format;
@@ -645,26 +700,42 @@ namespace shz
 		return pFramebuffer;
 	}
 
-	IFramebuffer* Tutorial19_RenderPasses::GetCurrentFramebuffer()
+	void Tutorial07_RenderPass::initLights()
 	{
-		ITextureView* pCurrentBackBufferRTV = m_pDevice->GetDeviceInfo().IsGLDevice() ?
-			nullptr :
-			m_pSwapChain->GetCurrentBackBufferRTV();
+		// Randomly distribute lights within the volume
 
-		auto fb_it = m_FramebufferCache.find(pCurrentBackBufferRTV);
-		if (fb_it != m_FramebufferCache.end())
+		FastRandReal<float> Rnd{ 0, 0, 1 };
+
+		m_Lights.resize(m_LightsCount);
+		for (LightAttribs& Light : m_Lights)
 		{
-			return fb_it->second;
+			Light.Location = (float3{ Rnd(), Rnd(), Rnd() } - float3{ 0.5f, 0.5f, 0.5f }) * 2.0 * static_cast<float>(GRID_DIMENSION);
+			Light.Size = 0.25f + Rnd() * 0.25f;
+			Light.Color = float3{ Rnd(), Rnd(), Rnd() };
 		}
-		else
+
+		m_LightMoveDirs.resize(m_Lights.size());
+		for (float3& MoveDir : m_LightMoveDirs)
 		{
-			auto it = m_FramebufferCache.emplace(pCurrentBackBufferRTV, CreateFramebuffer(pCurrentBackBufferRTV));
-			VERIFY_EXPR(it.second);
-			return it.first->second;
+			MoveDir = (float3{ Rnd(), Rnd(), Rnd() } - float3{ 0.5f, 0.5f, 0.5f }) * 1.f;
 		}
 	}
 
-	void Tutorial19_RenderPasses::DrawScene()
+	void Tutorial07_RenderPass::createLightsBuffer()
+	{
+		m_pLightsBuffer.Release();
+
+		BufferDesc VertBuffDesc;
+		VertBuffDesc.Name = "Lights instances buffer";
+		VertBuffDesc.Usage = USAGE_DYNAMIC;
+		VertBuffDesc.BindFlags = BIND_VERTEX_BUFFER;
+		VertBuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
+		VertBuffDesc.Size = sizeof(LightAttribs) * m_LightsCount;
+
+		m_pDevice->CreateBuffer(VertBuffDesc, nullptr, &m_pLightsBuffer);
+	}
+
+	void Tutorial07_RenderPass::drawScene()
 	{
 		// Bind vertex and index buffers
 		IBuffer* pBuffs[] = { m_CubeVertexBuffer };
@@ -682,12 +753,12 @@ namespace shz
 		DrawIndexedAttribs DrawAttrs;
 		DrawAttrs.IndexType = VT_UINT32; // Index type
 		DrawAttrs.NumIndices = 36;
-		DrawAttrs.NumInstances = GridDim * GridDim;
+		DrawAttrs.NumInstances = GRID_DIMENSION * GRID_DIMENSION;
 		DrawAttrs.Flags = DRAW_FLAG_VERIFY_ALL; // Verify the state of vertex and index buffers
 		m_pImmediateContext->DrawIndexed(DrawAttrs);
 	}
 
-	void Tutorial19_RenderPasses::ApplyLighting()
+	void Tutorial07_RenderPass::applyLighting()
 	{
 		// Set the lighting PSO
 		m_pImmediateContext->SetPipelineState(m_pAmbientLightPSO);
@@ -732,10 +803,10 @@ namespace shz
 		}
 	}
 
-	void Tutorial19_RenderPasses::UpdateLights(float fElapsedTime)
+	void Tutorial07_RenderPass::updateLights(float fElapsedTime)
 	{
-		float3 VolumeMin{ -static_cast<float>(GridDim), -static_cast<float>(GridDim), -static_cast<float>(GridDim) };
-		float3 VolumeMax{ +static_cast<float>(GridDim), +static_cast<float>(GridDim), +static_cast<float>(GridDim) };
+		float3 VolumeMin{ -static_cast<float>(GRID_DIMENSION), -static_cast<float>(GRID_DIMENSION), -static_cast<float>(GRID_DIMENSION) };
+		float3 VolumeMax{ +static_cast<float>(GRID_DIMENSION), +static_cast<float>(GRID_DIMENSION), +static_cast<float>(GRID_DIMENSION) };
 		for (int light = 0; light < m_LightsCount; ++light)
 		{
 			LightAttribs& Light = m_Lights[light];
@@ -760,123 +831,34 @@ namespace shz
 		}
 	}
 
-	void Tutorial19_RenderPasses::InitLights()
+	void Tutorial07_RenderPass::releaseWindowResources()
 	{
-		// Randomly distribute lights within the volume
+		m_GBuffer = {};
+		m_FramebufferCache.clear();
+		m_pLightVolumeSRB.Release();
+		m_pAmbientLightSRB.Release();
+	}
 
-		FastRandReal<float> Rnd{ 0, 0, 1 };
+	IFramebuffer* Tutorial07_RenderPass::getCurrentFramebuffer()
+	{
+		ITextureView* pCurrentBackBufferRTV = m_pDevice->GetDeviceInfo().IsGLDevice() ?
+			nullptr :
+			m_pSwapChain->GetCurrentBackBufferRTV();
 
-		m_Lights.resize(m_LightsCount);
-		for (LightAttribs& Light : m_Lights)
+		auto fb_it = m_FramebufferCache.find(pCurrentBackBufferRTV);
+		if (fb_it != m_FramebufferCache.end())
 		{
-			Light.Location = (float3{ Rnd(), Rnd(), Rnd() } - float3{ 0.5f, 0.5f, 0.5f }) * 2.0 * static_cast<float>(GridDim);
-			Light.Size = 0.25f + Rnd() * 0.25f;
-			Light.Color = float3{ Rnd(), Rnd(), Rnd() };
+			return fb_it->second;
 		}
-
-		m_LightMoveDirs.resize(m_Lights.size());
-		for (float3& MoveDir : m_LightMoveDirs)
+		else
 		{
-			MoveDir = (float3{ Rnd(), Rnd(), Rnd() } - float3{ 0.5f, 0.5f, 0.5f }) * 1.f;
+			auto it = m_FramebufferCache.emplace(pCurrentBackBufferRTV, createFramebuffer(pCurrentBackBufferRTV));
+			VERIFY_EXPR(it.second);
+			return it.first->second;
 		}
 	}
 
-	// Render a frame
-	void Tutorial19_RenderPasses::Render()
-	{
-		const SwapChainDesc& SCDesc = m_pSwapChain->GetDesc();
 
-		{
-			// Update constant buffer
-			MapHelper<HLSL::Constants> Constants(m_pImmediateContext, m_pShaderConstantsCB, MAP_WRITE, MAP_FLAG_DISCARD);
-			Constants->ViewProj = m_CameraViewProjMatrix;
-			Constants->ViewProjInv = m_CameraViewProjInvMatrix;
-			Constants->ViewportSize = float4{
-				static_cast<float>(SCDesc.Width),
-				static_cast<float>(SCDesc.Height),
-				1.f / static_cast<float>(SCDesc.Width),
-				1.f / static_cast<float>(SCDesc.Height) //
-			};
-			Constants->ShowLightVolumes = m_ShowLightVolumes ? 1 : 0;
-		}
-
-		IFramebuffer* pFramebuffer = GetCurrentFramebuffer();
-
-		BeginRenderPassAttribs RPBeginInfo;
-		RPBeginInfo.pRenderPass = m_pRenderPass;
-		RPBeginInfo.pFramebuffer = pFramebuffer;
-
-		OptimizedClearValue ClearValues[4];
-		// Color
-		ClearValues[0].Color[0] = 0.f;
-		ClearValues[0].Color[1] = 0.f;
-		ClearValues[0].Color[2] = 0.f;
-		ClearValues[0].Color[3] = 0.f;
-
-		// Depth Z
-		ClearValues[1].Color[0] = 1.f;
-		ClearValues[1].Color[1] = 1.f;
-		ClearValues[1].Color[2] = 1.f;
-		ClearValues[1].Color[3] = 1.f;
-
-		// Depth buffer
-		ClearValues[2].DepthStencil.Depth = 1.f;
-
-		// Final color buffer
-		ClearValues[3].Color[0] = 0.0625f;
-		ClearValues[3].Color[1] = 0.0625f;
-		ClearValues[3].Color[2] = 0.0625f;
-		ClearValues[3].Color[3] = 1.f;
-		if (m_ConvertPSOutputToGamma)
-		{
-			for (size_t i = 0; i < 3; ++i)
-				ClearValues[3].Color[i] = LinearToGamma(ClearValues[3].Color[i]);
-		}
-
-		RPBeginInfo.pClearValues = ClearValues;
-		RPBeginInfo.ClearValueCount = _countof(ClearValues);
-		RPBeginInfo.StateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
-		m_pImmediateContext->BeginRenderPass(RPBeginInfo);
-
-		DrawScene();
-
-		m_pImmediateContext->NextSubpass();
-
-		ApplyLighting();
-
-		m_pImmediateContext->EndRenderPass();
-
-		if (m_pDevice->GetDeviceInfo().IsGLDevice())
-		{
-			// In OpenGL we now have to copy our off-screen buffer to the default framebuffer
-			ITexture* pOffscreenRenderTarget = pFramebuffer->GetDesc().ppAttachments[3]->GetTexture();
-			ITexture* pBackBuffer = m_pSwapChain->GetCurrentBackBufferRTV()->GetTexture();
-
-			CopyTextureAttribs CopyAttribs{ pOffscreenRenderTarget, RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
-										   pBackBuffer, RESOURCE_STATE_TRANSITION_MODE_TRANSITION };
-			m_pImmediateContext->CopyTexture(CopyAttribs);
-		}
-	}
-
-	void Tutorial19_RenderPasses::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
-	{
-		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
-
-		if (m_AnimateLights)
-			UpdateLights(static_cast<float>(ElapsedTime));
-
-		float4x4 View = float4x4::Translation({ 0.0f, 0.0f, 25.0f });
-
-		// Get pretransform matrix that rotates the scene according the surface orientation
-		float4x4 SrfPreTransform = GetSurfacePretransformMatrix(float3{ 0, 0, 1 });
-
-		// Get projection matrix adjusted to the current screen orientation
-		float4x4 Proj = GetAdjustedProjectionMatrix(PI / 4.0f, 0.1f, 100.f);
-
-		// Compute world-view-projection matrix
-		m_CameraViewProjMatrix = View * SrfPreTransform * Proj;
-		m_CameraViewProjInvMatrix = m_CameraViewProjMatrix.Inversed();
-	}
 
 } // namespace shz
 

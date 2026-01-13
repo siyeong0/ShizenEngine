@@ -47,12 +47,13 @@ namespace shz
 	IDXCompiler* GetDeviceDXCompilerD3D12(IRenderDevice* pDevice);
 #endif
 
-	void CreateUniformBuffer(IRenderDevice* pDevice,
-		uint64           Size,
+	void CreateUniformBuffer(
+		IRenderDevice* pDevice,
+		uint64 Size,
 		const Char* Name,
 		IBuffer** ppBuffer,
-		USAGE            Usage,
-		BIND_FLAGS       BindFlags,
+		USAGE Usage,
+		BIND_FLAGS BindFlags,
 		CPU_ACCESS_FLAGS CPUAccessFlags,
 		void* pInitialData)
 	{
@@ -76,7 +77,15 @@ namespace shz
 	}
 
 	template <class TConverter>
-	void GenerateCheckerBoardPatternInternal(uint32 Width, uint32 Height, TEXTURE_FORMAT Fmt, uint32 HorzCells, uint32 VertCells, uint8* pData, uint64 StrideInBytes, TConverter Converter)
+	void GenerateCheckerBoardPatternInternal(
+		uint32 Width,
+		uint32 Height,
+		TEXTURE_FORMAT Fmt,
+		uint32 HorzCells,
+		uint32 VertCells,
+		uint8* pData,
+		uint64 StrideInBytes,
+		TConverter Converter)
 	{
 		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Fmt);
 		for (uint32 y = 0; y < Height; ++y)
@@ -95,7 +104,14 @@ namespace shz
 		}
 	}
 
-	void GenerateCheckerBoardPattern(uint32 Width, uint32 Height, TEXTURE_FORMAT Fmt, uint32 HorzCells, uint32 VertCells, uint8* pData, uint64 StrideInBytes)
+	void GenerateCheckerBoardPattern(
+		uint32 Width,
+		uint32 Height,
+		TEXTURE_FORMAT Fmt,
+		uint32 HorzCells,
+		uint32 VertCells,
+		uint8* pData,
+		uint64 StrideInBytes)
 	{
 		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Fmt);
 		switch (FmtAttribs.ComponentType)
@@ -293,8 +309,7 @@ namespace shz
 		}
 	}
 
-	template <typename ChannelType,
-		typename FilterType>
+	template <typename ChannelType, typename FilterType>
 	void FilterMipLevel(const ComputeMipLevelAttribs& Attribs, uint32 NumChannels, FilterType Filter)
 	{
 		VERIFY_EXPR(Attribs.FineMipWidth > 0 && Attribs.FineMipHeight > 0);
@@ -687,11 +702,11 @@ extern "C"
 {
 	void Shizen_CreateUniformBuffer(
 		shz::IRenderDevice* pDevice,
-		shz::uint64           Size,
+		shz::uint64 Size,
 		const shz::Char* Name,
 		shz::IBuffer** ppBuffer,
-		shz::USAGE            Usage,
-		shz::BIND_FLAGS       BindFlags,
+		shz::USAGE Usage,
+		shz::BIND_FLAGS BindFlags,
 		shz::CPU_ACCESS_FLAGS CPUAccessFlags,
 		void* pInitialData)
 	{
@@ -699,13 +714,13 @@ extern "C"
 	}
 
 	void Shizen_GenerateCheckerBoardPattern(
-		shz::uint32         Width,
-		shz::uint32         Height,
+		shz::uint32 Width,
+		shz::uint32 Height,
 		shz::TEXTURE_FORMAT Fmt,
-		shz::uint32         HorzCells,
-		shz::uint32         VertCells,
+		shz::uint32 HorzCells,
+		shz::uint32 VertCells,
 		shz::uint8* pData,
-		shz::uint64         StrideInBytes)
+		shz::uint64 StrideInBytes)
 	{
 		shz::GenerateCheckerBoardPattern(Width, Height, Fmt, HorzCells, VertCells, pData, StrideInBytes);
 	}
