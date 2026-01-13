@@ -205,7 +205,7 @@ void main(in  PSInput  PSIn,
 
 		ShaderResourceVariableDesc Vars[] =
 		{
-			{ SHADER_TYPE_VERTEX, "CameraCB", SHADER_RESOURCE_VARIABLE_TYPE_STATIC }
+			{ SHADER_TYPE_VERTEX, "CameraCB", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  }
 		};
 		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
@@ -221,9 +221,13 @@ void main(in  PSInput  PSIn,
 		if (!m_pTriangleSRB)
 			return false;
 
-		auto* pVar = m_pTrianglePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
-		if (pVar)
-			pVar->Set(m_pCameraCB);
+		//auto* pVar = m_pTrianglePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
+		//if (pVar)
+		//	pVar->Set(m_pCameraCB);
+		auto* pCBVar = m_pTriangleSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
+		if (!pCBVar)
+			return false;
+		pCBVar->Set(m_pCameraCB);
 
 		return true;
 	}
