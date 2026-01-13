@@ -60,6 +60,8 @@ namespace shz
         uint32 m_Width = 0;
         uint32 m_Height = 0;
 
+        RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+
         RefCntAutoPtr<IBuffer> m_pCameraCB;
         RefCntAutoPtr<IPipelineState> m_pTrianglePSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pTriangleSRB;

@@ -1,4 +1,4 @@
-#include "ShizenEngine.h"
+ï»¿#include "ShizenEngine.h"
 
 namespace shz
 {
@@ -11,7 +11,7 @@ namespace shz
 	{
 		SampleBase::Initialize(InitInfo);
 
-		// Renderer »ı¼º/ÃÊ±âÈ­
+		// Renderer ìƒì„±/ì´ˆê¸°í™”
 		m_pRenderer = std::make_unique<Renderer>();
 
 		RendererCreateInfo rendererCreateInfo = {};
@@ -28,6 +28,7 @@ namespace shz
 
 		m_pRenderScene = std::make_unique<RenderScene>();
 
+		m_Camera.SetProjAttribs(0.1f, 100.0f, static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight, PI / 4.0f, SURFACE_TRANSFORM_IDENTITY);
 
 		m_ViewFamily.Views.push_back({});
 		m_ViewFamily.Views[0].Viewport = {};
@@ -39,14 +40,14 @@ namespace shz
 	void ShizenEngine::Render()
 	{
 		m_ViewFamily.FrameIndex++;
-		// viewFamily´Â ³× ¿£Áø¿¡ ÀÌ¹Ì ÀÖ´ø °É ±×´ë·Î »ç¿ëÇÑ´Ù°í °¡Á¤
-		// (¾øÀ¸¸é ¿ì¼± ´õ¹Ì¸¦ ¸¸µé°Å³ª Renderer::Render¿¡¼­ ¹«½ÃÇÏµµ·Ï)
+		// viewFamilyëŠ” ë„¤ ì—”ì§„ì— ì´ë¯¸ ìˆë˜ ê±¸ ê·¸ëŒ€ë¡œ ì‚¬ìš©í•œë‹¤ê³  ê°€ì •
+		// (ì—†ìœ¼ë©´ ìš°ì„  ë”ë¯¸ë¥¼ ë§Œë“¤ê±°ë‚˜ Renderer::Renderì—ì„œ ë¬´ì‹œí•˜ë„ë¡)
 		m_pRenderer->BeginFrame();
 		m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
 		m_pRenderer->EndFrame();
 
-		// »ùÇÃÀÌ Á÷Á¢ Clear/Draw ÇÏ´ø ÄÚµå Á¦°Å!
-		// (Clear + Draw´Â Renderer ³»ºÎ¿¡¼­ Ã³¸®)
+		// ìƒ˜í”Œì´ ì§ì ‘ Clear/Draw í•˜ë˜ ì½”ë“œ ì œê±°!
+		// (Clear + DrawëŠ” Renderer ë‚´ë¶€ì—ì„œ ì²˜ë¦¬)
 	}
 
 	void ShizenEngine::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
@@ -60,13 +61,13 @@ namespace shz
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
 		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
-		// Áö±İ ´Ü°è¿¡¼­´Â ¿ÀºêÁ§Æ®/¶óÀÌÆ® °»½Å ¾ø¾îµµ µÊ.
-		// ÇÊ¿äÇØÁö¸é ¾Æ·¡Ã³·³ SceneÀ» °»½ÅÇÏ´Â ½ÄÀ¸·Î È®Àå.
+		// ì§€ê¸ˆ ë‹¨ê³„ì—ì„œëŠ” ì˜¤ë¸Œì íŠ¸/ë¼ì´íŠ¸ ê°±ì‹  ì—†ì–´ë„ ë¨.
+		// í•„ìš”í•´ì§€ë©´ ì•„ë˜ì²˜ëŸ¼ Sceneì„ ê°±ì‹ í•˜ëŠ” ì‹ìœ¼ë¡œ í™•ì¥.
 
-		// ¿¹) µğ¹ö±× »ï°¢Çü Åä±Û:
+		// ì˜ˆ) ë””ë²„ê·¸ ì‚¼ê°í˜• í† ê¸€:
 		// m_pRenderScene->SetDrawDebugTriangle(true/false);
 
-		// ¿¹) ³ªÁß¿¡ ¸Ş½¬ Ãß°¡ÇÒ ¶§:
+		// ì˜ˆ) ë‚˜ì¤‘ì— ë©”ì‰¬ ì¶”ê°€í•  ë•Œ:
 		// MeshHandle cube = m_pRenderer->CreateCubeMesh("...");
 		// RenderObjectId obj = m_pRenderScene->AddObject(cube, Matrix4x4::Identity());
 	}

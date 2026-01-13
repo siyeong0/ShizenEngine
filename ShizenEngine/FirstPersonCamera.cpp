@@ -1,4 +1,4 @@
-/*
+﻿/*
  *  Copyright 2019-2022 Diligent Graphics LLC
  *  Copyright 2015-2019 Egor Yusov
  *
@@ -93,9 +93,7 @@ namespace shz
 
 		float4x4 ReferenceRotation = GetReferenceRotiation();
 
-		float4x4 CameraRotation = float4x4::RotationArbitrary(m_ReferenceUpAxis, m_fYawAngle) *
-			float4x4::RotationArbitrary(m_ReferenceRightAxis, m_fPitchAngle) *
-			ReferenceRotation;
+		float4x4 CameraRotation = float4x4::RotationArbitrary(m_ReferenceUpAxis, m_fYawAngle) * float4x4::RotationArbitrary(m_ReferenceRightAxis, m_fPitchAngle) * ReferenceRotation;
 		float4x4 WorldRotation = CameraRotation.Transposed();
 
 		float4 PosDeltaWorld = WorldRotation.MulVector4({ PosDelta.x, PosDelta.y, PosDelta.z, 1.0f });
