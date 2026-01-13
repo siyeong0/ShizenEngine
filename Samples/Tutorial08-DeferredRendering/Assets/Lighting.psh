@@ -1,0 +1,168 @@
+#include "HLSL_Common.hlsli"
+
+cbuffer SHADER_CONSTANTS
+{
+    ShaderConstants g_ShaderCB;
+};
+
+cbuffer SHADOW_CONSTANTS
+{
+    ShadowConstants g_ShadowCB;
+};
+
+Texture2D<float4> g_GBuffer_Albedo;
+SamplerState g_GBuffer_Albedo_sampler;
+Texture2D<float4> g_GBuffer_Normal;
+SamplerState g_GBuffer_Normal_sampler;
+Texture2D<float4> g_GBuffer_Material;
+SamplerState g_GBuffer_Material_sampler;
+Texture2D<float> g_GBuffer_DepthZ;
+SamplerState g_GBuffer_DepthZ_sampler;
+
+Texture2D<float> g_ShadowMap;
+SamplerComparisonState g_ShadowMap_sampler;
+
+StructuredBuffer<LightAttribs> g_Lights;
+
+struct PSInput
+{
+    float4 Pos : SV_POSITION;
+    float2 UV : TEX_COORD;
+};
+
+struct PSOutput
+{
+    float4 Color : SV_TARGET0;
+};
+
+float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float ComputeSpecTerm(float NdotH, float roughness)
+{
+    float specPower = lerp(8.0, 128.0, 1.0 - roughness);
+    return pow(saturate(NdotH), specPower);
+}
+
+void main(in PSInput PSIn, out PSOutput PSOut)
+{
+    float2 uv = PSIn.UV;
+
+    float3 albedo = g_GBuffer_Albedo.Sample(g_GBuffer_Albedo_sampler, uv).rgb;
+
+    float3 n_enc = g_GBuffer_Normal.Sample(g_GBuffer_Normal_sampler, uv).rgb;
+    float3 N = DecodeNormal(n_enc);
+
+    float4 mat = g_GBuffer_Material.Sample(g_GBuffer_Material_sampler, uv);
+    float roughness = saturate(mat.r);
+    float metallic = saturate(mat.g);
+    float ao = saturate(mat.b);
+
+    float depth01 = g_GBuffer_DepthZ.Sample(g_GBuffer_DepthZ_sampler, uv);
+
+    float3 P = ReconstructWorldPos(
+        PSIn.Pos,
+        depth01,
+        g_ShaderCB.ViewportSize.zw,
+        g_ShaderCB.ViewProjInv);
+
+    // 카메라 위치 기반
+    float3 V = normalize(g_ShaderCB.CameraPosWS - P);
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+
+    // ------------------------------------------------------------------
+    // 1) Directional (Global, shadow-casting) light
+    //    ShadowFactor는 여기만 곱한다.
+    // ------------------------------------------------------------------
+    float3 directDir = 0.0;
+    {
+        // g_ShadowCB.LightDirWS: "빛이 진행하는 방향"
+        // Ld는 "표면 -> 광원 방향"이 아니라, shading에서 보통 dot(N, L)용 "표면 -> 빛 방향"
+        // 빛 진행 방향이 (0,-1,0)이면, L은 (0,+1,0)이 되어야 함 => -LightDirWS
+        float3 Ld = normalize(-g_ShadowCB.LightDirWS);
+        float NdotL_d = saturate(dot(N, Ld));
+
+        if (NdotL_d > 0.0)
+        {
+            float shadow = ComputeShadowFactorPCF(
+                g_ShadowMap,
+                g_ShadowMap_sampler,
+                P,
+                g_ShadowCB.LightViewProj,
+                g_ShadowCB.ShadowMapTexelSize,
+                g_ShadowCB.ShadowBias,
+                g_ShadowCB.ShadowStrength);
+
+            float3 H_d = normalize(Ld + V);
+            float VdotH = saturate(dot(V, H_d));
+            float NdotH = saturate(dot(N, H_d));
+
+            float spec = ComputeSpecTerm(NdotH, roughness);
+            float3 F = FresnelSchlick(F0, VdotH);
+            float3 kd = (1.0 - F) * (1.0 - metallic);
+
+            float3 diffuse = kd * albedo / PI;
+            float3 specular = F * spec;
+
+            float3 SunColor = float3(1.0, 0.98, 0.95);
+            float SunIntensity = 6.0;
+
+            directDir = (diffuse + specular) * (SunColor * SunIntensity) * NdotL_d;
+
+            // Directional에만 shadow 곱
+            directDir *= shadow;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 2) Point lights (no shadow)
+    //    i=1부터 시작. (0번은 전역 라이트로 reserved)
+    // ------------------------------------------------------------------
+    float3 Lo = 0.0;
+    const float POINT_LIGHT_INTENSITY = 0.20;
+
+    uint lightCount = (uint) max(g_ShaderCB.LightsCount, 0);
+
+    [loop]
+    for (uint i = 1; i < lightCount; ++i)
+    {
+        LightAttribs L = g_Lights[i];
+
+        float3 Lvec = L.Location - P;
+        float dist = length(Lvec);
+
+        float invDist = 1.0 / max(dist, 1e-4);
+        float3 Ldir = Lvec * invDist;
+
+        float att = saturate(1.0 - dist / max(L.Radius, 1e-4));
+        att *= att;
+
+        float NdotL = saturate(dot(N, Ldir));
+        if (NdotL <= 0.0 || att <= 0.0)
+            continue;
+
+        float3 H = normalize(Ldir + V);
+        float VdotH = saturate(dot(V, H));
+        float NdotH = saturate(dot(N, H));
+
+        float spec = ComputeSpecTerm(NdotH, roughness);
+        float3 F = FresnelSchlick(F0, VdotH);
+        float3 kd = (1.0 - F) * (1.0 - metallic);
+
+        float3 diffuse = kd * albedo / PI;
+        float3 specular = F * spec;
+
+        float3 radiance = L.Color * (att * POINT_LIGHT_INTENSITY);
+
+        Lo += (diffuse + specular) * radiance * NdotL;
+    }
+
+    float3 ambient = albedo * 0.015 * ao;
+
+    float3 color = ambient + directDir + Lo;
+
+    PSOut.Color = float4(color, 1.0);
+}

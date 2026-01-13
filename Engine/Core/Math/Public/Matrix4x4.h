@@ -340,6 +340,42 @@ namespace shz
 			}
 		}
 
+		// Matrix4x4 inside struct
+		static inline Matrix4x4 OrthoOffCenter(
+			float32 left,
+			float32 right,
+			float32 bottom,
+			float32 top,
+			float32 zn,
+			float32 zf)
+		{
+			ASSERT(std::fabs(right - left) > 1e-12f);
+			ASSERT(std::fabs(top - bottom) > 1e-12f);
+			ASSERT(std::fabs(zf - zn) > 1e-12f);
+
+			const float32 invW = 1.0f / (right - left);
+			const float32 invH = 1.0f / (top - bottom);
+			const float32 invD = 1.0f / (zf - zn);
+
+			// Row-vector orthographic (LH), depth 0..1:
+			//
+			// x' = x * 2/(r-l) + (-(r+l)/(r-l))
+			// y' = y * 2/(t-b) + (-(t+b)/(t-b))
+			// z' = z * 1/(zf-zn) + (-(zn)/(zf-zn))
+			//
+			// With your convention (v' = v*M), translation must live in last ROW.
+			return Matrix4x4(
+				2.0f * invW, 0.0f, 0.0f, 0.0f,
+				0.0f, 2.0f * invH, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f * invD, 0.0f,
+				-(right + left) * invW,
+				-(top + bottom) * invH,
+				-zn * invD,
+				1.0f
+			);
+		}
+
+
 		// --------------------------------------------------------
 		// Transform (row-vector): v' = v * M
 		// --------------------------------------------------------
