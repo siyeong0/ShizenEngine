@@ -81,7 +81,6 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
 		// Shadow pass doesn't use any render target outputs
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 0;
 		PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
@@ -92,7 +91,6 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
 		// Enable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-		// clang-format on
 
 		ShaderCreateInfo ShaderCI;
 		ShaderCI.pShaderSourceStreamFactory = pShaderSourceFactory;
@@ -118,7 +116,6 @@ namespace shz
 		// We don't use pixel shader as we are only interested in populating the depth buffer
 		PSOCreateInfo.pPS = nullptr;
 
-		// clang-format off
 		// Define vertex shader input layout
 		LayoutElement LayoutElems[] =
 		{
@@ -129,7 +126,7 @@ namespace shz
 			// Attribute 2 - texture coordinates
 			LayoutElement{1, 0, 2, VT_FLOAT32, false}
 		};
-		// clang-format on
+		
 
 		PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
 		PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
@@ -167,7 +164,7 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
+		
 		// This tutorial renders to a single render target
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
 		// Set render target format which is the format of the swap chain's color buffer
@@ -180,7 +177,7 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
 		// Enable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-		// clang-format on
+		
 
 		ShaderCreateInfo ShaderCI;
 		// Tell the system that the shader source code is in HLSL.
@@ -230,14 +227,14 @@ namespace shz
 		// Define variable type that will be used by default
 		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		// clang-format off
+		
 		// Shader variables should typically be mutable, which means they are expected
 		// to change on a per-instance basis
 		ShaderResourceVariableDesc Vars[] =
 		{
 			{SHADER_TYPE_PIXEL, "g_ShadowMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
@@ -247,12 +244,12 @@ namespace shz
 		ComparsionSampler.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
 		ComparsionSampler.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
 		ComparsionSampler.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
-		// clang-format off
+		
 		ImmutableSamplerDesc ImtblSamplers[] =
 		{
 			{SHADER_TYPE_PIXEL, "g_ShadowMap", ComparsionSampler}
 		};
-		// clang-format on
+		
 		PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers = ImtblSamplers;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
 
@@ -273,7 +270,7 @@ namespace shz
 		// This is a graphics pipeline
 		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		// clang-format off
+		
 		// This tutorial renders to a single render target
 		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
 		// Set render target format which is the format of the swap chain's color buffer
@@ -286,7 +283,7 @@ namespace shz
 		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
 		// Disable depth testing
 		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
-		// clang-format on
+		
 
 		ShaderCreateInfo ShaderCI;
 		// Tell the system that the shader source code is in HLSL.
@@ -340,7 +337,7 @@ namespace shz
 		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Variables;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Variables);
 
-		// clang-format off
+		
 		SamplerDesc SamLinearClampDesc
 		{
 			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
@@ -350,7 +347,7 @@ namespace shz
 		{
 			{SHADER_TYPE_PIXEL, "g_ShadowMap", SamLinearClampDesc}
 		};
-		// clang-format on
+		
 
 		// Sampling depth textures is not supported on all GLES devices.
 		// Setting non-comparison sampler for shadow map makes the Load() function

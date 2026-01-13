@@ -309,13 +309,13 @@ namespace shz
 
 		PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		// clang-format off
+		
 		ShaderResourceVariableDesc Vars[] =
 		{
 			{SHADER_TYPE_PIXEL, "g_SubpassInputColor", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
 			{SHADER_TYPE_PIXEL, "g_SubpassInputDepthZ", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
 		};
-		// clang-format on
+		
 		PSODesc.ResourceLayout.Variables = Vars;
 		PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
@@ -378,7 +378,7 @@ namespace shz
 		// Prepar subpass descriptions
 		SubpassDesc Subpasses[NumSubpasses];
 
-		// clang-format off
+		
 		// Subpass 0 attachments - 2 render targets and depth buffer
 		AttachmentReference RTAttachmentRefs0[] =
 		{
@@ -401,7 +401,7 @@ namespace shz
 			{0, RESOURCE_STATE_INPUT_ATTACHMENT},
 			{1, RESOURCE_STATE_INPUT_ATTACHMENT}
 		};
-		// clang-format on
+		
 
 		Subpasses[0].RenderTargetAttachmentCount = _countof(RTAttachmentRefs0);
 		Subpasses[0].pRenderTargetAttachments = RTAttachmentRefs0;

@@ -37,7 +37,6 @@ namespace shz
 	{
 		switch (Format)
 		{
-			// clang-format off
 		case TEX_FORMAT_RGBA8_UNORM: return spv::ImageFormatRgba8;
 		case TEX_FORMAT_RG8_UNORM:   return spv::ImageFormatRg8;
 		case TEX_FORMAT_R8_UNORM:    return spv::ImageFormatR8;
@@ -90,7 +89,6 @@ namespace shz
 		case TEX_FORMAT_RGB10A2_UNORM:   return spv::ImageFormatRgb10A2;
 		case TEX_FORMAT_RGB10A2_UINT:    return spv::ImageFormatRgb10a2ui;
 
-			// clang-format on
 		default:
 			return spv::ImageFormatUnknown;
 		}
