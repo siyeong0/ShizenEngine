@@ -141,9 +141,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="targetver.h" />
     <ClInclude Include="TexturedCube.h" />
     <ClInclude Include="Tutorial06_ShadowMap.h" />
   </ItemGroup>
@@ -153,12 +150,7 @@
     <ClCompile Include="Tutorial06_ShadowMap.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial06-ShadowMap.rc" />
-  </ItemGroup>
-  <ItemGroup>
     <Image Include="Assets\pearl_abyss_logo.png" />
-    <Image Include="small.ico" />
-    <Image Include="Tutorial06-ShadowMap.ico" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Assets\cube.psh">

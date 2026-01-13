@@ -15,15 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Tutorial06_ShadowMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -43,17 +34,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial06-ShadowMap.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="small.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Tutorial06-ShadowMap.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Assets\pearl_abyss_logo.png">
       <Filter>Resource Files</Filter>
     </Image>

@@ -125,9 +125,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="targetver.h" />
     <ClInclude Include="Tutorial03_Texturing.h" />
   </ItemGroup>
   <ItemGroup>
@@ -135,12 +132,7 @@
     <ClCompile Include="Tutorial03_Texturing.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial03-Texturing.rc" />
-  </ItemGroup>
-  <ItemGroup>
     <Image Include="Assets\pearl_abyss_logo.png" />
-    <Image Include="small.ico" />
-    <Image Include="Tutorial03-Texturing.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Engine\Core\Engine-Core.vcxproj">

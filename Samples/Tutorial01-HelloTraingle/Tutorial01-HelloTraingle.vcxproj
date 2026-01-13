@@ -125,17 +125,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="targetver.h" />
     <ClInclude Include="Tutorial01_HelloTriangle.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="Tutorial01-HelloTraingle.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="small.ico" />
-    <Image Include="Tutorial01-HelloTraingle.ico" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

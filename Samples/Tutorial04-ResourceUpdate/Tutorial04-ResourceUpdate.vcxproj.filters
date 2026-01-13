@@ -15,15 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Tutorial04_ResourceUpdate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -37,17 +28,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Tutorial04-ResourceUpdate.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="small.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Tutorial04-ResourceUpdate.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Assets\KittyCraft0.png">
       <Filter>Resource Files</Filter>
     </Image>
