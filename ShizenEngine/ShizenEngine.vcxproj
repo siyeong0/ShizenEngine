@@ -141,9 +141,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="FirstPersonCamera.h" />
     <ClInclude Include="ShizenEngine.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="FirstPersonCamera.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ShizenEngine.cpp" />
   </ItemGroup>

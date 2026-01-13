@@ -19,6 +19,7 @@
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/StaticMesh.h"
+#include "Engine/Renderer/Public/ViewFamily.h"
 
 namespace shz
 {
@@ -35,13 +36,6 @@ namespace shz
         uint32 BackBufferHeight = 0;
     };
 
-    struct FrameData
-    {
-        uint64 FrameIndex = 0;
-        float DeltaSeconds = 0.0f;
-        float TimeSeconds = 0.0f;
-    };
-
     class Renderer
     {
     public:
@@ -50,11 +44,11 @@ namespace shz
 
         void OnResize(uint32 width, uint32 height);
 
-        void BeginFrame(const FrameData& params);
-        void Render(const RenderScene& scene, const class ViewFamily& viewFamily);
+        void BeginFrame();
+        void Render(const RenderScene& scene, const ViewFamily& viewFamily);
         void EndFrame();
  
-        MeshHandle CreateCubeMesh(const char* path);
+        MeshHandle CreateCubeMesh();
 
     private:
         bool CreateDebugTrianglePSO();
@@ -66,9 +60,9 @@ namespace shz
         uint32 m_Width = 0;
         uint32 m_Height = 0;
 
-        FrameData m_FrameParam = {};
-
+        RefCntAutoPtr<IBuffer> m_pCameraCB;
         RefCntAutoPtr<IPipelineState> m_pTrianglePSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pTriangleSRB;
 
         uint32 m_NextMeshId = 1;
         std::unordered_map<MeshHandle, StaticMesh> m_MeshTable;

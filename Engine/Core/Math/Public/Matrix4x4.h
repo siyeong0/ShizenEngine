@@ -314,7 +314,7 @@ namespace shz
 			);
 		}
 
-		void SetNearFarClipPlanes(float32 zNear, float32 zFar, bool NegativeOneToOneZ)
+		void SetNearFarClipPlanes(float32 zNear, float32 zFar, bool NegativeOneToOneZ = false)
 		{
 			if (_m33 == 0)
 			{

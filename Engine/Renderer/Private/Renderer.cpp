@@ -1,11 +1,24 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "Renderer.h"
 #include "ViewFamily.h"
 #include "Engine/RHI/Interface/IBuffer.h"
+#include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
 namespace shz
 {
+	struct CameraConstants
+	{
+		float4x4 ViewProj;
+	};
+	static_assert(sizeof(CameraConstants) % 16 == 0);
+
 	static const char* g_TriangleVS = R"(
+cbuffer CameraCB
+{
+    float4x4 g_ViewProj;
+};
+
 struct PSInput
 {
     float4 Pos   : SV_POSITION;
@@ -25,10 +38,12 @@ void main(in  uint    VertId : SV_VertexID,
     Col[1] = float3(0.0, 1.0, 0.0);
     Col[2] = float3(0.0, 0.0, 1.0);
 
-    PSIn.Pos   = Pos[VertId];
+    // View/Proj ì ìš©
+    PSIn.Pos   = mul(Pos[VertId], g_ViewProj);
     PSIn.Color = Col[VertId];
 }
 )";
+
 
 	static const char* g_TrianglePS = R"(
 struct PSInput
@@ -60,6 +75,8 @@ void main(in  PSInput  PSIn,
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : SCDesc.Width;
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : SCDesc.Height;
 
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(CameraConstants), "Shader constants CB", &m_pCameraCB);
+
 		if (!CreateDebugTrianglePSO())
 			return false;
 
@@ -74,7 +91,6 @@ void main(in  PSInput  PSIn,
 
 		m_CreateInfo = {};
 		m_Width = m_Height = 0;
-		m_FrameParam = {};
 	}
 
 	void Renderer::OnResize(uint32 width, uint32 height)
@@ -83,52 +99,60 @@ void main(in  PSInput  PSIn,
 		m_Height = height;
 	}
 
-	void Renderer::BeginFrame(const FrameData& params)
+	void Renderer::BeginFrame()
 	{
-		m_FrameParam = params;
+
 	}
 
-	void Renderer::Render(const RenderScene& scene, const ViewFamily&)
+	void Renderer::Render(const RenderScene& scene, const ViewFamily& viewFamily)
 	{
 		auto* pCtx = m_CreateInfo.pImmediateContext.RawPtr();
 		auto* pSC = m_CreateInfo.pSwapChain.RawPtr();
 		if (!pCtx || !pSC)
 			return;
 
+		// ---- RenderTarget ë°”ì¸ë”©(ê¶Œì¥) ----
 		ITextureView* pRTV = pSC->GetCurrentBackBufferRTV();
 		ITextureView* pDSV = pSC->GetDepthBufferDSV();
+		pCtx->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
+		// ---- Clear ----
 		const float ClearColor[] = { 0.350f, 0.350f, 0.350f, 1.0f };
-		pCtx->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-		pCtx->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+		pCtx->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+		pCtx->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-		// 1) Debug triangle (³»Àå)
+		// ---- ViewFamilyì—ì„œ View/Proj ê°€ì ¸ì˜¤ê¸° ----
+		// âš ï¸ ì•„ë˜ëŠ” "ViewFamilyê°€ Views[0]ì„ ê°€ì§„ë‹¤"ëŠ” ì „í˜•ì ì¸ í˜•íƒœë¥¼ ê°€ì •.
+		// ë„ˆì˜ ViewFamily êµ¬ì¡°ì— ë§ê²Œ í•„ë“œëª…ë§Œ ë§ì¶°ì£¼ë©´ ë¨.
+		const auto& view = viewFamily.Views[0];
+
+		// ë„ˆì˜ ìˆ˜í•™ ë¼ì´ë¸ŒëŸ¬ë¦¬ê°€ row/col-major ì–´ëŠ ìª½ì¸ì§€ì— ë”°ë¼
+		// ViewProj ê³± ìˆœì„œë¥¼ ë§ì¶°ì•¼ í•¨.
+		// (ëŒ€ë¶€ë¶„: ViewProj = View * Proj ë˜ëŠ” Proj * View ì¤‘ í•˜ë‚˜)
+		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix; // <-- ë„¤ ì—”ì§„ ê·œì•½ì— ë§ê²Œ ì¡°ì •
+
+		// ---- CameraCB ì—…ë°ì´íŠ¸ ----
+		{
+			MapHelper<CameraConstants> CBData(pCtx, m_pCameraCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			CBData->ViewProj = viewProj;
+		}
+
+		// ---- Debug triangle draw ----
 		if (m_pTrianglePSO)
 		{
 			pCtx->SetPipelineState(m_pTrianglePSO);
+
+			pCtx->CommitShaderResources(m_pTriangleSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
 			DrawAttribs DA;
 			DA.NumVertices = 3;
 			pCtx->Draw(DA);
 		}
 
-		// 2) RenderScene objects (StaticMesh draw) - Áö±İÀº "ÆÄÀÌÇÁ¶óÀÎ/¹ÙÀÎµù"ÀÌ ¾ø¾î¼­ »À´ë¸¸
-		//    ³×°¡ ´ÙÀ½ ´Ü°è¿¡¼­ material/PSO¸¦ ºÙÀÌ¸é ¿©±â¼­ section loop·Î DrawIndexed°¡ µé¾î°¨.
-		for (const auto& kv : scene.GetObjects())
-		{
-			const RenderScene::RenderObject& obj = kv.second;
-			auto mit = m_MeshTable.find(obj.meshHandle);
-			if (mit == m_MeshTable.end())
-				continue;
-
-			const StaticMesh& mesh = mit->second;
-			if (!mesh.VertexBuffer)
-				continue;
-
-			// TODO:
-			// - SetVertexBuffers(mesh.VertexBuffer, stride)
-			// - for each section: SetIndexBuffer, BindMaterial, DrawIndexed
-		}
+		// scene object drawëŠ” ê·¸ëŒ€ë¡œ (ë‚˜ì¤‘ì— í™•ì¥)
+		(void)scene;
 	}
+
 
 	void Renderer::EndFrame()
 	{
@@ -177,21 +201,41 @@ void main(in  PSInput  PSIn,
 			if (!pPS) return false;
 		}
 
+		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+		ShaderResourceVariableDesc Vars[] =
+		{
+			{ SHADER_TYPE_VERTEX, "CameraCB", SHADER_RESOURCE_VARIABLE_TYPE_STATIC }
+		};
+		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
+		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+
 		PSOCreateInfo.pVS = pVS;
 		PSOCreateInfo.pPS = pPS;
 
 		pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pTrianglePSO);
-		return m_pTrianglePSO != nullptr;
+		if (!m_pTrianglePSO)
+			return false;
+
+		m_pTrianglePSO->CreateShaderResourceBinding(&m_pTriangleSRB, true /*InitStaticResources*/);
+		if (!m_pTriangleSRB)
+			return false;
+
+		auto* pVar = m_pTrianglePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
+		if (pVar)
+			pVar->Set(m_pCameraCB);
+
+		return true;
 	}
 
-	MeshHandle Renderer::CreateCubeMesh(const char* /*path*/)
+	MeshHandle Renderer::CreateCubeMesh()
 	{
 		MeshHandle handle{ m_NextMeshId++ };
 
 		StaticMesh mesh;
 		if (!CreateCubeMesh_Internal(mesh))
 		{
-			// ½ÇÆĞÇÏ¸é invalid ¹İÈ¯
+			// ì‹¤íŒ¨í•˜ë©´ invalid ë°˜í™˜
 			return MeshHandle{};
 		}
 
@@ -201,8 +245,8 @@ void main(in  PSInput  PSIn,
 
 	bool Renderer::CreateCubeMesh_Internal(StaticMesh& outMesh)
 	{
-		// ¸Å¿ì ÃÖ¼Ò: Position(Color/UV ¾øÀ½) Á¤Á¡ + 36 indices
-		// ³×°¡ ´ÙÀ½ ´Ü°è¿¡¼­ Vertex layoutÀ» È®Á¤ÇÏ¸é ¿©±â Á¤Á¡ ±¸Á¶¸¦ ±³Ã¼ÇÏ¸é µÊ.
+		// ë§¤ìš° ìµœì†Œ: Position(Color/UV ì—†ìŒ) ì •ì  + 36 indices
+		// ë„¤ê°€ ë‹¤ìŒ ë‹¨ê³„ì—ì„œ Vertex layoutì„ í™•ì •í•˜ë©´ ì—¬ê¸° ì •ì  êµ¬ì¡°ë¥¼ êµì²´í•˜ë©´ ë¨.
 
 		struct SimpleVertex
 		{
@@ -257,7 +301,7 @@ void main(in  PSInput  PSIn,
 			if (!outMesh.VertexBuffer) return false;
 		}
 
-		// --- Create index buffer (section 1°³) ---
+		// --- Create index buffer (section 1ê°œ) ---
 		MeshSection sec;
 		sec.NumIndices = 36;
 		sec.IndexType = INDEX_TYPE_UINT32;

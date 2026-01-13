@@ -155,6 +155,7 @@
     <ClInclude Include="Public\Material.h" />
     <ClInclude Include="Public\Renderer.h" />
     <ClInclude Include="Public\RenderScene.h" />
+    <ClInclude Include="Public\RenderTarget.h" />
     <ClInclude Include="Public\StaticMesh.h" />
     <ClInclude Include="Public\ViewFamily.h" />
   </ItemGroup>

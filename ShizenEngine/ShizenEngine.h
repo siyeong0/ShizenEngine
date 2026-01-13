@@ -31,6 +31,9 @@
 
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Renderer/Public/ViewFamily.h"
+
+#include "FirstPersonCamera.h"
 
 namespace shz
 {
@@ -51,7 +54,9 @@ namespace shz
         std::unique_ptr<Renderer> m_pRenderer = nullptr;
         std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
 
-        FrameData m_FrameParam;
+        ViewFamily m_ViewFamily = {};
+
+        FirstPersonCamera m_Camera;
     };
 
 } // namespace shz
