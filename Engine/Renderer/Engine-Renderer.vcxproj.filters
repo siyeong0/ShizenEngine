@@ -48,4 +48,11 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\Basic.psh" />
+    <FxCompile Include="Shaders\Basic.vsh" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\HLSL_Structures.hlsli" />
+  </ItemGroup>
 </Project>

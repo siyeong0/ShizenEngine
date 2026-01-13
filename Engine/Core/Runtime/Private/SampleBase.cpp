@@ -98,15 +98,15 @@ namespace shz
         {
         case SURFACE_TRANSFORM_ROTATE_90:
             // The image content is rotated 90 degrees clockwise.
-            return float4x4::RotationArbitrary(f3CameraViewAxis, -PI / 2.f);
+            return float4x4::RotationAxis(f3CameraViewAxis, -PI / 2.f);
 
         case SURFACE_TRANSFORM_ROTATE_180:
             // The image content is rotated 180 degrees clockwise.
-            return float4x4::RotationArbitrary(f3CameraViewAxis, -PI);
+            return float4x4::RotationAxis(f3CameraViewAxis, -PI);
 
         case SURFACE_TRANSFORM_ROTATE_270:
             // The image content is rotated 270 degrees clockwise.
-            return float4x4::RotationArbitrary(f3CameraViewAxis, -PI * 3.f / 2.f);
+            return float4x4::RotationAxis(f3CameraViewAxis, -PI * 3.f / 2.f);
 
         case SURFACE_TRANSFORM_OPTIMAL:
             UNEXPECTED("SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");

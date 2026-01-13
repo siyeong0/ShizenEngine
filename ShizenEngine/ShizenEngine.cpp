@@ -34,7 +34,15 @@ namespace shz
 		m_ViewFamily.Views[0].Viewport = {};
 
 		MeshHandle handle = m_pRenderer->CreateCubeMesh();
-		m_pRenderScene->AddObject(handle, Matrix4x4::Identity());
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0,  0 }, { 0,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
 	}
 
 	void ShizenEngine::Render()

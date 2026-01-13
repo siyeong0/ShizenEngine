@@ -189,22 +189,26 @@ namespace shz
 				0, 0, 1);
 		}
 
-		static inline Matrix3x3 RotationAxis(const Vector3& axis, float32 rad)
+		static inline Matrix3x3 RotationAxis(Vector3 axis, float32 rad)
 		{
-			// Build the standard (column-vector) Rodrigues matrix, then transpose.
-			Vector3 a = axis.Normalized();
-			const float32 x = a.x, y = a.y, z = a.z;
+			axis = axis.Normalized();
+
+			const float32 x = axis.x;
+			const float32 y = axis.y;
+			const float32 z = axis.z;
+
 			const float32 c = (float32)std::cos(rad);
-			const float32 s = (float32)std::sin(rad);
+			const float32 s = -(float32)std::sin(rad); // row-vector fix (same as Matrix4x4::RotationArbitrary)
 			const float32 t = 1.0f - c;
 
-			const Matrix3x3 col(
-				t * x * x + c, t * x * y - s * z, t * x * z + s * y,
-				t * x * y + s * z, t * y * y + c, t * y * z - s * x,
-				t * x * z - s * y, t * y * z + s * x, t * z * z + c);
-
-			return col.Transposed();
+			// Row-vector convention matrix (v' = v * R)
+			return Matrix3x3(
+				t * x * x + c, t * x * y + s * z, t * x * z - s * y,
+				t * y * x - s * z, t * y * y + c, t * y * z + s * x,
+				t * z * x + s * y, t * z * y - s * x, t * z * z + c
+			);
 		}
+
 	};
 	static_assert(sizeof(Matrix3x3) == sizeof(float32) * 9, "Matrix3x3 size is incorrect.");
 	static_assert(alignof(Matrix3x3) == alignof(float32), "Matrix3x3 alignment is incorrect.");

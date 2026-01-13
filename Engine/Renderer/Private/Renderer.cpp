@@ -7,62 +7,11 @@
 
 namespace shz
 {
-	struct CameraConstants
+
+	namespace hlsl
 	{
-		float4x4 ViewProj;
-	};
-	static_assert(sizeof(CameraConstants) % 16 == 0);
-
-	static const char* g_TriangleVS = R"(
-cbuffer CameraCB
-{
-    float4x4 g_ViewProj;
-};
-
-struct PSInput
-{
-    float4 Pos   : SV_POSITION;
-    float3 Color : COLOR;
-};
-
-void main(in  uint    VertId : SV_VertexID,
-          out PSInput PSIn)
-{
-    float4 Pos[3];
-    Pos[0] = float4(-0.5, -0.5, 0.0, 1.0);
-    Pos[1] = float4( 0.0, +0.5, 0.0, 1.0);
-    Pos[2] = float4(+0.5, -0.5, 0.0, 1.0);
-
-    float3 Col[3];
-    Col[0] = float3(1.0, 0.0, 0.0);
-    Col[1] = float3(0.0, 1.0, 0.0);
-    Col[2] = float3(0.0, 0.0, 1.0);
-
-    // View/Proj 적용
-    PSIn.Pos   = mul(Pos[VertId], g_ViewProj);
-    PSIn.Color = Col[VertId];
-}
-)";
-
-
-	static const char* g_TrianglePS = R"(
-struct PSInput
-{
-    float4 Pos   : SV_POSITION;
-    float3 Color : COLOR;
-};
-
-struct PSOutput
-{
-    float4 Color : SV_TARGET;
-};
-
-void main(in  PSInput  PSIn,
-          out PSOutput PSOut)
-{
-    PSOut.Color = float4(PSIn.Color.rgb, 1.0);
-}
-)";
+#include "Shaders/HLSL_Structures.hlsli"
+	} // namespace hlsl
 
 	bool Renderer::Initialize(const RendererCreateInfo& createInfo)
 	{
@@ -75,9 +24,12 @@ void main(in  PSInput  PSIn,
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : SCDesc.Width;
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : SCDesc.Height;
 
-		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(CameraConstants), "Shader constants CB", &m_pCameraCB);
+		m_CreateInfo.pEngineFactory->CreateDefaultShaderSourceStreamFactory("C:/Dev/ShizenEngine/Engine/Renderer/Shaders", &m_pShaderSourceFactory);
 
-		if (!CreateDebugTrianglePSO())
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Shader constants CB", &m_pFrameCB);
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Shader constants CB", &m_pObjectCB);
+
+		if (!CreateBasicPSO())
 			return false;
 
 		return true;
@@ -85,7 +37,7 @@ void main(in  PSInput  PSIn,
 
 	void Renderer::Cleanup()
 	{
-		m_pTrianglePSO.Release();
+		m_pBasicPSO.Release();
 		m_MeshTable.clear();
 		m_NextMeshId = 1;
 
@@ -111,126 +63,214 @@ void main(in  PSInput  PSIn,
 		if (!pCtx || !pSC)
 			return;
 
-		// ---- RenderTarget 바인딩(권장) ----
 		ITextureView* pRTV = pSC->GetCurrentBackBufferRTV();
 		ITextureView* pDSV = pSC->GetDepthBufferDSV();
 		pCtx->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-		// ---- Clear ----
 		const float ClearColor[] = { 0.350f, 0.350f, 0.350f, 1.0f };
 		pCtx->ClearRenderTarget(pRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 		pCtx->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-		// ---- ViewFamily에서 View/Proj 가져오기 ----
-		// ⚠️ 아래는 "ViewFamily가 Views[0]을 가진다"는 전형적인 형태를 가정.
-		// 너의 ViewFamily 구조에 맞게 필드명만 맞춰주면 됨.
 		const auto& view = viewFamily.Views[0];
+		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix; // 네 규약에 맞게
 
-		// 너의 수학 라이브러리가 row/col-major 어느 쪽인지에 따라
-		// ViewProj 곱 순서를 맞춰야 함.
-		// (대부분: ViewProj = View * Proj 또는 Proj * View 중 하나)
-		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix; // <-- 네 엔진 규약에 맞게 조정
-
-		// ---- CameraCB 업데이트 ----
+		// Frame CB 업데이트 (프레임 1회)
 		{
-			MapHelper<CameraConstants> CBData(pCtx, m_pCameraCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::FrameConstants> CBData(pCtx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 			CBData->ViewProj = viewProj;
 		}
 
-		// ---- Debug triangle draw ----
-		if (m_pTrianglePSO)
+		if (!m_pBasicPSO)
+			return;
+
+		pCtx->SetPipelineState(m_pBasicPSO);
+		pCtx->CommitShaderResources(m_pBasicSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+		for (const auto& obj : scene.GetObjects())
 		{
-			pCtx->SetPipelineState(m_pTrianglePSO);
+			const RenderScene::RenderObject& renderObject = obj.second;
+			const StaticMesh& mesh = m_MeshTable.at(renderObject.meshHandle);
 
-			pCtx->CommitShaderResources(m_pTriangleSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+			// Object CB 업데이트 (오브젝트마다)
+			{
+				MapHelper<hlsl::ObjectConstants> CBData(pCtx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				CBData->World = renderObject.transform;
+			}
 
-			DrawAttribs DA;
-			DA.NumVertices = 3;
-			pCtx->Draw(DA);
+			IBuffer* pVBs[] = { mesh.VertexBuffer };
+			uint64 Offsets[] = { 0 };
+			pCtx->SetVertexBuffers(
+				0, 1, pVBs, Offsets,
+				RESOURCE_STATE_TRANSITION_MODE_TRANSITION, // <-- VERIFY 금지
+				SET_VERTEX_BUFFERS_FLAG_RESET);
+
+			for (const auto& section : mesh.Sections)
+			{
+				pCtx->SetIndexBuffer(section.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION); // <-- VERIFY 금지
+
+				DrawIndexedAttribs DIA;
+				DIA.NumIndices = section.NumIndices;
+				DIA.IndexType = VT_UINT32;
+				DIA.Flags = DRAW_FLAG_VERIFY_ALL; // 디버그면 OK
+
+				pCtx->DrawIndexed(DIA);
+			}
 		}
-
-		// scene object draw는 그대로 (나중에 확장)
-		(void)scene;
 	}
+
 
 
 	void Renderer::EndFrame()
 	{
 	}
 
-	bool Renderer::CreateDebugTrianglePSO()
+	bool Renderer::CreateBasicPSO()
 	{
 		auto* pDevice = m_CreateInfo.pDevice.RawPtr();
 		if (!pDevice)
 			return false;
 
-		GraphicsPipelineStateCreateInfo PSOCreateInfo;
-		PSOCreateInfo.PSODesc.Name = "Debug Triangle PSO";
-		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
 		const auto& SCDesc = m_CreateInfo.pSwapChain->GetDesc();
 
-		PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 1;
-		PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = SCDesc.ColorBufferFormat;
-		PSOCreateInfo.GraphicsPipeline.DSVFormat = SCDesc.DepthBufferFormat;
+		GraphicsPipelineStateCreateInfo PSOCreateInfo = {};
+		PSOCreateInfo.PSODesc.Name = "Debug Basic PSO";
+		PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		PSOCreateInfo.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
-		PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
+		// =========================
+		// Graphics pipeline states
+		// =========================
+		auto& GP = PSOCreateInfo.GraphicsPipeline;
+		GP.NumRenderTargets = 1;
+		GP.RTVFormats[0] = SCDesc.ColorBufferFormat;
+		GP.DSVFormat = SCDesc.DepthBufferFormat;
 
-		ShaderCreateInfo ShaderCI;
+		GP.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+		GP.RasterizerDesc.CullMode = CULL_MODE_NONE;
+
+		// 너 셰이더는 Depth01을 출력하지만, 현재 PS에서 쓰지도 않고
+		// Debug 목적이라면 Depth off가 맞음.
+		GP.DepthStencilDesc.DepthEnable = false;
+
+		// =========================
+		// Input Layout (ATTRIB0/1/2)
+		// VSInput:
+		//  float3 Pos    : ATTRIB0;
+		//  float2 UV     : ATTRIB1;
+		//  float3 Normal : ATTRIB2;
+		// =========================
+		LayoutElement LayoutElems[] =
+		{
+			// Slot 0 기준
+			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 : float3
+			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // ATTRIB1 : float2
+			LayoutElement{2, 0, 3, VT_FLOAT32, false}, // ATTRIB2 : float3
+		};
+		GP.InputLayout.LayoutElements = LayoutElems;
+		GP.InputLayout.NumElements = _countof(LayoutElems);
+
+		// =========================
+		// Shaders
+		// =========================
+		ShaderCreateInfo ShaderCI = {};
 		ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-		ShaderCI.Desc.UseCombinedTextureSamplers = true;
 		ShaderCI.EntryPoint = "main";
+		ShaderCI.pShaderSourceStreamFactory = m_pShaderSourceFactory;
+
+		ShaderCI.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
 		RefCntAutoPtr<IShader> pVS;
 		{
+			ShaderCI.Desc = {};
+			ShaderCI.Desc.Name = "Basic VS";
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-			ShaderCI.Desc.Name = "Debug Triangle VS";
-			ShaderCI.Source = g_TriangleVS;
+			ShaderCI.FilePath = "Basic.vsh";
+			ShaderCI.Desc.UseCombinedTextureSamplers = true; // 텍스처 안 쓰면 False여도 됨
+
 			pDevice->CreateShader(ShaderCI, &pVS);
-			if (!pVS) return false;
+			if (!pVS)
+				return false;
 		}
 
 		RefCntAutoPtr<IShader> pPS;
 		{
+			ShaderCI.Desc = {};
+			ShaderCI.Desc.Name = "Basic PS";
 			ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-			ShaderCI.Desc.Name = "Debug Triangle PS";
-			ShaderCI.Source = g_TrianglePS;
+			ShaderCI.FilePath = "Basic.psh";
+			ShaderCI.Desc.UseCombinedTextureSamplers = true;
+
 			pDevice->CreateShader(ShaderCI, &pPS);
-			if (!pPS) return false;
+			if (!pPS)
+				return false;
 		}
-
-		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-		ShaderResourceVariableDesc Vars[] =
-		{
-			{ SHADER_TYPE_VERTEX, "CameraCB", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  }
-		};
-		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
-		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
 		PSOCreateInfo.pVS = pVS;
 		PSOCreateInfo.pPS = pPS;
 
-		pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pTrianglePSO);
-		if (!m_pTrianglePSO)
+		// =========================
+		// Resource Layout
+		// 셰이더에 텍스처/샘플러 없음.
+		// 상수버퍼만 바인딩하면 됨.
+		//
+		// 여기서 "Variables"는 '이름 기반'으로 SRB에서 Set할 리소스를 선언하는 곳.
+		// Diligent은 cbuffer의 "상수버퍼 변수명"으로 노출되는 경우가 많음:
+		//   - cbuffer FRAME_CONSTANTS { FrameConstants g_FrameCB; }
+		//     => 보통 "g_FrameCB" 가 변수명으로 잡힘
+		//
+		// 그래서 g_FrameCB / g_ObjectCB를 기본으로 넣어주고,
+		// 만약 네 구현이 cbuffer 블록 이름으로 노출하면
+		// 아래 GetVariableByName에서 fallback 처리해줌.
+		// =========================
+		PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+		ShaderResourceVariableDesc Vars[] =
+		{
+			// VS에서만 사용
+			{ SHADER_TYPE_VERTEX, "FRAME_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  },
+			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC  },
+		};
+		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
+		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+
+		// =========================
+		// Create PSO
+		// =========================
+		pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pBasicPSO);
+		if (!m_pBasicPSO)
 			return false;
 
-		m_pTrianglePSO->CreateShaderResourceBinding(&m_pTriangleSRB, true /*InitStaticResources*/);
-		if (!m_pTriangleSRB)
+		// =========================
+		// SRB
+		// =========================
+		m_pBasicPSO->CreateShaderResourceBinding(&m_pBasicSRB, true /*InitStaticResources*/);
+		if (!m_pBasicSRB)
 			return false;
 
-		//auto* pVar = m_pTrianglePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
-		//if (pVar)
-		//	pVar->Set(m_pCameraCB);
-		auto* pCBVar = m_pTriangleSRB->GetVariableByName(SHADER_TYPE_VERTEX, "CameraCB");
-		if (!pCBVar)
+		// =========================
+		// Bind constant buffers
+		// =========================
+		auto BindCB = [&](const char* name, IBuffer* pCB) -> bool
+			{
+				if (!pCB) return false;
+
+				if (auto* Var = m_pBasicSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
+				{
+					Var->Set(pCB);
+					return true;
+				}
+				return false;
+			};
+
+		if (!BindCB("FRAME_CONSTANTS", m_pFrameCB))
 			return false;
-		pCBVar->Set(m_pCameraCB);
+
+		if (!BindCB("OBJECT_CONSTANTS", m_pObjectCB))
+			return false;
 
 		return true;
 	}
+
 
 	MeshHandle Renderer::CreateCubeMesh()
 	{
@@ -249,47 +289,68 @@ void main(in  PSInput  PSIn,
 
 	bool Renderer::CreateCubeMesh_Internal(StaticMesh& outMesh)
 	{
-		// 매우 최소: Position(Color/UV 없음) 정점 + 36 indices
-		// 네가 다음 단계에서 Vertex layout을 확정하면 여기 정점 구조를 교체하면 됨.
-
 		struct SimpleVertex
 		{
 			float3 Pos;
+			float2 UV;
+			float3 Normal;
 		};
 
-		static const SimpleVertex Verts[8] =
-		{
-			{ {-0.5f, -0.5f, -0.5f} },
-			{ {+0.5f, -0.5f, -0.5f} },
-			{ {+0.5f, +0.5f, -0.5f} },
-			{ {-0.5f, +0.5f, -0.5f} },
-			{ {-0.5f, -0.5f, +0.5f} },
-			{ {+0.5f, -0.5f, +0.5f} },
-			{ {+0.5f, +0.5f, +0.5f} },
-			{ {-0.5f, +0.5f, +0.5f} },
-		};
-
-		static const uint32 Indices[36] =
+		// 24 verts (4 per face)
+		static const SimpleVertex Verts[] =
 		{
 			// -Z
-			0,2,1, 0,3,2,
+			{{-0.5f,-0.5f,-0.5f},{0,1},{0,0,-1}},
+			{{+0.5f,-0.5f,-0.5f},{1,1},{0,0,-1}},
+			{{+0.5f,+0.5f,-0.5f},{1,0},{0,0,-1}},
+			{{-0.5f,+0.5f,-0.5f},{0,0},{0,0,-1}},
+
 			// +Z
-			4,5,6, 4,6,7,
+			{{-0.5f,-0.5f,+0.5f},{0,1},{0,0,+1}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{0,0,+1}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{0,0,+1}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{0,0,+1}},
+
 			// -X
-			0,7,3, 0,4,7,
+			{{-0.5f,-0.5f,+0.5f},{0,1},{-1,0,0}},
+			{{-0.5f,-0.5f,-0.5f},{1,1},{-1,0,0}},
+			{{-0.5f,+0.5f,-0.5f},{1,0},{-1,0,0}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{-1,0,0}},
+
 			// +X
-			1,2,6, 1,6,5,
+			{{+0.5f,-0.5f,-0.5f},{0,1},{+1,0,0}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{+1,0,0}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{+1,0,0}},
+			{{+0.5f,+0.5f,-0.5f},{0,0},{+1,0,0}},
+
 			// -Y
-			0,1,5, 0,5,4,
+			{{-0.5f,-0.5f,+0.5f},{0,1},{0,-1,0}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{0,-1,0}},
+			{{+0.5f,-0.5f,-0.5f},{1,0},{0,-1,0}},
+			{{-0.5f,-0.5f,-0.5f},{0,0},{0,-1,0}},
+
 			// +Y
-			3,7,6, 3,6,2
+			{{-0.5f,+0.5f,-0.5f},{0,1},{0,+1,0}},
+			{{+0.5f,+0.5f,-0.5f},{1,1},{0,+1,0}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{0,+1,0}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{0,+1,0}},
 		};
 
-		outMesh.NumVertices = 8;
-		outMesh.VertexStride = sizeof(SimpleVertex);
-		outMesh.LocalBounds = { {-0.5f, -0.5f, -0.5f}, { 0.5f, 0.5f, 0.5f } };
+		static const uint32 Indices[] =
+		{
+			0,2,1, 0,3,2,       // -Z
+			4,5,6, 4,6,7,       // +Z
+			8,10,9, 8,11,10,    // -X
+			12,14,13, 12,15,14, // +X
+			16,18,17, 16,19,18, // -Y
+			20,22,21, 20,23,22  // +Y
+		};
 
-		// --- Create vertex buffer ---
+		outMesh.NumVertices = _countof(Verts);
+		outMesh.VertexStride = sizeof(SimpleVertex);
+		outMesh.LocalBounds = { {-0.5f,-0.5f,-0.5f}, {+0.5f,+0.5f,+0.5f} };
+
+		// VB
 		{
 			BufferDesc VBDesc;
 			VBDesc.Name = "Cube VB";
@@ -305,9 +366,9 @@ void main(in  PSInput  PSIn,
 			if (!outMesh.VertexBuffer) return false;
 		}
 
-		// --- Create index buffer (section 1개) ---
+		// IB (section 1개)
 		MeshSection sec;
-		sec.NumIndices = 36;
+		sec.NumIndices = _countof(Indices);
 		sec.IndexType = INDEX_TYPE_UINT32;
 
 		{
@@ -329,4 +390,5 @@ void main(in  PSInput  PSIn,
 		outMesh.Sections.push_back(sec);
 		return true;
 	}
+
 } // namespace shz

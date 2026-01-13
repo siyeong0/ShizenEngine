@@ -51,7 +51,7 @@ namespace shz
         MeshHandle CreateCubeMesh();
 
     private:
-        bool CreateDebugTrianglePSO();
+        bool CreateBasicPSO();
         bool CreateCubeMesh_Internal(StaticMesh& outMesh);
 
     private:
@@ -62,9 +62,10 @@ namespace shz
 
         RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-        RefCntAutoPtr<IBuffer> m_pCameraCB;
-        RefCntAutoPtr<IPipelineState> m_pTrianglePSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pTriangleSRB;
+        RefCntAutoPtr<IBuffer> m_pFrameCB;
+        RefCntAutoPtr<IBuffer> m_pObjectCB;
+        RefCntAutoPtr<IPipelineState> m_pBasicPSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
         uint32 m_NextMeshId = 1;
         std::unordered_map<MeshHandle, StaticMesh> m_MeshTable;

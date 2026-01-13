@@ -1,201 +1,211 @@
-﻿/*
- *  Copyright 2019-2022 Diligent Graphics LLC
- *  Copyright 2015-2019 Egor Yusov
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- *  In no event and under no legal theory, whether in tort (including negligence),
- *  contract, or otherwise, unless required by applicable law (such as deliberate
- *  and grossly negligent acts) or agreed to in writing, shall any Contributor be
- *  liable for any damages, including any direct, indirect, special, incidental,
- *  or consequential damages of any character arising as a result of this License or
- *  out of the use or inability to use the software (including but not limited to damages
- *  for loss of goodwill, work stoppage, computer failure or malfunction, or any and
- *  all other commercial damages or losses), even if such Contributor has been advised
- *  of the possibility of such damages.
- */
-
-#include "FirstPersonCamera.h"
+﻿#include "FirstPersonCamera.h"
 #include <algorithm>
+#include <cmath>
 
 namespace shz
 {
+    float4x4 FirstPersonCamera::GetReferenceRotiation() const
+    {
+        // IMPORTANT:
+        // Your Matrix4x4 uses row-vector v' = v*M, and MulVector4() dots with COLUMNS.
+        // Therefore basis vectors must live in COLUMNS to map local(ref) -> world.
+        return float4x4
+        {
+            m_ReferenceRightAxis.x, m_ReferenceUpAxis.x, m_ReferenceAheadAxis.x, 0,
+            m_ReferenceRightAxis.y, m_ReferenceUpAxis.y, m_ReferenceAheadAxis.y, 0,
+            m_ReferenceRightAxis.z, m_ReferenceUpAxis.z, m_ReferenceAheadAxis.z, 0,
+                                 0,                   0,                      0, 1
+        };
+    }
 
-	void FirstPersonCamera::Update(InputController& Controller, float ElapsedTime)
-	{
-		float3 MoveDirection = float3(0, 0, 0);
-		// Update acceleration vector based on keyboard state
-		if (Controller.IsKeyDown(InputKeys::MoveForward))
-			MoveDirection.z += 1.0f;
-		if (Controller.IsKeyDown(InputKeys::MoveBackward))
-			MoveDirection.z -= 1.0f;
+    void FirstPersonCamera::SetReferenceAxes(const float3& ReferenceRightAxis,
+        const float3& ReferenceUpAxis,
+        bool          IsRightHanded)
+    {
+        m_ReferenceRightAxis = ReferenceRightAxis.Normalized();
 
-		if (Controller.IsKeyDown(InputKeys::MoveRight))
-			MoveDirection.x += 1.0f;
-		if (Controller.IsKeyDown(InputKeys::MoveLeft))
-			MoveDirection.x -= 1.0f;
+        // Make Up orthogonal to Right
+        m_ReferenceUpAxis = ReferenceUpAxis - Vector3::Dot(ReferenceUpAxis, m_ReferenceRightAxis) * m_ReferenceRightAxis;
 
-		if (Controller.IsKeyDown(InputKeys::MoveUp))
-			MoveDirection.y += 1.0f;
-		if (Controller.IsKeyDown(InputKeys::MoveDown))
-			MoveDirection.y -= 1.0f;
+        float UpLen = m_ReferenceUpAxis.Length();
+        constexpr float Epsilon = 1e-5f;
+        if (UpLen < Epsilon)
+        {
+            UpLen = Epsilon;
+            LOG_WARNING_MESSAGE("Right and Up axes are collinear");
+        }
+        m_ReferenceUpAxis /= UpLen;
 
-		// Normalize vector so if moving in 2 dirs (left & forward),
-		// the camera doesn't move faster than if moving in 1 dir
-		auto len = MoveDirection.Length();
-		if (len != 0.0)
-			MoveDirection /= len;
+        // +1 for RH, -1 for LH (same as Diligent sample)
+        m_fHandness = IsRightHanded ? +1.f : -1.f;
 
-		bool IsSpeedUpScale = Controller.IsKeyDown(InputKeys::ShiftDown);
-		bool IsSuperSpeedUpScale = Controller.IsKeyDown(InputKeys::ControlDown);
+        // Ahead axis:
+        // If you want LH with +Z forward, this sign convention must match your engine's axis setup.
+        m_ReferenceAheadAxis = m_fHandness * Vector3::Cross(m_ReferenceRightAxis, m_ReferenceUpAxis);
 
-		MoveDirection *= m_fMoveSpeed;
-		if (IsSpeedUpScale) MoveDirection *= m_fSpeedUpScale;
-		if (IsSuperSpeedUpScale) MoveDirection *= m_fSuperSpeedUpScale;
+        float AheadLen = m_ReferenceAheadAxis.Length();
+        if (AheadLen < Epsilon)
+        {
+            AheadLen = Epsilon;
+            LOG_WARNING_MESSAGE("Ahead axis is not well defined");
+        }
+        m_ReferenceAheadAxis /= AheadLen;
+    }
 
-		m_fCurrentSpeed = MoveDirection.Length();
+    void FirstPersonCamera::SetRotation(float Yaw, float Pitch)
+    {
+        m_fYawAngle = Yaw;
+        m_fPitchAngle = Pitch;
+    }
 
-		float3 PosDelta = MoveDirection * ElapsedTime;
+    void FirstPersonCamera::SetLookAt(const float3& LookAt)
+    {
+        // World-space view direction
+        float3 ViewDirW = LookAt - m_Pos;
+        if (ViewDirW.Length() < 1e-6f)
+            return;
+        ViewDirW = ViewDirW.Normalized();
 
-		{
-			const auto& mouseState = Controller.GetMouseState();
+        // Convert world direction -> reference space:
+        // RefRot maps ref->world, so inverse (transpose for ortho basis) maps world->ref.
+        const float4x4 RefRot = GetReferenceRotiation();
+        const float4x4 InvRefRot = RefRot.Transposed(); // assuming orthonormal
 
-			float MouseDeltaX = 0;
-			float MouseDeltaY = 0;
-			if (m_LastMouseState.PosX >= 0 && m_LastMouseState.PosY >= 0 &&
-				m_LastMouseState.ButtonFlags != MouseState::BUTTON_FLAG_NONE)
-			{
-				MouseDeltaX = mouseState.PosX - m_LastMouseState.PosX;
-				MouseDeltaY = mouseState.PosY - m_LastMouseState.PosY;
-			}
-			m_LastMouseState = mouseState;
+        const Vector3 ViewDirRef = InvRefRot.TransformDirection(ViewDirW);
 
-			float fYawDelta = MouseDeltaX * m_fRotationSpeed;
-			float fPitchDelta = MouseDeltaY * m_fRotationSpeed;
-			if (mouseState.ButtonFlags & MouseState::BUTTON_FLAG_LEFT)
-			{
-				m_fYawAngle += fYawDelta * -m_fHandness;
-				m_fPitchAngle += fPitchDelta * -m_fHandness;
-				m_fPitchAngle = std::max(m_fPitchAngle, -PI / 2.f);
-				m_fPitchAngle = std::min(m_fPitchAngle, +PI / 2.f);
-			}
-		}
+        // For LH (+Z forward): yaw = atan2(x, z)
+        m_fYawAngle = std::atan2(ViewDirRef.x, ViewDirRef.z);
 
-		float4x4 ReferenceRotation = GetReferenceRotiation();
+        const float xzLen = std::sqrt(ViewDirRef.z * ViewDirRef.z + ViewDirRef.x * ViewDirRef.x);
+        m_fPitchAngle = -std::atan2(ViewDirRef.y, xzLen);
 
-		float4x4 CameraRotation = float4x4::RotationArbitrary(m_ReferenceUpAxis, m_fYawAngle) * float4x4::RotationArbitrary(m_ReferenceRightAxis, m_fPitchAngle) * ReferenceRotation;
-		float4x4 WorldRotation = CameraRotation.Transposed();
+        m_fPitchAngle = Clamp(m_fPitchAngle, -PI * 0.5f, +PI * 0.5f);
+    }
 
-		float4 PosDeltaWorld = WorldRotation.MulVector4({ PosDelta.x, PosDelta.y, PosDelta.z, 1.0f });
-		m_Pos += {PosDeltaWorld.x, PosDeltaWorld.y, PosDeltaWorld.z};
+    void FirstPersonCamera::SetProjAttribs(float32 NearClipPlane,
+        float32 FarClipPlane,
+        float32 AspectRatio,
+        float32 FOV,
+        SURFACE_TRANSFORM SrfPreTransform)
+    {
+        m_ProjAttribs.NearClipPlane = NearClipPlane;
+        m_ProjAttribs.FarClipPlane = FarClipPlane;
+        m_ProjAttribs.AspectRatio = AspectRatio;
+        m_ProjAttribs.FOV = FOV;
+        m_ProjAttribs.PreTransform = SrfPreTransform;
 
-		m_ViewMatrix = float4x4::Translation(-m_Pos) * CameraRotation;
-		m_WorldMatrix = WorldRotation * float4x4::Translation(m_Pos);
-	}
+        // NOTE:
+        // If you actually support surface pretransform, you should apply it here.
+        // For now we keep it identical to your engine's row-vector LH projection.
+        m_ProjMatrix = Matrix4x4::PerspectiveFovLH(
+            m_ProjAttribs.FOV,
+            m_ProjAttribs.AspectRatio,
+            m_ProjAttribs.NearClipPlane,
+            m_ProjAttribs.FarClipPlane);
+    }
 
-	float4x4 FirstPersonCamera::GetReferenceRotiation() const
-	{
-		// clang-format off
-		return float4x4
-		{
-			m_ReferenceRightAxis.x, m_ReferenceUpAxis.x, m_ReferenceAheadAxis.x, 0,
-			m_ReferenceRightAxis.y, m_ReferenceUpAxis.y, m_ReferenceAheadAxis.y, 0,
-			m_ReferenceRightAxis.z, m_ReferenceUpAxis.z, m_ReferenceAheadAxis.z, 0,
-								 0,                   0,                      0, 1
-		};
-		// clang-format on
-	}
+    void FirstPersonCamera::SetSpeedUpScales(float32 SpeedUpScale, float32 SuperSpeedUpScale)
+    {
+        m_fSpeedUpScale = SpeedUpScale;
+        m_fSuperSpeedUpScale = SuperSpeedUpScale;
+    }
 
-	void FirstPersonCamera::SetReferenceAxes(const float3& ReferenceRightAxis, const float3& ReferenceUpAxis, bool IsRightHanded)
-	{
-		m_ReferenceRightAxis = ReferenceRightAxis.Normalized();
-		m_ReferenceUpAxis = ReferenceUpAxis - Vector3::Dot(ReferenceUpAxis, m_ReferenceRightAxis) * m_ReferenceRightAxis;
-		auto            UpLen = m_ReferenceUpAxis.Length();
-		constexpr float Epsilon = 1e-5f;
-		if (UpLen < Epsilon)
-		{
-			UpLen = Epsilon;
-			LOG_WARNING_MESSAGE("Right and Up axes are collinear");
-		}
-		m_ReferenceUpAxis /= UpLen;
+    void FirstPersonCamera::Update(InputController& Controller, float ElapsedTime)
+    {
+        // -------------------------
+        // 1) Movement input (local)
+        // -------------------------
+        float3 MoveDir(0, 0, 0);
+        if (Controller.IsKeyDown(InputKeys::MoveForward))  MoveDir.z += 1.0f;
+        if (Controller.IsKeyDown(InputKeys::MoveBackward)) MoveDir.z -= 1.0f;
 
-		m_fHandness = IsRightHanded ? +1.f : -1.f;
-		m_ReferenceAheadAxis = m_fHandness * Vector3::Cross(m_ReferenceRightAxis, m_ReferenceUpAxis);
-		auto AheadLen = m_ReferenceAheadAxis.Length();
-		if (AheadLen < Epsilon)
-		{
-			AheadLen = Epsilon;
-			LOG_WARNING_MESSAGE("Ahead axis is not well defined");
-		}
-		m_ReferenceAheadAxis /= AheadLen;
-	}
+        if (Controller.IsKeyDown(InputKeys::MoveRight))    MoveDir.x += 1.0f;
+        if (Controller.IsKeyDown(InputKeys::MoveLeft))     MoveDir.x -= 1.0f;
 
-	void FirstPersonCamera::SetLookAt(const float3& LookAt)
-	{
-		float3 ViewDir = LookAt - m_Pos;
+        if (Controller.IsKeyDown(InputKeys::MoveUp))       MoveDir.y += 1.0f;
+        if (Controller.IsKeyDown(InputKeys::MoveDown))     MoveDir.y -= 1.0f;
 
-		float4 ViewDir4 = GetReferenceRotiation().MulVector4({ ViewDir.x, ViewDir.y, ViewDir.z, 1.0f });
-		ViewDir = { ViewDir4.x, ViewDir4.y, ViewDir4.z };
+        const float len = MoveDir.Length();
+        if (len > 1e-6f)
+            MoveDir /= len;
 
-		m_fYawAngle = atan2f(ViewDir.x, ViewDir.z);
+        const bool SpeedUp = Controller.IsKeyDown(InputKeys::ShiftDown);
+        const bool SuperSpeedUp = Controller.IsKeyDown(InputKeys::ControlDown);
 
-		float fXZLen = sqrtf(ViewDir.z * ViewDir.z + ViewDir.x * ViewDir.x);
-		m_fPitchAngle = -atan2f(ViewDir.y, fXZLen);
-	}
+        float speed = m_fMoveSpeed;
+        if (SpeedUp)      speed *= m_fSpeedUpScale;
+        if (SuperSpeedUp) speed *= m_fSuperSpeedUpScale;
 
-	void FirstPersonCamera::SetRotation(float Yaw, float Pitch)
-	{
-		m_fYawAngle = Yaw;
-		m_fPitchAngle = Pitch;
-	}
+        m_fCurrentSpeed = speed * (len > 1e-6f ? 1.0f : 0.0f);
 
-	void FirstPersonCamera::SetProjAttribs(float32 NearClipPlane, float32 FarClipPlane, float32 AspectRatio, float32 FOV, SURFACE_TRANSFORM SrfPreTransform)
-	{
-		m_ProjAttribs.NearClipPlane = NearClipPlane;
-		m_ProjAttribs.FarClipPlane = FarClipPlane;
-		m_ProjAttribs.AspectRatio = AspectRatio;
-		m_ProjAttribs.FOV = FOV;
-		m_ProjAttribs.PreTransform = SrfPreTransform;
+        const float3 PosDeltaLocal = MoveDir * (speed * ElapsedTime);
 
-		float XScale, YScale;
-		if (SrfPreTransform == SURFACE_TRANSFORM_ROTATE_90 ||
-			SrfPreTransform == SURFACE_TRANSFORM_ROTATE_270 ||
-			SrfPreTransform == SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90 ||
-			SrfPreTransform == SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270)
-		{
-			// When the screen is rotated, vertical FOV becomes horizontal FOV
-			XScale = 1.f / std::tan(FOV / 2.f);
-			// Aspect ratio is width/height accounting for pretransform
-			YScale = XScale / AspectRatio;
-		}
-		else
-		{
-			YScale = 1.f / std::tan(FOV / 2.f);
-			XScale = YScale / AspectRatio;
-		}
+        // -------------------------
+        // 2) Mouse look -> yaw/pitch
+        // -------------------------
+        {
+            const auto& mouseState = Controller.GetMouseState();
 
-		float4x4 Proj;
-		Proj._m00 = XScale;
-		Proj._m11 = YScale;
-		Proj.SetNearFarClipPlanes(NearClipPlane, FarClipPlane);
+            float MouseDeltaX = 0.0f;
+            float MouseDeltaY = 0.0f;
 
-		m_ProjMatrix = Matrix4x4::PerspectiveFovLH(m_ProjAttribs.FOV, m_ProjAttribs.AspectRatio, m_ProjAttribs.NearClipPlane, m_ProjAttribs.FarClipPlane);
-	}
+            if (m_LastMouseState.PosX >= 0 && m_LastMouseState.PosY >= 0 &&
+                m_LastMouseState.ButtonFlags != MouseState::BUTTON_FLAG_NONE)
+            {
+                MouseDeltaX = float(mouseState.PosX - m_LastMouseState.PosX);
+                MouseDeltaY = float(mouseState.PosY - m_LastMouseState.PosY);
+            }
+            m_LastMouseState = mouseState;
 
-	void FirstPersonCamera::SetSpeedUpScales(float32 SpeedUpScale, float32 SuperSpeedUpScale)
-	{
-		m_fSpeedUpScale = SpeedUpScale;
-		m_fSuperSpeedUpScale = SuperSpeedUpScale;
-	}
+            if (mouseState.ButtonFlags & MouseState::BUTTON_FLAG_LEFT)
+            {
+                const float yawDelta = MouseDeltaX * m_fRotationSpeed;
+                const float pitchDelta = MouseDeltaY * m_fRotationSpeed;
+
+                // Keep Diligent-style handedness sign:
+                // If this feels inverted in your engine, flip the sign here.
+                m_fYawAngle += yawDelta * -m_fHandness;
+                m_fPitchAngle += pitchDelta * -m_fHandness;
+
+                m_fPitchAngle = Clamp(m_fPitchAngle, -PI * 0.5f, +PI * 0.5f);
+            }
+        }
+
+        // -------------------------
+        // 3) Build camera rotation (WORLD)
+        //    row-vector: v_world = v_local * WorldRot
+        // -------------------------
+        const float4x4 RefRot = GetReferenceRotiation(); // ref(local)->world
+
+        // Yaw about reference UP in world space
+        const float4x4 YawRot = float4x4::RotationAxis(m_ReferenceUpAxis, m_fYawAngle);
+
+        // Compute current (yawed) right axis in world:
+        // local right (1,0,0) -> world via RefRot then yaw
+        const Vector3 RightW = (RefRot * YawRot).TransformDirection(Vector3(1, 0, 0));
+
+        // Pitch about current right axis (FPS pitch)
+        const float4x4 PitchRot = float4x4::RotationAxis(RightW, m_fPitchAngle);
+
+        // Final world rotation
+        const float4x4 WorldRot = RefRot * YawRot * PitchRot;
+
+        // -------------------------
+        // 4) Apply movement: local delta -> world delta (w=0!)
+        // -------------------------
+        const Vector3 PosDeltaWorld = WorldRot.TransformDirection(PosDeltaLocal);
+        m_Pos += PosDeltaWorld;
+
+        // -------------------------
+        // 5) Build View/World matrices
+        // World: local -> world
+        // View : world -> view
+        // -------------------------
+        m_WorldMatrix = WorldRot * float4x4::Translation(m_Pos);
+
+        // For pure rotation, inverse is transpose.
+        const float4x4 InvRot = WorldRot.Transposed();
+        m_ViewMatrix = float4x4::Translation(-m_Pos) * InvRot;
+    }
 
 } // namespace shz

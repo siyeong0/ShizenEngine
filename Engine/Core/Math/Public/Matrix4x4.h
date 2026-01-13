@@ -134,6 +134,7 @@ namespace shz
 				0, 0, 0, 1);
 		}
 
+		// Arbitrary axis rotation (Rodrigues) - consistent with row-major storage
 		static inline Matrix4x4 RotationAxis(const Vector3& axis, float32 rad)
 		{
 			const Matrix3x3 R = Matrix3x3::RotationAxis(axis, rad);
@@ -142,42 +143,6 @@ namespace shz
 				R._m10, R._m11, R._m12, 0,
 				R._m20, R._m21, R._m22, 0,
 				0, 0, 0, 1);
-		}
-
-		// Arbitrary axis rotation (Rodrigues) - consistent with row-major storage.
-		static inline Matrix4x4 RotationArbitrary(Vector3 axis, float32 angleInRadians)
-		{
-			axis = Vector3::Normalize(axis);
-
-			const float32 s = (float32)std::sin(angleInRadians);
-			const float32 c = (float32)std::cos(angleInRadians);
-			const float32 t = 1.0f - c;
-
-			Matrix4x4 r = Identity();
-
-			// Row-major, pure rotation in upper 3x3
-			r._m00 = t * axis.x * axis.x + c;
-			r._m01 = t * axis.x * axis.y + s * axis.z;
-			r._m02 = t * axis.x * axis.z - s * axis.y;
-			r._m03 = 0.0f;
-
-			r._m10 = t * axis.y * axis.x - s * axis.z;
-			r._m11 = t * axis.y * axis.y + c;
-			r._m12 = t * axis.y * axis.z + s * axis.x;
-			r._m13 = 0.0f;
-
-			r._m20 = t * axis.z * axis.x + s * axis.y;
-			r._m21 = t * axis.z * axis.y - s * axis.x;
-			r._m22 = t * axis.z * axis.z + c;
-			r._m23 = 0.0f;
-
-			// translation stays in last row (0,0,0,1)
-			r._m30 = 0.0f;
-			r._m31 = 0.0f;
-			r._m32 = 0.0f;
-			r._m33 = 1.0f;
-
-			return r;
 		}
 
 		static inline Matrix4x4 TRS(const Vector3& translation, const Vector3& rotationEuler, const Vector3& scale)
