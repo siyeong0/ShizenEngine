@@ -6,6 +6,7 @@
 // NOTE:
 // Using current Tools/Image path. You may move it under Engine later.
 #include "Tools/Image/Public/TextureLoader.h"
+#include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
 {
@@ -15,7 +16,7 @@ namespace shz
 	// - Holds source path + loading options (sRGB, mips, compression, etc.).
 	// - Renderer uses these options to create GPU texture (TextureRenderData).
 	// ------------------------------------------------------------
-	class TextureAsset final
+	class TextureAsset final : public AssetObject
 	{
 	public:
 		// Minimal identity / metadata

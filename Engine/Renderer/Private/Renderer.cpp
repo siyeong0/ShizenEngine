@@ -344,7 +344,7 @@ namespace shz
 
 				// section material: register MaterialAsset (by value) -> create renderer instance
 				const MaterialAsset& slotMat = meshAsset.GetMaterialSlot(asec.MaterialSlot);
-				MaterialAssetHandle hMatAsset = m_pAssetManager->RegisterMaterial(slotMat, slotIndex++);
+				MaterialAssetHandle hMatAsset = m_pAssetManager->RegisterMaterial(slotMat);
 				sec.Material = CreateMaterialInstance(hMatAsset);
 
 				outMesh.Sections.push_back(sec);

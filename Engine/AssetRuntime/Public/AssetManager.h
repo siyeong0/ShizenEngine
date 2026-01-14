@@ -1,7 +1,5 @@
 // AssetManager.h
 #pragma once
-#include <string>
-#include <string_view>
 #include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
@@ -41,7 +39,7 @@ namespace shz
 		// - If "key" already exists, returns existing handle.
 		// --------------------------------------------------------
 		TextureAssetHandle    RegisterTexture(const TextureAsset& asset);
-		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset, uint32 subId);
+		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset);
 		StaticMeshAssetHandle RegisterStaticMesh(const StaticMeshAsset& asset);
 
 		// --------------------------------------------------------
@@ -59,9 +57,9 @@ namespace shz
 		// --------------------------------------------------------
 		// Lookup handle by key/path
 		// --------------------------------------------------------
-		TextureAssetHandle     FindTextureByKey(std::string_view key) const noexcept;
-		MaterialAssetHandle    FindMaterialByKey(std::string_view key) const noexcept;
-		StaticMeshAssetHandle  FindStaticMeshByKey(std::string_view key) const noexcept;
+		TextureAssetHandle     FindTextureById(const AssetId& id) const noexcept;
+		MaterialAssetHandle    FindMaterialById(const AssetId& id) const noexcept;
+		StaticMeshAssetHandle  FindStaticMeshById(const AssetId& id) const noexcept;
 
 		// --------------------------------------------------------
 		// Remove / Clear
@@ -79,12 +77,6 @@ namespace shz
 		uint32 GetMaterialCount() const noexcept { return static_cast<uint32>(m_Materials.size()); }
 		uint32 GetStaticMeshCount() const noexcept { return static_cast<uint32>(m_StaticMeshes.size()); }
 
-		// --------------------------------------------------------
-		// Key policy
-		// - You can replace this later with GUID or hashed import key.
-		// --------------------------------------------------------
-		static std::string MakeKeyFromPath(std::string_view path);
-
 	private:
 		TextureAssetHandle    allocateTextureHandle() noexcept { return TextureAssetHandle{ m_NextTextureId++ }; }
 		MaterialAssetHandle   allocateMaterialHandle() noexcept { return MaterialAssetHandle{ m_NextMaterialId++ }; }
@@ -97,9 +89,9 @@ namespace shz
 		std::unordered_map<StaticMeshAssetHandle, StaticMeshAsset> m_StaticMeshes;
 
 		// Key -> handle (dedup / lookup)
-		std::unordered_map<std::string, TextureAssetHandle>    m_TextureKeyToHandle;
-		std::unordered_map<std::string, MaterialAssetHandle>   m_MaterialKeyToHandle;
-		std::unordered_map<std::string, StaticMeshAssetHandle> m_StaticMeshKeyToHandle;
+		std::unordered_map<AssetId, TextureAssetHandle>    m_TextureKeyToHandle;
+		std::unordered_map<AssetId, MaterialAssetHandle>   m_MaterialKeyToHandle;
+		std::unordered_map<AssetId, StaticMeshAssetHandle> m_StaticMeshKeyToHandle;
 
 		uint32 m_NextTextureId = 1;
 		uint32 m_NextMaterialId = 1;

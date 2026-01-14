@@ -1,4 +1,3 @@
-// AssetManager.cpp
 #include "pch.h"
 #include "AssetManager.h"
 
@@ -8,70 +7,6 @@
 namespace shz
 {
 	// ------------------------------------------------------------
-	// Small helpers (local)
-	// ------------------------------------------------------------
-	static inline void ToLowerInPlace(std::string& s)
-	{
-		for (char& c : s)
-			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	}
-
-	static inline void NormalizeSlashesInPlace(std::string& s)
-	{
-		for (char& c : s)
-		{
-			if (c == '\\')
-				c = '/';
-		}
-
-		// Collapse duplicate slashes: "a//b" -> "a/b"
-		std::string out;
-		out.reserve(s.size());
-		bool prevSlash = false;
-		for (char c : s)
-		{
-			const bool isSlash = (c == '/');
-			if (isSlash && prevSlash)
-				continue;
-			out.push_back(c);
-			prevSlash = isSlash;
-		}
-		s.swap(out);
-	}
-
-	static inline void TrimSpacesInPlace(std::string& s)
-	{
-		auto isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
-
-		size_t b = 0;
-		while (b < s.size() && isSpace(static_cast<unsigned char>(s[b])))
-			++b;
-
-		size_t e = s.size();
-		while (e > b && isSpace(static_cast<unsigned char>(s[e - 1])))
-			--e;
-
-		s = s.substr(b, e - b);
-	}
-
-	// ------------------------------------------------------------
-	// AssetManager
-	// ------------------------------------------------------------
-	std::string AssetManager::MakeKeyFromPath(std::string_view path)
-	{
-		std::string key(path.begin(), path.end());
-		TrimSpacesInPlace(key);
-		NormalizeSlashesInPlace(key);
-
-#if defined(_WIN32)
-		// On Windows treat paths as case-insensitive for cache key.
-		ToLowerInPlace(key);
-#endif
-
-		return key;
-	}
-
-	// ------------------------------------------------------------
 	// Register (by value)
 	// ------------------------------------------------------------
 	TextureAssetHandle AssetManager::RegisterTexture(const TextureAsset& asset)
@@ -79,41 +14,33 @@ namespace shz
 		if (!asset.IsValid())
 			return {};
 
-		const std::string key = MakeKeyFromPath(asset.GetSourcePath());
-		if (!key.empty())
-		{
-			auto it = m_TextureKeyToHandle.find(key);
-			if (it != m_TextureKeyToHandle.end())
-				return it->second;
-		}
+		AssetId id = asset.GetId();
+		auto it = m_TextureKeyToHandle.find(id);
+		if (it != m_TextureKeyToHandle.end())
+			return it->second;
 
 		TextureAssetHandle h = allocateTextureHandle();
 		m_Textures.emplace(h, asset);
 
-		if (!key.empty())
-			m_TextureKeyToHandle.emplace(key, h);
+		m_TextureKeyToHandle.emplace(id, h);
 
 		return h;
 	}
 
-	MaterialAssetHandle AssetManager::RegisterMaterial(const MaterialAsset& asset, uint32 subId) 
+	MaterialAssetHandle AssetManager::RegisterMaterial(const MaterialAsset& asset)
 	{
 		if (!asset.IsValid())
 			return {};
 
-		const std::string key = MakeKeyFromPath(asset.GetSourcePath() + std::to_string(subId)); // TODO: 지금은 sub ID 필요. AssetObject마다 Unqique eky를 가지게
-		if (!key.empty())
-		{
-			auto it = m_MaterialKeyToHandle.find(key);
-			if (it != m_MaterialKeyToHandle.end())
-				return it->second;
-		}
+		AssetId id = asset.GetId();
+		auto it = m_MaterialKeyToHandle.find(id);
+		if (it != m_MaterialKeyToHandle.end())
+			return it->second;
 
 		MaterialAssetHandle h = allocateMaterialHandle();
 		m_Materials.emplace(h, asset);
 
-		if (!key.empty())
-			m_MaterialKeyToHandle.emplace(key, h);
+		m_MaterialKeyToHandle.emplace(id, h);
 
 		return h;
 	}
@@ -123,19 +50,15 @@ namespace shz
 		if (!asset.IsValid())
 			return {};
 
-		const std::string key = MakeKeyFromPath(asset.GetSourcePath());
-		if (!key.empty())
-		{
-			auto it = m_StaticMeshKeyToHandle.find(key);
-			if (it != m_StaticMeshKeyToHandle.end())
-				return it->second;
-		}
+		AssetId id = asset.GetId();
+		auto it = m_StaticMeshKeyToHandle.find(id);
+		if (it != m_StaticMeshKeyToHandle.end())
+			return it->second;
 
 		StaticMeshAssetHandle h = allocateStaticMeshHandle();
 		m_StaticMeshes.emplace(h, asset);
 
-		if (!key.empty())
-			m_StaticMeshKeyToHandle.emplace(key, h);
+		m_StaticMeshKeyToHandle.emplace(id, h);
 
 		return h;
 	}
@@ -164,33 +87,21 @@ namespace shz
 	// ------------------------------------------------------------
 	// Find by key
 	// ------------------------------------------------------------
-	TextureAssetHandle AssetManager::FindTextureByKey(std::string_view key) const noexcept
+	TextureAssetHandle AssetManager::FindTextureById(const AssetId& id) const noexcept
 	{
-		if (key.empty())
-			return {};
-
-		std::string k = MakeKeyFromPath(key);
-		auto it = m_TextureKeyToHandle.find(k);
+		auto it = m_TextureKeyToHandle.find(id);
 		return (it != m_TextureKeyToHandle.end()) ? it->second : TextureAssetHandle{};
 	}
 
-	MaterialAssetHandle AssetManager::FindMaterialByKey(std::string_view key) const noexcept
+	MaterialAssetHandle AssetManager::FindMaterialById(const AssetId& id) const noexcept
 	{
-		if (key.empty())
-			return {};
-
-		std::string k = MakeKeyFromPath(key);
-		auto it = m_MaterialKeyToHandle.find(k);
+		auto it = m_MaterialKeyToHandle.find(id);
 		return (it != m_MaterialKeyToHandle.end()) ? it->second : MaterialAssetHandle{};
 	}
 
-	StaticMeshAssetHandle AssetManager::FindStaticMeshByKey(std::string_view key) const noexcept
+	StaticMeshAssetHandle AssetManager::FindStaticMeshById(const AssetId& id) const noexcept
 	{
-		if (key.empty())
-			return {};
-
-		std::string k = MakeKeyFromPath(key);
-		auto it = m_StaticMeshKeyToHandle.find(k);
+		auto it = m_StaticMeshKeyToHandle.find(id);
 		return (it != m_StaticMeshKeyToHandle.end()) ? it->second : StaticMeshAssetHandle{};
 	}
 
@@ -206,13 +117,10 @@ namespace shz
 		if (it == m_Textures.end())
 			return false;
 
-		const std::string key = MakeKeyFromPath(it->second.GetSourcePath());
-		if (!key.empty())
-		{
-			auto kit = m_TextureKeyToHandle.find(key);
-			if (kit != m_TextureKeyToHandle.end() && kit->second == h)
-				m_TextureKeyToHandle.erase(kit);
-		}
+		AssetId id = it->second.GetId();
+		auto kit = m_TextureKeyToHandle.find(id);
+		if (kit != m_TextureKeyToHandle.end() && kit->second == h)
+			m_TextureKeyToHandle.erase(kit);
 
 		m_Textures.erase(it);
 		return true;
@@ -227,13 +135,10 @@ namespace shz
 		if (it == m_Materials.end())
 			return false;
 
-		const std::string key = MakeKeyFromPath(it->second.GetSourcePath());
-		if (!key.empty())
-		{
-			auto kit = m_MaterialKeyToHandle.find(key);
-			if (kit != m_MaterialKeyToHandle.end() && kit->second == h)
-				m_MaterialKeyToHandle.erase(kit);
-		}
+		AssetId id = it->second.GetId();
+		auto kit = m_MaterialKeyToHandle.find(id);
+		if (kit != m_MaterialKeyToHandle.end() && kit->second == h)
+			m_MaterialKeyToHandle.erase(kit);
 
 		m_Materials.erase(it);
 		return true;
@@ -248,13 +153,10 @@ namespace shz
 		if (it == m_StaticMeshes.end())
 			return false;
 
-		const std::string key = MakeKeyFromPath(it->second.GetSourcePath());
-		if (!key.empty())
-		{
-			auto kit = m_StaticMeshKeyToHandle.find(key);
-			if (kit != m_StaticMeshKeyToHandle.end() && kit->second == h)
-				m_StaticMeshKeyToHandle.erase(kit);
-		}
+		AssetId id = it->second.GetId();
+		auto kit = m_StaticMeshKeyToHandle.find(id);
+		if (kit != m_StaticMeshKeyToHandle.end() && kit->second == h)
+			m_StaticMeshKeyToHandle.erase(kit);
 
 		m_StaticMeshes.erase(it);
 		return true;

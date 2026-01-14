@@ -4,6 +4,7 @@
 #include "Engine/Core/Math/Math.h"
 
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
+#include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
 {
@@ -13,7 +14,7 @@ namespace shz
 	// - Holds texture assets + scalar/vector parameters + render options.
 	// - Consumed by Renderer to create MaterialRenderData.
 	// ------------------------------------------------------------
-	class MaterialAsset final // TODO: Inherit IAssetObject?
+	class MaterialAsset final : public AssetObject
 	{
 	public:
 		enum MATERIAL_BLEND_MODE : uint8
