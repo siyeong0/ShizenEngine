@@ -3,39 +3,7 @@
 #include <cstddef>
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-
-namespace shz
-{
-	struct MeshHandle { uint32 Id = 0; };
-	struct MaterialHandle { uint32 Id = 0; };
-	struct RenderObjectId { uint32 Id = 0; };
-	struct LightId { uint32 Id = 0; };
-
-	inline constexpr bool operator==(MeshHandle a, MeshHandle b) { return a.Id == b.Id; }
-	inline constexpr bool operator==(MaterialHandle a, MaterialHandle b) { return a.Id == b.Id; }
-	inline constexpr bool operator==(RenderObjectId a, RenderObjectId b) { return a.Id == b.Id; }
-	inline constexpr bool operator==(LightId a, LightId b) { return a.Id == b.Id; }
-} // namespace shz
-
-namespace std
-{
-	template<> struct hash<shz::MeshHandle>
-	{
-		size_t operator()(const shz::MeshHandle& h) const noexcept { return std::hash<shz::uint32>{}(h.Id); }
-	};
-	template<> struct hash<shz::MaterialHandle>
-	{
-		size_t operator()(const shz::MaterialHandle& h) const noexcept { return std::hash<shz::uint32>{}(h.Id); }
-	};
-	template<> struct hash<shz::RenderObjectId>
-	{
-		size_t operator()(const shz::RenderObjectId& h) const noexcept { return std::hash<shz::uint32>{}(h.Id); }
-	};
-	template<> struct hash<shz::LightId>
-	{
-		size_t operator()(const shz::LightId& h) const noexcept { return std::hash<shz::uint32>{}(h.Id); }
-	};
-}
+#include "Engine/Renderer/Public/Handles.h"
 
 namespace shz
 {

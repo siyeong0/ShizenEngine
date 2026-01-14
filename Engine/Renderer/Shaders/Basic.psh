@@ -1,3 +1,7 @@
+
+Texture2D g_BaseColorTex;
+SamplerState g_BaseColorTex_sampler;
+
 struct PSInput
 {
     float4 Pos : SV_POSITION;
@@ -13,5 +17,6 @@ struct PSOutput
 
 void main(in PSInput PSIn, out PSOutput PSOut)
 {
-    PSOut.Color = float4(1.0, 0.0, 1.0, 1.0);
+    float4 albedo = g_BaseColorTex.Sample(g_BaseColorTex_sampler, PSIn.UV);
+    PSOut.Color = albedo;
 }

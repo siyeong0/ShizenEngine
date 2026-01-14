@@ -4,6 +4,7 @@
 #include "Engine/RHI/Interface/IBuffer.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
+#include "Tools/Image/Public/TextureUtilities.h"
 
 namespace shz
 {
@@ -31,6 +32,30 @@ namespace shz
 
 		if (!CreateBasicPSO())
 			return false;
+
+		// Default material (magenta / white texture 없음이어도 OK)
+		{
+			Material mat{};
+			mat.BaseColorFactor = float3(1.0f, 1.0f, 1.0f);
+			mat.Opacity = 1.0f;
+			mat.AlphaMode = MATERIAL_ALPHA_OPAQUE;
+			mat.RoughnessFactor = 0.5f;
+			mat.MetallicFactor = 0.0f;
+
+			m_DefaultMaterial = { m_NextMaterialId++ };
+			m_MaterialTable[m_DefaultMaterial] = mat;
+
+			SamplerDesc SamDesc = {};
+			SamDesc.MinFilter = FILTER_TYPE_LINEAR;
+			SamDesc.MagFilter = FILTER_TYPE_LINEAR;
+			SamDesc.MipFilter = FILTER_TYPE_LINEAR;
+			SamDesc.AddressU = TEXTURE_ADDRESS_WRAP;
+			SamDesc.AddressV = TEXTURE_ADDRESS_WRAP;
+			SamDesc.AddressW = TEXTURE_ADDRESS_WRAP;
+
+			m_CreateInfo.pDevice->CreateSampler(SamDesc, &m_pDefaultSampler);
+			ASSERT(m_pDefaultSampler, "Failed to create default sampler.");
+		}
 
 		return true;
 	}
@@ -83,9 +108,6 @@ namespace shz
 		if (!m_pBasicPSO)
 			return;
 
-		pCtx->SetPipelineState(m_pBasicPSO);
-		pCtx->CommitShaderResources(m_pBasicSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
 		for (const auto& obj : scene.GetObjects())
 		{
 			const RenderScene::RenderObject& renderObject = obj.second;
@@ -104,17 +126,33 @@ namespace shz
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION, // <-- VERIFY 금지
 				SET_VERTEX_BUFFERS_FLAG_RESET);
 
+			MaterialHandle lastMat{};
+
 			for (const auto& section : mesh.Sections)
 			{
-				pCtx->SetIndexBuffer(section.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION); // <-- VERIFY 금지
+				pCtx->SetIndexBuffer(section.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+				MaterialHandle matHandle = section.Material;
+				MaterialRenderData* matRD = GetOrCreateMaterialRenderData(matHandle);
+				ASSERT(matRD != nullptr, "Material GPU Data is null.");
+
+				if (matHandle.Id != lastMat.Id) // Handle에 비교 연산 있으면 그걸 써도 됨
+				{
+					pCtx->SetPipelineState(matRD->pPSO);
+					pCtx->CommitShaderResources(matRD->pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+					lastMat = matHandle;
+				}
 
 				DrawIndexedAttribs DIA;
 				DIA.NumIndices = section.NumIndices;
 				DIA.IndexType = (section.IndexType == INDEX_TYPE_UINT16) ? VT_UINT16 : VT_UINT32;
-				DIA.Flags = DRAW_FLAG_VERIFY_ALL; // 디버그면 OK
+				DIA.Flags = DRAW_FLAG_VERIFY_ALL;
+				DIA.FirstIndexLocation = section.StartIndex;
+				DIA.BaseVertex = section.BaseVertex;
 
 				pCtx->DrawIndexed(DIA);
 			}
+
 		}
 	}
 
@@ -123,6 +161,173 @@ namespace shz
 	void Renderer::EndFrame()
 	{
 	}
+
+	MaterialRenderData* Renderer::GetOrCreateMaterialRenderData(MaterialHandle h)
+	{
+		// 0) invalid handle 방어
+		if (!h.IsValid())
+			return nullptr;
+
+		// 1) 캐시 hit
+		auto it = m_MatRenderDataTable.find(h);
+		if (it != m_MatRenderDataTable.end())
+			return &it->second;
+
+		// 2) Material 조회
+		auto mit = m_MaterialTable.find(h);
+		if (mit == m_MaterialTable.end())
+		{
+			ASSERT(false, "MaterialHandle not found in m_MaterialTable.");
+			return nullptr;
+		}
+		const Material& mat = mit->second;
+
+		// 3) Basic PSO가 없으면 생성 불가
+		if (!m_pBasicPSO)
+		{
+			ASSERT(false, "m_pBasicPSO is null.");
+			return nullptr;
+		}
+
+		// 4) fallback 1x1 white SRV (최초 1회 생성)
+		//    - 셰이더가 무조건 Sample 하니까 null SRV면 터질 수 있어서 필수
+		static RefCntAutoPtr<ITextureView> s_WhiteSRV;
+		if (!s_WhiteSRV)
+		{
+			auto* pDevice = m_CreateInfo.pDevice.RawPtr();
+			if (!pDevice)
+				return nullptr;
+
+			// 1x1 RGBA8 white
+			const uint32 whiteRGBA = 0xFFFFFFFFu;
+
+			TextureDesc TexDesc = {};
+			TexDesc.Name = "DefaultWhite1x1";
+			TexDesc.Type = RESOURCE_DIM_TEX_2D;
+			TexDesc.Width = 1;
+			TexDesc.Height = 1;
+			TexDesc.MipLevels = 1;
+			TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
+			TexDesc.Usage = USAGE_IMMUTABLE;
+			TexDesc.BindFlags = BIND_SHADER_RESOURCE;
+
+			TextureSubResData Sub = {};
+			Sub.pData = &whiteRGBA;
+			Sub.Stride = sizeof(uint32);
+
+			TextureData InitData = {};
+			InitData.pSubResources = &Sub;
+			InitData.NumSubresources = 1;
+
+			RefCntAutoPtr<ITexture> pWhiteTex;
+			pDevice->CreateTexture(TexDesc, &InitData, &pWhiteTex);
+			if (!pWhiteTex)
+			{
+				ASSERT(false, "Failed to create DefaultWhite1x1 texture.");
+				return nullptr;
+			}
+
+			s_WhiteSRV = pWhiteTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			if (!s_WhiteSRV)
+			{
+				ASSERT(false, "DefaultWhite1x1 SRV is null.");
+				return nullptr;
+			}
+			s_WhiteSRV->SetSampler(m_pDefaultSampler);
+		}
+
+		// 5) MaterialRenderData 생성 (Basic 셰이더 하드코딩)
+		MaterialRenderData rd{};
+		rd.Handle = h;
+
+		// RenderQueue (지금은 Basic pass라 큰 의미는 없지만 일단 채워둠)
+		rd.RenderQueue = MaterialRenderData::GetQueueFromAlphaMode(mat.AlphaMode);
+
+		// 파라미터(현재 Basic shader가 안 쓰더라도 RD에 저장해두면 이후 확장 쉬움)
+		rd.BaseColor = float4(mat.BaseColorFactor.x, mat.BaseColorFactor.y, mat.BaseColorFactor.z, mat.Opacity);
+		rd.Metallic = mat.MetallicFactor;
+		rd.Roughness = mat.RoughnessFactor;
+		rd.NormalScale = mat.NormalScale;
+		rd.OcclusionStrength = mat.AmbientOcclusionStrength;
+		rd.Emissive = mat.EmissiveFactor;
+		rd.AlphaCutoff = mat.AlphaCutoff;
+
+		// Basic PSO/SRB
+		rd.pPSO = m_pBasicPSO;
+
+		rd.pPSO->CreateShaderResourceBinding(&rd.pSRB, true /*InitStaticResources*/);
+		if (!rd.pSRB)
+		{
+			ASSERT(false, "Failed to create SRB for material.");
+			return nullptr;
+		}
+
+		// 6) 상수버퍼 바인딩 (VS)
+		auto BindVS_CB = [&](const char* name, IBuffer* pCB) -> bool
+		{
+			if (!pCB) return false;
+			if (auto* Var = rd.pSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
+			{
+				Var->Set(pCB);
+				return true;
+			}
+			return false;
+		};
+
+		if (!BindVS_CB("FRAME_CONSTANTS", m_pFrameCB))
+		{
+			ASSERT(false, "Failed to bind FRAME_CONSTANTS.");
+			return nullptr;
+		}
+
+		if (!BindVS_CB("OBJECT_CONSTANTS", m_pObjectCB))
+		{
+			ASSERT(false, "Failed to bind OBJECT_CONSTANTS.");
+			return nullptr;
+		}
+
+		// 7) BaseColor 텍스처 바인딩 (PS)
+		//    - Material에 BaseColorTexture가 있으면 그걸 사용
+		//    - 없으면 white fallback
+		ITextureView* pBaseColorSRV = s_WhiteSRV.RawPtr();
+
+		if (mat.BaseColorTexture.IsValid())
+		{
+			auto tit = m_TextureTable.find(mat.BaseColorTexture);
+			if (tit != m_TextureTable.end() && tit->second)
+			{
+				RefCntAutoPtr<ITexture> pTex = tit->second;
+				if (auto* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
+					pBaseColorSRV = pSRV;
+			}
+		}
+
+		// 셰이더 변수 이름: g_BaseColorTex
+		if (auto* TexVar = rd.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
+		{
+			TexVar->Set(pBaseColorSRV);
+		}
+		else
+		{
+			ASSERT(false, "PS SRB variable 'g_BaseColorTex' not found.");
+			return nullptr;
+		}
+
+		// Combined sampler 켜둔 상태면 보통 "g_BaseColorTex_sampler"가 잡힘
+		// (없어도 괜찮게 optional 처리)
+		if (auto* SampVar = rd.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex_sampler"))
+		{
+			// 샘플러를 따로 만들고 싶으면 여기서 Set.
+			// 지금은 PSO static sampler나 엔진 기본 sampler 정책이 있다면 그걸 쓰면 됨.
+			// SampVar->Set(rd.pDefaultSampler); // optional
+		}
+
+		// 9) 캐시에 저장 후 포인터 반환
+		auto [insIt, ok] = m_MatRenderDataTable.emplace(h, std::move(rd));
+		return &insIt->second;
+	}
+
+
 
 	bool Renderer::CreateBasicPSO()
 	{
@@ -143,14 +348,10 @@ namespace shz
 		GP.NumRenderTargets = 1;
 		GP.RTVFormats[0] = SCDesc.ColorBufferFormat;
 		GP.DSVFormat = SCDesc.DepthBufferFormat;
-
 		GP.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
 		GP.RasterizerDesc.CullMode = CULL_MODE_NONE;
-
-		// 너 셰이더는 Depth01을 출력하지만, 현재 PS에서 쓰지도 않고
-		// Debug 목적이라면 Depth off가 맞음.
-		GP.DepthStencilDesc.DepthEnable = false;
+		GP.RasterizerDesc.FrontCounterClockwise = true;
+		GP.DepthStencilDesc.DepthEnable = true;
 
 		// =========================
 		// Input Layout (ATTRIB0/1/2)
@@ -235,9 +436,13 @@ namespace shz
 
 		ShaderResourceVariableDesc Vars[] =
 		{
-			// VS에서만 사용
+			// Vertex shader constants
 			{ SHADER_TYPE_VERTEX, "FRAME_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  },
 			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC  },
+
+			// Pixel shader texture
+			{ SHADER_TYPE_PIXEL,  "g_BaseColorTex",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL,  "g_BaseColorTex_sampler",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		PSOCreateInfo.PSODesc.ResourceLayout.Variables = Vars;
 		PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
@@ -260,16 +465,16 @@ namespace shz
 		// Bind constant buffers
 		// =========================
 		auto BindCB = [&](const char* name, IBuffer* pCB) -> bool
-			{
-				if (!pCB) return false;
+		{
+			if (!pCB) return false;
 
-				if (auto* Var = m_pBasicSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
-				{
-					Var->Set(pCB);
-					return true;
-				}
-				return false;
-			};
+			if (auto* Var = m_pBasicSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
+			{
+				Var->Set(pCB);
+				return true;
+			}
+			return false;
+		};
 
 		if (!BindCB("FRAME_CONSTANTS", m_pFrameCB))
 			return false;
@@ -279,6 +484,82 @@ namespace shz
 
 		return true;
 	}
+
+	TextureHandle Renderer::CreateTexture(const TextureAsset& asset)
+	{
+		if (!asset.IsValid())
+			return {};
+
+		TextureLoadInfo loadInfo = asset.BuildTextureLoadInfo();
+
+		RefCntAutoPtr<ITexture> pTex;
+		CreateTextureFromFile(asset.GetSourcePath().c_str(), loadInfo, m_CreateInfo.pDevice, &pTex);
+
+		ITextureView* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		if (pSRV && m_pDefaultSampler)
+			pSRV->SetSampler(m_pDefaultSampler);
+
+		TextureHandle handle{ m_NextTexId++ };
+		m_TextureTable[handle] = pTex;
+
+		return handle;
+	}
+
+	MaterialHandle Renderer::CreateMaterial(const MaterialAsset& asset)
+	{
+		Material mat{};
+
+		// -------------------------
+		// Parameters
+		// -------------------------
+		const auto& P = asset.GetParams();
+		mat.BaseColorFactor = float3(P.BaseColor.x, P.BaseColor.y, P.BaseColor.z);
+		mat.Opacity = P.BaseColor.w; // 또는 별도 Opacity 정책이면 수정
+		mat.MetallicFactor = P.Metallic;
+		mat.RoughnessFactor = P.Roughness;
+		mat.NormalScale = P.NormalScale;
+		mat.EmissiveFactor = P.EmissiveColor * P.EmissiveIntensity;
+		mat.AmbientOcclusionStrength = P.Occlusion;
+
+		// -------------------------
+		// Alpha / Options
+		// -------------------------
+		mat.AlphaCutoff = P.AlphaCutoff;
+
+		switch (asset.GetOptions().AlphaMode)
+		{
+		case MaterialAsset::ALPHA_OPAQUE: mat.AlphaMode = MATERIAL_ALPHA_OPAQUE; break;
+		case MaterialAsset::ALPHA_MASK:   mat.AlphaMode = MATERIAL_ALPHA_MASK;   break;
+		case MaterialAsset::ALPHA_BLEND:  mat.AlphaMode = MATERIAL_ALPHA_BLEND;  break;
+		default:                          mat.AlphaMode = MATERIAL_ALPHA_OPAQUE; break;
+		}
+
+		// TwoSided / CastShadow 같은 건 Material에 아직 필드가 없으니
+		// 나중에 Material(렌더용)에 옵션 추가하거나 MaterialRenderData 쪽에 둬도 됨.
+
+		// -------------------------
+		// Textures
+		// -------------------------
+		if (asset.HasTexture(MaterialAsset::TEX_ALBEDO))
+			mat.BaseColorTexture = CreateTexture(asset.GetTexture(MaterialAsset::TEX_ALBEDO));
+
+		if (asset.HasTexture(MaterialAsset::TEX_NORMAL))
+			mat.NormalTexture = CreateTexture(asset.GetTexture(MaterialAsset::TEX_NORMAL));
+
+		if (asset.HasTexture(MaterialAsset::TEX_ORM))
+			mat.MetallicRoughnessTexture = CreateTexture(asset.GetTexture(MaterialAsset::TEX_ORM)); // 네 Material 필드명 기준
+
+		// AO를 ORM에서 분리하고 싶다면:
+		// out.AmbientOcclusionTexture = CreateTexture(...)
+
+		if (asset.HasTexture(MaterialAsset::TEX_EMISSIVE))
+			mat.EmissiveTexture = CreateTexture(asset.GetTexture(MaterialAsset::TEX_EMISSIVE));
+
+		MaterialHandle handle = { m_NextMaterialId++ };
+		m_MaterialTable[handle] = mat;
+		return handle;
+	}
+
 
 	MeshHandle Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
 	{
@@ -355,7 +636,8 @@ namespace shz
 		const auto& idx32 = asset.GetIndicesU32();
 		const auto& idx16 = asset.GetIndicesU16();
 
-		auto CreateSectionIB = [&](MeshSection& sec,
+		auto CreateSectionIB = [&](
+			MeshSection& sec,
 			const void* pIndexData,
 			uint64 indexDataBytes) -> bool
 		{
@@ -388,8 +670,8 @@ namespace shz
 				sec.IndexType = useU32 ? INDEX_TYPE_UINT32 : INDEX_TYPE_UINT16;
 
 				// Optional fields if your MeshSection has them
-				// sec.MaterialSlot = asec.MaterialSlot; // TODO: Create Material Handle?
-				sec.LocalBounds = asec.LocalBounds;  // 없으면 제거
+				sec.Material = CreateMaterial(asset.GetMaterialSlot(asec.MaterialSlot));
+				sec.LocalBounds = asec.LocalBounds; 
 				sec.StartIndex = 0;
 
 				const uint32 first = asec.FirstIndex;
@@ -430,6 +712,7 @@ namespace shz
 				return MeshHandle{};
 			}
 
+			sec.Material = m_DefaultMaterial;
 			outMesh.Sections.push_back(sec);
 		}
 
@@ -527,10 +810,11 @@ namespace shz
 		}
 
 		// IB (one section)
-		MeshSection sec;
+		MeshSection sec = {};
 		sec.NumIndices = _countof(Indices);
 		sec.IndexType = INDEX_TYPE_UINT32;
 		sec.StartIndex = 0;
+		sec.BaseVertex = 0;
 
 		{
 			BufferDesc IBDesc;
@@ -549,6 +833,7 @@ namespace shz
 				return MeshHandle{};
 			}
 		}
+		sec.Material = m_DefaultMaterial;
 
 		outMesh.Sections.clear();
 		outMesh.Sections.push_back(sec);
@@ -558,6 +843,6 @@ namespace shz
 	}
 
 
-	
+
 
 } // namespace shz

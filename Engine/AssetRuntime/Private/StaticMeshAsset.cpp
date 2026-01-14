@@ -79,20 +79,16 @@ namespace shz
 	// Material slots
 	// ------------------------------------------------------------
 
-	MaterialAsset* StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
+	MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
 	{
-		if (slot >= static_cast<uint32>(m_MaterialSlots.size()))
-			return nullptr;
-
-		return &m_MaterialSlots[slot];
+		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()));
+		return m_MaterialSlots[slot];
 	}
 
-	const MaterialAsset* StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
+	const MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
 	{
-		if (slot >= static_cast<uint32>(m_MaterialSlots.size()))
-			return nullptr;
-
-		return &m_MaterialSlots[slot];
+		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()));
+		return m_MaterialSlots[slot];
 	}
 
 	// ------------------------------------------------------------

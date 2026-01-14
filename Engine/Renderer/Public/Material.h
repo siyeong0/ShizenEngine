@@ -1,15 +1,10 @@
 #pragma once
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
+#include "Engine/Renderer/Public/Handles.h"
 
 namespace shz
 {
-    struct TextureHandle
-    {
-        uint32 Id = 0; // 0 = invalid
-        constexpr bool IsValid() const { return Id != 0; }
-    };
-
     enum MATERIAL_PRESET_TYPE
     {
         MATERIAL_TYPE_DEFAULT,

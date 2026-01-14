@@ -35,15 +35,15 @@ namespace shz
 		m_ViewFamily.Views[0].Viewport = {};
 
 		MeshHandle cubeHandle = m_pRenderer->CreateCubeMesh();
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0,  0 }, { 0,0,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
-		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  0 }, { 0,0,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
+		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
 
 		// Assets
 		StaticMeshAsset flightHelmetMeshAsset;
@@ -53,6 +53,7 @@ namespace shz
 		MeshHandle flightHelmetMeshHandle = m_pRenderer->CreateStaticMesh(flightHelmetMeshAsset);
 
 		m_HelmetId = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 8 }, { 0,0,0 }, { 5,5,5 }));
+		auto dummy = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 5, 3, 8 }, { 0,0,0 }, { 5,5,5 }));
 	}
 
 	void ShizenEngine::Render()

@@ -78,8 +78,8 @@ namespace shz
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		MaterialAsset* GetMaterialSlot(uint32 slot) noexcept;
-		const MaterialAsset* GetMaterialSlot(uint32 slot) const noexcept;
+		MaterialAsset& GetMaterialSlot(uint32 slot) noexcept;
+		const MaterialAsset& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)

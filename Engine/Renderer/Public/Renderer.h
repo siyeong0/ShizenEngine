@@ -1,4 +1,5 @@
 #pragma once
+#pragma once
 #include <vector>
 #include <unordered_map>
 
@@ -21,6 +22,7 @@
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
 namespace shz
@@ -50,11 +52,14 @@ namespace shz
 		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
 		void EndFrame();
 
+        TextureHandle CreateTexture(const TextureAsset& asset);
+        MaterialHandle CreateMaterial(const MaterialAsset& asset);
 		MeshHandle CreateStaticMesh(const StaticMeshAsset& asset);
 
 		MeshHandle CreateCubeMesh();
 
 	private:
+		MaterialRenderData* GetOrCreateMaterialRenderData(MaterialHandle h);
 		bool CreateBasicPSO();
 		bool CreateCubeMesh_Internal(StaticMeshRenderData& outMesh);
 
@@ -71,7 +76,19 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
+		MaterialHandle m_DefaultMaterial = {};
+		RefCntAutoPtr<ISampler> m_pDefaultSampler;
+
 		uint32 m_NextMeshId = 1;
 		std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
+
+        uint32 m_NextTexId = 1;
+        std::unordered_map<TextureHandle, RefCntAutoPtr<ITexture>>  m_TextureTable;
+
+        uint m_NextMaterialId = 1;
+        std::unordered_map<MaterialHandle, Material>  m_MaterialTable;
+
+		uint m_NextMatRenderDataId = 1;
+		std::unordered_map<MaterialHandle, MaterialRenderData>  m_MatRenderDataTable;
 	};
 } // namespace shz
