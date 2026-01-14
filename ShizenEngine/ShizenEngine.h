@@ -57,6 +57,8 @@ namespace shz
         ViewFamily m_ViewFamily = {};
 
         FirstPersonCamera m_Camera;
+
+        RenderObjectId m_HelmetId = {};
     };
 
 } // namespace shz

@@ -52,7 +52,7 @@ namespace shz
 
 		MeshHandle flightHelmetMeshHandle = m_pRenderer->CreateStaticMesh(flightHelmetMeshAsset);
 
-		m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 2 }, { 0,0,0 }, { 10,10,10 }));
+		m_HelmetId = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 8 }, { 0,0,0 }, { 5,5,5 }));
 	}
 
 	void ShizenEngine::Render()
@@ -79,15 +79,9 @@ namespace shz
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
 		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
-		// 지금 단계에서는 오브젝트/라이트 갱신 없어도 됨.
-		// 필요해지면 아래처럼 Scene을 갱신하는 식으로 확장.
 
-		// 예) 디버그 삼각형 토글:
-		// m_pRenderScene->SetDrawDebugTriangle(true/false);
 
-		// 예) 나중에 메쉬 추가할 때:
-		// MeshHandle cube = m_pRenderer->CreateCubeMesh("...");
-		// RenderObjectId obj = m_pRenderScene->AddObject(cube, Matrix4x4::Identity());
+		m_pRenderScene->SetObjectTransform(m_HelmetId, Matrix4x4::TRS({ 0, 0, 8 }, { 0,static_cast<float>(CurrTime),0 }, { 5,5,5 }));
 	}
 
 } // namespace shz
