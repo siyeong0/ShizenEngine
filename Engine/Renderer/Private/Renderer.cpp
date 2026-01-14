@@ -89,7 +89,7 @@ namespace shz
 		for (const auto& obj : scene.GetObjects())
 		{
 			const RenderScene::RenderObject& renderObject = obj.second;
-			const StaticMesh& mesh = m_MeshTable.at(renderObject.meshHandle);
+			const StaticMeshRenderData& mesh = m_MeshTable.at(renderObject.meshHandle);
 
 			// Object CB 업데이트 (오브젝트마다)
 			{
@@ -276,7 +276,7 @@ namespace shz
 	{
 		MeshHandle handle{ m_NextMeshId++ };
 
-		StaticMesh mesh;
+		StaticMeshRenderData mesh;
 		if (!CreateCubeMesh_Internal(mesh))
 		{
 			// 실패하면 invalid 반환
@@ -287,7 +287,7 @@ namespace shz
 		return handle;
 	}
 
-	bool Renderer::CreateCubeMesh_Internal(StaticMesh& outMesh)
+	bool Renderer::CreateCubeMesh_Internal(StaticMeshRenderData& outMesh)
 	{
 		struct SimpleVertex
 		{

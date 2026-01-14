@@ -1,4 +1,5 @@
 ﻿#include "ShizenEngine.h"
+#include "Engine/AssetRuntime/Public/AssimpImporter.h"
 
 namespace shz
 {
@@ -43,6 +44,12 @@ namespace shz
 		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
 		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
 		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
+
+		// Assets
+		StaticMeshAsset flightHelmetMeshAsset;
+		if (!AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf", &flightHelmetMeshAsset))
+			std::cout << "Load Failed" << std::endl;
+
 	}
 
 	void ShizenEngine::Render()

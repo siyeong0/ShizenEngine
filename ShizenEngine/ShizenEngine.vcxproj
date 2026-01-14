@@ -150,6 +150,9 @@
     <ClCompile Include="ShizenEngine.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Engine\AssetRuntime\Engine-AssetRuntime.vcxproj">
+      <Project>{505d73a4-5365-4527-b263-3c10be6d839b}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Engine\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
     </ProjectReference>

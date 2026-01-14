@@ -24,7 +24,7 @@ namespace shz
 		MaterialHandle Material = {};
 	};
 
-	struct StaticMesh
+	struct StaticMeshRenderData
 	{
 		RefCntAutoPtr<IBuffer> VertexBuffer;
 

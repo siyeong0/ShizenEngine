@@ -68,6 +68,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Renderer", "Engine\R
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShizenEngine", "ShizenEngine\ShizenEngine.vcxproj", "{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-AssetRuntime", "Engine\AssetRuntime\Engine-AssetRuntime.vcxproj", "{505D73A4-5365-4527-B263-3C10BE6D839B}"
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		Platforms\Common\Platforms-Common.vcxitems*{2504a2be-409e-4eba-ab7f-1c8d7375ad94}*SharedItemsImports = 4
@@ -80,6 +82,7 @@ Global
 		Primitives\Primitives.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{4fbef7da-a1db-4295-acb2-b05c609ccab8}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{4fbef7da-a1db-4295-acb2-b05c609ccab8}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{505d73a4-5365-4527-b263-3c10be6d839b}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}*SharedItemsImports = 4
@@ -304,6 +307,14 @@ Global
 		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x64.Build.0 = Release|x64
 		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x86.ActiveCfg = Release|Win32
 		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x86.Build.0 = Release|Win32
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x64.ActiveCfg = Debug|x64
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x64.Build.0 = Debug|x64
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x86.ActiveCfg = Debug|Win32
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x86.Build.0 = Debug|Win32
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Release|x64.ActiveCfg = Release|x64
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Release|x64.Build.0 = Release|x64
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Release|x86.ActiveCfg = Release|Win32
+		{505D73A4-5365-4527-B263-3C10BE6D839B}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -332,6 +343,7 @@ Global
 		{8FBE85FB-C5DC-4664-A364-B959B9BAD226} = {4B94ECC0-DD89-4416-9C93-8008347B16D1}
 		{2504A2BE-409E-4EBA-AB7F-1C8D7375AD94} = {4B94ECC0-DD89-4416-9C93-8008347B16D1}
 		{434146A2-C1AF-4D85-8E9B-2FAF1727B469} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{505D73A4-5365-4527-B263-3C10BE6D839B} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {18FF0238-B1F0-41F5-B348-E7D538FEA02E}

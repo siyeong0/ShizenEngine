@@ -18,7 +18,7 @@
 
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/StaticMesh.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
 namespace shz
@@ -52,7 +52,7 @@ namespace shz
 
     private:
         bool CreateBasicPSO();
-        bool CreateCubeMesh_Internal(StaticMesh& outMesh);
+        bool CreateCubeMesh_Internal(StaticMeshRenderData& outMesh);
 
     private:
         RendererCreateInfo m_CreateInfo = {};
@@ -68,6 +68,6 @@ namespace shz
         RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
         uint32 m_NextMeshId = 1;
-        std::unordered_map<MeshHandle, StaticMesh> m_MeshTable;
+        std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
     };
 } // namespace shz

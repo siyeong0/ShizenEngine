@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{434146a2-c1af-4d85-8e9b-2faf1727b469}</ProjectGuid>
-    <RootNamespace>EngineRenderer</RootNamespace>
+    <ProjectGuid>{505d73a4-5365-4527-b263-3c10be6d839b}</ProjectGuid>
+    <RootNamespace>EngineAssetRuntime</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -56,6 +56,7 @@
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
+    <Import Project="..\..\Primitives\Primitives.vcxitems" Label="Shared" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -152,12 +153,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\Material.h" />
-    <ClInclude Include="Public\Renderer.h" />
-    <ClInclude Include="Public\RenderScene.h" />
-    <ClInclude Include="Public\RenderTarget.h" />
-    <ClInclude Include="Public\StaticMeshRenderData.h" />
-    <ClInclude Include="Public\ViewFamily.h" />
+    <ClInclude Include="Public\AssimpImporter.h" />
+    <ClInclude Include="Public\MaterialAsset.h" />
+    <ClInclude Include="Public\StaticMeshAsset.h" />
+    <ClInclude Include="Public\TextureAsset.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -166,29 +165,15 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\Renderer.cpp" />
-    <ClCompile Include="Private\RenderScene.cpp" />
+    <ClCompile Include="Private\AssimpImporter.cpp" />
+    <ClCompile Include="Private\MaterialAsset.cpp" />
+    <ClCompile Include="Private\StaticMeshAsset.cpp" />
+    <ClCompile Include="Private\TextureAsset.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\Basic.psh">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Basic.vsh">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-    </FxCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\HLSL_Structures.hlsli" />
+    <ProjectReference Include="..\Core\Engine-Core.vcxproj">
+      <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

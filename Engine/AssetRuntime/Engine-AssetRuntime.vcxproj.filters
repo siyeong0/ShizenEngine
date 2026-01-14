@@ -15,38 +15,37 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Tutorial07_RenderPass.h">
+    <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TexturedCube.h">
+    <ClInclude Include="Public\StaticMeshAsset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\AssimpImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\MaterialAsset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\TextureAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Tutorial07_RenderPass.cpp">
+    <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="Private\StaticMeshAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TexturedCube.cpp">
+    <ClCompile Include="Private\AssimpImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="Assets\pearl_abyss_logo.png">
-      <Filter>Resource Files</Filter>
-    </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Assets\shader_structs.fxh" />
-  </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="Assets\ambient_light.vsh" />
-    <CustomBuild Include="Assets\light_volume.psh" />
-    <CustomBuild Include="Assets\ambient_light.psh" />
-    <CustomBuild Include="Assets\cube.psh" />
-    <CustomBuild Include="Assets\cube.vsh" />
-    <CustomBuild Include="Assets\light_volume.vsh" />
+    <ClCompile Include="Private\MaterialAsset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\TextureAsset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

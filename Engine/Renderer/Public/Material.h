@@ -32,41 +32,31 @@ namespace shz
     struct Material
     {
         // =========================================================
-        // Textures (참조만: 소유 X)
+        // Textures
         // =========================================================
-        // sRGB
         TextureHandle BaseColorTexture = {};
-        // Linear
         TextureHandle NormalTexture = {};
-        // Linear: (Metallic, Roughness) packed (예: R=Metallic, G=Roughness)
         TextureHandle MetallicRoughnessTexture = {};
-        // Linear
         TextureHandle AmbientOcclusionTexture = {};
-        // sRGB or Linear(엔진 정책에 맞게)
         TextureHandle EmissiveTexture = {};
-        // Optional: 알파를 별도 텍스처로 관리하고 싶을 때
-        TextureHandle OpacityTexture = {};
 
         // =========================================================
         // Factors (Metallic-Roughness PBR)
         // =========================================================
-        float3 BaseColorFactor = DEFAULT_BASE_COLOR;
-        float  Opacity = DEFAULT_OPACITY;
-
-        float  MetallicFactor = DEFAULT_METALLIC;
-        float  RoughnessFactor = DEFAULT_ROUGHNESS;
-
-        float  NormalScale = DEFAULT_NORMAL_SCALE;
-        float  AmbientOcclusionStrength = DEFAULT_AO_STRENGTH;
-
-        float3 EmissiveFactor = DEFAULT_EMISSIVE;
+        float3 BaseColorFactor = { 0.8f, 0.8f, 0.8f };
+        float  Opacity = 1.0f;
+        float  MetallicFactor = 0.0f;
+        float  RoughnessFactor = 0.5f;
+        float  NormalScale = 1.0f;
+        float  AmbientOcclusionStrength = 1.0f;
+        float3 EmissiveFactor = { 0.0f, 0.0f, 0.0f };
 
         // =========================================================
         // Alpha
         // =========================================================
 
         MATERIAL_ALPHA_MODE AlphaMode = MATERIAL_ALPHA_OPAQUE;
-        float AlphaCutoff = DEFAULT_ALPHA_CUTOFF; // AlphaMode==MASK일 때 사용
+        float AlphaCutoff = 0.5f; // AlphaMode==MASK일 때 사용
 
         // =========================================================
         // Ctors
@@ -76,11 +66,11 @@ namespace shz
 
         Material(
             const float3& baseColorFactor,
-            float         opacity,
-            float         metallic,
-            float         roughness,
+            float opacity,
+            float metallic,
+            float roughness,
             MATERIAL_ALPHA_MODE alphaMode = MATERIAL_ALPHA_OPAQUE,
-            float         alphaCutoff = DEFAULT_ALPHA_CUTOFF)
+            float alphaCutoff = 0.5f)
             : BaseColorFactor(baseColorFactor)
             , Opacity(opacity)
             , MetallicFactor(metallic)
@@ -95,7 +85,7 @@ namespace shz
             MATERIAL_ALPHA_MODE  alphaMode = MATERIAL_ALPHA_OPAQUE)
             : AlphaMode(alphaMode)
         {
-            ResetToDefaults();
+            *this = {};
             ApplyPreset(type);
         }
 
@@ -103,36 +93,11 @@ namespace shz
         // Helpers
         // =========================================================
 
-        void ResetToDefaults()
-        {
-            BaseColorTexture = {};
-            NormalTexture = {};
-            MetallicRoughnessTexture = {};
-            AmbientOcclusionTexture = {};
-            EmissiveTexture = {};
-            OpacityTexture = {};
-
-            BaseColorFactor = DEFAULT_BASE_COLOR;
-            Opacity = DEFAULT_OPACITY;
-
-            MetallicFactor = DEFAULT_METALLIC;
-            RoughnessFactor = DEFAULT_ROUGHNESS;
-
-            NormalScale = DEFAULT_NORMAL_SCALE;
-            AmbientOcclusionStrength = DEFAULT_AO_STRENGTH;
-
-            EmissiveFactor = DEFAULT_EMISSIVE;
-
-            AlphaMode = MATERIAL_ALPHA_OPAQUE;
-            AlphaCutoff = DEFAULT_ALPHA_CUTOFF;
-        }
-
         void ApplyPreset(MATERIAL_PRESET_TYPE type)
         {
             switch (type)
             {
             case MATERIAL_TYPE_DEFAULT:
-                // defaults 유지
                 break;
 
             case MATERIAL_TYPE_MATTE:
@@ -142,22 +107,18 @@ namespace shz
                 break;
 
             case MATERIAL_TYPE_MIRROR:
-                // “이상적인 거울”은 사실 금속/유전체로 딱 떨어지진 않지만,
-                // 엔진 프리셋으로는 매우 낮은 roughness + 높은 metallic로 근사
                 BaseColorFactor = { 1.0f, 1.0f, 1.0f };
                 MetallicFactor = 1.0f;
                 RoughnessFactor = 0.02f;
                 break;
 
             case MATERIAL_TYPE_PLASTIC:
-                // 유전체(비금속)
                 BaseColorFactor = { 0.8f, 0.1f, 0.1f };
                 MetallicFactor = 0.0f;
                 RoughnessFactor = 0.35f;
                 break;
 
             case MATERIAL_TYPE_GLASS:
-                // 투명은 보통 BLEND(혹은 별도 투명 파이프라인)
                 BaseColorFactor = { 1.0f, 1.0f, 1.0f };
                 MetallicFactor = 0.0f;
                 RoughnessFactor = 0.02f;
@@ -190,31 +151,12 @@ namespace shz
 
         bool IsOpaque() const
         {
-            // OPAQUE면 무조건 불투명 취급
             if (AlphaMode == MATERIAL_ALPHA_OPAQUE)
                 return true;
-
-            // MASK는 컷아웃이므로 "불투명 패스"에 넣고 싶을 때가 많음(엔진 정책)
-            // 여기서는 “완전 불투명”만 true로 정의
             return false;
         }
 
         bool IsAlphaMasked() const { return AlphaMode == MATERIAL_ALPHA_MASK; }
         bool IsTranslucent() const { return AlphaMode == MATERIAL_ALPHA_BLEND; }
-
-    private:
-        // Physically plausible defaults (dielectric, mid-roughness)
-        static inline constexpr float3 DEFAULT_BASE_COLOR = { 0.8f, 0.8f, 0.8f };
-        static inline constexpr float  DEFAULT_OPACITY = 1.0f;
-
-        static inline constexpr float  DEFAULT_METALLIC = 0.0f;
-        static inline constexpr float  DEFAULT_ROUGHNESS = 0.5f;
-
-        static inline constexpr float  DEFAULT_NORMAL_SCALE = 1.0f;
-        static inline constexpr float  DEFAULT_AO_STRENGTH = 1.0f;
-
-        static inline constexpr float3 DEFAULT_EMISSIVE = { 0.0f, 0.0f, 0.0f };
-
-        static inline constexpr float  DEFAULT_ALPHA_CUTOFF = 0.5f;
     };
 } // namespace shz
