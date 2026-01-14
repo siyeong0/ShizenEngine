@@ -7,6 +7,8 @@
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
+#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"
@@ -23,51 +25,53 @@
 
 namespace shz
 {
-    struct RendererCreateInfo
-    {
-        RefCntAutoPtr<IEngineFactory>  pEngineFactory;
-        RefCntAutoPtr<IRenderDevice>   pDevice;
-        RefCntAutoPtr<IDeviceContext>  pImmediateContext;
-        std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
-        RefCntAutoPtr<ISwapChain>      pSwapChain;
-        ImGuiImplShizen* pImGui = nullptr;
+	struct RendererCreateInfo
+	{
+		RefCntAutoPtr<IEngineFactory>  pEngineFactory;
+		RefCntAutoPtr<IRenderDevice>   pDevice;
+		RefCntAutoPtr<IDeviceContext>  pImmediateContext;
+		std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
+		RefCntAutoPtr<ISwapChain>      pSwapChain;
+		ImGuiImplShizen* pImGui = nullptr;
 
-        uint32 BackBufferWidth = 0;
-        uint32 BackBufferHeight = 0;
-    };
+		uint32 BackBufferWidth = 0;
+		uint32 BackBufferHeight = 0;
+	};
 
-    class Renderer
-    {
-    public:
-        bool Initialize(const RendererCreateInfo& createInfo);
-        void Cleanup();
+	class Renderer
+	{
+	public:
+		bool Initialize(const RendererCreateInfo& createInfo);
+		void Cleanup();
 
-        void OnResize(uint32 width, uint32 height);
+		void OnResize(uint32 width, uint32 height);
 
-        void BeginFrame();
-        void Render(const RenderScene& scene, const ViewFamily& viewFamily);
-        void EndFrame();
- 
-        MeshHandle CreateCubeMesh();
+		void BeginFrame();
+		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
+		void EndFrame();
 
-    private:
-        bool CreateBasicPSO();
-        bool CreateCubeMesh_Internal(StaticMeshRenderData& outMesh);
+		MeshHandle CreateStaticMesh(const StaticMeshAsset& asset);
 
-    private:
-        RendererCreateInfo m_CreateInfo = {};
+		MeshHandle CreateCubeMesh();
 
-        uint32 m_Width = 0;
-        uint32 m_Height = 0;
+	private:
+		bool CreateBasicPSO();
+		bool CreateCubeMesh_Internal(StaticMeshRenderData& outMesh);
 
-        RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+	private:
+		RendererCreateInfo m_CreateInfo = {};
 
-        RefCntAutoPtr<IBuffer> m_pFrameCB;
-        RefCntAutoPtr<IBuffer> m_pObjectCB;
-        RefCntAutoPtr<IPipelineState> m_pBasicPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
+		uint32 m_Width = 0;
+		uint32 m_Height = 0;
 
-        uint32 m_NextMeshId = 1;
-        std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
-    };
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+
+		RefCntAutoPtr<IBuffer> m_pFrameCB;
+		RefCntAutoPtr<IBuffer> m_pObjectCB;
+		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
+
+		uint32 m_NextMeshId = 1;
+		std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
+	};
 } // namespace shz

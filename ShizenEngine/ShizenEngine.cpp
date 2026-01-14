@@ -34,22 +34,25 @@ namespace shz
 		m_ViewFamily.Views.push_back({});
 		m_ViewFamily.Views[0].Viewport = {};
 
-		MeshHandle handle = m_pRenderer->CreateCubeMesh();
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ -2, 0,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0,  0 }, { 0,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 0, 0,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(handle, Matrix4x4::TRS({ 2, 0,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
+		MeshHandle cubeHandle = m_pRenderer->CreateCubeMesh();
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, 0,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0,  0 }, { 0,0,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, 0,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
+		//m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, 0,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
 
 		// Assets
 		StaticMeshAsset flightHelmetMeshAsset;
 		if (!AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf", &flightHelmetMeshAsset))
 			std::cout << "Load Failed" << std::endl;
 
+		MeshHandle flightHelmetMeshHandle = m_pRenderer->CreateStaticMesh(flightHelmetMeshAsset);
+
+		m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 2 }, { 0,0,0 }, { 10,10,10 }));
 	}
 
 	void ShizenEngine::Render()

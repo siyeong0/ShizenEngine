@@ -22,6 +22,8 @@ namespace shz
 		INDEX_TYPE IndexType = INDEX_TYPE_UINT32;
 
 		MaterialHandle Material = {};
+
+		Box LocalBounds;
 	};
 
 	struct StaticMeshRenderData

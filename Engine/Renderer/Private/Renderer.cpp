@@ -110,7 +110,7 @@ namespace shz
 
 				DrawIndexedAttribs DIA;
 				DIA.NumIndices = section.NumIndices;
-				DIA.IndexType = VT_UINT32;
+				DIA.IndexType = (section.IndexType == INDEX_TYPE_UINT16) ? VT_UINT16 : VT_UINT32;
 				DIA.Flags = DRAW_FLAG_VERIFY_ALL; // 디버그면 OK
 
 				pCtx->DrawIndexed(DIA);
@@ -155,16 +155,25 @@ namespace shz
 		// =========================
 		// Input Layout (ATTRIB0/1/2)
 		// VSInput:
-		//  float3 Pos    : ATTRIB0;
-		//  float2 UV     : ATTRIB1;
-		//  float3 Normal : ATTRIB2;
+		//  float3 Pos     : ATTRIB0;
+		//  float2 UV      : ATTRIB1;
+		//  float3 Normal  : ATTRIB2;
+		//  float3 Tangent : ATTRIB3;
 		// =========================
+
+		{
+			float3 Pos;
+			float2 UV;
+			float3 Normal;
+			float3 Tangent;
+		};
 		LayoutElement LayoutElems[] =
 		{
 			// Slot 0 기준
 			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 : float3
 			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // ATTRIB1 : float2
 			LayoutElement{2, 0, 3, VT_FLOAT32, false}, // ATTRIB2 : float3
+			LayoutElement{3, 0, 3, VT_FLOAT32, false}, // ATTRIB3 : float3
 		};
 		GP.InputLayout.LayoutElements = LayoutElems;
 		GP.InputLayout.NumElements = _countof(LayoutElems);
@@ -271,69 +280,217 @@ namespace shz
 		return true;
 	}
 
-
-	MeshHandle Renderer::CreateCubeMesh()
+	MeshHandle Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
 	{
-		MeshHandle handle{ m_NextMeshId++ };
-
-		StaticMeshRenderData mesh;
-		if (!CreateCubeMesh_Internal(mesh))
+		if (!asset.IsValid())
 		{
-			// 실패하면 invalid 반환
 			return MeshHandle{};
 		}
 
-		m_MeshTable.emplace(handle, std::move(mesh));
-		return handle;
-	}
+		MeshHandle handle{ m_NextMeshId++ };
 
-	bool Renderer::CreateCubeMesh_Internal(StaticMeshRenderData& outMesh)
-	{
+		StaticMeshRenderData outMesh;
+
 		struct SimpleVertex
 		{
 			float3 Pos;
 			float2 UV;
 			float3 Normal;
+			float3 Tangent;
+		};
+
+		const uint32 vtxCount = asset.GetVertexCount();
+		outMesh.NumVertices = vtxCount;
+		outMesh.VertexStride = sizeof(SimpleVertex);
+		outMesh.LocalBounds = asset.GetBounds();
+
+		const auto& positions = asset.GetPositions();
+		const auto& normals = asset.GetNormals();
+		const auto& tangents = asset.GetTangents();
+		const auto& uvs = asset.GetTexCoords();
+
+		// Build interleaved VB (AoS) to match your current pipeline.
+		std::vector<SimpleVertex> vbCPU;
+		vbCPU.resize(vtxCount);
+
+		for (uint32 i = 0; i < vtxCount; ++i)
+		{
+			SimpleVertex v{};
+			v.Pos = positions[i];
+			v.UV = uvs[i];
+			v.Normal = normals[i];
+			v.Tangent = tangents[i];
+			vbCPU[i] = v;
+		}
+
+		// VB
+		{
+			BufferDesc VBDesc;
+			VBDesc.Name = "StaticMesh VB";
+			VBDesc.Usage = USAGE_IMMUTABLE;
+			VBDesc.BindFlags = BIND_VERTEX_BUFFER;
+			VBDesc.Size = static_cast<uint64>(vbCPU.size() * sizeof(SimpleVertex));
+
+			BufferData VBData;
+			VBData.pData = vbCPU.data();
+			VBData.DataSize = static_cast<uint64>(vbCPU.size() * sizeof(SimpleVertex));
+
+			m_CreateInfo.pDevice->CreateBuffer(VBDesc, &VBData, &outMesh.VertexBuffer);
+			if (!outMesh.VertexBuffer)
+			{
+				return MeshHandle{};
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Sections
+		// - If asset has sections: create per-section IB (simple path)
+		// - Else: create one section over full index buffer
+		// ------------------------------------------------------------
+
+		outMesh.Sections.clear();
+
+		const bool useU32 = (asset.GetIndexType() == VT_UINT32);
+
+		const auto& idx32 = asset.GetIndicesU32();
+		const auto& idx16 = asset.GetIndicesU16();
+
+		auto CreateSectionIB = [&](MeshSection& sec,
+			const void* pIndexData,
+			uint64 indexDataBytes) -> bool
+		{
+			BufferDesc IBDesc;
+			IBDesc.Name = "StaticMesh IB";
+			IBDesc.Usage = USAGE_IMMUTABLE;
+			IBDesc.BindFlags = BIND_INDEX_BUFFER;
+			IBDesc.Size = indexDataBytes;
+
+			BufferData IBData;
+			IBData.pData = pIndexData;
+			IBData.DataSize = indexDataBytes;
+
+			m_CreateInfo.pDevice->CreateBuffer(IBDesc, &IBData, &sec.IndexBuffer);
+			return (sec.IndexBuffer != nullptr);
+		};
+
+		const auto& assetSections = asset.GetSections();
+		if (!assetSections.empty())
+		{
+			outMesh.Sections.reserve(assetSections.size());
+
+			for (const StaticMeshAsset::Section& asec : assetSections)
+			{
+				if (asec.IndexCount == 0)
+					continue;
+
+				MeshSection sec{};
+				sec.NumIndices = asec.IndexCount;
+				sec.IndexType = useU32 ? INDEX_TYPE_UINT32 : INDEX_TYPE_UINT16;
+
+				// Optional fields if your MeshSection has them
+				// sec.MaterialSlot = asec.MaterialSlot; // TODO: Create Material Handle?
+				sec.LocalBounds = asec.LocalBounds;  // 없으면 제거
+				sec.StartIndex = 0;
+
+				const uint32 first = asec.FirstIndex;
+				const uint32 count = asec.IndexCount;
+
+				const void* pData = nullptr;
+				uint64 bytes = 0;
+
+				if (useU32)
+				{
+					pData = idx32.empty() ? nullptr : static_cast<const void*>(idx32.data() + first);
+					bytes = static_cast<uint64>(count) * sizeof(uint32);
+				}
+				else
+				{
+					pData = idx16.empty() ? nullptr : static_cast<const void*>(idx16.data() + first);
+					bytes = static_cast<uint64>(count) * sizeof(uint16);
+				}
+
+				if (!CreateSectionIB(sec, pData, bytes))
+				{
+					return MeshHandle{};
+				}
+
+				outMesh.Sections.push_back(sec);
+			}
+		}
+		else
+		{
+			// Fallback: one section over full indices
+			MeshSection sec{};
+			sec.NumIndices = asset.GetIndexCount();
+			sec.IndexType = useU32 ? INDEX_TYPE_UINT32 : INDEX_TYPE_UINT16;
+			sec.StartIndex = 0;
+
+			if (!CreateSectionIB(sec, asset.GetIndexData(), asset.GetIndexDataSizeBytes()))
+			{
+				return MeshHandle{};
+			}
+
+			outMesh.Sections.push_back(sec);
+		}
+
+		// Store
+		m_MeshTable.emplace(handle, std::move(outMesh));
+		return handle;
+	}
+
+
+	MeshHandle Renderer::CreateCubeMesh()
+	{
+		MeshHandle handle{ m_NextMeshId++ };
+
+		StaticMeshRenderData outMesh;
+
+		struct SimpleVertex
+		{
+			float3 Pos;
+			float2 UV;
+			float3 Normal;
+			float3 Tangent;
 		};
 
 		// 24 verts (4 per face)
 		static const SimpleVertex Verts[] =
 		{
-			// -Z
-			{{-0.5f,-0.5f,-0.5f},{0,1},{0,0,-1}},
-			{{+0.5f,-0.5f,-0.5f},{1,1},{0,0,-1}},
-			{{+0.5f,+0.5f,-0.5f},{1,0},{0,0,-1}},
-			{{-0.5f,+0.5f,-0.5f},{0,0},{0,0,-1}},
+			// -Z (U: +X)
+			{{-0.5f,-0.5f,-0.5f},{0,1},{0,0,-1},{+1,0,0}},
+			{{+0.5f,-0.5f,-0.5f},{1,1},{0,0,-1},{+1,0,0}},
+			{{+0.5f,+0.5f,-0.5f},{1,0},{0,0,-1},{+1,0,0}},
+			{{-0.5f,+0.5f,-0.5f},{0,0},{0,0,-1},{+1,0,0}},
 
-			// +Z
-			{{-0.5f,-0.5f,+0.5f},{0,1},{0,0,+1}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{0,0,+1}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{0,0,+1}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{0,0,+1}},
+			// +Z (U: +X)
+			{{-0.5f,-0.5f,+0.5f},{0,1},{0,0,+1},{+1,0,0}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{0,0,+1},{+1,0,0}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{0,0,+1},{+1,0,0}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{0,0,+1},{+1,0,0}},
 
-			// -X
-			{{-0.5f,-0.5f,+0.5f},{0,1},{-1,0,0}},
-			{{-0.5f,-0.5f,-0.5f},{1,1},{-1,0,0}},
-			{{-0.5f,+0.5f,-0.5f},{1,0},{-1,0,0}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{-1,0,0}},
+			// -X (U: -Z)
+			{{-0.5f,-0.5f,+0.5f},{0,1},{-1,0,0},{0,0,-1}},
+			{{-0.5f,-0.5f,-0.5f},{1,1},{-1,0,0},{0,0,-1}},
+			{{-0.5f,+0.5f,-0.5f},{1,0},{-1,0,0},{0,0,-1}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{-1,0,0},{0,0,-1}},
 
-			// +X
-			{{+0.5f,-0.5f,-0.5f},{0,1},{+1,0,0}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{+1,0,0}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{+1,0,0}},
-			{{+0.5f,+0.5f,-0.5f},{0,0},{+1,0,0}},
+			// +X (U: +Z)
+			{{+0.5f,-0.5f,-0.5f},{0,1},{+1,0,0},{0,0,+1}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{+1,0,0},{0,0,+1}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{+1,0,0},{0,0,+1}},
+			{{+0.5f,+0.5f,-0.5f},{0,0},{+1,0,0},{0,0,+1}},
 
-			// -Y
-			{{-0.5f,-0.5f,+0.5f},{0,1},{0,-1,0}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{0,-1,0}},
-			{{+0.5f,-0.5f,-0.5f},{1,0},{0,-1,0}},
-			{{-0.5f,-0.5f,-0.5f},{0,0},{0,-1,0}},
+			// -Y (U: +X)
+			{{-0.5f,-0.5f,+0.5f},{0,1},{0,-1,0},{+1,0,0}},
+			{{+0.5f,-0.5f,+0.5f},{1,1},{0,-1,0},{+1,0,0}},
+			{{+0.5f,-0.5f,-0.5f},{1,0},{0,-1,0},{+1,0,0}},
+			{{-0.5f,-0.5f,-0.5f},{0,0},{0,-1,0},{+1,0,0}},
 
-			// +Y
-			{{-0.5f,+0.5f,-0.5f},{0,1},{0,+1,0}},
-			{{+0.5f,+0.5f,-0.5f},{1,1},{0,+1,0}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{0,+1,0}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{0,+1,0}},
+			// +Y (U: +X)
+			{{-0.5f,+0.5f,-0.5f},{0,1},{0,+1,0},{+1,0,0}},
+			{{+0.5f,+0.5f,-0.5f},{1,1},{0,+1,0},{+1,0,0}},
+			{{+0.5f,+0.5f,+0.5f},{1,0},{0,+1,0},{+1,0,0}},
+			{{-0.5f,+0.5f,+0.5f},{0,0},{0,+1,0},{+1,0,0}},
 		};
 
 		static const uint32 Indices[] =
@@ -363,13 +520,17 @@ namespace shz
 			VBData.DataSize = sizeof(Verts);
 
 			m_CreateInfo.pDevice->CreateBuffer(VBDesc, &VBData, &outMesh.VertexBuffer);
-			if (!outMesh.VertexBuffer) return false;
+			if (!outMesh.VertexBuffer)
+			{
+				return MeshHandle{};
+			}
 		}
 
-		// IB (section 1개)
+		// IB (one section)
 		MeshSection sec;
 		sec.NumIndices = _countof(Indices);
 		sec.IndexType = INDEX_TYPE_UINT32;
+		sec.StartIndex = 0;
 
 		{
 			BufferDesc IBDesc;
@@ -383,12 +544,20 @@ namespace shz
 			IBData.DataSize = sizeof(Indices);
 
 			m_CreateInfo.pDevice->CreateBuffer(IBDesc, &IBData, &sec.IndexBuffer);
-			if (!sec.IndexBuffer) return false;
+			if (!sec.IndexBuffer)
+			{
+				return MeshHandle{};
+			}
 		}
 
 		outMesh.Sections.clear();
 		outMesh.Sections.push_back(sec);
-		return true;
+
+		m_MeshTable.emplace(handle, std::move(outMesh));
+		return handle;
 	}
+
+
+	
 
 } // namespace shz
