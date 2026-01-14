@@ -27,7 +27,7 @@
     <ClInclude Include="Public\StaticMeshRenderData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Material.h">
+    <ClInclude Include="Public\MaterialInstance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\ViewFamily.h">

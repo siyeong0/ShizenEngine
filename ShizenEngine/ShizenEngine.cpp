@@ -3,86 +3,103 @@
 
 namespace shz
 {
-	SampleBase* CreateSample()
-	{
-		return new ShizenEngine();
-	}
+    SampleBase* CreateSample()
+    {
+        return new ShizenEngine();
+    }
 
-	void ShizenEngine::Initialize(const SampleInitInfo& InitInfo)
-	{
-		SampleBase::Initialize(InitInfo);
+    void ShizenEngine::Initialize(const SampleInitInfo& InitInfo)
+    {
+        SampleBase::Initialize(InitInfo);
 
-		// Renderer 생성/초기화
-		m_pRenderer = std::make_unique<Renderer>();
+        // 1) AssetManager (CPU assets owner)
+        m_pAssetManager = std::make_unique<AssetManager>();
 
-		RendererCreateInfo rendererCreateInfo = {};
-		rendererCreateInfo.pEngineFactory = m_pEngineFactory;
-		rendererCreateInfo.pDevice = m_pDevice;
-		rendererCreateInfo.pImmediateContext = m_pImmediateContext;
-		rendererCreateInfo.pDeferredContexts = m_pDeferredContexts;
-		rendererCreateInfo.pSwapChain = m_pSwapChain;
-		rendererCreateInfo.pImGui = m_pImGui;
-		rendererCreateInfo.BackBufferWidth = m_pSwapChain->GetDesc().Width;
-		rendererCreateInfo.BackBufferHeight = m_pSwapChain->GetDesc().Height;
+        // 2) Renderer
+        m_pRenderer = std::make_unique<Renderer>();
 
-		m_pRenderer->Initialize(rendererCreateInfo);
+        RendererCreateInfo rendererCreateInfo = {};
+        rendererCreateInfo.pEngineFactory = m_pEngineFactory;
+        rendererCreateInfo.pDevice = m_pDevice;
+        rendererCreateInfo.pImmediateContext = m_pImmediateContext;
+        rendererCreateInfo.pDeferredContexts = m_pDeferredContexts;
+        rendererCreateInfo.pSwapChain = m_pSwapChain;
+        rendererCreateInfo.pImGui = m_pImGui;
+        rendererCreateInfo.BackBufferWidth = m_pSwapChain->GetDesc().Width;
+        rendererCreateInfo.BackBufferHeight = m_pSwapChain->GetDesc().Height;
+        rendererCreateInfo.pAssetManager = m_pAssetManager.get(); // NEW
 
-		m_pRenderScene = std::make_unique<RenderScene>();
+        m_pRenderer->Initialize(rendererCreateInfo);
 
-		m_Camera.SetProjAttribs(0.1f, 100.0f, static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight, PI / 4.0f, SURFACE_TRANSFORM_IDENTITY);
+        m_pRenderScene = std::make_unique<RenderScene>();
 
-		m_ViewFamily.Views.push_back({});
-		m_ViewFamily.Views[0].Viewport = {};
+        m_Camera.SetProjAttribs(
+            0.1f,
+            100.0f,
+            static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight,
+            PI / 4.0f,
+            SURFACE_TRANSFORM_IDENTITY);
 
-		MeshHandle cubeHandle = m_pRenderer->CreateCubeMesh();
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  0 }, { 0,0,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
-		m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
+        m_ViewFamily.Views.push_back({});
+        m_ViewFamily.Views[0].Viewport = {};
 
-		// Assets
-		StaticMeshAsset flightHelmetMeshAsset;
-		if (!AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf", &flightHelmetMeshAsset))
-			std::cout << "Load Failed" << std::endl;
+        // 기존 테스트 큐브는 그대로 renderer-owned (asset 아님)
+        MeshHandle cubeHandle = m_pRenderer->CreateCubeMesh();
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2, -2 }, { PI / 4,0,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  0 }, { -PI / 4,0,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ -2, -2,  2 }, { 0,PI / 4,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2, -2 }, { 0,-PI / 4,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  0 }, { 0,0,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 0, -2,  2 }, { 0,0,PI / 4 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2, -2 }, { 0,0,-PI / 4 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  0 }, { PI / 4,-PI / 4,0 }, { 1,1,1 }));
+        m_pRenderScene->AddObject(cubeHandle, Matrix4x4::TRS({ 2, -2,  2 }, { 0,-PI / 4,PI / 4 }, { 1,1,1 }));
 
-		MeshHandle flightHelmetMeshHandle = m_pRenderer->CreateStaticMesh(flightHelmetMeshAsset);
+        // ------------------------------------------------------------
+        // Assets: FlightHelmet (CPU load -> AssetManager register -> Renderer create GPU mesh)
+        // ------------------------------------------------------------
+        StaticMeshAsset flightHelmetMeshAsset;
+        if (!AssimpImporter::LoadStaticMeshAsset(
+            "C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf",
+            &flightHelmetMeshAsset))
+        {
+            std::cout << "Load Failed" << std::endl;
+        }
 
-		m_HelmetId = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 8 }, { 0,0,0 }, { 5,5,5 }));
-		auto dummy = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 5, 3, 8 }, { 0,0,0 }, { 5,5,5 }));
-	}
+        // NEW: register CPU asset and get handle
+        StaticMeshAssetHandle helmetAssetHandle = m_pAssetManager->RegisterStaticMesh(flightHelmetMeshAsset);
 
-	void ShizenEngine::Render()
-	{
-		m_ViewFamily.FrameIndex++;
-		// viewFamily는 네 엔진에 이미 있던 걸 그대로 사용한다고 가정
-		// (없으면 우선 더미를 만들거나 Renderer::Render에서 무시하도록)
-		m_pRenderer->BeginFrame();
-		m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
-		m_pRenderer->EndFrame();
+        // Renderer now takes asset handle
+        MeshHandle flightHelmetMeshHandle = m_pRenderer->CreateStaticMesh(helmetAssetHandle);
 
-		// 샘플이 직접 Clear/Draw 하던 코드 제거!
-		// (Clear + Draw는 Renderer 내부에서 처리)
-	}
+        m_HelmetId = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 0, 0, 8 }, { 0,0,0 }, { 5,5,5 }));
+        auto dummy = m_pRenderScene->AddObject(flightHelmetMeshHandle, Matrix4x4::TRS({ 5, 3, 8 }, { 0,0,0 }, { 5,5,5 }));
+        (void)dummy;
+    }
 
-	void ShizenEngine::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
-	{
-		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
+    void ShizenEngine::Render()
+    {
+        m_ViewFamily.FrameIndex++;
 
-		float dt = static_cast<float>(ElapsedTime);
+        m_pRenderer->BeginFrame();
+        m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
+        m_pRenderer->EndFrame();
+    }
 
-		m_Camera.Update(m_InputController, dt);
+    void ShizenEngine::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
+    {
+        SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
 
-		m_ViewFamily.DeltaTime = dt;
-		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
-		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
+        float dt = static_cast<float>(ElapsedTime);
 
+        m_Camera.Update(m_InputController, dt);
 
-		m_pRenderScene->SetObjectTransform(m_HelmetId, Matrix4x4::TRS({ 0, 0, 8 }, { 0,static_cast<float>(CurrTime),0 }, { 5,5,5 }));
-	}
+        m_ViewFamily.DeltaTime = dt;
+        m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
+        m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
 
+        m_pRenderScene->SetObjectTransform(
+            m_HelmetId,
+            Matrix4x4::TRS({ 0, 0, 8 }, { 0,static_cast<float>(CurrTime),0 }, { 5,5,5 }));
+    }
 } // namespace shz

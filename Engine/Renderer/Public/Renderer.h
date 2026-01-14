@@ -1,14 +1,12 @@
 #pragma once
-#pragma once
 #include <vector>
 #include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
-
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/Renderer/Public/Handles.h"
 
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
@@ -20,75 +18,98 @@
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
+
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
+// AssetManager forward
+namespace shz { class AssetManager; }
+
 namespace shz
 {
-	struct RendererCreateInfo
-	{
-		RefCntAutoPtr<IEngineFactory>  pEngineFactory;
-		RefCntAutoPtr<IRenderDevice>   pDevice;
-		RefCntAutoPtr<IDeviceContext>  pImmediateContext;
-		std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
-		RefCntAutoPtr<ISwapChain>      pSwapChain;
-		ImGuiImplShizen* pImGui = nullptr;
+    struct RendererCreateInfo
+    {
+        RefCntAutoPtr<IEngineFactory>  pEngineFactory;
+        RefCntAutoPtr<IRenderDevice>   pDevice;
+        RefCntAutoPtr<IDeviceContext>  pImmediateContext;
+        std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
+        RefCntAutoPtr<ISwapChain>      pSwapChain;
+        ImGuiImplShizen* pImGui = nullptr;
 
-		uint32 BackBufferWidth = 0;
-		uint32 BackBufferHeight = 0;
-	};
+        // NEW: AssetManager reference (not owned)
+        AssetManager* pAssetManager = nullptr;
 
-	class Renderer
-	{
-	public:
-		bool Initialize(const RendererCreateInfo& createInfo);
-		void Cleanup();
+        uint32 BackBufferWidth = 0;
+        uint32 BackBufferHeight = 0;
+    };
 
-		void OnResize(uint32 width, uint32 height);
+    class Renderer
+    {
+    public:
+        bool Initialize(const RendererCreateInfo& createInfo);
+        void Cleanup();
 
-		void BeginFrame();
-		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
-		void EndFrame();
+        void OnResize(uint32 width, uint32 height);
 
-        TextureHandle CreateTexture(const TextureAsset& asset);
-        MaterialHandle CreateMaterial(const MaterialAsset& asset);
-		MeshHandle CreateStaticMesh(const StaticMeshAsset& asset);
+        void BeginFrame();
+        void Render(const RenderScene& scene, const ViewFamily& viewFamily);
+        void EndFrame();
 
-		MeshHandle CreateCubeMesh();
+        // ----------------------------
+        // Asset-driven creation
+        // ----------------------------
+        MeshHandle CreateStaticMesh(StaticMeshAssetHandle h);
 
-	private:
-		MaterialRenderData* GetOrCreateMaterialRenderData(MaterialHandle h);
-		bool CreateBasicPSO();
-		bool CreateCubeMesh_Internal(StaticMeshRenderData& outMesh);
+        // Sample helper (still renderer-owned)
+        MeshHandle CreateCubeMesh();
 
-	private:
-		RendererCreateInfo m_CreateInfo = {};
+    private:
+        // GPU cache creation helpers
+        TextureHandle CreateTextureGPU(TextureAssetHandle h);
+        MaterialHandle CreateMaterialInstance(MaterialAssetHandle h);
 
-		uint32 m_Width = 0;
-		uint32 m_Height = 0;
+        MaterialRenderData* GetOrCreateMaterialRenderData(MaterialHandle h);
+        bool CreateBasicPSO();
 
-		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+    private:
+        RendererCreateInfo m_CreateInfo = {};
+        AssetManager* m_pAssetManager = nullptr;
 
-		RefCntAutoPtr<IBuffer> m_pFrameCB;
-		RefCntAutoPtr<IBuffer> m_pObjectCB;
-		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
+        uint32 m_Width = 0;
+        uint32 m_Height = 0;
 
-		MaterialHandle m_DefaultMaterial = {};
-		RefCntAutoPtr<ISampler> m_pDefaultSampler;
+        RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		uint32 m_NextMeshId = 1;
-		std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
+        RefCntAutoPtr<IBuffer> m_pFrameCB;
+        RefCntAutoPtr<IBuffer> m_pObjectCB;
+        RefCntAutoPtr<IPipelineState> m_pBasicPSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
+        MaterialHandle m_DefaultMaterial = {};
+        RefCntAutoPtr<ISampler> m_pDefaultSampler;
+
+        // ----------------------------
+        // GPU mesh table
+        // ----------------------------
+        uint32 m_NextMeshId = 1;
+        std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
+
+        // ----------------------------
+        // GPU texture cache (by TextureAssetHandle)
+        // ----------------------------
         uint32 m_NextTexId = 1;
-        std::unordered_map<TextureHandle, RefCntAutoPtr<ITexture>>  m_TextureTable;
+        std::unordered_map<TextureAssetHandle, TextureHandle> m_TexAssetToGpuHandle;
+        std::unordered_map<TextureHandle, RefCntAutoPtr<ITexture>> m_TextureTable;
 
-        uint m_NextMaterialId = 1;
-        std::unordered_map<MaterialHandle, Material>  m_MaterialTable;
+        // ----------------------------
+        // Runtime material instances (renderer-owned)
+        // ----------------------------
+        uint32 m_NextMaterialId = 1;
+        std::unordered_map<MaterialHandle, MaterialInstance> m_MaterialTable;
 
-		uint m_NextMatRenderDataId = 1;
-		std::unordered_map<MaterialHandle, MaterialRenderData>  m_MatRenderDataTable;
-	};
+        // Render data cache
+        std::unordered_map<MaterialHandle, MaterialRenderData> m_MatRenderDataTable;
+    };
 } // namespace shz

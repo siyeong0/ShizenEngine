@@ -26,6 +26,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)FileStream.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FlagEnum.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FormatString.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Handle.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)InterfaceID.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)IMemoryAllocator.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Object.h" />

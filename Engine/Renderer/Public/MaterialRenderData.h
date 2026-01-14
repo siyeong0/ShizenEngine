@@ -4,7 +4,8 @@
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
-#include "Engine/Renderer/Public/Material.h"
+#include "Engine/Renderer/Public/MaterialInstance.h"
+#include "Engine/Renderer/Public/Handles.h"
 
 // RHI forward decls
 namespace shz
