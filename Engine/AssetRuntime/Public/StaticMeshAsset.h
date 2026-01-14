@@ -4,7 +4,6 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-
 #include "Engine/AssetRuntime/Public/MaterialAsset.h"
 
 namespace shz
@@ -12,19 +11,12 @@ namespace shz
 	// ------------------------------------------------------------
 	// StaticMeshAsset
 	// - CPU-side static mesh asset data (no GPU/RHI dependency).
-	// - Filled by importers (e.g., Assimp).
-	// - Consumed by Renderer to create StaticMeshRenderData.
+	// - Stored as SoA for easy vertex stream split later.
+	// - Importers may still feed AoS (Vertex) and we deinterleave.
 	// ------------------------------------------------------------
 	class StaticMeshAsset final // TODO: Inherit IAssetObject?
 	{
 	public:
-		struct Vertex final
-		{
-			float3 Position = float3(0.0f, 0.0f, 0.0f);
-			float3 Normal = float3(0.0f, 1.0f, 0.0f);
-			float2 TexCoords = float2(0.0f, 0.0f);
-		};
-
 		struct Section final
 		{
 			uint32 FirstIndex = 0;
@@ -56,8 +48,13 @@ namespace shz
 		// ------------------------------------------------------------
 		// Geometry setters
 		// ------------------------------------------------------------
+		void ReserveVertices(uint32 count);
 
-		void SetVertices(std::vector<Vertex>&& vertices) { m_Vertices = std::move(vertices); }
+		void SetPositions(std::vector<float3>&& positions) { m_Positions = std::move(positions); }
+		void SetNormals(std::vector<float3>&& normals) { m_Normals = std::move(normals); }
+		void SetTangents(std::vector<float3>&& tangents) { m_Tangents = std::move(tangents); }
+		void SetTexCoords(std::vector<float2>&& texCoords) { m_TexCoords = std::move(texCoords); }
+
 		void SetIndicesU32(std::vector<uint32>&& indices);
 		void SetIndicesU16(std::vector<uint16>&& indices);
 
@@ -74,8 +71,6 @@ namespace shz
 		// Materials (slots)
 		// ------------------------------------------------------------
 
-		// Material slots are owned by this mesh asset.
-		// Section.MaterialSlot indexes into this array.
 		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
 
 		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
@@ -83,15 +78,17 @@ namespace shz
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		// Returns nullptr if slot index is out of range.
 		MaterialAsset* GetMaterialSlot(uint32 slot) noexcept;
 		const MaterialAsset* GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
-		// Geometry getters
+		// Geometry getters (SoA)
 		// ------------------------------------------------------------
 
-		const std::vector<Vertex>& GetVertices() const noexcept { return m_Vertices; }
+		const std::vector<float3>& GetPositions() const noexcept { return m_Positions; }
+		const std::vector<float3>& GetNormals() const noexcept { return m_Normals; }
+		const std::vector<float3>& GetTangents() const noexcept { return m_Tangents; }
+		const std::vector<float2>& GetTexCoords() const noexcept { return m_TexCoords; }
 
 		VALUE_TYPE GetIndexType() const noexcept { return m_IndexType; }
 
@@ -100,12 +97,10 @@ namespace shz
 		const std::vector<uint32>& GetIndicesU32() const noexcept { return m_IndicesU32; }
 		const std::vector<uint16>& GetIndicesU16() const noexcept { return m_IndicesU16; }
 
-		// Raw index buffer pointer + size in bytes (for upload).
-		// Returns nullptr if indices are not present.
 		const void* GetIndexData() const noexcept;
 		uint32 GetIndexDataSizeBytes() const noexcept;
 
-		uint32 GetVertexCount() const noexcept { return static_cast<uint32>(m_Vertices.size()); }
+		uint32 GetVertexCount() const noexcept { return static_cast<uint32>(m_Positions.size()); }
 		uint32 GetIndexCount() const noexcept;
 
 		// ------------------------------------------------------------
@@ -115,24 +110,14 @@ namespace shz
 		bool IsValid() const noexcept;
 		bool HasCPUData() const noexcept;
 
-		// Computes mesh bounds from vertex positions.
-		// Also fills section bounds if sections exist.
 		void RecomputeBounds();
-
 		const Box& GetBounds() const noexcept { return m_Bounds; }
 
 		// ------------------------------------------------------------
 		// Memory policy
 		// ------------------------------------------------------------
 
-		// Strip CPU geometry after GPU upload, but keep:
-		// - sections
-		// - bounds
-		// - metadata
-		// - material slots
 		void StripCPUData();
-
-		// Clears all data, including sections, bounds, and material slots.
 		void Clear();
 
 	private:
@@ -142,15 +127,18 @@ namespace shz
 		std::string m_Name;
 		std::string m_SourcePath;
 
-		std::vector<Vertex> m_Vertices;
+		// SoA vertex attributes
+		std::vector<float3> m_Positions;
+		std::vector<float3> m_Normals;
+		std::vector<float3> m_Tangents;
+		std::vector<float2> m_TexCoords;
 
+		// Indices
 		VALUE_TYPE m_IndexType = VT_UINT32;
 		std::vector<uint32> m_IndicesU32;
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-
-		// Owned material slots for this mesh.
 		std::vector<MaterialAsset> m_MaterialSlots;
 
 		Box m_Bounds = {};

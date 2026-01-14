@@ -287,7 +287,6 @@ namespace shz
 	// ------------------------------------------------------------
 	// AssimpImporter
 	// ------------------------------------------------------------
-
 	bool AssimpImporter::LoadStaticMeshAsset(
 		const std::string& filePath,
 		StaticMeshAsset* pOutMesh,
@@ -310,22 +309,19 @@ namespace shz
 		const aiScene* scene = importer.ReadFile(filePath.c_str(), flags);
 		if (scene == nullptr)
 		{
-			if (outError)
-				*outError = MakeError("Assimp ReadFile failed", importer.GetErrorString());
+			if (outError) *outError = MakeError("Assimp ReadFile failed", importer.GetErrorString());
 			return false;
 		}
 
 		if ((scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene->mRootNode == nullptr)
 		{
-			if (outError)
-				*outError = MakeError("Assimp scene incomplete", importer.GetErrorString());
+			if (outError) *outError = MakeError("Assimp scene incomplete", importer.GetErrorString());
 			return false;
 		}
 
 		if (scene->mNumMeshes == 0)
 		{
-			if (outError)
-				*outError = "Assimp: scene has no meshes.";
+			if (outError) *outError = "Assimp: scene has no meshes.";
 			return false;
 		}
 
@@ -343,7 +339,6 @@ namespace shz
 				ImportOneMaterial(mat, i, filePath, materials[i]);
 			}
 
-			// Requires: StaticMeshAsset::SetMaterialSlots(std::vector<MaterialAsset>&&)
 			pOutMesh->SetMaterialSlots(std::move(materials));
 		}
 
@@ -358,7 +353,9 @@ namespace shz
 			{
 				const aiMesh* mesh = scene->mMeshes[m];
 				if (mesh != nullptr)
+				{
 					totalVertexCount += mesh->mNumVertices;
+				}
 			}
 		}
 		else
@@ -366,66 +363,93 @@ namespace shz
 			totalVertexCount = scene->mMeshes[0]->mNumVertices;
 		}
 
+		pOutMesh->ReserveVertices(totalVertexCount);
+
 		const VALUE_TYPE indexType = CanUseU16Indices(totalVertexCount) ? VT_UINT16 : VT_UINT32;
 
-		// Initialize index storage
+		// Initialize index storage (keeps your existing pattern)
 		if (indexType == VT_UINT32)
+		{
 			pOutMesh->SetIndicesU32({});
+		}
 		else
+		{
 			pOutMesh->SetIndicesU16({});
+		}
+
+		// Indices accessors (non-const)
+		auto& idx32 = pOutMesh->GetIndicesU32();
+		auto& idx16 = pOutMesh->GetIndicesU16();
+
+		auto pushIndex = [&](uint32 idx)
+		{
+			if (indexType == VT_UINT32)
+			{
+				idx32.push_back(idx);
+			}
+			else
+			{
+				idx16.push_back(static_cast<uint16>(idx));
+			}
+		};
 
 		// ------------------------------------------------------------
-		// Import meshes (merge into one VB + per-mesh sections)
+		// Import meshes (SoA)
 		// ------------------------------------------------------------
 
-		std::vector<StaticMeshAsset::Vertex> vertices;
-		vertices.reserve(totalVertexCount);
+		std::vector<float3> positions;
+		std::vector<float3> normals;
+		std::vector<float3> tangents;
+		std::vector<float2> texCoords;
+
+		positions.reserve(totalVertexCount);
+		normals.reserve(totalVertexCount);
+		tangents.reserve(totalVertexCount);
+		texCoords.reserve(totalVertexCount);
 
 		std::vector<StaticMeshAsset::Section> sections;
 		sections.reserve(options.MergeMeshes ? scene->mNumMeshes : 1);
 
-		// NOTE:
-		// Assumes StaticMeshAsset provides non-const accessors:
-		//   std::vector<uint32>& GetIndicesU32()
-		//   std::vector<uint16>& GetIndicesU16()
-		auto& idx32 = pOutMesh->GetIndicesU32();
-		auto& idx16 = pOutMesh->GetIndicesU16();
-
-		auto PushIndex = [&](uint32 idx)
-		{
-			if (indexType == VT_UINT32)
-				idx32.push_back(idx);
-			else
-				idx16.push_back(static_cast<uint16>(idx));
-		};
-
 		auto ImportMeshAsSection = [&](const aiMesh* mesh) -> bool
 		{
 			if (mesh == nullptr)
+			{
 				return true;
+			}
 
 			if (!mesh->HasPositions())
+			{
 				return false;
+			}
 
-			const uint32 baseVertex = static_cast<uint32>(vertices.size());
+			const uint32 baseVertex = static_cast<uint32>(positions.size());
 			const uint32 vertexCount = mesh->mNumVertices;
 
-			// Vertices
+			// Assimp tangents require aiProcess_CalcTangentSpace in flags.
+			const bool hasNormals = mesh->HasNormals();
+			const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
+			const bool hasUV0 = mesh->HasTextureCoords(0);
+
+			// Vertices (SoA push in lockstep to keep sizes identical)
 			for (uint32 v = 0; v < vertexCount; ++v)
 			{
-				StaticMeshAsset::Vertex vert{};
-
 				const aiVector3D& p = mesh->mVertices[v];
-				vert.Position = float3(p.x, p.y, p.z) * options.UniformScale;
+				positions.push_back(float3(p.x, p.y, p.z) * options.UniformScale);
 
-				if (mesh->HasNormals())
-					vert.Normal = ToFloat3(mesh->mNormals[v]);
+				if (hasNormals)
+					normals.push_back(ToFloat3(mesh->mNormals[v]));
+				else
+					normals.push_back(float3(0.0f, 1.0f, 0.0f));
 
-				// UV0 (Assimp stores as aiVector3D)
-				if (mesh->HasTextureCoords(0))
-					vert.TexCoords = ToFloat2(mesh->mTextureCoords[0][v]);
+				if (hasTangents)
+					tangents.push_back(ToFloat3(mesh->mTangents[v]));
+				else
+					tangents.push_back(float3(0.0f, 0.0f, 1.0f));
 
-				vertices.push_back(vert);
+				if (hasUV0)
+					texCoords.push_back(ToFloat2(mesh->mTextureCoords[0][v]));
+				else
+					texCoords.push_back(float2(0.0f, 0.0f));
 			}
 
 			// Section
@@ -447,9 +471,9 @@ namespace shz
 				const uint32 i1 = baseVertex + face.mIndices[1];
 				const uint32 i2 = baseVertex + face.mIndices[2];
 
-				PushIndex(i0);
-				PushIndex(i1);
-				PushIndex(i2);
+				pushIndex(i0);
+				pushIndex(i1);
+				pushIndex(i2);
 				indexCount += 3;
 			}
 
@@ -482,7 +506,14 @@ namespace shz
 			}
 		}
 
-		pOutMesh->SetVertices(std::move(vertices));
+		// ------------------------------------------------------------
+		// Commit to asset (SoA)
+		// ------------------------------------------------------------
+
+		pOutMesh->SetPositions(std::move(positions));
+		pOutMesh->SetNormals(std::move(normals));
+		pOutMesh->SetTangents(std::move(tangents));
+		pOutMesh->SetTexCoords(std::move(texCoords));
 		pOutMesh->SetSections(std::move(sections));
 
 		// Bounds (mesh + sections)
@@ -491,10 +522,11 @@ namespace shz
 		if (!pOutMesh->IsValid())
 		{
 			if (outError)
-				*outError = "Assimp: imported mesh is invalid (empty vertices/indices or inconsistent sections/material slots).";
+				*outError = "Assimp: imported mesh is invalid (empty vertices/indices or inconsistent attributes/sections/material slots).";
 			return false;
 		}
 
 		return true;
 	}
+
 } // namespace shz

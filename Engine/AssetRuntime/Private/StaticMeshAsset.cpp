@@ -7,6 +7,17 @@
 namespace shz
 {
 	// ------------------------------------------------------------
+	// Geometry setters
+	// ------------------------------------------------------------
+	void StaticMeshAsset::ReserveVertices(uint32 count)
+	{
+		m_Positions.reserve(count);
+		m_Normals.reserve(count);
+		m_Tangents.reserve(count);
+		m_TexCoords.reserve(count);
+	}
+
+	// ------------------------------------------------------------
 	// Indices
 	// ------------------------------------------------------------
 
@@ -90,8 +101,14 @@ namespace shz
 
 	bool StaticMeshAsset::IsValid() const noexcept
 	{
-		if (m_Vertices.empty())
+		if (m_Positions.empty())
 			return false;
+
+		// Enforce attribute array size consistency (for your current "simple" mesh format).
+		const size_t vtxCount = m_Positions.size();
+		if (m_Normals.size() != vtxCount)  return false;
+		if (m_Tangents.size() != vtxCount) return false;
+		if (m_TexCoords.size() != vtxCount) return false;
 
 		if (GetIndexCount() == 0)
 			return false;
@@ -119,7 +136,7 @@ namespace shz
 
 	bool StaticMeshAsset::HasCPUData() const noexcept
 	{
-		return !m_Vertices.empty() && (GetIndexCount() != 0);
+		return !m_Positions.empty() && (GetIndexCount() != 0);
 	}
 
 	// ------------------------------------------------------------
@@ -128,7 +145,7 @@ namespace shz
 
 	void StaticMeshAsset::RecomputeBounds()
 	{
-		if (m_Vertices.empty())
+		if (m_Positions.empty())
 		{
 			m_Bounds = Box{};
 			for (Section& sec : m_Sections)
@@ -148,10 +165,8 @@ namespace shz
 			-std::numeric_limits<float>::infinity(),
 			-std::numeric_limits<float>::infinity());
 
-		for (const Vertex& v : m_Vertices)
+		for (const float3& p : m_Positions)
 		{
-			const float3& p = v.Position;
-
 			if (p.x < minV.x) minV.x = p.x;
 			if (p.y < minV.y) minV.y = p.y;
 			if (p.z < minV.z) minV.z = p.z;
@@ -161,9 +176,6 @@ namespace shz
 			if (p.z > maxV.z) maxV.z = p.z;
 		}
 
-		// NOTE:
-		// If your Box is not constructed as Box(min, max),
-		// update this line accordingly.
 		m_Bounds = Box(minV, maxV);
 
 		recomputeSectionBounds();
@@ -217,10 +229,10 @@ namespace shz
 			for (uint32 i = sec.FirstIndex; i < end; ++i)
 			{
 				const uint32 idx = GetIndexAt(i);
-				if (idx >= static_cast<uint32>(m_Vertices.size()))
+				if (idx >= static_cast<uint32>(m_Positions.size()))
 					continue;
 
-				const float3& p = m_Vertices[idx].Position;
+				const float3& p = m_Positions[idx];
 
 				if (p.x < minV.x) minV.x = p.x;
 				if (p.y < minV.y) minV.y = p.y;
@@ -241,8 +253,17 @@ namespace shz
 
 	void StaticMeshAsset::StripCPUData()
 	{
-		m_Vertices.clear();
-		m_Vertices.shrink_to_fit();
+		m_Positions.clear();
+		m_Positions.shrink_to_fit();
+
+		m_Normals.clear();
+		m_Normals.shrink_to_fit();
+
+		m_Tangents.clear();
+		m_Tangents.shrink_to_fit();
+
+		m_TexCoords.clear();
+		m_TexCoords.shrink_to_fit();
 
 		m_IndicesU32.clear();
 		m_IndicesU32.shrink_to_fit();
@@ -256,7 +277,11 @@ namespace shz
 		m_Name.clear();
 		m_SourcePath.clear();
 
-		m_Vertices.clear();
+		m_Positions.clear();
+		m_Normals.clear();
+		m_Tangents.clear();
+		m_TexCoords.clear();
+
 		m_IndicesU32.clear();
 		m_IndicesU16.clear();
 		m_Sections.clear();
