@@ -39,9 +39,6 @@
     <ClInclude Include="Public\MaterialRenderData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Handles.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

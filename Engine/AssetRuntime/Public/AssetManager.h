@@ -1,29 +1,23 @@
 // AssetManager.h
 #pragma once
 #include <unordered_map>
+#include <memory>
+#include <type_traits>
 
 #include "Primitives/BasicTypes.h"
-
-#include "Engine/AssetRuntime/Public/AssetHandles.h"
-#include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/Public/AssetId.h"
+#include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
 {
 	// ------------------------------------------------------------
-	// AssetManager
-	// - CPU-side registry/cache for assets (no GPU/RHI dependency).
-	// - Responsibilities (MVP):
-	//   * Register assets (by path or by value)
-	//   * Deduplicate by "key" (default: normalized path)
-	//   * Provide stable AssetHandles
-	//   * Query assets back by handle
+	// AssetManager (single map)
+	// - Stores ALL assets in one registry: AssetId -> AssetObject
+	// - Typed access via custom TypeId (no RTTI).
 	//
 	// Notes:
-	// - This does NOT load GPU resources.
-	// - You can later expand:
-	//   * async loading, hot-reload, cooked packages, GUIDs, etc.
+	// - Register copies the asset into heap storage (unique_ptr).
+	// - AssetId MUST be globally unique and stable for the asset.
 	// ------------------------------------------------------------
 	class AssetManager final
 	{
@@ -34,68 +28,173 @@ namespace shz
 		~AssetManager() = default;
 
 		// --------------------------------------------------------
-		// Register by value
-		// - Copies the asset into the registry.
-		// - If "key" already exists, returns existing handle.
+		// Register (by value copy)
+		// - If same AssetId already exists, returns existing id.
+		// - Requires: T derives AssetObject
 		// --------------------------------------------------------
-		TextureAssetHandle    RegisterTexture(const TextureAsset& asset);
-		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset);
-		StaticMeshAssetHandle RegisterStaticMesh(const StaticMeshAsset& asset);
+		template<typename T>
+		AssetId Register(const T& asset)
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			if (!asset.IsValid())
+				return {};
+
+			const AssetId id = asset.GetId();
+			if (!id.IsValid())
+				return {};
+
+			auto it = m_Assets.find(id);
+			if (it != m_Assets.end())
+			{
+				// Optional: type check (debug-time safety)
+				ASSERT(it->second && it->second->GetTypeId() == GetAssetTypeId<T>(),
+					"AssetId collision across different asset types.");
+				return id;
+			}
+
+			m_Assets.emplace(id, std::make_unique<T>(asset));
+			return id;
+		}
 
 		// --------------------------------------------------------
-		// Lookup by handle
-		// - Returns nullptr if handle invalid or not found.
-		//
-		// IMPORTANT:
-		// - You currently return references and ASSERT on invalid.
-		// - Keep that policy for now (matches your engine style).
+		// Register (take ownership)
+		// - Preferred when loading/parsing assets dynamically.
 		// --------------------------------------------------------
-		const TextureAsset& GetTexture(TextureAssetHandle h) const noexcept;
-		const MaterialAsset& GetMaterial(MaterialAssetHandle h) const noexcept;
-		const StaticMeshAsset& GetStaticMesh(StaticMeshAssetHandle h) const noexcept;
+		template<typename T>
+		AssetId Register(std::unique_ptr<T> pAsset)
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			if (!pAsset || !pAsset->IsValid())
+				return {};
+
+			const AssetId id = pAsset->GetId();
+			if (!id.IsValid())
+				return {};
+
+			auto it = m_Assets.find(id);
+			if (it != m_Assets.end())
+			{
+				ASSERT(it->second && it->second->GetTypeId() == GetAssetTypeId<T>(),
+					"AssetId collision across different asset types.");
+				return id;
+			}
+
+			m_Assets.emplace(id, std::move(pAsset));
+			return id;
+		}
 
 		// --------------------------------------------------------
-		// Lookup handle by key/path
+		// Get (typed) - assert policy
 		// --------------------------------------------------------
-		TextureAssetHandle     FindTextureById(const AssetId& id) const noexcept;
-		MaterialAssetHandle    FindMaterialById(const AssetId& id) const noexcept;
-		StaticMeshAssetHandle  FindStaticMeshById(const AssetId& id) const noexcept;
+		template<typename T>
+		const T& Get(const AssetId& id) const noexcept
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			auto it = m_Assets.find(id);
+			ASSERT(it != m_Assets.end() && it->second, "Invalid AssetId.");
+			ASSERT(it->second->GetTypeId() == GetAssetTypeId<T>(), "Asset type mismatch.");
+
+			return *static_cast<const T*>(it->second.get());
+		}
+
+		template<typename T>
+		T& Get(const AssetId& id) noexcept
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			auto it = m_Assets.find(id);
+			ASSERT(it != m_Assets.end() && it->second, "Invalid AssetId.");
+			ASSERT(it->second->GetTypeId() == GetAssetTypeId<T>(), "Asset type mismatch.");
+
+			return *static_cast<T*>(it->second.get());
+		}
+
+		// --------------------------------------------------------
+		// TryGet (typed) - returns nullptr on failure
+		// --------------------------------------------------------
+		template<typename T>
+		const T* TryGet(const AssetId& id) const noexcept
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			auto it = m_Assets.find(id);
+			if (it == m_Assets.end() || !it->second)
+				return nullptr;
+
+			if (it->second->GetTypeId() != GetAssetTypeId<T>())
+				return nullptr;
+
+			return static_cast<const T*>(it->second.get());
+		}
+
+		template<typename T>
+		T* TryGet(const AssetId& id) noexcept
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			auto it = m_Assets.find(id);
+			if (it == m_Assets.end() || !it->second)
+				return nullptr;
+
+			if (it->second->GetTypeId() != GetAssetTypeId<T>())
+				return nullptr;
+
+			return static_cast<T*>(it->second.get());
+		}
+
+		// --------------------------------------------------------
+		// FindById
+		// - In this design, AssetId is already the key.
+		// - This returns id if exists, otherwise {}.
+		// --------------------------------------------------------
+		AssetId FindById(const AssetId& id) const noexcept
+		{
+			return (m_Assets.find(id) != m_Assets.end()) ? id : AssetId{};
+		}
 
 		// --------------------------------------------------------
 		// Remove / Clear
 		// --------------------------------------------------------
-		bool RemoveTexture(TextureAssetHandle h);
-		bool RemoveMaterial(MaterialAssetHandle h);
-		bool RemoveStaticMesh(StaticMeshAssetHandle h);
+		bool Remove(const AssetId& id)
+		{
+			return (m_Assets.erase(id) > 0);
+		}
 
-		void Clear();
+		void Clear()
+		{
+			m_Assets.clear();
+		}
 
 		// --------------------------------------------------------
 		// Stats
+		// - Total count across all asset types.
+		// - Typed count requires scanning (O(N)).
 		// --------------------------------------------------------
-		uint32 GetTextureCount() const noexcept { return static_cast<uint32>(m_Textures.size()); }
-		uint32 GetMaterialCount() const noexcept { return static_cast<uint32>(m_Materials.size()); }
-		uint32 GetStaticMeshCount() const noexcept { return static_cast<uint32>(m_StaticMeshes.size()); }
+		uint32 GetTotalCount() const noexcept
+		{
+			return static_cast<uint32>(m_Assets.size());
+		}
+
+		template<typename T>
+		uint32 GetCount() const noexcept
+		{
+			static_assert(std::is_base_of_v<AssetObject, T>, "T must derive from AssetObject.");
+
+			const AssetTypeId typeId = GetAssetTypeId<T>();
+			uint32 count = 0;
+			for (const auto& kv : m_Assets)
+			{
+				if (kv.second && kv.second->GetTypeId() == typeId)
+					++count;
+			}
+			return count;
+		}
 
 	private:
-		TextureAssetHandle    allocateTextureHandle() noexcept { return TextureAssetHandle{ m_NextTextureId++ }; }
-		MaterialAssetHandle   allocateMaterialHandle() noexcept { return MaterialAssetHandle{ m_NextMaterialId++ }; }
-		StaticMeshAssetHandle allocateStaticMeshHandle() noexcept { return StaticMeshAssetHandle{ m_NextStaticMeshId++ }; }
-
-	private:
-		// Handle -> asset (registry storage)
-		std::unordered_map<TextureAssetHandle, TextureAsset>    m_Textures;
-		std::unordered_map<MaterialAssetHandle, MaterialAsset>   m_Materials;
-		std::unordered_map<StaticMeshAssetHandle, StaticMeshAsset> m_StaticMeshes;
-
-		// Key -> handle (dedup / lookup)
-		std::unordered_map<AssetId, TextureAssetHandle>    m_TextureKeyToHandle;
-		std::unordered_map<AssetId, MaterialAssetHandle>   m_MaterialKeyToHandle;
-		std::unordered_map<AssetId, StaticMeshAssetHandle> m_StaticMeshKeyToHandle;
-
-		uint32 m_NextTextureId = 1;
-		uint32 m_NextMaterialId = 1;
-		uint32 m_NextStaticMeshId = 1;
+		std::unordered_map<AssetId, std::unique_ptr<AssetObject>> m_Assets;
 	};
 
 } // namespace shz

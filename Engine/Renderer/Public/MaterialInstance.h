@@ -3,8 +3,10 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/Public/AssetHandles.h" 
-#include "Engine/Renderer/Public/Handles.h"
+
+#include "Engine/AssetRuntime/Public/AssetId.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/TextureAsset.h"
 
 namespace shz
 {
@@ -18,7 +20,7 @@ namespace shz
     // ------------------------------------------------------------
     // MaterialInstance
     // - Runtime-side instance (CPU-side, no GPU dependency).
-    // - References a parent material asset by handle (does NOT own/copy it).
+    // - References a parent material asset by AssetId (does NOT own/copy it).
     // - Stores optional overrides (texture asset refs + scalar/vector params).
     // ------------------------------------------------------------
     class MaterialInstance final
@@ -26,7 +28,7 @@ namespace shz
     public:
         MaterialInstance() = default;
 
-        explicit MaterialInstance(MaterialAssetHandle parent) noexcept
+        explicit MaterialInstance(AssetId parent) noexcept
             : m_Parent(parent)
         {
         }
@@ -82,12 +84,12 @@ namespace shz
         // --------------------------------------------------------
         // Parent
         // --------------------------------------------------------
-        void SetParent(MaterialAssetHandle parent) noexcept { m_Parent = parent; }
-        MaterialAssetHandle GetParent() const noexcept { return m_Parent; }
-        bool HasParent() const noexcept { return m_Parent.IsValid(); }
+        void SetParent(AssetId parent) noexcept { m_Parent = parent; }
+        AssetId GetParent() const noexcept { return m_Parent; }
+        bool HasParent() const noexcept { return true; // TODO: }
 
         // --------------------------------------------------------
-        // Texture overrides (asset references)
+        // Texture overrides (asset references, AssetId)
         // --------------------------------------------------------
         void ClearAllTextureOverrides() noexcept
         {
@@ -98,11 +100,11 @@ namespace shz
             m_EmissiveTexture.reset();
         }
 
-        void OverrideBaseColorTexture(TextureAssetHandle tex) noexcept { m_BaseColorTexture = tex; }
-        void OverrideNormalTexture(TextureAssetHandle tex) noexcept { m_NormalTexture = tex; }
-        void OverrideMetallicRoughnessTexture(TextureAssetHandle tex) noexcept { m_MetallicRoughnessTexture = tex; }
-        void OverrideAmbientOcclusionTexture(TextureAssetHandle tex) noexcept { m_AmbientOcclusionTexture = tex; }
-        void OverrideEmissiveTexture(TextureAssetHandle tex) noexcept { m_EmissiveTexture = tex; }
+        void OverrideBaseColorTexture(AssetId tex) noexcept { m_BaseColorTexture = tex; }
+        void OverrideNormalTexture(AssetId tex) noexcept { m_NormalTexture = tex; }
+        void OverrideMetallicRoughnessTexture(AssetId tex) noexcept { m_MetallicRoughnessTexture = tex; }
+        void OverrideAmbientOcclusionTexture(AssetId tex) noexcept { m_AmbientOcclusionTexture = tex; }
+        void OverrideEmissiveTexture(AssetId tex) noexcept { m_EmissiveTexture = tex; }
 
         void ClearBaseColorTextureOverride() noexcept { m_BaseColorTexture.reset(); }
         void ClearNormalTextureOverride() noexcept { m_NormalTexture.reset(); }
@@ -116,11 +118,11 @@ namespace shz
         bool HasAmbientOcclusionTextureOverride() const noexcept { return m_AmbientOcclusionTexture.has_value(); }
         bool HasEmissiveTextureOverride() const noexcept { return m_EmissiveTexture.has_value(); }
 
-        TextureAssetHandle GetBaseColorTextureOverrideOrInvalid() const noexcept { return m_BaseColorTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetNormalTextureOverrideOrInvalid() const noexcept { return m_NormalTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetMetallicRoughnessTextureOverrideOrInvalid() const noexcept { return m_MetallicRoughnessTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetAmbientOcclusionTextureOverrideOrInvalid() const noexcept { return m_AmbientOcclusionTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetEmissiveTextureOverrideOrInvalid() const noexcept { return m_EmissiveTexture.value_or(TextureAssetHandle{}); }
+        AssetId GetBaseColorTextureOverrideOrInvalid() const noexcept { return m_BaseColorTexture.value_or(AssetId{}); }
+        AssetId GetNormalTextureOverrideOrInvalid() const noexcept { return m_NormalTexture.value_or(AssetId{}); }
+        AssetId GetMetallicRoughnessTextureOverrideOrInvalid() const noexcept { return m_MetallicRoughnessTexture.value_or(AssetId{}); }
+        AssetId GetAmbientOcclusionTextureOverrideOrInvalid() const noexcept { return m_AmbientOcclusionTexture.value_or(AssetId{}); }
+        AssetId GetEmissiveTextureOverrideOrInvalid() const noexcept { return m_EmissiveTexture.value_or(AssetId{}); }
 
         // --------------------------------------------------------
         // Parameter overrides
@@ -178,15 +180,15 @@ namespace shz
         }
 
     private:
-        // Parent asset reference
-        MaterialAssetHandle m_Parent = {};
+        // Parent asset reference (MaterialAsset id)
+        AssetId m_Parent = {};
 
-        // Texture overrides (asset refs)
-        std::optional<TextureAssetHandle> m_BaseColorTexture;
-        std::optional<TextureAssetHandle> m_NormalTexture;
-        std::optional<TextureAssetHandle> m_MetallicRoughnessTexture;
-        std::optional<TextureAssetHandle> m_AmbientOcclusionTexture;
-        std::optional<TextureAssetHandle> m_EmissiveTexture;
+        // Texture overrides (TextureAsset ids)
+        std::optional<AssetId> m_BaseColorTexture;
+        std::optional<AssetId> m_NormalTexture;
+        std::optional<AssetId> m_MetallicRoughnessTexture;
+        std::optional<AssetId> m_AmbientOcclusionTexture;
+        std::optional<AssetId> m_EmissiveTexture;
 
         // Parameter overrides
         std::optional<float3> m_BaseColorFactor;

@@ -152,7 +152,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\Handles.h" />
     <ClInclude Include="Public\MaterialInstance.h" />
     <ClInclude Include="Public\MaterialRenderData.h" />
     <ClInclude Include="Public\Renderer.h" />

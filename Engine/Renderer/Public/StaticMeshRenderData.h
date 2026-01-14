@@ -13,7 +13,7 @@ namespace shz
 
 		VALUE_TYPE IndexType = VT_UINT32;
 
-		MaterialHandle Material = {};
+		Handle<MaterialInstance> Material = {};
 
 		Box LocalBounds;
 	};
