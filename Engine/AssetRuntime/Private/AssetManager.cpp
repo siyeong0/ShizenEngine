@@ -96,12 +96,12 @@ namespace shz
 		return h;
 	}
 
-	MaterialAssetHandle AssetManager::RegisterMaterial(const MaterialAsset& asset)
+	MaterialAssetHandle AssetManager::RegisterMaterial(const MaterialAsset& asset, uint32 subId) 
 	{
 		if (!asset.IsValid())
 			return {};
 
-		const std::string key = MakeKeyFromPath(asset.GetSourcePath());
+		const std::string key = MakeKeyFromPath(asset.GetSourcePath() + std::to_string(subId)); // TODO: 지금은 sub ID 필요. AssetObject마다 Unqique eky를 가지게
 		if (!key.empty())
 		{
 			auto it = m_MaterialKeyToHandle.find(key);
@@ -138,43 +138,6 @@ namespace shz
 			m_StaticMeshKeyToHandle.emplace(key, h);
 
 		return h;
-	}
-
-	// ------------------------------------------------------------
-	// Register (by path)
-	// ------------------------------------------------------------
-	TextureAssetHandle AssetManager::RegisterTexturePath(const std::string& sourcePath, bool isSRGB)
-	{
-		if (sourcePath.empty())
-			return {};
-
-		TextureAsset a;
-		a.SetSourcePath(sourcePath);
-
-		// If your TextureAsset doesn't have SetIsSRGB, remove/adapt this.
-		a.SetIsSRGB(isSRGB);
-
-		return RegisterTexture(a);
-	}
-
-	MaterialAssetHandle AssetManager::RegisterMaterialPath(const std::string& sourcePath)
-	{
-		if (sourcePath.empty())
-			return {};
-
-		MaterialAsset a;
-		a.SetSourcePath(sourcePath);
-		return RegisterMaterial(a);
-	}
-
-	StaticMeshAssetHandle AssetManager::RegisterStaticMeshPath(const std::string& sourcePath)
-	{
-		if (sourcePath.empty())
-			return {};
-
-		StaticMeshAsset a;
-		a.SetSourcePath(sourcePath);
-		return RegisterStaticMesh(a);
 	}
 
 	// ------------------------------------------------------------

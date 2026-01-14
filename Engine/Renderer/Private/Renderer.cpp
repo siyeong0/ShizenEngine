@@ -310,6 +310,7 @@ namespace shz
 		{
 			outMesh.Sections.reserve(assetSections.size());
 
+			int slotIndex = 0;
 			for (const StaticMeshAsset::Section& asec : assetSections)
 			{
 				if (asec.IndexCount == 0)
@@ -343,7 +344,7 @@ namespace shz
 
 				// section material: register MaterialAsset (by value) -> create renderer instance
 				const MaterialAsset& slotMat = meshAsset.GetMaterialSlot(asec.MaterialSlot);
-				MaterialAssetHandle hMatAsset = m_pAssetManager->RegisterMaterial(slotMat);
+				MaterialAssetHandle hMatAsset = m_pAssetManager->RegisterMaterial(slotMat, slotIndex++);
 				sec.Material = CreateMaterialInstance(hMatAsset);
 
 				outMesh.Sections.push_back(sec);

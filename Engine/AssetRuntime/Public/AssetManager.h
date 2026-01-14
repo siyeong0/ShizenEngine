@@ -41,23 +41,8 @@ namespace shz
 		// - If "key" already exists, returns existing handle.
 		// --------------------------------------------------------
 		TextureAssetHandle    RegisterTexture(const TextureAsset& asset);
-		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset);
+		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset, uint32 subId);
 		StaticMeshAssetHandle RegisterStaticMesh(const StaticMeshAsset& asset);
-
-		// --------------------------------------------------------
-		// Register by path
-		// - Convenience helpers that build a minimal asset from path.
-		// - If already registered, returns existing handle.
-		//
-		// NOTE:
-		// - Texture/Material/StaticMesh asset classes must provide
-		//   SetSourcePath() for these helpers to be meaningful.
-		// - For StaticMesh, "register by path" only registers metadata
-		//   (source path). Actual mesh import stays in AssimpImporter.
-		// --------------------------------------------------------
-		TextureAssetHandle    RegisterTexturePath(const std::string& sourcePath, bool isSRGB);
-		MaterialAssetHandle   RegisterMaterialPath(const std::string& sourcePath);
-		StaticMeshAssetHandle RegisterStaticMeshPath(const std::string& sourcePath);
 
 		// --------------------------------------------------------
 		// Lookup by handle
