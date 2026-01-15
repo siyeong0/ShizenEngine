@@ -157,6 +157,7 @@
     <ClInclude Include="Public\AssetManager.h" />
     <ClInclude Include="Public\AssetObject.h" />
     <ClInclude Include="Public\AssimpImporter.h" />
+    <ClInclude Include="Public\AssetHandles.h" />
     <ClInclude Include="Public\MaterialAsset.h" />
     <ClInclude Include="Public\StaticMeshAsset.h" />
     <ClInclude Include="Public\TextureAsset.h" />
@@ -168,6 +169,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Private\AssetManager.cpp" />
     <ClCompile Include="Private\AssetObject.cpp" />
     <ClCompile Include="Private\AssimpImporter.cpp" />
     <ClCompile Include="Private\MaterialAsset.cpp" />

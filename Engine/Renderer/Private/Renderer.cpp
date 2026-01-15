@@ -70,7 +70,7 @@ namespace shz
 			mat.OverrideRoughness(0.5f);
 			mat.OverrideMetallic(0.0f);
 
-			m_DefaultMaterial = Handle<MaterialInstance>{ m_NextMaterialId++ };
+			m_DefaultMaterial = MaterialHandle{ m_NextMaterialId++ };
 			m_MaterialTable[m_DefaultMaterial] = mat;
 		}
 
@@ -118,15 +118,17 @@ namespace shz
 	// GPU resource creation (from AssetManager-owned CPU assets)
 	// ============================================================
 
-	Handle<ITexture> Renderer::CreateTextureGPU(AssetId texId)
+	TextureHandle Renderer::CreateTextureGPU(TextureAssetHandle h)
 	{
-		// cache hit
-		auto it = m_TexAssetToGpuHandle.find(texId);
+		if (!h.IsValid())
+			return {};
+
+		// cache hit: same texture asset -> same GPU texture handle
+		auto it = m_TexAssetToGpuHandle.find(h);
 		if (it != m_TexAssetToGpuHandle.end())
 			return it->second;
 
-		// AssetManager (single-map)
-		const TextureAsset& texAsset = m_pAssetManager->Get<TextureAsset>(texId);
+		const TextureAsset& texAsset = m_pAssetManager->GetTexture(h);
 
 		TextureLoadInfo loadInfo = texAsset.BuildTextureLoadInfo();
 
@@ -139,20 +141,25 @@ namespace shz
 		if (pSRV && m_pDefaultSampler)
 			pSRV->SetSampler(m_pDefaultSampler);
 
-		Handle<ITexture> gpuHandle{ m_NextTexId++ };
+		TextureHandle gpuHandle{ m_NextTexId++ };
 		m_TextureTable[gpuHandle] = pTex;
-		m_TexAssetToGpuHandle.emplace(texId, gpuHandle);
+		m_TexAssetToGpuHandle.emplace(h, gpuHandle);
 
 		return gpuHandle;
 	}
 
-
-	Handle<MaterialInstance> Renderer::CreateMaterialInstance(AssetId matId)
+	MaterialHandle Renderer::CreateMaterialInstance(MaterialAssetHandle h)
 	{
-		const MaterialAsset& matAsset = m_pAssetManager->Get<MaterialAsset>(matId);
+		if (!h.IsValid())
+			return m_DefaultMaterial;
+
+		const MaterialAsset& matAsset = m_pAssetManager->GetMaterial(h);
 
 		MaterialInstance inst{};
 
+		// -------------------------
+		// Parameters
+		// -------------------------
 		const auto& P = matAsset.GetParams();
 
 		inst.OverrideBaseColorFactor(float3(P.BaseColor.x, P.BaseColor.y, P.BaseColor.z));
@@ -168,6 +175,9 @@ namespace shz
 
 		inst.OverrideAlphaCutoff(P.AlphaCutoff);
 
+		// -------------------------
+		// Alpha Mode
+		// -------------------------
 		switch (matAsset.GetOptions().AlphaMode)
 		{
 		case MaterialAsset::ALPHA_OPAQUE: inst.OverrideAlphaMode(MATERIAL_ALPHA_OPAQUE); break;
@@ -176,51 +186,52 @@ namespace shz
 		default:                          inst.OverrideAlphaMode(MATERIAL_ALPHA_OPAQUE); break;
 		}
 
-		// IMPORTANT:
-		// MaterialAsset가 TextureAsset를 "by value"로 들고 있다면,
-		// 그 TextureAsset를 AssetManager에 등록하고 (AssetId 반환)
-		// MaterialInstance에 "AssetId"로 저장해야 한다.
+		// -------------------------
+		// Textures
 		//
-		// 아래는 MaterialInstance가 AssetId 버전의 Override를 지원한다고 가정:
-		//  - OverrideBaseColorTexture(AssetId)
-		//  - OverrideNormalTexture(AssetId)
-		//  - OverrideMetallicRoughnessTexture(AssetId)
-		//  - OverrideEmissiveTexture(AssetId)
-
+		// NOTE:
+		// MaterialAsset currently stores TextureAsset by value.
+		// We register those TextureAssets into AssetManager and then
+		// create/cached GPU textures from TextureAssetHandle.
+		// -------------------------
 		if (matAsset.HasTexture(MaterialAsset::TEX_ALBEDO))
 		{
-			AssetId texId = m_pAssetManager->Register(matAsset.GetTexture(MaterialAsset::TEX_ALBEDO));
-			inst.OverrideBaseColorTexture(texId);
+			TextureAssetHandle hTex = m_pAssetManager->RegisterTexture(matAsset.GetTexture(MaterialAsset::TEX_ALBEDO));
+			inst.OverrideBaseColorTexture(hTex);
 		}
 
 		if (matAsset.HasTexture(MaterialAsset::TEX_NORMAL))
 		{
-			AssetId texId = m_pAssetManager->Register(matAsset.GetTexture(MaterialAsset::TEX_NORMAL));
-			inst.OverrideNormalTexture(texId);
+			TextureAssetHandle hTex = m_pAssetManager->RegisterTexture(matAsset.GetTexture(MaterialAsset::TEX_NORMAL));
+			inst.OverrideNormalTexture(hTex);
 		}
 
 		if (matAsset.HasTexture(MaterialAsset::TEX_ORM))
 		{
-			AssetId texId = m_pAssetManager->Register(matAsset.GetTexture(MaterialAsset::TEX_ORM));
-			inst.OverrideMetallicRoughnessTexture(texId);
+			TextureAssetHandle hTex = m_pAssetManager->RegisterTexture(matAsset.GetTexture(MaterialAsset::TEX_ORM));
+			inst.OverrideMetallicRoughnessTexture(hTex);
 		}
 
 		if (matAsset.HasTexture(MaterialAsset::TEX_EMISSIVE))
 		{
-			AssetId texId = m_pAssetManager->Register(matAsset.GetTexture(MaterialAsset::TEX_EMISSIVE));
-			inst.OverrideEmissiveTexture(texId);
+			TextureAssetHandle hTex = m_pAssetManager->RegisterTexture(matAsset.GetTexture(MaterialAsset::TEX_EMISSIVE));
+			inst.OverrideEmissiveTexture(hTex);
 		}
 
-		Handle<MaterialInstance> hInst{ m_NextMaterialId++ };
+		MaterialHandle hInst{ m_NextMaterialId++ };
 		m_MaterialTable[hInst] = inst;
+
 		return hInst;
 	}
 
-	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(AssetId meshId)
+	MeshHandle Renderer::CreateStaticMesh(StaticMeshAssetHandle h)
 	{
-		const StaticMeshAsset& meshAsset = m_pAssetManager->Get<StaticMeshAsset>(meshId);
+		if (!h.IsValid())
+			return {};
 
-		Handle<StaticMeshRenderData> handle{ m_NextMeshId++ };
+		const StaticMeshAsset& meshAsset = m_pAssetManager->GetStaticMesh(h);
+
+		MeshHandle handle{ m_NextMeshId++ };
 
 		StaticMeshRenderData outMesh;
 
@@ -242,7 +253,9 @@ namespace shz
 		const auto& tangents = meshAsset.GetTangents();
 		const auto& uvs = meshAsset.GetTexCoords();
 
-		std::vector<SimpleVertex> vbCPU(vtxCount);
+		std::vector<SimpleVertex> vbCPU;
+		vbCPU.resize(vtxCount);
+
 		for (uint32 i = 0; i < vtxCount; ++i)
 		{
 			SimpleVertex v{};
@@ -297,6 +310,7 @@ namespace shz
 		{
 			outMesh.Sections.reserve(assetSections.size());
 
+			int slotIndex = 0;
 			for (const StaticMeshAsset::Section& asec : assetSections)
 			{
 				if (asec.IndexCount == 0)
@@ -328,16 +342,17 @@ namespace shz
 				if (!CreateSectionIB(sec, pData, bytes))
 					return {};
 
-				// Material slot: register the MaterialAsset into AssetManager, get AssetId back
+				// section material: register MaterialAsset (by value) -> create renderer instance
 				const MaterialAsset& slotMat = meshAsset.GetMaterialSlot(asec.MaterialSlot);
-				AssetId matId = m_pAssetManager->Register(slotMat);
-				sec.Material = CreateMaterialInstance(matId);
+				MaterialAssetHandle hMatAsset = m_pAssetManager->RegisterMaterial(slotMat);
+				sec.Material = CreateMaterialInstance(hMatAsset);
 
 				outMesh.Sections.push_back(sec);
 			}
 		}
 		else
 		{
+			// Fallback: one section over full indices
 			MeshSection sec{};
 			sec.NumIndices = meshAsset.GetIndexCount();
 			sec.IndexType = useU32 ? VT_UINT32 : VT_UINT16;
@@ -353,7 +368,6 @@ namespace shz
 		m_MeshTable.emplace(handle, std::move(outMesh));
 		return handle;
 	}
-
 
 	// ============================================================
 	// Render
@@ -404,13 +418,13 @@ namespace shz
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
 				SET_VERTEX_BUFFERS_FLAG_RESET);
 
-			Handle<MaterialInstance> lastMat{};
+			MaterialHandle lastMat{};
 
 			for (const auto& section : mesh.Sections)
 			{
 				pCtx->SetIndexBuffer(section.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-				const Handle<MaterialInstance> matHandle = section.Material;
+				const MaterialHandle matHandle = section.Material;
 				MaterialRenderData* matRD = GetOrCreateMaterialRenderData(matHandle);
 				ASSERT(matRD != nullptr, "Material GPU Data is null.");
 
@@ -436,7 +450,7 @@ namespace shz
 	// MaterialRenderData (SRB/PSO bindings)
 	// ============================================================
 
-	MaterialRenderData* Renderer::GetOrCreateMaterialRenderData(Handle<MaterialInstance> h)
+	MaterialRenderData* Renderer::GetOrCreateMaterialRenderData(MaterialHandle h)
 	{
 		// 0) invalid guard
 		if (!h.IsValid())
@@ -451,7 +465,7 @@ namespace shz
 		auto mit = m_MaterialTable.find(h);
 		if (mit == m_MaterialTable.end())
 		{
-			ASSERT(false, "Handle<MaterialRenderData> not found in m_MaterialTable.");
+			ASSERT(false, "MaterialHandle not found in m_MaterialTable.");
 			return nullptr;
 		}
 		const MaterialInstance& MatInst = mit->second;
@@ -552,14 +566,17 @@ namespace shz
 		// 7) base color texture bind (PS)
 		ITextureView* pBaseColorSRV = s_WhiteSRV.RawPtr();
 
-		const AssetId baseColorTexId = MatInst.GetBaseColorTextureOverrideOrInvalid();
-		Handle<ITexture> texGPUHandle = CreateTextureGPU(baseColorTexId);
-		RefCntAutoPtr<ITexture> pTex = m_TextureTable[texGPUHandle];
-		if (auto* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
+		const TextureAssetHandle baseColorAssetHandle = MatInst.GetBaseColorTextureOverrideOrInvalid();
+		if (baseColorAssetHandle.IsValid())
 		{
-			if (m_pDefaultSampler)
-				pSRV->SetSampler(m_pDefaultSampler);
-			pBaseColorSRV = pSRV;
+			TextureHandle texGPUHandle = CreateTextureGPU(baseColorAssetHandle);
+			RefCntAutoPtr<ITexture> pTex = m_TextureTable[texGPUHandle];
+			if (auto* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
+			{
+				if (m_pDefaultSampler)
+					pSRV->SetSampler(m_pDefaultSampler);
+				pBaseColorSRV = pSRV;
+			}
 		}
 
 		if (auto* TexVar = RD.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
@@ -697,9 +714,9 @@ namespace shz
 	// Cube mesh (same behavior as your current sample)
 	// ============================================================
 
-	Handle<StaticMeshRenderData> Renderer::CreateCubeMesh()
+	MeshHandle Renderer::CreateCubeMesh()
 	{
-		Handle<StaticMeshRenderData> handle{ m_NextMeshId++ };
+		MeshHandle handle{ m_NextMeshId++ };
 
 		StaticMeshRenderData outMesh;
 

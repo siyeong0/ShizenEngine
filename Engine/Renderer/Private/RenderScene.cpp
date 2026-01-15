@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "RenderScene.h"
-#include "StaticMeshRenderData.h"
 
 namespace shz
 {
@@ -14,9 +13,9 @@ namespace shz
     }
 
 
-    Handle<RenderScene::RenderObject> RenderScene::AddObject(const Handle<StaticMeshRenderData>& meshHandle, const Matrix4x4& transform)
+    RenderObjectId RenderScene::AddObject(const MeshHandle& meshHandle, const Matrix4x4& transform)
     {
-        Handle<RenderScene::RenderObject> id;
+        RenderObjectId id{ m_NextObjectId++ };
         RenderObject obj;
         obj.meshHandle = meshHandle;
         obj.transform = transform;
@@ -24,41 +23,41 @@ namespace shz
         return id;
     }
 
-    void RenderScene::RemoveObject(Handle<RenderScene::RenderObject>  id)
+    void RenderScene::RemoveObject(RenderObjectId id)
     {
         m_Objects.erase(id);
     }
 
-    void RenderScene::SetObjectTransform(Handle<RenderScene::RenderObject>  id, const Matrix4x4& world)
+    void RenderScene::SetObjectTransform(RenderObjectId id, const Matrix4x4& world)
     {
         auto it = m_Objects.find(id);
         if (it != m_Objects.end())
             it->second.transform = world;
     }
 
-    void RenderScene::SetObjectMesh(Handle<RenderScene::RenderObject>  id, Handle<StaticMeshRenderData> mesh)
+    void RenderScene::SetObjectMesh(RenderObjectId id, MeshHandle mesh)
     {
         auto it = m_Objects.find(id);
         if (it != m_Objects.end())
             it->second.meshHandle = mesh;
     }
 
-    Handle<RenderScene::LightObject> RenderScene::AddLight(const LightObject& light)
+    LightId RenderScene::AddLight(const LightDesc& desc)
     {
-        Handle<RenderScene::LightObject> id{ m_NextLightId++ };
-        m_Lights.emplace(id, light);
+        LightId id{ m_NextLightId++ };
+        m_Lights.emplace(id, desc);
         return id;
     }
 
-    void RenderScene::RemoveLight(Handle<RenderScene::LightObject> id)
+    void RenderScene::RemoveLight(LightId id)
     {
         m_Lights.erase(id);
     }
 
-    void RenderScene::UpdateLight(Handle<RenderScene::LightObject> id, const LightObject& light)
+    void RenderScene::UpdateLight(LightId id, const LightDesc& desc)
     {
         auto it = m_Lights.find(id);
         if (it != m_Lights.end())
-            it->second = light;
+            it->second = desc;
     }
 } // namespace shz
