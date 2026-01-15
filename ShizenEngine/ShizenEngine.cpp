@@ -15,33 +15,6 @@ namespace shz
 	// Helpers
 	// ------------------------------------------------------------
 
-	float3 ShizenEngine::MakeAxisAngleEuler(uint32 axis, float angleRad) noexcept
-	{
-		switch (axis)
-		{
-		case 0: return float3(angleRad, 0.0f, 0.0f); // X
-		case 1: return float3(0.0f, angleRad, 0.0f); // Y
-		default:return float3(0.0f, 0.0f, angleRad); // Z
-		}
-	}
-
-	void ShizenEngine::BuildMeshPathList(std::vector<const char*>& outPaths) const
-	{
-		outPaths.clear();
-
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		/*outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
-		outPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");*/
-	}
-
 	static float computeUniformScaleToFitUnitCube(const Box& bounds, float targetSize = 1.0f) noexcept
 	{
 		const float3 size = bounds.Max - bounds.Min;
@@ -59,7 +32,7 @@ namespace shz
 	}
 
 
-	void ShizenEngine::SpawnMeshesOnXYGrid(
+	void ShizenEngine::spawnMeshesOnXYGrid(
 		const std::vector<const char*>& meshPaths,
 		float3 gridCenter,
 		float spacingX,
@@ -104,7 +77,7 @@ namespace shz
 			// --------------------------------------------------------
 			// Compute uniform scale so mesh fits inside 1x1x1
 			// --------------------------------------------------------
-			const auto bounds = cpuMesh.GetBounds(); // AABB {Min,Max} 라고 가정
+			const Box& bounds = cpuMesh.GetBounds(); // AABB {Min,Max} 라고 가정
 			const float uniform = computeUniformScaleToFitUnitCube(bounds, 1.0f);
 			entry.Scale = float3(uniform, uniform, uniform);
 
@@ -192,14 +165,25 @@ namespace shz
 		// Load mesh paths + spawn as ONE XZ grid
 		// ------------------------------------------------------------
 		std::vector<const char*> meshPaths;
-		BuildMeshPathList(meshPaths);
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
 		// XZ grid settings
 		const float3 gridCenter = float3(0.0f, 0.0f, 5.0f);
 		const float spacingX = 1.0f;
 		const float spacingY = 1.0f;
 
-		SpawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY);
+		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY);
 	}
 
 	void ShizenEngine::Render()
@@ -232,7 +216,8 @@ namespace shz
 				continue;
 
 			const float angle = t * m.RotateSpeed;
-			const float3 rot = m.BaseRotation + MakeAxisAngleEuler(m.RotateAxis, angle);
+			float3 rot = m.BaseRotation;
+			rot[m.RotateAxis] += angle;
 
 			m_pRenderScene->SetObjectTransform(m.ObjectId,Matrix4x4::TRS(m.Position, rot, m.Scale));
 		}

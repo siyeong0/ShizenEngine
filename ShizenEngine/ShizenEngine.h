@@ -42,15 +42,12 @@ namespace shz
         };
 
     private:
-        void BuildMeshPathList(std::vector<const char*>& outPaths) const;
 
-        void SpawnMeshesOnXYGrid(
+        void spawnMeshesOnXYGrid(
             const std::vector<const char*>& meshPaths,
             float3 gridCenter,
             float spacingX,
             float spacingY);
-
-        static float3 MakeAxisAngleEuler(uint32 axis, float angleRad) noexcept;
 
     private:
         std::unique_ptr<Renderer>    m_pRenderer = nullptr;

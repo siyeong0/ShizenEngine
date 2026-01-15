@@ -3630,8 +3630,7 @@ namespace shz
 			2048,  // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
 			1024,  // D3D12_DESCRIPTOR_HEAP_TYPE_RTV
 			1024   // D3D12_DESCRIPTOR_HEAP_TYPE_DSV
-		}
-		;
+		};
 
 		// The size of the GPU descriptor heap region designated to static/mutable
 		// shader resource variables.
@@ -3656,8 +3655,7 @@ namespace shz
 		{
 			16384, // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
 			1024   // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-		}
-		;
+		};
 
 		// The size of the GPU descriptor heap region designated to dynamic
 		// shader resource variables.
@@ -3676,9 +3674,8 @@ namespace shz
 		uint32 GPUDescriptorHeapDynamicSize[2]
 		{
 			8192,  // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-			1024   // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-		}
-		;
+			2048   // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+		};
 
 		// The size of the chunk that dynamic descriptor allocations manager
 		// requests from the main GPU descriptor heap.
@@ -3693,8 +3690,7 @@ namespace shz
 		{
 			256,  // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
 			32    // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-		}
-		;
+		};
 
 		// A device context uses dynamic heap when it needs to allocate temporary
 		// CPU-accessible memory to update a resource via IDeviceContext::UpdateBuffer() or
@@ -3724,8 +3720,7 @@ namespace shz
 			512, // QUERY_TYPE_TIMESTAMP
 			128, // QUERY_TYPE_PIPELINE_STATISTICS
 			256, // QUERY_TYPE_DURATION
-		}
-		;
+		};
 
 		// Path to DirectX Shader Compiler, which is required to use Shader Model 6.0+ features.
 
@@ -3902,8 +3897,7 @@ namespace shz
 		// the engine creates another one.
 		VulkanDescriptorPoolSize MainDescriptorPoolSize
 			//Max  SepSm  CmbSm  SmpImg StrImg   UB     SB    UTxB   StTxB  InptAtt  AccelSt
-		{ 8192,  1024,  8192,  8192,  1024,  4096,  4096,  1024,  1024,   256,     256 }
-		;
+		{ 8192,  1024,  8192,  8192,  1024,  4096,  4096,  1024,  1024,   256,     256 };
 
 		// Size of the dynamic descriptor pool that is used to allocate descriptor sets
 		// for dynamic variables. Every device context has its own dynamic descriptor set allocator.
@@ -3911,8 +3905,7 @@ namespace shz
 		// performs lock-free suballocations from the pool.
 		VulkanDescriptorPoolSize DynamicDescriptorPoolSize
 			//Max  SepSm  CmbSm  SmpImg StrImg   UB     SB    UTxB   StTxB  InptAtt  AccelSt
-		{ 2048,   256,  2048,  2048,   256,  1024,  1024,   256,   256,    64,      64 }
-		;
+		{ 2048,   256,  2048,  2048,   256,  1024,  1024,   256,   256,    64,      64 };
 
 		// Allocation granularity for device-local memory.
 
@@ -4027,8 +4020,7 @@ namespace shz
 			512, // QUERY_TYPE_TIMESTAMP
 			128, // QUERY_TYPE_PIPELINE_STATISTICS
 			256  // QUERY_TYPE_DURATION
-		}
-		;
+		};
 
 		// Path to DirectX Shader Compiler, which is required to use Shader Model 6.0+
 		// features when compiling shaders from HLSL.
