@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\RenderResourceCache.h" />
     <ClInclude Include="Public\MaterialInstance.h" />
     <ClInclude Include="Public\MaterialRenderData.h" />
     <ClInclude Include="Public\Renderer.h" />
@@ -169,6 +170,7 @@
     </ClCompile>
     <ClCompile Include="Private\MaterialRenderData.cpp" />
     <ClCompile Include="Private\Renderer.cpp" />
+    <ClCompile Include="Private\RenderResourceCache.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
   </ItemGroup>
   <ItemGroup>
