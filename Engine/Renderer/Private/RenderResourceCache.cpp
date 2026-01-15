@@ -582,35 +582,34 @@ namespace shz
 	MaterialRenderData* RenderResourceCache::GetOrCreateMaterialRenderData(
 		Handle<MaterialInstance> h,
 		const RefCntAutoPtr<IPipelineState>& pPSO,
-		const RefCntAutoPtr<IBuffer>& pFrameCB,
 		const RefCntAutoPtr<IBuffer>& pObjectCB,
 		IDeviceContext* pCtx)
 	{
 		if (!h.IsValid())
-		{
 			return nullptr;
-		}
 
 		const auto* InstSlot = findSlot(h, m_MaterialSlots);
 		if (!InstSlot)
 			return nullptr;
 
-		if (!pPSO || !pFrameCB || !pObjectCB || !pCtx)
-			return nullptr;
-
-		// cache hit
+		// Cache hit
 		if (auto It = m_MatRenderDataTable.find(h); It != m_MatRenderDataTable.end())
 			return &It->second;
+
+		ASSERT(pCtx, "DeviceContext is null.");
+		ASSERT(pPSO, "PSO is null.");
+		ASSERT(pObjectCB, "ObjectCB is null.");
 
 		const MaterialInstance& MatInst = InstSlot->Value.value();
 
 		// ------------------------------------------------------------
-		// Default 1x1 SRVs (created once)
+		// Helpers
 		// ------------------------------------------------------------
 		auto PackRGBA8 = [](uint8 r, uint8 g, uint8 b, uint8 a) -> uint32
 		{
 			return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
 		};
+
 		auto Create1x1Texture = [&](const char* name, uint32 rgba, RefCntAutoPtr<ITexture>& outTex) -> bool
 		{
 			if (outTex)
@@ -642,7 +641,42 @@ namespace shz
 			return (outTex != nullptr);
 		};
 
-		// Create defaults once (per RenderResourceCache instance)
+		std::vector<StateTransitionDesc> Barriers;
+		Barriers.reserve(32);
+
+		auto AddTexToSRVState = [&](ITextureView* pView)
+		{
+			if (!pCtx || !pView)
+				return;
+
+			ITexture* pTex = pView->GetTexture();
+			if (!pTex)
+				return;
+
+			Barriers.push_back(StateTransitionDesc{
+				pTex,
+				RESOURCE_STATE_UNKNOWN,
+				RESOURCE_STATE_SHADER_RESOURCE,
+				STATE_TRANSITION_FLAG_UPDATE_STATE
+				});
+		};
+
+		auto AddBufToCBState = [&](IBuffer* pBuf)
+		{
+			if (!pCtx || !pBuf)
+				return;
+
+			Barriers.push_back(StateTransitionDesc{
+				pBuf,
+				RESOURCE_STATE_UNKNOWN,
+				RESOURCE_STATE_CONSTANT_BUFFER,
+				STATE_TRANSITION_FLAG_UPDATE_STATE
+				});
+		};
+
+		// ------------------------------------------------------------
+		// Default 1x1 textures (created once per cache)
+		// ------------------------------------------------------------
 		if (!m_DefaultTextures.White)
 		{
 			// BaseColor default: white
@@ -654,7 +688,6 @@ namespace shz
 				return nullptr;
 
 			// MetallicRoughness default (glTF): roughness=1 (G=255), metallic=0 (B=0)
-			// R is unused in your shader, but keep 0. A=255
 			if (!Create1x1Texture("DefaultMR1x1", PackRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness))
 				return nullptr;
 
@@ -665,9 +698,16 @@ namespace shz
 			// Emissive default: 0
 			if (!Create1x1Texture("DefaultEmissive1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive))
 				return nullptr;
+
+			// Force states + update tracking (important for render pass usage)
+			AddTexToSRVState(m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			AddTexToSRVState(m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			AddTexToSRVState(m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			AddTexToSRVState(m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			AddTexToSRVState(m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 		}
 
-		// Default SRVs (raw pointers are OK as long as textures are owned by m_DefaultTextures)
+		// Default SRVs
 		ITextureView* pDefaultBaseColorSRV = m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 		ITextureView* pDefaultNormalSRV = m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 		ITextureView* pDefaultMRSRV = m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
@@ -681,7 +721,7 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Read instance parameters (fallbacks)
+		// Instance parameters
 		// ------------------------------------------------------------
 		const float3 BaseColor = MatInst.GetBaseColorFactor(float3(1, 1, 1));
 		const float  Opacity = MatInst.GetOpacity(1.0f);
@@ -714,11 +754,10 @@ namespace shz
 		// ------------------------------------------------------------
 		// Bind constant buffers
 		// ------------------------------------------------------------
-		ASSERT(pObjectCB);
 		if (auto* Var = RD.pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
-		{
 			Var->Set(pObjectCB);
-		}
+
+		AddBufToCBState(pObjectCB);
 
 		// ------------------------------------------------------------
 		// Resolve texture SRVs (override -> GPU texture -> SRV; else default)
@@ -743,33 +782,38 @@ namespace shz
 			if (!pTex)
 				return pDefaultSRV;
 
-			if (ITextureView* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
-			{
-				InOutFlags |= FlagBit;
-				return pSRV;
-			}
+			ITextureView* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			if (!pSRV)
+				return pDefaultSRV;
 
-			return pDefaultSRV;
+			// Force SRV state + tracking update for render pass usage.
+			AddTexToSRVState(pSRV);
+
+			InOutFlags |= FlagBit;
+			return pSRV;
 		};
 
 		uint32 Flags = 0;
 
 		ITextureView* pBaseColorSRV =
 			ResolveSRV(MatInst.GetBaseColorTextureOverride(), pDefaultBaseColorSRV, hlsl::MAT_HAS_BASECOLOR, Flags);
-
 		ITextureView* pNormalSRV =
 			ResolveSRV(MatInst.GetNormalTextureOverride(), pDefaultNormalSRV, hlsl::MAT_HAS_NORMAL, Flags);
-
 		ITextureView* pMRSRV =
 			ResolveSRV(MatInst.GetMetallicRoughnessTextureOverride(), pDefaultMRSRV, hlsl::MAT_HAS_MR, Flags);
-
 		ITextureView* pAOSRV =
 			ResolveSRV(MatInst.GetAmbientOcclusionTextureOverride(), pDefaultAOSRV, hlsl::MAT_HAS_AO, Flags);
-
 		ITextureView* pEmissiveSRV =
 			ResolveSRV(MatInst.GetEmissiveTextureOverride(), pDefaultEmissiveSRV, hlsl::MAT_HAS_EMISSIVE, Flags);
 
 		RD.MaterialFlags = Flags;
+
+		// Even if SRVs are defaults, make sure their states are correct and tracking is updated.
+		AddTexToSRVState(pBaseColorSRV);
+		AddTexToSRVState(pNormalSRV);
+		AddTexToSRVState(pMRSRV);
+		AddTexToSRVState(pAOSRV);
+		AddTexToSRVState(pEmissiveSRV);
 
 		// ------------------------------------------------------------
 		// Bind PS textures
@@ -781,7 +825,7 @@ namespace shz
 				Var->Set(pSRV);
 				return true;
 			}
-			std::cerr << "PS SRB texture variable\"" << Name << "\"not found." << std::endl;
+			std::cerr << "PS SRB texture variable \"" << Name << "\" not found.\n";
 			return false;
 		};
 
@@ -806,6 +850,18 @@ namespace shz
 		{
 			ASSERT(false, "PS SRB variable 'MATERIAL_CONSTANTS' not found.");
 			return nullptr;
+		}
+
+		AddBufToCBState(RD.pMaterialCB);
+
+		// ------------------------------------------------------------
+		// Apply all resource state transitions now (RenderPass-safe)
+		// - This must happen OUTSIDE render pass.
+		// - Updates internal state tracking to avoid VERIFY errors.
+		// ------------------------------------------------------------
+		if (pCtx && !Barriers.empty())
+		{
+			pCtx->TransitionResourceStates(static_cast<uint32>(Barriers.size()), Barriers.data());
 		}
 
 		auto [InsIt, Ok] = m_MatRenderDataTable.emplace(h, std::move(RD));

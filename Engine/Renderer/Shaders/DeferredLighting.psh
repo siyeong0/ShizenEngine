@@ -1,0 +1,103 @@
+// DeferredLighting.psh
+#include "HLSL_Structures.hlsli"
+
+cbuffer FRAME_CONSTANTS
+{
+    FrameConstants g_FrameCB;
+};
+
+// GBuffer inputs
+Texture2D<float4> g_GBuffer0; // Albedo.rgb, Opacity.a
+Texture2D<float4> g_GBuffer1; // Normal packed 0..1 (world)
+Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, Reserved
+Texture2D<float4> g_GBuffer3; // Emissive.rgb, unused
+
+SamplerState g_LinearClampSampler;
+
+struct PSInput
+{
+    float4 Pos : SV_POSITION;
+    float2 UV : TEXCOORD0;
+};
+
+static float Pow5(float x)
+{
+    float x2 = x * x;
+    return x2 * x2 * x;
+}
+
+static float3 UnpackNormal01(float3 n01)
+{
+    return normalize(n01 * 2.0 - 1.0);
+}
+
+void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
+{
+    float2 uv = PSIn.UV;
+
+    // Fetch GBuffer
+    float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
+    float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
+    float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
+    float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
+
+    float3 baseColor = gb0.rgb;
+    float opacity = gb0.a;
+
+    float3 N = UnpackNormal01(gb1.xyz);
+
+    OutColor = float4(N * 0.5 + 0.5, 1.0);
+    return;
+    
+    float metallic = saturate(gb2.x);
+    float roughness = saturate(gb2.y);
+    float ao = saturate(gb2.z);
+
+    float3 emissive = gb3.rgb;
+
+    // ------------------------------------------------------------
+    // Reconstruct view direction (no world pos in GBuffer right now)
+    // ------------------------------------------------------------
+    // You didn't store depth or world position in GBuffer in this simplified path.
+    // So we can't do physically correct V. We'll fake V as "camera forward".
+    //
+    // Later upgrade options:
+    //  1) Store depth in separate buffer and reconstruct world pos
+    //  2) Store view-space position (expensive)
+    //  3) Store linear depth in gb2.w etc.
+    //
+    // For now, approximate V as facing -Z in view space (or any stable vector).
+    float3 V = float3(0.0, 0.0, 1.0);
+
+    // ------------------------------------------------------------
+    // Fixed directional light
+    // ------------------------------------------------------------
+    const float3 LightDirWS = normalize(float3(0.1, -1.0, 0.1)); // light direction in world
+    const float3 LightColor = float3(1.0, 1.0, 1.0);
+    const float LightIntensity = 1.0;
+
+    float3 L = normalize(-LightDirWS); // surface->light dir
+    float NdotL = saturate(dot(N, L));
+
+    // ------------------------------------------------------------
+    // Cheap PBR-ish shading (not full GGX; minimal + stable)
+    // ------------------------------------------------------------
+    float3 diffuse = baseColor * NdotL;
+
+    // Spec: roughness -> shininess (same idea you used)
+    float shininess = lerp(256.0, 8.0, roughness);
+    float3 H = normalize(L + V);
+    float specTerm = pow(saturate(dot(N, H)), shininess);
+
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
+    float VdotH = saturate(dot(V, H));
+    float3 F = F0 + (1.0 - F0) * Pow5(1.0 - VdotH);
+
+    float3 specular = F * specTerm;
+
+    float3 ambient = baseColor * 0.03;
+
+    float3 lit = (ambient + (diffuse + specular) * LightColor * LightIntensity) * ao + emissive;
+
+    OutColor = float4(lit, opacity);
+}

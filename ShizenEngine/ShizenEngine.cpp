@@ -254,27 +254,33 @@ namespace shz
 		// ------------------------------------------------------------
 		// Debug cubes (optional)
 		// ------------------------------------------------------------
-		StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
-		auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
-		m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
-		auto dummy = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
+		//StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
+		//auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
+		//m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
+		//auto dummy1 = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
+
+		StaticMeshAsset floorMeshAsset;
+		AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx", &floorMeshAsset);
+		auto floorMeshHandle = m_pAssetManager->RegisterStaticMesh(floorMeshAsset);
+		m_FloorHandle = m_pRenderer->CreateStaticMesh(floorMeshHandle);
+		auto dummy2 = m_pRenderScene->AddObject(m_FloorHandle, Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0, 1.0f, 1.0f }));
 
 		// ------------------------------------------------------------
 		// Load mesh paths + spawn as ONE XZ grid
 		// ------------------------------------------------------------
 		std::vector<const char*> meshPaths;
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
 		// XZ grid settings
 		const float3 gridCenter = float3(0.0f, 1.0f, 5.0f);

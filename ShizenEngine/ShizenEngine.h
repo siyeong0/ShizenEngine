@@ -59,6 +59,7 @@ namespace shz
 
         // Debug cube (renderer-owned)
         Handle<StaticMeshRenderData> m_CubeHandle = {};
+        Handle<StaticMeshRenderData> m_FloorHandle = {};
 
         // Loaded meshes (1 object per path)
         std::vector<LoadedMesh> m_Loaded = {};

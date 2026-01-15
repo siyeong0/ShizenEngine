@@ -74,7 +74,16 @@ namespace shz
 		bool DestroyTextureGPU(Handle<ITexture> h);
 
 	private:
-		bool CreateBasicPSO();
+
+		void renderForward(const RenderScene& scene, const ViewFamily& viewFamily);
+
+		bool createBasicPSO();
+		bool createGBufferPSO();
+		bool createLightingPSO();
+		bool createPostPSO();
+
+		bool createDeferredTargets();
+		bool createDeferredRenderPasses();
 
 	private:
 		RendererCreateInfo m_CreateInfo = {};
@@ -89,8 +98,45 @@ namespace shz
 		RefCntAutoPtr<IBuffer> m_pObjectCB;
 
 		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
 		std::unique_ptr<RenderResourceCache> m_pRenderResourceCache;
+
+		// ------------------------------------------------------------
+// Deferred resources (GBuffer -> Lighting -> Post)
+// ------------------------------------------------------------
+		static constexpr uint32 kGBufferCount = 4;
+
+		RefCntAutoPtr<ITexture>     m_GBufferTex[kGBufferCount];
+		RefCntAutoPtr<ITextureView> m_GBufferRTV[kGBufferCount];
+		RefCntAutoPtr<ITextureView> m_GBufferSRV[kGBufferCount];
+
+		RefCntAutoPtr<ITexture>     m_LightingTex;
+		RefCntAutoPtr<ITextureView> m_LightingRTV;
+		RefCntAutoPtr<ITextureView> m_LightingSRV;
+
+		// Render passes + framebuffers
+		RefCntAutoPtr<IRenderPass>  m_RP_GBuffer;
+		RefCntAutoPtr<IFramebuffer> m_FB_GBuffer;
+
+		RefCntAutoPtr<IRenderPass>  m_RP_Lighting;
+		RefCntAutoPtr<IFramebuffer> m_FB_Lighting;
+
+		RefCntAutoPtr<IRenderPass>  m_RP_Post;
+		RefCntAutoPtr<IFramebuffer> m_FB_Post; // rebuilt every frame (backbuffer changes)
+
+		// G-Buffer PSO
+		RefCntAutoPtr<IPipelineState> m_pGBufferPSO;
+
+		// Fullscreen PSOs
+
+		RefCntAutoPtr<IPipelineState> m_PSO_Lighting;
+		RefCntAutoPtr<IShaderResourceBinding> m_SRB_Lighting;
+
+		RefCntAutoPtr<IPipelineState> m_PSO_Post;
+		RefCntAutoPtr<IShaderResourceBinding> m_SRB_Post;
+
+		// Bookkeeping
+		uint32 m_DeferredWidth = 0;
+		uint32 m_DeferredHeight = 0;
 	};
 } // namespace shz

@@ -63,6 +63,12 @@
   <ItemGroup>
     <FxCompile Include="Shaders\Basic.psh" />
     <FxCompile Include="Shaders\Basic.vsh" />
+    <FxCompile Include="Shaders\GBuffer.vsh" />
+    <FxCompile Include="Shaders\GBuffer.psh" />
+    <FxCompile Include="Shaders\DeferredLighting.vsh" />
+    <FxCompile Include="Shaders\DeferredLighting.psh" />
+    <FxCompile Include="Shaders\PostCopy.psh" />
+    <FxCompile Include="Shaders\PostCopy.vsh" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\HLSL_Structures.hlsli" />

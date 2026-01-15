@@ -63,7 +63,6 @@ namespace shz
 		MaterialRenderData* GetOrCreateMaterialRenderData(
 			Handle<MaterialInstance> h,
 			const RefCntAutoPtr<IPipelineState>& pPSO,
-			const RefCntAutoPtr<IBuffer>& pFrameCB,
 			const RefCntAutoPtr<IBuffer>& pObjectCB,
 			IDeviceContext* pCtx);
 

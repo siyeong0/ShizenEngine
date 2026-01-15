@@ -409,7 +409,8 @@ namespace shz
         }
     }
 
-    void CreateTextureFromFile(const Char* FilePath,
+    void CreateTextureFromFile(
+        const Char* FilePath,
         const TextureLoadInfo& TexLoadInfo,
         IRenderDevice* pDevice,
         ITexture** ppTexture)

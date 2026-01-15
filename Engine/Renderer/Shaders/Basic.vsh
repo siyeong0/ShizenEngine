@@ -30,10 +30,6 @@ struct VSOutput
 
 void main(in VSInput VSIn, out VSOutput VSOut)
 {
-    //VSOut.WorldPos = mul(float4(VSIn.Pos, 1), g_ObjectCB.World).xyz;
-    //float4 clip = mul(float4(VSOut.WorldPos, 1.0), g_FrameCB.ViewProj);
-    //VSOut.Pos = clip;
-    
     float4 worldPos4 = mul(float4(VSIn.Pos, 1.0), g_ObjectCB.World);
     VSOut.WorldPos = worldPos4.xyz;
     float4 clip = mul(worldPos4, g_FrameCB.ViewProj);
