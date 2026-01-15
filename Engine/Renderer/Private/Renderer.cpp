@@ -30,7 +30,7 @@ namespace shz
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : swapChainDesc.Height;
 
 		// Shader source factory
-		m_CreateInfo.pEngineFactory->CreateDefaultShaderSourceStreamFactory(m_CreateInfo.ShaderRootDir,&m_pShaderSourceFactory);
+		m_CreateInfo.pEngineFactory->CreateDefaultShaderSourceStreamFactory(m_CreateInfo.ShaderRootDir, &m_pShaderSourceFactory);
 
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants CB", &m_pFrameCB);
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants CB", &m_pObjectCB);
@@ -41,30 +41,15 @@ namespace shz
 			return false;
 		}
 
-		// Default sampler
-		{
-			SamplerDesc samplerDesc = {};
-			samplerDesc.MinFilter = FILTER_TYPE_LINEAR;
-			samplerDesc.MagFilter = FILTER_TYPE_LINEAR;
-			samplerDesc.MipFilter = FILTER_TYPE_LINEAR;
-			samplerDesc.AddressU = TEXTURE_ADDRESS_WRAP;
-			samplerDesc.AddressV = TEXTURE_ADDRESS_WRAP;
-			samplerDesc.AddressW = TEXTURE_ADDRESS_WRAP;
-
-			m_CreateInfo.pDevice->CreateSampler(samplerDesc, &m_pDefaultSampler);
-			ASSERT(m_pDefaultSampler, "Failed to create default sampler.");
-		}
-
 		// Create resource cache (owned)
 		{
-			ASSERT(m_pRenderResourceCache, "Resource cache already created.");
+			ASSERT(!m_pRenderResourceCache, "Resource cache already created.");
 
 			m_pRenderResourceCache = std::make_unique<RenderResourceCache>();
 
 			RenderResourceCacheCreateInfo RCI = {};
 			RCI.pDevice = m_CreateInfo.pDevice;
 			RCI.pAssetManager = m_pAssetManager;
-			RCI.pDefaultSampler = m_pDefaultSampler;
 
 			if (!m_pRenderResourceCache->Initialize(RCI))
 			{
@@ -85,7 +70,6 @@ namespace shz
 		m_pObjectCB.Release();
 
 		m_pShaderSourceFactory.Release();
-		m_pDefaultSampler.Release();
 
 		m_pAssetManager = nullptr;
 		m_CreateInfo = {};
@@ -110,12 +94,6 @@ namespace shz
 	{
 		ASSERT(m_pRenderResourceCache, "RenderResourceCache is null.");
 		return m_pRenderResourceCache->CreateStaticMesh(h);
-	}
-
-	Handle<StaticMeshRenderData> Renderer::CreateCubeMesh()
-	{
-		ASSERT(m_pRenderResourceCache, "RenderResourceCache is null.");
-		return m_pRenderResourceCache->CreateCubeMesh();
 	}
 
 	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> h)
@@ -163,13 +141,31 @@ namespace shz
 			return;
 		}
 
-		const View& view = viewFamily.Views[0];
-		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-
 		// Frame CB update
 		{
 			MapHelper<hlsl::FrameConstants> cbData(pImmediateContext, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
-			cbData->ViewProj = viewProj;
+
+			const View& view = viewFamily.Views[0];
+			cbData->View = view.ViewMatrix;
+			cbData->Proj = view.ProjMatrix;
+			cbData->ViewProj = view.ViewMatrix * view.ProjMatrix;
+			
+			cbData->CameraPosition = { view.ViewMatrix._m03, view.ViewMatrix._m13, view.ViewMatrix._m23 };
+
+			cbData->ViewportSize = {
+				static_cast<float>(view.Viewport.right - view.Viewport.left),
+				static_cast<float>(view.Viewport.bottom - view.Viewport.top)
+			};
+			cbData->InvViewportSize = {
+				1.f / cbData->ViewportSize.x,
+				1.f / cbData->ViewportSize.y
+			};
+
+			cbData->NearPlane = view.NearPlane;
+			cbData->FarPlane = view.FarPlane;
+
+			cbData->DeltaTime = viewFamily.DeltaTime;
+			cbData->CurrTime = viewFamily.CurrentTime;
 		}
 
 		ASSERT(m_pBasicPSO, "BasicPSO is null. Initialize it.");
@@ -194,6 +190,7 @@ namespace shz
 			{
 				MapHelper<hlsl::ObjectConstants> CBData(pImmediateContext, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
 				CBData->World = renderObject->Transform;
+				CBData->WorldInvTranspose = renderObject->Transform.Inversed().Transposed();
 			}
 
 			IBuffer* pVBs[] = { pMesh->VertexBuffer };
@@ -208,7 +205,13 @@ namespace shz
 
 				const Handle<MaterialInstance> matHandle = section.Material;
 
-				MaterialRenderData* matRD = m_pRenderResourceCache->GetOrCreateMaterialRenderData(matHandle, m_pBasicPSO, m_pFrameCB, m_pObjectCB);
+				MaterialRenderData* matRD =
+					m_pRenderResourceCache->GetOrCreateMaterialRenderData(
+						matHandle,
+						m_pBasicPSO,
+						m_pFrameCB,
+						m_pObjectCB,
+						pImmediateContext);
 				ASSERT(matRD, "Failed to get or create material render data.");
 
 				if (matHandle != lastMat)
@@ -216,6 +219,22 @@ namespace shz
 					pImmediateContext->SetPipelineState(matRD->pPSO);
 					pImmediateContext->CommitShaderResources(matRD->pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 					lastMat = matHandle;
+				}
+
+				// Upload material constants
+				{
+					MapHelper<hlsl::MaterialConstants> CB(pImmediateContext, matRD->pMaterialCB, MAP_WRITE, MAP_FLAG_DISCARD);
+
+					CB->BaseColorFactor = matRD->BaseColor;
+					CB->EmissiveFactor = matRD->Emissive;
+					CB->MetallicFactor = matRD->Metallic;
+
+					CB->RoughnessFactor = matRD->Roughness;
+					CB->NormalScale = matRD->NormalScale;
+					CB->OcclusionStrength = matRD->OcclusionStrength;
+					CB->AlphaCutoff = matRD->AlphaCutoff;
+
+					CB->Flags = matRD->MaterialFlags;
 				}
 
 				DrawIndexedAttribs DIA = {};
@@ -249,25 +268,25 @@ namespace shz
 		gp.RTVFormats[0] = scDesc.ColorBufferFormat;
 		gp.DSVFormat = scDesc.DepthBufferFormat;
 		gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+		gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
 		gp.RasterizerDesc.FrontCounterClockwise = true;
 		gp.DepthStencilDesc.DepthEnable = true;
 
-		LayoutElement LlayoutElems[] =
+		LayoutElement layoutElems[] =
 		{
 			LayoutElement{0, 0, 3, VT_FLOAT32, false},
 			LayoutElement{1, 0, 2, VT_FLOAT32, false},
 			LayoutElement{2, 0, 3, VT_FLOAT32, false},
 			LayoutElement{3, 0, 3, VT_FLOAT32, false},
 		};
-		gp.InputLayout.LayoutElements = LlayoutElems;
-		gp.InputLayout.NumElements = _countof(LlayoutElems);
+		gp.InputLayout.LayoutElements = layoutElems;
+		gp.InputLayout.NumElements = _countof(layoutElems);
 
 		ShaderCreateInfo shaderCreateInfo = {};
 		shaderCreateInfo.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		shaderCreateInfo.EntryPoint = "main";
 		shaderCreateInfo.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-		shaderCreateInfo.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+		shaderCreateInfo.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
 
 		RefCntAutoPtr<IShader> pVS;
 		{
@@ -275,7 +294,7 @@ namespace shz
 			shaderCreateInfo.Desc.Name = "Basic VS";
 			shaderCreateInfo.Desc.ShaderType = SHADER_TYPE_VERTEX;
 			shaderCreateInfo.FilePath = "Basic.vsh";
-			shaderCreateInfo.Desc.UseCombinedTextureSamplers = true;
+			shaderCreateInfo.Desc.UseCombinedTextureSamplers = false;
 
 			pDevice->CreateShader(shaderCreateInfo, &pVS);
 			if (!pVS)
@@ -291,7 +310,7 @@ namespace shz
 			shaderCreateInfo.Desc.Name = "Basic PS";
 			shaderCreateInfo.Desc.ShaderType = SHADER_TYPE_PIXEL;
 			shaderCreateInfo.FilePath = "Basic.psh";
-			shaderCreateInfo.Desc.UseCombinedTextureSamplers = true;
+			shaderCreateInfo.Desc.UseCombinedTextureSamplers = false;
 
 			pDevice->CreateShader(shaderCreateInfo, &pPS);
 			if (!pPS)
@@ -308,12 +327,29 @@ namespace shz
 
 		ShaderResourceVariableDesc shaderResVars[] =
 		{
-			{ SHADER_TYPE_VERTEX, "FRAME_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  },
-			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC  },
-			{ SHADER_TYPE_PIXEL,  "g_BaseColorTex",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE  },
+			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS",   SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+			{ SHADER_TYPE_PIXEL,  "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+
+			{ SHADER_TYPE_PIXEL,  "g_BaseColorTex",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL,  "g_NormalTex",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL,  "g_MetallicRoughnessTex",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL,  "g_AOTex",                 SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL,  "g_EmissiveTex",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		psoCreateInfo.PSODesc.ResourceLayout.Variables = shaderResVars;
 		psoCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(shaderResVars);
+
+		SamplerDesc linearWrapSamplerDesc
+		{
+			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+		};
+		ImmutableSamplerDesc ImtblSamplers[] =
+		{
+			{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrapSamplerDesc}
+		};
+		psoCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers = ImtblSamplers;
+		psoCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
 
 		pDevice->CreateGraphicsPipelineState(psoCreateInfo, &m_pBasicPSO);
 		if (!m_pBasicPSO)
@@ -322,34 +358,12 @@ namespace shz
 			return false;
 		}
 
-		m_pBasicPSO->CreateShaderResourceBinding(&m_pBasicSRB, true);
-		if (!m_pBasicSRB)
 		{
-			ASSERT(false, "Failed to create Basic SRB.");
-			return false;
-		}
+			if (auto* Var = m_pBasicPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+				Var->Set(m_pFrameCB);
 
-		auto bindCB = [&](const char* name, IBuffer* pCB) -> bool
-		{
-			if (!pCB) return false;
-			if (IShaderResourceVariable* var = m_pBasicSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
-			{
-				var->Set(pCB);
-				return true;
-			}
-			return false;
-		};
-
-		if (!bindCB("FRAME_CONSTANTS", m_pFrameCB))
-		{
-			ASSERT(false, "Failed to bind FRAME_CONSTANTS.");
-			return false;
-		}
-
-		if (!bindCB("OBJECT_CONSTANTS", m_pObjectCB))
-		{
-			ASSERT(false, "Failed to bind OBJECT_CONSTANTS.");
-			return false;
+			if (auto* Var = m_pBasicPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+				Var->Set(m_pFrameCB);
 		}
 
 		return true;

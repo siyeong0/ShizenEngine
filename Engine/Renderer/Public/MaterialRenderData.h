@@ -48,6 +48,9 @@ namespace shz
         RefCntAutoPtr<IPipelineState> pPSO;
         RefCntAutoPtr<IShaderResourceBinding> pSRB;
 
+        RefCntAutoPtr<IBuffer> pMaterialCB;
+        uint32 MaterialFlags = 0;
+
         RefCntAutoPtr<ISampler> pDefaultSampler;
 
         // Runtime constants

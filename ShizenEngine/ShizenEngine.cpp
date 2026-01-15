@@ -113,6 +113,101 @@ namespace shz
 		}
 	}
 
+	static inline StaticMeshAsset CreateCubeStaticMeshAsset(const char* Name = "Cube")
+	{
+		StaticMeshAsset Mesh = {};
+		Mesh.SetName(Name ? std::string(Name) : std::string("Cube"));
+		Mesh.SetSourcePath("builtin://Cube");
+
+		// 24 vertices (4 per face)
+		std::vector<float3> Positions;
+		std::vector<float3> Normals;
+		std::vector<float3> Tangents;
+		std::vector<float2> UVs;
+
+		Positions.reserve(24);
+		Normals.reserve(24);
+		Tangents.reserve(24);
+		UVs.reserve(24);
+
+		auto PushFace = [&](float3 v0, float3 v1, float3 v2, float3 v3, float3 n, float3 t) // v0..v3 in CCW order
+		{
+			// UV convention:
+			// v0: (0,1), v1: (1,1), v2: (1,0), v3: (0,0)
+			Positions.push_back(v0); UVs.push_back(float2(0, 1)); Normals.push_back(n); Tangents.push_back(t);
+			Positions.push_back(v1); UVs.push_back(float2(1, 1)); Normals.push_back(n); Tangents.push_back(t);
+			Positions.push_back(v2); UVs.push_back(float2(1, 0)); Normals.push_back(n); Tangents.push_back(t);
+			Positions.push_back(v3); UVs.push_back(float2(0, 0)); Normals.push_back(n); Tangents.push_back(t);
+		};
+
+		// Cube corners (unit cube centered at origin)
+		const float3 p000 = float3(-0.5f, -0.5f, -0.5f);
+		const float3 p001 = float3(-0.5f, -0.5f, +0.5f);
+		const float3 p010 = float3(-0.5f, +0.5f, -0.5f);
+		const float3 p011 = float3(-0.5f, +0.5f, +0.5f);
+		const float3 p100 = float3(+0.5f, -0.5f, -0.5f);
+		const float3 p101 = float3(+0.5f, -0.5f, +0.5f);
+		const float3 p110 = float3(+0.5f, +0.5f, -0.5f);
+		const float3 p111 = float3(+0.5f, +0.5f, +0.5f);
+
+		// Faces (each face: 4 verts, CCW when looking at the face from outside)
+		// -Z (back)
+		PushFace(p000, p100, p110, p010, float3(0, 0, -1), float3(+1, 0, 0));
+		// +Z (front)
+		PushFace(p101, p001, p011, p111, float3(0, 0, +1), float3(+1, 0, 0));
+		// -X (left)
+		PushFace(p001, p000, p010, p011, float3(-1, 0, 0), float3(0, 0, -1));
+		// +X (right)
+		PushFace(p100, p101, p111, p110, float3(+1, 0, 0), float3(0, 0, +1));
+		// -Y (bottom)
+		PushFace(p001, p101, p100, p000, float3(0, -1, 0), float3(+1, 0, 0));
+		// +Y (top)
+		PushFace(p010, p110, p111, p011, float3(0, +1, 0), float3(+1, 0, 0));
+
+		// Indices: 6 faces * 2 triangles * 3 = 36
+		std::vector<uint32> Indices;
+		Indices.reserve(36);
+
+		for (uint32 face = 0; face < 6; ++face)
+		{
+			const uint32 base = face * 4;
+
+			Indices.push_back(base + 0);
+			Indices.push_back(base + 1);
+			Indices.push_back(base + 2);
+
+			Indices.push_back(base + 0);
+			Indices.push_back(base + 2);
+			Indices.push_back(base + 3);
+		}
+
+		Mesh.SetPositions(std::move(Positions));
+		Mesh.SetNormals(std::move(Normals));
+		Mesh.SetTangents(std::move(Tangents));
+		Mesh.SetTexCoords(std::move(UVs));
+		Mesh.SetIndicesU32(std::move(Indices));
+
+		// One section that covers the whole mesh
+		{
+			StaticMeshAsset::Section Sec = {};
+			Sec.FirstIndex = 0;
+			Sec.IndexCount = Mesh.GetIndexCount();
+			Sec.BaseVertex = 0;
+			Sec.MaterialSlot = 0;
+			Sec.LocalBounds = Box{ float3(-0.5f, -0.5f, -0.5f), float3(+0.5f, +0.5f, +0.5f) };
+
+			std::vector<StaticMeshAsset::Section> Sections;
+			Sections.push_back(Sec);
+			Mesh.SetSections(std::move(Sections));
+		}
+
+		// Bounds (if your Box ctor above is correct, this is enough)
+		// If you want robust: Mesh.RecomputeBounds();
+		Mesh.RecomputeBounds();
+
+		return Mesh;
+	}
+
 
 	// ------------------------------------------------------------
 	// Initialize
@@ -159,7 +254,10 @@ namespace shz
 		// ------------------------------------------------------------
 		// Debug cubes (optional)
 		// ------------------------------------------------------------
-		m_CubeHandle = m_pRenderer->CreateCubeMesh();
+		StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
+		auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
+		m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
+		auto dummy = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
 
 		// ------------------------------------------------------------
 		// Load mesh paths + spawn as ONE XZ grid
@@ -179,7 +277,7 @@ namespace shz
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
 		// XZ grid settings
-		const float3 gridCenter = float3(0.0f, 0.0f, 5.0f);
+		const float3 gridCenter = float3(0.0f, 1.0f, 5.0f);
 		const float spacingX = 1.0f;
 		const float spacingY = 1.0f;
 
@@ -200,26 +298,27 @@ namespace shz
 		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
 
 		const float dt = static_cast<float>(ElapsedTime);
-		(void)dt;
+		const float currTime = static_cast<float>(CurrTime);
 
 		m_Camera.Update(m_InputController, dt);
 
 		m_ViewFamily.DeltaTime = dt;
+		m_ViewFamily.CurrentTime = currTime;
 		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
 		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
-
-		const float t = static_cast<float>(CurrTime);
+		m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
+		m_ViewFamily.Views[0].FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
 
 		for (auto& m : m_Loaded)
 		{
 			if (!m.ObjectId.IsValid())
 				continue;
 
-			const float angle = t * m.RotateSpeed;
+			const float angle = currTime * m.RotateSpeed;
 			float3 rot = m.BaseRotation;
 			rot[m.RotateAxis] += angle;
 
-			m_pRenderScene->SetObjectTransform(m.ObjectId,Matrix4x4::TRS(m.Position, rot, m.Scale));
+			m_pRenderScene->SetObjectTransform(m.ObjectId, Matrix4x4::TRS(m.Position, rot, m.Scale));
 		}
 	}
 

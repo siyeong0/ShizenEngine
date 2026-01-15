@@ -114,7 +114,6 @@ namespace shz
 		if (opt.ConvertToLeftHanded)
 		{
 			flags |= aiProcess_MakeLeftHanded;
-			flags |= aiProcess_FlipWindingOrder;
 		}
 
 		return flags;

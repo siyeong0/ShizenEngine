@@ -69,6 +69,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Materials (slots)
 		// ------------------------------------------------------------
+		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
 		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
 
 		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }

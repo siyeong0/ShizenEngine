@@ -105,32 +105,43 @@ namespace shz
 			ID3DBlob** ppCompilerOutput)
 		{
 			DWORD dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+
 #if defined(SHZ_DEBUG)
-			// Set the D3D10_SHADER_DEBUG flag to embed debug information in the shaders.
-			// Setting this flag improves the shader debugging experience, but still allows
-			// the shaders to be optimized and to run exactly the way they will run in
-			// the release configuration of this program.
+			// Embed debug information in the shader bytecode.
+			// Note: Debug info alone does NOT disable optimization.
 			dwShaderFlags |= D3DCOMPILE_DEBUG;
-#else
-			// Warning: do not use this flag as it causes shader compiler to fail the compilation and
-			// report strange errors:
-			// dwShaderFlags |= D3D10_SHADER_OPTIMIZATION_LEVEL3;
+			dwShaderFlags |= D3DCOMPILE_SKIP_OPTIMIZATION;
+
+			// Optional (often useful during debugging):
+			// dwShaderFlags |= D3DCOMPILE_WARNINGS_ARE_ERRORS;
+			// dwShaderFlags |= D3DCOMPILE_PREFER_FLOW_CONTROL;
 #endif
 
-			static_assert(SHADER_COMPILE_FLAG_LAST == 1u << 4u, "Did you add a new shader compile flag? You may need to handle it here.");
+			// Keep this updated when adding new engine-level flags.
+			static_assert(SHADER_COMPILE_FLAG_LAST == (1u << 5u), "Did you add a new shader compile flag? You may need to handle it here.");
+
+			// Engine-level flags -> FXC flags
 			if (ShaderCI.CompileFlags & SHADER_COMPILE_FLAG_ENABLE_UNBOUNDED_ARRAYS)
 				dwShaderFlags |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
 			if (ShaderCI.CompileFlags & SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR)
 				dwShaderFlags |= D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
 
+			if (ShaderCI.CompileFlags & SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION)
+				dwShaderFlags |= D3DCOMPILE_SKIP_OPTIMIZATION;
+
+#if !defined(SHZ_DEBUG)
+			// Release: keep default optimization behavior.
+			// Avoid forcing OPTIMIZATION_LEVEL3 if it previously triggered compiler weirdness in your setup.
+			// dwShaderFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+
 			D3D_SHADER_MACRO Macros[] = { {"D3DCOMPILER", ""}, {} };
 
 			D3DIncludeImpl IncludeImpl{ ShaderCI.pShaderSourceStreamFactory };
 			return D3DCompile(Source, SourceLength, nullptr, Macros, &IncludeImpl, ShaderCI.EntryPoint, profile, dwShaderFlags, 0, ppBlobOut, ppCompilerOutput);
 		}
-
-	} // namespace
+	}
 
 	RefCntAutoPtr<IDataBlob> CompileD3DBytecode(
 		const ShaderCreateInfo& ShaderCI,

@@ -2,10 +2,19 @@
 #include "RenderResourceCache.h"
 
 #include "Engine/AssetRuntime/Public/AssetManager.h"
+
+#include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
+
 #include "Tools/Image/Public/TextureUtilities.h"
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	} // namespace hlsl
+
 	// ------------------------------------------------------------
 	// Slot helpers (StaticMeshRenderData)
 	// ------------------------------------------------------------
@@ -320,12 +329,6 @@ namespace shz
 		if (!pTex)
 			return {};
 
-		if (ITextureView* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
-		{
-			if (m_CreateInfo.pDefaultSampler)
-				pSRV->SetSampler(m_CreateInfo.pDefaultSampler);
-		}
-
 		UniqueHandle<ITexture> owner = UniqueHandle<ITexture>::Make();
 		const Handle<ITexture> gpuHandle = owner.Get();
 		const uint32 index = gpuHandle.GetIndex();
@@ -540,10 +543,16 @@ namespace shz
 				if (!CreateSectionIB(sec, pData, bytes))
 					return {};
 
-				const MaterialAsset& slotMat = meshAsset.GetMaterialSlot(asec.MaterialSlot);
-				Handle<MaterialAsset> hMatAsset = m_pAssetManager->RegisterMaterial(slotMat);
-				sec.Material = createMaterialInstance(hMatAsset);
-
+				if (meshAsset.HasMaterial())
+				{
+					const MaterialAsset& slotMat = meshAsset.GetMaterialSlot(asec.MaterialSlot);
+					Handle<MaterialAsset> hMatAsset = m_pAssetManager->RegisterMaterial(slotMat);
+					sec.Material = createMaterialInstance(hMatAsset);
+				}
+				else
+				{
+					sec.Material = m_DefaultMaterial;
+				}
 				outMesh.Sections.push_back(sec);
 			}
 		}
@@ -567,128 +576,6 @@ namespace shz
 	}
 
 	// ============================================================
-	// Cube mesh
-	// ============================================================
-
-	Handle<StaticMeshRenderData> RenderResourceCache::CreateCubeMesh()
-	{
-		UniqueHandle<StaticMeshRenderData> owner = UniqueHandle<StaticMeshRenderData>::Make();
-		const Handle<StaticMeshRenderData> handle = owner.Get();
-		const uint32 index = handle.GetIndex();
-
-		ensureSlotCapacity(index, m_MeshSlots);
-
-		auto& slot = m_MeshSlots[index];
-		ASSERT(!slot.Owner.Get().IsValid() && !slot.Value.has_value(), "Cube mesh slot already occupied.");
-
-		StaticMeshRenderData outMesh = {};
-
-		struct SimpleVertex
-		{
-			float3 Pos;
-			float2 UV;
-			float3 Normal;
-			float3 Tangent;
-		};
-
-		static const SimpleVertex Verts[] =
-		{
-			{{-0.5f,-0.5f,-0.5f},{0,1},{0,0,-1},{+1,0,0}},
-			{{+0.5f,-0.5f,-0.5f},{1,1},{0,0,-1},{+1,0,0}},
-			{{+0.5f,+0.5f,-0.5f},{1,0},{0,0,-1},{+1,0,0}},
-			{{-0.5f,+0.5f,-0.5f},{0,0},{0,0,-1},{+1,0,0}},
-
-			{{-0.5f,-0.5f,+0.5f},{0,1},{0,0,+1},{+1,0,0}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{0,0,+1},{+1,0,0}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{0,0,+1},{+1,0,0}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{0,0,+1},{+1,0,0}},
-
-			{{-0.5f,-0.5f,+0.5f},{0,1},{-1,0,0},{0,0,-1}},
-			{{-0.5f,-0.5f,-0.5f},{1,1},{-1,0,0},{0,0,-1}},
-			{{-0.5f,+0.5f,-0.5f},{1,0},{-1,0,0},{0,0,-1}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{-1,0,0},{0,0,-1}},
-
-			{{+0.5f,-0.5f,-0.5f},{0,1},{+1,0,0},{0,0,+1}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{+1,0,0},{0,0,+1}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{+1,0,0},{0,0,+1}},
-			{{+0.5f,+0.5f,-0.5f},{0,0},{+1,0,0},{0,0,+1}},
-
-			{{-0.5f,-0.5f,+0.5f},{0,1},{0,-1,0},{+1,0,0}},
-			{{+0.5f,-0.5f,+0.5f},{1,1},{0,-1,0},{+1,0,0}},
-			{{+0.5f,-0.5f,-0.5f},{1,0},{0,-1,0},{+1,0,0}},
-			{{-0.5f,-0.5f,-0.5f},{0,0},{0,-1,0},{+1,0,0}},
-
-			{{-0.5f,+0.5f,-0.5f},{0,1},{0,+1,0},{+1,0,0}},
-			{{+0.5f,+0.5f,-0.5f},{1,1},{0,+1,0},{+1,0,0}},
-			{{+0.5f,+0.5f,+0.5f},{1,0},{0,+1,0},{+1,0,0}},
-			{{-0.5f,+0.5f,+0.5f},{0,0},{0,+1,0},{+1,0,0}},
-		};
-
-		static const uint32 Indices[] =
-		{
-			0,2,1, 0,3,2,
-			4,5,6, 4,6,7,
-			8,10,9, 8,11,10,
-			12,14,13, 12,15,14,
-			16,18,17, 16,19,18,
-			20,22,21, 20,23,22
-		};
-
-		outMesh.NumVertices = _countof(Verts);
-		outMesh.VertexStride = sizeof(SimpleVertex);
-		outMesh.LocalBounds = { {-0.5f,-0.5f,-0.5f}, {+0.5f,+0.5f,+0.5f} };
-
-		// VB
-		{
-			BufferDesc VBDesc = {};
-			VBDesc.Name = "Cube VB";
-			VBDesc.Usage = USAGE_IMMUTABLE;
-			VBDesc.BindFlags = BIND_VERTEX_BUFFER;
-			VBDesc.Size = sizeof(Verts);
-
-			BufferData VBData = {};
-			VBData.pData = Verts;
-			VBData.DataSize = sizeof(Verts);
-
-			m_CreateInfo.pDevice->CreateBuffer(VBDesc, &VBData, &outMesh.VertexBuffer);
-			if (!outMesh.VertexBuffer)
-				return {};
-		}
-
-		// IB (one section)
-		MeshSection sec = {};
-		sec.NumIndices = _countof(Indices);
-		sec.IndexType = VT_UINT32;
-		sec.StartIndex = 0;
-
-		{
-			BufferDesc IBDesc = {};
-			IBDesc.Name = "Cube IB";
-			IBDesc.Usage = USAGE_IMMUTABLE;
-			IBDesc.BindFlags = BIND_INDEX_BUFFER;
-			IBDesc.Size = sizeof(Indices);
-
-			BufferData IBData = {};
-			IBData.pData = Indices;
-			IBData.DataSize = sizeof(Indices);
-
-			m_CreateInfo.pDevice->CreateBuffer(IBDesc, &IBData, &sec.IndexBuffer);
-			if (!sec.IndexBuffer)
-				return {};
-		}
-
-		sec.Material = m_DefaultMaterial;
-
-		outMesh.Sections.clear();
-		outMesh.Sections.push_back(sec);
-
-		slot.Owner = std::move(owner);
-		slot.Value.emplace(std::move(outMesh));
-
-		return handle;
-	}
-
-	// ============================================================
 	// MaterialRenderData (SRB/PSO bindings)
 	// ============================================================
 
@@ -696,65 +583,106 @@ namespace shz
 		Handle<MaterialInstance> h,
 		const RefCntAutoPtr<IPipelineState>& pPSO,
 		const RefCntAutoPtr<IBuffer>& pFrameCB,
-		const RefCntAutoPtr<IBuffer>& pObjectCB)
+		const RefCntAutoPtr<IBuffer>& pObjectCB,
+		IDeviceContext* pCtx)
 	{
 		if (!h.IsValid())
+		{
+			return nullptr;
+		}
+
+		const auto* InstSlot = findSlot(h, m_MaterialSlots);
+		if (!InstSlot)
 			return nullptr;
 
-		const auto* instSlot = findSlot(h, m_MaterialSlots);
-		if (!instSlot)
-			return nullptr;
-
-		if (!pPSO || !pFrameCB || !pObjectCB)
+		if (!pPSO || !pFrameCB || !pObjectCB || !pCtx)
 			return nullptr;
 
 		// cache hit
-		if (auto it = m_MatRenderDataTable.find(h); it != m_MatRenderDataTable.end())
-			return &it->second;
+		if (auto It = m_MatRenderDataTable.find(h); It != m_MatRenderDataTable.end())
+			return &It->second;
 
-		const MaterialInstance& MatInst = instSlot->Value.value();
+		const MaterialInstance& MatInst = InstSlot->Value.value();
 
-		// Fallback white SRV (create once)
-		static RefCntAutoPtr<ITextureView> s_WhiteSRV;
-		if (!s_WhiteSRV)
+		// ------------------------------------------------------------
+		// Default 1x1 SRVs (created once)
+		// ------------------------------------------------------------
+		auto PackRGBA8 = [](uint8 r, uint8 g, uint8 b, uint8 a) -> uint32
 		{
+			return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
+		};
+		auto Create1x1Texture = [&](const char* name, uint32 rgba, RefCntAutoPtr<ITexture>& outTex) -> bool
+		{
+			if (outTex)
+				return true;
+
 			auto* pDevice = m_CreateInfo.pDevice.RawPtr();
 			if (!pDevice)
+				return false;
+
+			TextureDesc desc = {};
+			desc.Name = name;
+			desc.Type = RESOURCE_DIM_TEX_2D;
+			desc.Width = 1;
+			desc.Height = 1;
+			desc.MipLevels = 1;
+			desc.Format = TEX_FORMAT_RGBA8_UNORM;
+			desc.Usage = USAGE_IMMUTABLE;
+			desc.BindFlags = BIND_SHADER_RESOURCE;
+
+			TextureSubResData sub = {};
+			sub.pData = &rgba;
+			sub.Stride = sizeof(uint32);
+
+			TextureData data = {};
+			data.pSubResources = &sub;
+			data.NumSubresources = 1;
+
+			pDevice->CreateTexture(desc, &data, &outTex);
+			return (outTex != nullptr);
+		};
+
+		// Create defaults once (per RenderResourceCache instance)
+		if (!m_DefaultTextures.White)
+		{
+			// BaseColor default: white
+			if (!Create1x1Texture("DefaultWhite1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.White))
 				return nullptr;
 
-			const uint32 whiteRGBA = 0xFFFFFFFFu;
-
-			TextureDesc TexDesc = {};
-			TexDesc.Name = "DefaultWhite1x1";
-			TexDesc.Type = RESOURCE_DIM_TEX_2D;
-			TexDesc.Width = 1;
-			TexDesc.Height = 1;
-			TexDesc.MipLevels = 1;
-			TexDesc.Format = TEX_FORMAT_RGBA8_UNORM;
-			TexDesc.Usage = USAGE_IMMUTABLE;
-			TexDesc.BindFlags = BIND_SHADER_RESOURCE;
-
-			TextureSubResData Sub = {};
-			Sub.pData = &whiteRGBA;
-			Sub.Stride = sizeof(uint32);
-
-			TextureData InitData = {};
-			InitData.pSubResources = &Sub;
-			InitData.NumSubresources = 1;
-
-			RefCntAutoPtr<ITexture> pWhiteTex;
-			pDevice->CreateTexture(TexDesc, &InitData, &pWhiteTex);
-			if (!pWhiteTex)
+			// Normal default: (0.5, 0.5, 1.0) in UNORM => (128, 128, 255)
+			if (!Create1x1Texture("DefaultNormal1x1", PackRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal))
 				return nullptr;
 
-			s_WhiteSRV = pWhiteTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			if (!s_WhiteSRV)
+			// MetallicRoughness default (glTF): roughness=1 (G=255), metallic=0 (B=0)
+			// R is unused in your shader, but keep 0. A=255
+			if (!Create1x1Texture("DefaultMR1x1", PackRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness))
 				return nullptr;
 
-			if (m_CreateInfo.pDefaultSampler)
-				s_WhiteSRV->SetSampler(m_CreateInfo.pDefaultSampler);
+			// AO default: 1
+			if (!Create1x1Texture("DefaultAO1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.AO))
+				return nullptr;
+
+			// Emissive default: 0
+			if (!Create1x1Texture("DefaultEmissive1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive))
+				return nullptr;
 		}
 
+		// Default SRVs (raw pointers are OK as long as textures are owned by m_DefaultTextures)
+		ITextureView* pDefaultBaseColorSRV = m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		ITextureView* pDefaultNormalSRV = m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		ITextureView* pDefaultMRSRV = m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		ITextureView* pDefaultAOSRV = m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		ITextureView* pDefaultEmissiveSRV = m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+		if (!pDefaultBaseColorSRV || !pDefaultNormalSRV || !pDefaultMRSRV || !pDefaultAOSRV || !pDefaultEmissiveSRV)
+		{
+			ASSERT(false);
+			return nullptr;
+		}
+
+		// ------------------------------------------------------------
+		// Read instance parameters (fallbacks)
+		// ------------------------------------------------------------
 		const float3 BaseColor = MatInst.GetBaseColorFactor(float3(1, 1, 1));
 		const float  Opacity = MatInst.GetOpacity(1.0f);
 		const float  Metallic = MatInst.GetMetallic(0.0f);
@@ -783,62 +711,106 @@ namespace shz
 		if (!RD.pSRB)
 			return nullptr;
 
-		auto BindVS_CB = [&](const char* name, IBuffer* pCB) -> bool
+		// ------------------------------------------------------------
+		// Bind constant buffers
+		// ------------------------------------------------------------
+		ASSERT(pObjectCB);
+		if (auto* Var = RD.pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
 		{
-			if (!pCB) return false;
-			if (auto* Var = RD.pSRB->GetVariableByName(SHADER_TYPE_VERTEX, name))
+			Var->Set(pObjectCB);
+		}
+
+		// ------------------------------------------------------------
+		// Resolve texture SRVs (override -> GPU texture -> SRV; else default)
+		// ------------------------------------------------------------
+		auto ResolveSRV = [&](Handle<TextureAsset> TexAsset,
+			ITextureView* pDefaultSRV,
+			uint32 FlagBit,
+			uint32& InOutFlags) -> ITextureView*
+		{
+			if (!TexAsset.IsValid())
+				return pDefaultSRV;
+
+			const Handle<ITexture> TexGPUHandle = createTextureGPU(TexAsset);
+			if (!TexGPUHandle.IsValid())
+				return pDefaultSRV;
+
+			const auto* TexSlot = findTexSlot(TexGPUHandle, m_TextureSlots);
+			if (!TexSlot || !TexSlot->Value.has_value())
+				return pDefaultSRV;
+
+			const RefCntAutoPtr<ITexture>& pTex = TexSlot->Value.value();
+			if (!pTex)
+				return pDefaultSRV;
+
+			if (ITextureView* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
 			{
-				Var->Set(pCB);
+				InOutFlags |= FlagBit;
+				return pSRV;
+			}
+
+			return pDefaultSRV;
+		};
+
+		uint32 Flags = 0;
+
+		ITextureView* pBaseColorSRV =
+			ResolveSRV(MatInst.GetBaseColorTextureOverride(), pDefaultBaseColorSRV, hlsl::MAT_HAS_BASECOLOR, Flags);
+
+		ITextureView* pNormalSRV =
+			ResolveSRV(MatInst.GetNormalTextureOverride(), pDefaultNormalSRV, hlsl::MAT_HAS_NORMAL, Flags);
+
+		ITextureView* pMRSRV =
+			ResolveSRV(MatInst.GetMetallicRoughnessTextureOverride(), pDefaultMRSRV, hlsl::MAT_HAS_MR, Flags);
+
+		ITextureView* pAOSRV =
+			ResolveSRV(MatInst.GetAmbientOcclusionTextureOverride(), pDefaultAOSRV, hlsl::MAT_HAS_AO, Flags);
+
+		ITextureView* pEmissiveSRV =
+			ResolveSRV(MatInst.GetEmissiveTextureOverride(), pDefaultEmissiveSRV, hlsl::MAT_HAS_EMISSIVE, Flags);
+
+		RD.MaterialFlags = Flags;
+
+		// ------------------------------------------------------------
+		// Bind PS textures
+		// ------------------------------------------------------------
+		auto BindPS_Tex = [&](const char* Name, ITextureView* pSRV) -> bool
+		{
+			if (auto* Var = RD.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, Name))
+			{
+				Var->Set(pSRV);
 				return true;
 			}
+			std::cerr << "PS SRB texture variable\"" << Name << "\"not found." << std::endl;
 			return false;
 		};
 
-		if (!BindVS_CB("FRAME_CONSTANTS", pFrameCB))
+		BindPS_Tex("g_BaseColorTex", pBaseColorSRV);
+		BindPS_Tex("g_NormalTex", pNormalSRV);
+		BindPS_Tex("g_MetallicRoughnessTex", pMRSRV);
+		BindPS_Tex("g_AOTex", pAOSRV);
+		BindPS_Tex("g_EmissiveTex", pEmissiveSRV);
+
+		// ------------------------------------------------------------
+		// Create + bind material constant buffer
+		// ------------------------------------------------------------
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::MaterialConstants), "Material constants CB", &RD.pMaterialCB);
+		if (!RD.pMaterialCB)
 			return nullptr;
 
-		if (!BindVS_CB("OBJECT_CONSTANTS", pObjectCB))
-			return nullptr;
-
-		// Base color SRV
-		ITextureView* pBaseColorSRV = s_WhiteSRV.RawPtr();
-
-		const Handle<TextureAsset> baseColorAssetHandle = MatInst.GetBaseColorTextureOverride();
-		if (baseColorAssetHandle.IsValid())
+		if (auto* MatCBVar = RD.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS"))
 		{
-			const Handle<ITexture> texGPUHandle = createTextureGPU(baseColorAssetHandle);
-			if (texGPUHandle.IsValid())
-			{
-				const auto* texSlot = findTexSlot(texGPUHandle, m_TextureSlots);
-				if (texSlot && texSlot->Value.has_value())
-				{
-					const RefCntAutoPtr<ITexture>& pTex = texSlot->Value.value();
-					if (pTex)
-					{
-						if (auto* pSRV = pTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE))
-						{
-							if (m_CreateInfo.pDefaultSampler)
-								pSRV->SetSampler(m_CreateInfo.pDefaultSampler);
-							pBaseColorSRV = pSRV;
-						}
-					}
-				}
-			}
-		}
-
-		if (auto* TexVar = RD.pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
-		{
-			TexVar->Set(pBaseColorSRV);
+			MatCBVar->Set(RD.pMaterialCB);
 		}
 		else
 		{
-			ASSERT(false, "PS SRB variable 'g_BaseColorTex' not found.");
+			ASSERT(false, "PS SRB variable 'MATERIAL_CONSTANTS' not found.");
 			return nullptr;
 		}
 
-		auto [insIt, ok] = m_MatRenderDataTable.emplace(h, std::move(RD));
-		(void)ok;
-		return &insIt->second;
+		auto [InsIt, Ok] = m_MatRenderDataTable.emplace(h, std::move(RD));
+		(void)Ok;
+		return &InsIt->second;
 	}
 
 } // namespace shz

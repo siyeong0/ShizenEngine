@@ -68,7 +68,6 @@ namespace shz
 
 		// Resource-facing API (still exposed via Renderer, implemented by RenderResourceCache)
 		Handle<StaticMeshRenderData> CreateStaticMesh(Handle<StaticMeshAsset> h);
-		Handle<StaticMeshRenderData> CreateCubeMesh();
 
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> h);
 		bool DestroyMaterialInstance(Handle<MaterialInstance> h);
@@ -91,8 +90,6 @@ namespace shz
 
 		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
-
-		RefCntAutoPtr<ISampler> m_pDefaultSampler;
 
 		std::unique_ptr<RenderResourceCache> m_pRenderResourceCache;
 	};

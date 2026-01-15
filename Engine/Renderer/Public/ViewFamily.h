@@ -10,6 +10,8 @@ namespace shz
         Matrix4x4 ViewMatrix;
         Matrix4x4 ProjMatrix;
         Rect Viewport;
+        float32 NearPlane;
+        float32 FarPlane;
     };
 
     struct ViewFamily
@@ -18,6 +20,7 @@ namespace shz
         std::vector<View> Views;
 
         float DeltaTime;
+        float CurrentTime;
         uint64 FrameIndex;
 
         uint32 ShowFlags;

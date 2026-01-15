@@ -82,7 +82,8 @@ namespace shz
         m_fPitchAngle = Clamp(m_fPitchAngle, -PI * 0.5f, +PI * 0.5f);
     }
 
-    void FirstPersonCamera::SetProjAttribs(float32 NearClipPlane,
+    void FirstPersonCamera::SetProjAttribs(
+        float32 NearClipPlane,
         float32 FarClipPlane,
         float32 AspectRatio,
         float32 FOV,

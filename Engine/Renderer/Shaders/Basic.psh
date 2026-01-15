@@ -1,22 +1,139 @@
+#include "HLSL_Structures.hlsli"
 
+cbuffer FRAME_CONSTANTS
+{
+    FrameConstants g_FrameCB;
+};
+cbuffer OBJECT_CONSTANTS
+{
+    ObjectConstants g_ObjectCB;
+};
+
+cbuffer MATERIAL_CONSTANTS
+{
+    MaterialConstants g_MaterialCB;
+}
+
+// Textures 
 Texture2D g_BaseColorTex;
-SamplerState g_BaseColorTex_sampler;
+Texture2D g_NormalTex;
+Texture2D g_MetallicRoughnessTex;
+Texture2D g_AOTex;
+Texture2D g_EmissiveTex;
+
+// Single shared sampler (bind as immutable/static sampler in PSO)
+SamplerState g_LinearWrapSampler;
 
 struct PSInput
 {
     float4 Pos : SV_POSITION;
     float2 UV : TEXCOORD0;
-    float3 WorldN : TEXCOORD1;
-    float Depth01 : TEXCOORD2;
+    float3 WorldPos : TEXCOORD1;
+    float3 WorldN : TEXCOORD2;
+    float3 WorldT : TEXCOORD3;
+    float Depth01 : TEXCOORD4;
 };
 
 struct PSOutput
 {
-    float4 Color : SV_TARGET;
+    float4 Color : SV_TARGET0;
 };
+
+static float3 UnpackNormalTS(float3 n01)
+{
+    return normalize(n01 * 2.0 - 1.0);
+}
+
+static float Pow5(float x)
+{
+    float x2 = x * x;
+    return x2 * x2 * x;
+}
 
 void main(in PSInput PSIn, out PSOutput PSOut)
 {
-    float4 albedo = g_BaseColorTex.Sample(g_BaseColorTex_sampler, PSIn.UV);
-    PSOut.Color = albedo;
+    float2 uv = PSIn.UV;
+
+    // ----------------------------
+    // Material sampling
+    // ----------------------------
+    float4 baseColor = g_MaterialCB.BaseColorFactor;
+    if ((g_MaterialCB.Flags & MAT_HAS_BASECOLOR) != 0)
+        baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
+
+    float ao = 1.0;
+    if ((g_MaterialCB.Flags & MAT_HAS_AO) != 0)
+    {
+        ao = g_AOTex.Sample(g_LinearWrapSampler, uv).r;
+        ao = lerp(1.0, ao, g_MaterialCB.OcclusionStrength);
+    }
+
+    float3 emissive = g_MaterialCB.EmissiveFactor;
+    if ((g_MaterialCB.Flags & MAT_HAS_EMISSIVE) != 0)
+        emissive *= g_EmissiveTex.Sample(g_LinearWrapSampler, uv).rgb;
+
+    float metallic = g_MaterialCB.MetallicFactor;
+    float roughness = g_MaterialCB.RoughnessFactor;
+    if ((g_MaterialCB.Flags & MAT_HAS_MR) != 0)
+    {
+        float4 mr = g_MetallicRoughnessTex.Sample(g_LinearWrapSampler, uv);
+        metallic *= mr.b; // glTF: B = metallic
+        roughness *= mr.g; // glTF: G = roughness
+    }
+    roughness = saturate(roughness);
+
+    // ----------------------------
+    // Normal mapping
+    // ----------------------------
+    float3 N = normalize(PSIn.WorldN);
+
+    if ((g_MaterialCB.Flags & MAT_HAS_NORMAL) != 0)
+    {
+        float3 T = normalize(PSIn.WorldT);
+        float3 B = normalize(cross(N, T));
+
+        float3 nTS = UnpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
+        nTS.xy *= g_MaterialCB.NormalScale;
+
+        float3x3 TBN = float3x3(T, B, N);
+        N = normalize(mul(nTS, TBN));
+    }
+
+    // ----------------------------
+    // Super simple lighting
+    // - 1 directional light
+    // - Lambert diffuse + tiny Blinn-Phong spec
+    // ----------------------------
+    const float3 LightDirWS = normalize(float3(0.1, -1.0, 0.1)); // points from light to world
+    const float3 LightColor = float3(1.0, 1.0, 1.0);
+    const float LightIntensity = 3.0;
+
+    float3 L = normalize(-LightDirWS); // direction from surface to light
+    float3 V = normalize(g_FrameCB.CameraPosition - PSIn.WorldPos);
+
+    // NOTE: We don't have world position in this shader yet.
+    // For now, we approximate V as looking from origin.
+    // Recommended: pass WorldPos from VS and compute V = normalize(CameraPos - WorldPos).
+
+    float NdotL = saturate(dot(N, L));
+
+    float3 diffuse = baseColor.rgb * NdotL;
+
+    // Very simple spec: roughness -> shininess
+    float shininess = lerp(256.0, 8.0, roughness);
+    float3 H = normalize(L + V);
+    float specTerm = pow(saturate(dot(N, H)), shininess);
+
+    // metallic reduces diffuse, increases spec a bit (cheap hack)
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor.rgb, saturate(metallic));
+    float VdotH = saturate(dot(V, H));
+    float3 F = F0 + (1.0 - F0) * Pow5(1.0 - VdotH);
+
+    float3 specular = F * specTerm;
+
+    float3 ambient = baseColor.rgb * 0.03;
+
+    float3 lit = (ambient + (diffuse + specular) * LightColor * LightIntensity) * ao + emissive;
+
+    PSOut.Color = float4(lit, baseColor.a);
 }

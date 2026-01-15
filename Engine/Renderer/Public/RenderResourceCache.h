@@ -35,7 +35,6 @@ namespace shz
 	{
 		RefCntAutoPtr<IRenderDevice> pDevice;
 		AssetManager* pAssetManager = nullptr; // not owned
-		RefCntAutoPtr<ISampler> pDefaultSampler;
 	};
 
 	class RenderResourceCache final
@@ -53,7 +52,6 @@ namespace shz
 		// Public APIs used by Renderer
 		// ------------------------------------------------------------
 		Handle<StaticMeshRenderData> CreateStaticMesh(Handle<StaticMeshAsset> h);
-		Handle<StaticMeshRenderData> CreateCubeMesh();
 
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> h);
 		bool DestroyMaterialInstance(Handle<MaterialInstance> h);
@@ -66,7 +64,8 @@ namespace shz
 			Handle<MaterialInstance> h,
 			const RefCntAutoPtr<IPipelineState>& pPSO,
 			const RefCntAutoPtr<IBuffer>& pFrameCB,
-			const RefCntAutoPtr<IBuffer>& pObjectCB);
+			const RefCntAutoPtr<IBuffer>& pObjectCB,
+			IDeviceContext* pCtx);
 
 	private:
 		// ------------------------------------------------------------
@@ -127,5 +126,17 @@ namespace shz
 
 		// Per material instance render binding cache (SRB etc)
 		std::unordered_map<Handle<MaterialInstance>, MaterialRenderData> m_MatRenderDataTable;
+
+
+		struct DefaultMaterialTextures
+		{
+			RefCntAutoPtr<ITexture> White;
+			RefCntAutoPtr<ITexture> Normal;
+			RefCntAutoPtr<ITexture> MetallicRoughness;
+			RefCntAutoPtr<ITexture> AO;
+			RefCntAutoPtr<ITexture> Emissive;
+		};
+
+		DefaultMaterialTextures m_DefaultTextures;
 	};
 } // namespace shz

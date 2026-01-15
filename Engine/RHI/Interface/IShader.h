@@ -327,8 +327,6 @@ namespace shz
 	};
 
 
-
-
 	// Shader compilation flags
 	enum SHADER_COMPILE_FLAGS : uint32
 	{
@@ -342,53 +340,25 @@ namespace shz
 		SHADER_COMPILE_FLAG_SKIP_REFLECTION = 1u << 1u,
 
 		// Compile the shader asynchronously.
-		//
-		// When this flag is set to true and if the devices supports
-		// AsyncShaderCompilation feature, the shader will be compiled
-		// asynchronously in the background. An application should use
-		// the IShader::GetStatus() method to check the shader status.
-		// If the device does not support asynchronous shader compilation,
-		// the flag is ignored and the shader is compiled synchronously.
 		SHADER_COMPILE_FLAG_ASYNCHRONOUS = 1u << 2u,
 
 		// Pack matrices in row-major order.
-		//
-		// By default, matrices are laid out in GPU memory in column-major order,
-		// which means that the first four values in a 4x4 matrix represent
-		// the first column, the next four values represent the second column,
-		// and so on.
-		//
-		// If this flag is set, matrices are packed in row-major order, i.e.
-		// they are laid out in memory row-by-row.
 		SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR = 1u << 3u,
 
 		// Convert HLSL to GLSL when compiling HLSL shaders to SPIRV.
-		//
-		// HLSL shaders can be compiled to SPIRV directly using either DXC or glslang.
-		// While glslang supports most HLSL 5.1 features, some Vulkan-specific functionality
-		// is missing. Notably, glslang does not support UAV texture format annotations
-		// (see https://github.com/KhronosGroup/glslang/issues/3790), for example:
-		//
-		//     [[vk::image_format("rgba8")]] RWTexture2D<float4> g_rwTexture;
-		//
-		// This flag provides a workaround by converting HLSL to GLSL before compiling it
-		// to SPIRV. The converter supports specially formatted comments to specify UAV
-		// texture formats:
-		//
-		//     RWTexture2D<float4 /*format = rgba8*/> g_rwTexture;
-		//
-		// Another use case for this flag is to leverage GLSL-specific keywords in HLSL
-		// shaders, such as `gl_DrawID` for multi-draw or manually setting `gl_PointSize`.
-		//
-		// This flag only takes effect when compiling HLSL to SPIRV with glslang.
-		// Since DXC does not support GLSL, this flag is ignored when SHADER_COMPILER_DXC is used.
 		SHADER_COMPILE_FLAG_HLSL_TO_SPIRV_VIA_GLSL = 1u << 4u,
 
-		SHADER_COMPILE_FLAG_LAST = SHADER_COMPILE_FLAG_HLSL_TO_SPIRV_VIA_GLSL
+		// Disable shader optimization.
+		//
+		// FXC  : adds D3DCOMPILE_SKIP_OPTIMIZATION
+		// DXC  : adds -Od
+		//
+		// This flag is intended for debugging only.
+		SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION = 1u << 5u,
+
+		SHADER_COMPILE_FLAG_LAST = SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION
 	};
 	DEFINE_FLAG_ENUM_OPERATORS(SHADER_COMPILE_FLAGS);
-
-
 
 
 	// Shader creation attributes

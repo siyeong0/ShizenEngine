@@ -49,7 +49,6 @@ namespace shz
 		void SetProjAttribs(float32 NearClipPlane, float32 FarClipPlane, float32 AspectRatio, float32 FOV, SURFACE_TRANSFORM SrfPreTransform);
 		void SetSpeedUpScales(float32 SpeedUpScale, float32 SuperSpeedUpScale);
 
-
 		const float4x4& GetViewMatrix()  const { return m_ViewMatrix; }
 		const float4x4& GetWorldMatrix() const { return m_WorldMatrix; }
 		const float4x4& GetProjMatrix()  const { return m_ProjMatrix; }
@@ -94,9 +93,9 @@ namespace shz
 		float4x4 m_ViewMatrix;
 		float4x4 m_WorldMatrix;
 		float4x4 m_ProjMatrix;
-		float    m_fRotationSpeed = 0.01f;
-		float    m_fMoveSpeed = 1.f;
-		float    m_fCurrentSpeed = 0.f;
+		float m_fRotationSpeed = 0.01f;
+		float m_fMoveSpeed = 1.f;
+		float m_fCurrentSpeed = 0.f;
 
 		float m_fYawAngle = 0; // Yaw angle of camera
 		float m_fPitchAngle = 0; // Pitch angle of camera
