@@ -788,7 +788,7 @@ namespace shz
 
 		gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
-		gp.RasterizerDesc.FrontCounterClockwise = false;
+		gp.RasterizerDesc.FrontCounterClockwise = true;
 		gp.DepthStencilDesc.DepthEnable = true;
 		gp.DepthStencilDesc.DepthWriteEnable = true;
 		gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
