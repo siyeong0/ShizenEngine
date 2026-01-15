@@ -6,12 +6,48 @@ namespace shz
 	bool TextureAsset::IsValid() const noexcept
 	{
 		// Source path is required to load from disk.
-		return !m_SourcePath.empty();
+		if (m_SourcePath.empty())
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool TextureAsset::ValidateOptions() const noexcept
+	{
+		// Basic sanity checks for authoring-time validation.
+
+		// Bind flags are expected to include SRV for typical material textures.
+		// We allow 0 for special cases, but it is often a mistake.
+		// If you want strict behavior, change this to "return false".
+		if (m_BindFlags == 0)
+		{
+			return true;
+		}
+
+		// Alpha cutoff should not be negative.
+		if (m_AlphaCutoff < 0.0f)
+		{
+			return false;
+		}
+
+		// If explicit mip levels are requested, generating mips should usually be enabled.
+		// This is policy-dependent, so keep it permissive.
+		if (m_MipLevels > 1 && !m_GenerateMips)
+		{
+			return true;
+		}
+
+		return true;
 	}
 
 	TextureLoadInfo TextureAsset::BuildTextureLoadInfo() const noexcept
 	{
 		TextureLoadInfo info{};
+
+		// WARNING:
+		// This pointer is only valid while TextureAsset is alive and m_Name is unchanged.
 		info.Name = m_Name.empty() ? nullptr : m_Name.c_str();
 
 		info.Usage = m_Usage;
@@ -21,7 +57,11 @@ namespace shz
 		info.IsSRGB = m_IsSRGB;
 		info.GenerateMips = m_GenerateMips;
 		info.FlipVertically = m_FlipVertically;
-		info.PermultiplyAlpha = m_PremultiplyAlpha;
+
+		// NOTE:
+		// Make sure the field name in TextureLoadInfo matches this exactly.
+		// Some codebases use "PremultiplyAlpha" (common spelling).
+		info.PremultiplyAlpha = m_PremultiplyAlpha;
 
 		info.Format = m_Format;
 
@@ -32,7 +72,7 @@ namespace shz
 		info.Swizzle = m_Swizzle;
 		info.UniformImageClipDim = m_UniformImageClipDim;
 
-		// info.CPUAccessFlags, info.pAllocator etc. are left default by asset.
+		// info.CPUAccessFlags, info.pAllocator etc. are left as defaults by the asset.
 		return info;
 	}
 

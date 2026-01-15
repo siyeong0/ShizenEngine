@@ -30,9 +30,6 @@
     <ClInclude Include="Public\TextureAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetHandles.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\AssetManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>

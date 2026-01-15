@@ -13,7 +13,7 @@ namespace shz
 	// StaticMeshAsset
 	// - CPU-side static mesh asset data (no GPU/RHI dependency).
 	// - Stored as SoA for easy vertex stream split later.
-	// - Importers may still feed AoS (Vertex) and we deinterleave.
+	// - Importers may feed AoS and deinterleave into these streams.
 	// ------------------------------------------------------------
 	class StaticMeshAsset final : public AssetObject
 	{
@@ -22,8 +22,8 @@ namespace shz
 		{
 			uint32 FirstIndex = 0;
 			uint32 IndexCount = 0;
-			uint32 BaseVertex = 0; // optional for some pipelines
-			uint32 MaterialSlot = 0; // index into material slots
+			uint32 BaseVertex = 0;     // Optional for some pipelines
+			uint32 MaterialSlot = 0;   // Index into material slots
 
 			Box LocalBounds = {};
 		};
@@ -39,7 +39,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Metadata
 		// ------------------------------------------------------------
-
 		void SetName(const std::string& name) { m_Name = name; }
 		const std::string& GetName() const noexcept { return m_Name; }
 
@@ -62,7 +61,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Sections (submeshes)
 		// ------------------------------------------------------------
-
 		void SetSections(std::vector<Section>&& sections) { m_Sections = std::move(sections); }
 
 		std::vector<Section>& GetSections() noexcept { return m_Sections; }
@@ -71,7 +69,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Materials (slots)
 		// ------------------------------------------------------------
-
 		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
 
 		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
@@ -85,7 +82,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
 		// ------------------------------------------------------------
-
 		const std::vector<float3>& GetPositions() const noexcept { return m_Positions; }
 		const std::vector<float3>& GetNormals() const noexcept { return m_Normals; }
 		const std::vector<float3>& GetTangents() const noexcept { return m_Tangents; }
@@ -107,8 +103,14 @@ namespace shz
 		// ------------------------------------------------------------
 		// Validation / bounds
 		// ------------------------------------------------------------
-
+		// Minimal validity:
+		// - Positions must exist
+		// - Indices must exist
+		// - Optional streams, if present, must match vertex count
+		// - Sections, if present, must be in-range
 		bool IsValid() const noexcept;
+
+		// Returns true if the mesh has enough CPU data to build GPU buffers.
 		bool HasCPUData() const noexcept;
 
 		void RecomputeBounds();
@@ -117,24 +119,25 @@ namespace shz
 		// ------------------------------------------------------------
 		// Memory policy
 		// ------------------------------------------------------------
-
+		// Strips CPU-side geometry data. Keeps metadata/sections/material slots.
+		// Note: does not guarantee immediate memory release (no shrink_to_fit).
 		void StripCPUData();
+
 		void Clear();
 
 	private:
-		void recomputeSectionBounds();
+		uint32 GetIndexAt(uint32 i) const noexcept;
+		void RecomputeSectionBounds();
 
 	private:
 		std::string m_Name;
 		std::string m_SourcePath;
 
-		// SoA vertex attributes
 		std::vector<float3> m_Positions;
 		std::vector<float3> m_Normals;
 		std::vector<float3> m_Tangents;
 		std::vector<float2> m_TexCoords;
 
-		// Indices
 		VALUE_TYPE m_IndexType = VT_UINT32;
 		std::vector<uint32> m_IndicesU32;
 		std::vector<uint16> m_IndicesU16;

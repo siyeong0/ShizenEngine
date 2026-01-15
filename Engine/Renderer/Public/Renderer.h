@@ -1,12 +1,25 @@
+// ============================================================
+// Renderer.h (ONLY the necessary parts updated)
+// - Fix texture slot design: Owner handle type != stored value type
+// - Keep public GPU handle type: Handle<ITexture>
+// - Store actual GPU object: RefCntAutoPtr<ITexture>
+// ============================================================
+
 #pragma once
 #include <vector>
 #include <unordered_map>
+#include <optional>
 
 #include "Primitives/BasicTypes.h"
+#include "Primitives/Handle.hpp"
+#include "Primitives/UniqueHandle.hpp"
+
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
-#include "Engine/Renderer/Public/Handles.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/Public/TextureAsset.h"
 
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
@@ -21,6 +34,7 @@
 
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Renderer/Public/MaterialInstance.h"
 #include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
@@ -38,16 +52,24 @@ namespace shz
         RefCntAutoPtr<ISwapChain>      pSwapChain;
         ImGuiImplShizen* pImGui = nullptr;
 
-        // NEW: AssetManager reference (not owned)
+        // AssetManager reference (not owned)
         AssetManager* pAssetManager = nullptr;
 
         uint32 BackBufferWidth = 0;
         uint32 BackBufferHeight = 0;
+
+        // Hard-coded shader root in your current project; can be made configurable later
+        const char* ShaderRootDir = "C:/Dev/ShizenEngine/Engine/Renderer/Shaders";
     };
 
-    class Renderer
+    class Renderer final
     {
     public:
+        Renderer() = default;
+        Renderer(const Renderer&) = delete;
+        Renderer& operator=(const Renderer&) = delete;
+        ~Renderer() = default;
+
         bool Initialize(const RendererCreateInfo& createInfo);
         void Cleanup();
 
@@ -57,21 +79,60 @@ namespace shz
         void Render(const RenderScene& scene, const ViewFamily& viewFamily);
         void EndFrame();
 
-        // ----------------------------
-        // Asset-driven creation
-        // ----------------------------
-        MeshHandle CreateStaticMesh(StaticMeshAssetHandle h);
+        Handle<StaticMeshRenderData> CreateStaticMesh(Handle<StaticMeshAsset> h);
+        Handle<StaticMeshRenderData> CreateCubeMesh();
 
-        // Sample helper (still renderer-owned)
-        MeshHandle CreateCubeMesh();
+        bool DestroyStaticMesh(Handle<StaticMeshRenderData> h);
+        bool DestroyMaterialInstance(Handle<MaterialInstance> h);
+        bool DestroyTextureGPU(Handle<ITexture> h);
 
     private:
-        // GPU cache creation helpers
-        TextureHandle CreateTextureGPU(TextureAssetHandle h);
-        MaterialHandle CreateMaterialInstance(MaterialAssetHandle h);
+        // ------------------------------------------------------------
+        // Internal storage policy: Slot + UniqueHandle
+        // NOTE: For textures, handle type (ITexture) differs from stored value type (RefCntAutoPtr<ITexture>).
+        // ------------------------------------------------------------
+        template<typename T>
+        struct Slot final
+        {
+            UniqueHandle<T> Owner = {};
+            std::optional<T> Value = {};
+        };
 
-        MaterialRenderData* GetOrCreateMaterialRenderData(MaterialHandle h);
+        // NEW: Slot that decouples handle type and stored value type
+        template<typename HandleT, typename ValueT>
+        struct SlotHV final
+        {
+            UniqueHandle<HandleT> Owner = {};
+            std::optional<ValueT> Value = {};
+        };
+
+        template<typename TSlot>
+        static void EnsureSlotCapacity(uint32 index, std::vector<TSlot>& slots)
+        {
+            if (index >= static_cast<uint32>(slots.size()))
+            {
+                slots.resize(static_cast<size_t>(index) + 1);
+            }
+        }
+
+        static Slot<StaticMeshRenderData>* FindSlot(Handle<StaticMeshRenderData> h, std::vector<Slot<StaticMeshRenderData>>& slots) noexcept;
+        static const Slot<StaticMeshRenderData>* FindSlot(Handle<StaticMeshRenderData> h, const std::vector<Slot<StaticMeshRenderData>>& slots) noexcept;
+
+        static Slot<MaterialInstance>* FindSlot(Handle<MaterialInstance> h, std::vector<Slot<MaterialInstance>>& slots) noexcept;
+        static const Slot<MaterialInstance>* FindSlot(Handle<MaterialInstance> h, const std::vector<Slot<MaterialInstance>>& slots) noexcept;
+
+        // UPDATED: Texture slot uses SlotHV<ITexture, RefCntAutoPtr<ITexture>>
+        static SlotHV<ITexture, RefCntAutoPtr<ITexture>>* FindTexSlot(Handle<ITexture> h, std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>>& slots) noexcept;
+        static const SlotHV<ITexture, RefCntAutoPtr<ITexture>>* FindTexSlot(Handle<ITexture> h, const std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>>& slots) noexcept;
+
+    private:
+        Handle<ITexture> CreateTextureGPU(Handle<TextureAsset> h);
+        Handle<MaterialInstance> CreateMaterialInstance(Handle<MaterialAsset> h);
+
+        MaterialRenderData* GetOrCreateMaterialRenderData(Handle<MaterialInstance> h);
         bool CreateBasicPSO();
+
+        const StaticMeshRenderData* TryGetMesh(Handle<StaticMeshRenderData> h) const noexcept;
 
     private:
         RendererCreateInfo m_CreateInfo = {};
@@ -87,29 +148,19 @@ namespace shz
         RefCntAutoPtr<IPipelineState> m_pBasicPSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pBasicSRB;
 
-        MaterialHandle m_DefaultMaterial = {};
+        Handle<MaterialInstance> m_DefaultMaterial = {};
         RefCntAutoPtr<ISampler> m_pDefaultSampler;
 
-        // ----------------------------
-        // GPU mesh table
-        // ----------------------------
-        uint32 m_NextMeshId = 1;
-        std::unordered_map<MeshHandle, StaticMeshRenderData> m_MeshTable;
+        std::vector<Slot<StaticMeshRenderData>> m_MeshSlots;
 
-        // ----------------------------
-        // GPU texture cache (by TextureAssetHandle)
-        // ----------------------------
-        uint32 m_NextTexId = 1;
-        std::unordered_map<TextureAssetHandle, TextureHandle> m_TexAssetToGpuHandle;
-        std::unordered_map<TextureHandle, RefCntAutoPtr<ITexture>> m_TextureTable;
+        // TextureAsset -> GPU texture handle cache
+        std::unordered_map<Handle<TextureAsset>, Handle<ITexture>> m_TexAssetToGpuHandle;
 
-        // ----------------------------
-        // Runtime material instances (renderer-owned)
-        // ----------------------------
-        uint32 m_NextMaterialId = 1;
-        std::unordered_map<MaterialHandle, MaterialInstance> m_MaterialTable;
+        // UPDATED: Texture slots are keyed by Handle<ITexture> but store RefCntAutoPtr<ITexture>
+        std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>> m_TextureSlots;
 
-        // Render data cache
-        std::unordered_map<MaterialHandle, MaterialRenderData> m_MatRenderDataTable;
+        std::vector<Slot<MaterialInstance>> m_MaterialSlots;
+
+        std::unordered_map<Handle<MaterialInstance>, MaterialRenderData> m_MatRenderDataTable;
     };
 } // namespace shz

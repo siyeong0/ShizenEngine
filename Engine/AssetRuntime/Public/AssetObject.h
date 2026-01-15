@@ -1,4 +1,5 @@
 #pragma once
+#include <concepts>
 #include "Primitives/BasicTypes.h"
 #include "Engine/AssetRuntime/Public/AssetId.h"
 
@@ -15,4 +16,7 @@ namespace shz
 	private:
 		const AssetId m_Id;
 	};
+
+	template<typename T>
+	concept AssetTypeConcept = std::derived_from<T, AssetObject>;
 } // namespace shz

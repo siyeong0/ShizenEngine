@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include <vector>
+#include "Primitives/Handle.hpp"
 #include "Engine/Core/Math/Math.h"
+#include "Engine/Renderer/Public/MaterialInstance.h"
 
 namespace shz
 {
@@ -13,7 +15,7 @@ namespace shz
 
 		VALUE_TYPE IndexType = VT_UINT32;
 
-		MaterialHandle Material = {};
+		Handle<MaterialInstance> Material = {};
 
 		Box LocalBounds;
 	};

@@ -1,10 +1,14 @@
-// AssetManager.h
 #pragma once
+#include <vector>
+#include <concepts>
 #include <unordered_map>
+#include <optional>
 
 #include "Primitives/BasicTypes.h"
+#include "Primitives/Handle.hpp"
+#include "Primitives/UniqueHandle.hpp"
 
-#include "Engine/AssetRuntime/Public/AssetHandles.h"
+#include "Engine/AssetRuntime/Public/AssetObject.h"
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
 #include "Engine/AssetRuntime/Public/MaterialAsset.h"
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
@@ -14,16 +18,9 @@ namespace shz
 	// ------------------------------------------------------------
 	// AssetManager
 	// - CPU-side registry/cache for assets (no GPU/RHI dependency).
-	// - Responsibilities (MVP):
-	//   * Register assets (by path or by value)
-	//   * Deduplicate by "key" (default: normalized path)
-	//   * Provide stable AssetHandles
-	//   * Query assets back by handle
-	//
-	// Notes:
-	// - This does NOT load GPU resources.
-	// - You can later expand:
-	//   * async loading, hot-reload, cooked packages, GUIDs, etc.
+	// - Slot table (vector) + AssetId -> Handle map
+	// - Handle safety:
+	//   * slot.Owner.Get() == requested handle (index+generation match)
 	// ------------------------------------------------------------
 	class AssetManager final
 	{
@@ -33,69 +30,159 @@ namespace shz
 		AssetManager& operator=(const AssetManager&) = delete;
 		~AssetManager() = default;
 
-		// --------------------------------------------------------
-		// Register by value
-		// - Copies the asset into the registry.
-		// - If "key" already exists, returns existing handle.
-		// --------------------------------------------------------
-		TextureAssetHandle    RegisterTexture(const TextureAsset& asset);
-		MaterialAssetHandle   RegisterMaterial(const MaterialAsset& asset);
-		StaticMeshAssetHandle RegisterStaticMesh(const StaticMeshAsset& asset);
+		Handle<TextureAsset>    RegisterTexture(const TextureAsset& asset);
+		Handle<MaterialAsset>   RegisterMaterial(const MaterialAsset& asset);
+		Handle<StaticMeshAsset> RegisterStaticMesh(const StaticMeshAsset& asset);
 
-		// --------------------------------------------------------
-		// Lookup by handle
-		// - Returns nullptr if handle invalid or not found.
-		//
-		// IMPORTANT:
-		// - You currently return references and ASSERT on invalid.
-		// - Keep that policy for now (matches your engine style).
-		// --------------------------------------------------------
-		const TextureAsset& GetTexture(TextureAssetHandle h) const noexcept;
-		const MaterialAsset& GetMaterial(MaterialAssetHandle h) const noexcept;
-		const StaticMeshAsset& GetStaticMesh(StaticMeshAssetHandle h) const noexcept;
+		const TextureAsset& GetTexture(Handle<TextureAsset> h) const noexcept;
+		const MaterialAsset& GetMaterial(Handle<MaterialAsset> h) const noexcept;
+		const StaticMeshAsset& GetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
 
-		// --------------------------------------------------------
-		// Lookup handle by key/path
-		// --------------------------------------------------------
-		TextureAssetHandle     FindTextureById(const AssetId& id) const noexcept;
-		MaterialAssetHandle    FindMaterialById(const AssetId& id) const noexcept;
-		StaticMeshAssetHandle  FindStaticMeshById(const AssetId& id) const noexcept;
+		const TextureAsset* TryGetTexture(Handle<TextureAsset> h) const noexcept;
+		const MaterialAsset* TryGetMaterial(Handle<MaterialAsset> h) const noexcept;
+		const StaticMeshAsset* TryGetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
 
-		// --------------------------------------------------------
-		// Remove / Clear
-		// --------------------------------------------------------
-		bool RemoveTexture(TextureAssetHandle h);
-		bool RemoveMaterial(MaterialAssetHandle h);
-		bool RemoveStaticMesh(StaticMeshAssetHandle h);
+		Handle<TextureAsset>    FindTextureById(const AssetId& id) const noexcept;
+		Handle<MaterialAsset>   FindMaterialById(const AssetId& id) const noexcept;
+		Handle<StaticMeshAsset> FindStaticMeshById(const AssetId& id) const noexcept;
+
+		bool RemoveTexture(Handle<TextureAsset> h);
+		bool RemoveMaterial(Handle<MaterialAsset> h);
+		bool RemoveStaticMesh(Handle<StaticMeshAsset> h);
 
 		void Clear();
 
-		// --------------------------------------------------------
-		// Stats
-		// --------------------------------------------------------
-		uint32 GetTextureCount() const noexcept { return static_cast<uint32>(m_Textures.size()); }
-		uint32 GetMaterialCount() const noexcept { return static_cast<uint32>(m_Materials.size()); }
-		uint32 GetStaticMeshCount() const noexcept { return static_cast<uint32>(m_StaticMeshes.size()); }
+		uint32 GetTextureCount() const noexcept { return m_TextureCount; }
+		uint32 GetMaterialCount() const noexcept { return m_MaterialCount; }
+		uint32 GetStaticMeshCount() const noexcept { return m_StaticMeshCount; }
 
 	private:
-		TextureAssetHandle    allocateTextureHandle() noexcept { return TextureAssetHandle{ m_NextTextureId++ }; }
-		MaterialAssetHandle   allocateMaterialHandle() noexcept { return MaterialAssetHandle{ m_NextMaterialId++ }; }
-		StaticMeshAssetHandle allocateStaticMeshHandle() noexcept { return StaticMeshAssetHandle{ m_NextStaticMeshId++ }; }
+		template<AssetTypeConcept AssetType>
+		struct AssetSlot final
+		{
+			UniqueHandle<AssetType>  Owner = {}; // owns handle lifetime
+			std::optional<AssetType> Value = {}; // owns asset lifetime (no assignment required)
+		};
 
 	private:
-		// Handle -> asset (registry storage)
-		std::unordered_map<TextureAssetHandle, TextureAsset>    m_Textures;
-		std::unordered_map<MaterialAssetHandle, MaterialAsset>   m_Materials;
-		std::unordered_map<StaticMeshAssetHandle, StaticMeshAsset> m_StaticMeshes;
+		template<AssetTypeConcept AssetType>
+		static void EnsureSlotCapacity(uint32 index, std::vector<AssetSlot<AssetType>>& slots)
+		{
+			if (index >= static_cast<uint32>(slots.size()))
+			{
+				slots.resize(static_cast<size_t>(index) + 1);
+			}
+		}
 
-		// Key -> handle (dedup / lookup)
-		std::unordered_map<AssetId, TextureAssetHandle>    m_TextureKeyToHandle;
-		std::unordered_map<AssetId, MaterialAssetHandle>   m_MaterialKeyToHandle;
-		std::unordered_map<AssetId, StaticMeshAssetHandle> m_StaticMeshKeyToHandle;
+		template<AssetTypeConcept AssetType>
+		static AssetSlot<AssetType>* FindSlot(Handle<AssetType> h, std::vector<AssetSlot<AssetType>>& slots) noexcept
+		{
+			if (!h.IsValid())
+			{
+				return nullptr;
+			}
 
-		uint32 m_NextTextureId = 1;
-		uint32 m_NextMaterialId = 1;
-		uint32 m_NextStaticMeshId = 1;
+			const uint32 index = h.GetIndex();
+			if (index == 0 || index >= static_cast<uint32>(slots.size()))
+			{
+				return nullptr;
+			}
+
+			auto& slot = slots[index];
+
+			if (!slot.Value.has_value())
+			{
+				return nullptr;
+			}
+
+			// generation-safe check:
+			// stale handle(index same, gen different) -> Owner.Get() != h
+			if (slot.Owner.Get() != h)
+			{
+				return nullptr;
+			}
+
+			return &slot;
+		}
+
+		template<AssetTypeConcept AssetType>
+		static const AssetSlot<AssetType>* FindSlot(Handle<AssetType> h, const std::vector<AssetSlot<AssetType>>& slots) noexcept
+		{
+			if (!h.IsValid())
+			{
+				return nullptr;
+			}
+
+			const uint32 index = h.GetIndex();
+			if (index == 0 || index >= static_cast<uint32>(slots.size()))
+			{
+				return nullptr;
+			}
+
+			const auto& slot = slots[index];
+
+			if (!slot.Value.has_value())
+			{
+				return nullptr;
+			}
+
+			if (slot.Owner.Get() != h)
+			{
+				return nullptr;
+			}
+
+			return &slot;
+		}
+
+	private:
+		template<AssetTypeConcept AssetType>
+		static Handle<AssetType> RegisterAsset(
+			const AssetType& asset,
+			std::vector<AssetSlot<AssetType>>& slots,
+			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
+			uint32& count);
+
+		template<AssetTypeConcept AssetType>
+		static const AssetType& GetAsset(
+			Handle<AssetType> h,
+			const std::vector<AssetSlot<AssetType>>& slots) noexcept;
+
+		template<AssetTypeConcept AssetType>
+		static const AssetType* TryGetAsset(
+			Handle<AssetType> h,
+			const std::vector<AssetSlot<AssetType>>& slots) noexcept;
+
+		template<AssetTypeConcept AssetType>
+		static Handle<AssetType> FindById(
+			const AssetId& id,
+			const std::vector<AssetSlot<AssetType>>& slots,
+			const std::unordered_map<AssetId, Handle<AssetType>>& idToHandle) noexcept;
+
+		template<AssetTypeConcept AssetType>
+		static bool RemoveAsset(
+			Handle<AssetType> h,
+			std::vector<AssetSlot<AssetType>>& slots,
+			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
+			uint32& count);
+
+		template<AssetTypeConcept AssetType>
+		static void ClearTable(
+			std::vector<AssetSlot<AssetType>>& slots,
+			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
+			uint32& count);
+
+	private:
+		std::vector<AssetSlot<TextureAsset>> m_TextureSlots;
+		std::unordered_map<AssetId, Handle<TextureAsset>> m_TextureIdToHandle;
+		uint32 m_TextureCount = 0;
+
+		std::vector<AssetSlot<MaterialAsset>> m_MaterialSlots;
+		std::unordered_map<AssetId, Handle<MaterialAsset>> m_MaterialIdToHandle;
+		uint32 m_MaterialCount = 0;
+
+		std::vector<AssetSlot<StaticMeshAsset>> m_StaticMeshSlots;
+		std::unordered_map<AssetId, Handle<StaticMeshAsset>> m_StaticMeshIdToHandle;
+		uint32 m_StaticMeshCount = 0;
 	};
 
 } // namespace shz

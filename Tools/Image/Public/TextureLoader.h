@@ -111,7 +111,7 @@ namespace shz
 		bool FlipVertically = false;
 
 		/// Flag indicating that RGB channels should be premultiplied by alpha
-		bool PermultiplyAlpha = false;
+		bool PremultiplyAlpha = false;
 
 		/// Texture format
 		TEXTURE_FORMAT Format = TEX_FORMAT_UNKNOWN;

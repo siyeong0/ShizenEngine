@@ -14,12 +14,11 @@ namespace shz
 	// TextureAsset
 	// - CPU-side texture asset (no GPU resource ownership).
 	// - Holds source path + loading options (sRGB, mips, compression, etc.).
-	// - Renderer uses these options to create GPU texture (TextureRenderData).
+	// - Renderer uses these options to create GPU texture resources.
 	// ------------------------------------------------------------
 	class TextureAsset final : public AssetObject
 	{
 	public:
-		// Minimal identity / metadata
 		TextureAsset() = default;
 		TextureAsset(const TextureAsset&) = default;
 		TextureAsset(TextureAsset&&) noexcept = default;
@@ -37,7 +36,7 @@ namespace shz
 		const std::string& GetSourcePath() const noexcept { return m_SourcePath; }
 
 		// ------------------------------------------------------------
-		// Load options (mirrors TextureLoadInfo conceptually)
+		// Load options
 		// ------------------------------------------------------------
 		void SetIsSRGB(bool value) noexcept { m_IsSRGB = value; }
 		bool GetIsSRGB() const noexcept { return m_IsSRGB; }
@@ -69,7 +68,6 @@ namespace shz
 		void SetSwizzle(const TextureComponentMapping& swizzle) noexcept { m_Swizzle = swizzle; }
 		const TextureComponentMapping& GetSwizzle() const noexcept { return m_Swizzle; }
 
-		// Usage/bind policy (optional; default fits typical material textures)
 		void SetUsage(USAGE usage) noexcept { m_Usage = usage; }
 		USAGE GetUsage() const noexcept { return m_Usage; }
 
@@ -80,12 +78,17 @@ namespace shz
 		uint32 GetMipLevels() const noexcept { return m_MipLevels; }
 
 		// ------------------------------------------------------------
-		// Derived
+		// Derived / utilities
 		// ------------------------------------------------------------
+		// Minimal "loadable" validity check.
 		bool IsValid() const noexcept;
 
+		// Optional: checks option consistency (debug/authoring validation).
+		bool ValidateOptions() const noexcept;
+
 		// Builds TextureLoadInfo used by Tools/Image loader.
-		// If Name is empty, loader can still work, but naming helps debugging.
+		// WARNING: Name points into this object's internal string.
+		// Use only when the loader consumes the struct immediately.
 		TextureLoadInfo BuildTextureLoadInfo() const noexcept;
 
 		// Clears all metadata and resets options to defaults.
@@ -95,7 +98,6 @@ namespace shz
 		std::string m_Name;
 		std::string m_SourcePath;
 
-		// Options
 		USAGE      m_Usage = USAGE_IMMUTABLE;
 		BIND_FLAGS m_BindFlags = BIND_SHADER_RESOURCE;
 		uint32     m_MipLevels = 0;
@@ -108,8 +110,8 @@ namespace shz
 		TEXTURE_FORMAT m_Format = TEX_FORMAT_UNKNOWN;
 
 		float m_AlphaCutoff = 0.0f;
-		TEXTURE_LOAD_MIP_FILTER     m_MipFilter = TEXTURE_LOAD_MIP_FILTER_DEFAULT;
-		TEXTURE_LOAD_COMPRESS_MODE  m_CompressMode = TEXTURE_LOAD_COMPRESS_MODE_NONE;
+		TEXTURE_LOAD_MIP_FILTER    m_MipFilter = TEXTURE_LOAD_MIP_FILTER_DEFAULT;
+		TEXTURE_LOAD_COMPRESS_MODE m_CompressMode = TEXTURE_LOAD_COMPRESS_MODE_NONE;
 
 		TextureComponentMapping m_Swizzle = TextureComponentMapping::Identity();
 		uint32 m_UniformImageClipDim = 0;

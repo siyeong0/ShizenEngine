@@ -1,11 +1,11 @@
 #pragma once
 #include "Primitives/BasicTypes.h"
+#include "Primitives/Handle.hpp"
 
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/Renderer/Public/MaterialInstance.h"
-#include "Engine/Renderer/Public/Handles.h"
 
 // RHI forward decls
 namespace shz
@@ -24,51 +24,33 @@ namespace shz
 
     // ------------------------------------------------------------
     // MaterialRenderData
-    // - GPU-side binding data for a material (PSO/SRB + texture SRVs).
-    // - Cached by Renderer (MaterialHandle -> MaterialRenderData).
+    // - GPU-side binding data for a material instance (PSO/SRB + textures).
+    // - Cached by Renderer.
     //
     // NOTE:
-    // - Keep this strictly "render-implementation side".
-    // - CPU authoring data lives in MaterialAsset.
-    // - Runtime logical material params/handles live in Material.
+    // - This struct does NOT manage lifetime of the instance handle.
+    // - Handle liveness must be validated by the cache/registry that owns it.
     // ------------------------------------------------------------
     struct MaterialRenderData final
     {
-        // ------------------------------------------------------------
-        // Identity
-        // ------------------------------------------------------------
-        MaterialHandle Handle = {};
+        // Identity (instance this render data belongs to)
+        Handle<MaterialInstance> InstanceHandle = {};
 
-        // ------------------------------------------------------------
         // Derived render policy
-        // ------------------------------------------------------------
         MATERIAL_RENDER_QUEUE RenderQueue = MATERIAL_RENDER_QUEUE_OPAQUE;
 
-        // Optional: per-material raster state hints (if you plan to support it)
         bool TwoSided = false;
         bool CastShadow = true;
 
-        // Sort key for render ordering / batching
-        // Typical layout:
-        //  [63..56] RenderQueue
-        //  [55..40] PSOKey hash (or pipeline variant)
-        //  [39.. 0] Material/Resource hash (textures/srb)
         uint64 SortKey = 0;
 
-        // ------------------------------------------------------------
         // GPU bindings
-        // ------------------------------------------------------------
-        RefCntAutoPtr<IPipelineState>        pPSO;
+        RefCntAutoPtr<IPipelineState> pPSO;
         RefCntAutoPtr<IShaderResourceBinding> pSRB;
 
-        // Common sampler (optional; could also be static sampler in PSO)
         RefCntAutoPtr<ISampler> pDefaultSampler;
 
-        // ------------------------------------------------------------
-        // Runtime constants (optional)
-        // - If you later switch to "material uniform buffer",
-        //   you can keep a pointer/offset here.
-        // ------------------------------------------------------------
+        // Runtime constants
         float4 BaseColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
         float  Metallic = 0.0f;
         float  Roughness = 0.5f;
@@ -77,14 +59,8 @@ namespace shz
         float3 Emissive = float3(0.0f, 0.0f, 0.0f);
         float  AlphaCutoff = 0.5f;
 
-        // ------------------------------------------------------------
-        // Ctors
-        // ------------------------------------------------------------
         MaterialRenderData() = default;
 
-        // ------------------------------------------------------------
-        // Helpers
-        // ------------------------------------------------------------
         void Clear();
         bool IsValid() const noexcept;
 

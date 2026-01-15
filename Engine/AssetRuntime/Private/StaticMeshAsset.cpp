@@ -2,7 +2,6 @@
 #include "StaticMeshAsset.h"
 
 #include <limits>
-#include <utility>
 
 namespace shz
 {
@@ -20,14 +19,12 @@ namespace shz
 	// ------------------------------------------------------------
 	// Indices
 	// ------------------------------------------------------------
-
 	void StaticMeshAsset::SetIndicesU32(std::vector<uint32>&& indices)
 	{
 		m_IndexType = VT_UINT32;
 		m_IndicesU32 = std::move(indices);
 
 		m_IndicesU16.clear();
-		m_IndicesU16.shrink_to_fit();
 	}
 
 	void StaticMeshAsset::SetIndicesU16(std::vector<uint16>&& indices)
@@ -36,18 +33,25 @@ namespace shz
 		m_IndicesU16 = std::move(indices);
 
 		m_IndicesU32.clear();
-		m_IndicesU32.shrink_to_fit();
 	}
 
 	const void* StaticMeshAsset::GetIndexData() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
-			return m_IndicesU32.empty() ? nullptr : static_cast<const void*>(m_IndicesU32.data());
+			if (m_IndicesU32.empty())
+			{
+				return nullptr;
+			}
+			return static_cast<const void*>(m_IndicesU32.data());
 		}
 		else
 		{
-			return m_IndicesU16.empty() ? nullptr : static_cast<const void*>(m_IndicesU16.data());
+			if (m_IndicesU16.empty())
+			{
+				return nullptr;
+			}
+			return static_cast<const void*>(m_IndicesU16.data());
 		}
 	}
 
@@ -55,11 +59,13 @@ namespace shz
 	{
 		if (m_IndexType == VT_UINT32)
 		{
-			return static_cast<uint32>(m_IndicesU32.size() * sizeof(uint32));
+			const uint64 bytes = static_cast<uint64>(m_IndicesU32.size()) * sizeof(uint32);
+			return static_cast<uint32>(bytes);
 		}
 		else
 		{
-			return static_cast<uint32>(m_IndicesU16.size() * sizeof(uint16));
+			const uint64 bytes = static_cast<uint64>(m_IndicesU16.size()) * sizeof(uint16);
+			return static_cast<uint32>(bytes);
 		}
 	}
 
@@ -75,10 +81,21 @@ namespace shz
 		}
 	}
 
+	uint32 StaticMeshAsset::GetIndexAt(uint32 i) const noexcept
+	{
+		if (m_IndexType == VT_UINT32)
+		{
+			return m_IndicesU32[i];
+		}
+		else
+		{
+			return static_cast<uint32>(m_IndicesU16[i]);
+		}
+	}
+
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-
 	MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()));
@@ -94,51 +111,106 @@ namespace shz
 	// ------------------------------------------------------------
 	// Validation / policy
 	// ------------------------------------------------------------
-
 	bool StaticMeshAsset::IsValid() const noexcept
 	{
+		// Positions are required.
 		if (m_Positions.empty())
+		{
 			return false;
+		}
 
-		// Enforce attribute array size consistency (for your current "simple" mesh format).
-		const size_t vtxCount = m_Positions.size();
-		if (m_Normals.size() != vtxCount)  return false;
-		if (m_Tangents.size() != vtxCount) return false;
-		if (m_TexCoords.size() != vtxCount) return false;
-
+		// Indices are required.
 		if (GetIndexCount() == 0)
+		{
 			return false;
+		}
 
-		// Sections are optional. If provided, they should be consistent.
+		const size_t vtxCount = m_Positions.size();
+
+		// Optional streams: if present, they must match vertex count.
+		if (!m_Normals.empty())
+		{
+			if (m_Normals.size() != vtxCount)
+			{
+				return false;
+			}
+		}
+
+		if (!m_Tangents.empty())
+		{
+			if (m_Tangents.size() != vtxCount)
+			{
+				return false;
+			}
+		}
+
+		if (!m_TexCoords.empty())
+		{
+			if (m_TexCoords.size() != vtxCount)
+			{
+				return false;
+			}
+		}
+
+		// Sections are optional. If provided, they must be in-range.
+		const uint32 indexCount = GetIndexCount();
 		for (const Section& sec : m_Sections)
 		{
 			if (sec.IndexCount == 0)
+			{
 				return false;
+			}
 
 			const uint64 end = static_cast<uint64>(sec.FirstIndex) + static_cast<uint64>(sec.IndexCount);
-			if (end > static_cast<uint64>(GetIndexCount()))
+			if (end > static_cast<uint64>(indexCount))
+			{
 				return false;
+			}
 
 			// If materials exist, ensure section slot is within range.
 			if (!m_MaterialSlots.empty())
 			{
 				if (sec.MaterialSlot >= static_cast<uint32>(m_MaterialSlots.size()))
+				{
 					return false;
+				}
 			}
 		}
+
+		// Optional strict check (debug): index values must be < vertex count.
+		// Uncomment if you want strict validation.
+		/*
+		for (uint32 i = 0; i < indexCount; ++i)
+		{
+			const uint32 idx = GetIndexAt(i);
+			if (idx >= static_cast<uint32>(vtxCount))
+			{
+				return false;
+			}
+		}
+		*/
 
 		return true;
 	}
 
 	bool StaticMeshAsset::HasCPUData() const noexcept
 	{
-		return !m_Positions.empty() && (GetIndexCount() != 0);
+		if (m_Positions.empty())
+		{
+			return false;
+		}
+
+		if (GetIndexCount() == 0)
+		{
+			return false;
+		}
+
+		return true;
 	}
 
 	// ------------------------------------------------------------
 	// Bounds
 	// ------------------------------------------------------------
-
 	void StaticMeshAsset::RecomputeBounds()
 	{
 		if (m_Positions.empty())
@@ -163,24 +235,26 @@ namespace shz
 
 		for (const float3& p : m_Positions)
 		{
-			if (p.x < minV.x) minV.x = p.x;
-			if (p.y < minV.y) minV.y = p.y;
-			if (p.z < minV.z) minV.z = p.z;
+			if (p.x < minV.x) { minV.x = p.x; }
+			if (p.y < minV.y) { minV.y = p.y; }
+			if (p.z < minV.z) { minV.z = p.z; }
 
-			if (p.x > maxV.x) maxV.x = p.x;
-			if (p.y > maxV.y) maxV.y = p.y;
-			if (p.z > maxV.z) maxV.z = p.z;
+			if (p.x > maxV.x) { maxV.x = p.x; }
+			if (p.y > maxV.y) { maxV.y = p.y; }
+			if (p.z > maxV.z) { maxV.z = p.z; }
 		}
 
 		m_Bounds = Box(minV, maxV);
 
-		recomputeSectionBounds();
+		RecomputeSectionBounds();
 	}
 
-	void StaticMeshAsset::recomputeSectionBounds()
+	void StaticMeshAsset::RecomputeSectionBounds()
 	{
 		if (m_Sections.empty())
+		{
 			return;
+		}
 
 		if (!HasCPUData())
 		{
@@ -190,18 +264,6 @@ namespace shz
 			}
 			return;
 		}
-
-		auto GetIndexAt = [&](uint32 i) -> uint32
-		{
-			if (m_IndexType == VT_UINT32)
-			{
-				return m_IndicesU32[i];
-			}
-			else
-			{
-				return static_cast<uint32>(m_IndicesU16[i]);
-			}
-		};
 
 		for (Section& sec : m_Sections)
 		{
@@ -225,18 +287,23 @@ namespace shz
 			for (uint32 i = sec.FirstIndex; i < end; ++i)
 			{
 				const uint32 idx = GetIndexAt(i);
+
+				// If invalid indices exist, we skip them to avoid crashes.
+				// For strict behavior, you can assert here instead.
 				if (idx >= static_cast<uint32>(m_Positions.size()))
+				{
 					continue;
+				}
 
 				const float3& p = m_Positions[idx];
 
-				if (p.x < minV.x) minV.x = p.x;
-				if (p.y < minV.y) minV.y = p.y;
-				if (p.z < minV.z) minV.z = p.z;
+				if (p.x < minV.x) { minV.x = p.x; }
+				if (p.y < minV.y) { minV.y = p.y; }
+				if (p.z < minV.z) { minV.z = p.z; }
 
-				if (p.x > maxV.x) maxV.x = p.x;
-				if (p.y > maxV.y) maxV.y = p.y;
-				if (p.z > maxV.z) maxV.z = p.z;
+				if (p.x > maxV.x) { maxV.x = p.x; }
+				if (p.y > maxV.y) { maxV.y = p.y; }
+				if (p.z > maxV.z) { maxV.z = p.z; }
 			}
 
 			sec.LocalBounds = Box(minV, maxV);
@@ -246,26 +313,19 @@ namespace shz
 	// ------------------------------------------------------------
 	// Memory
 	// ------------------------------------------------------------
-
 	void StaticMeshAsset::StripCPUData()
 	{
+		// Do not call shrink_to_fit() here to avoid expensive reallocations
+		// and potential stalls. If you need to aggressively return memory,
+		// add a separate function dedicated to that policy.
+
 		m_Positions.clear();
-		m_Positions.shrink_to_fit();
-
 		m_Normals.clear();
-		m_Normals.shrink_to_fit();
-
 		m_Tangents.clear();
-		m_Tangents.shrink_to_fit();
-
 		m_TexCoords.clear();
-		m_TexCoords.shrink_to_fit();
 
 		m_IndicesU32.clear();
-		m_IndicesU32.shrink_to_fit();
-
 		m_IndicesU16.clear();
-		m_IndicesU16.shrink_to_fit();
 	}
 
 	void StaticMeshAsset::Clear()
@@ -280,6 +340,7 @@ namespace shz
 
 		m_IndicesU32.clear();
 		m_IndicesU16.clear();
+
 		m_Sections.clear();
 		m_MaterialSlots.clear();
 

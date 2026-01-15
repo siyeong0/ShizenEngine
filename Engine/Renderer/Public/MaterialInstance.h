@@ -2,129 +2,192 @@
 #include <optional>
 
 #include "Primitives/BasicTypes.h"
+#include "Primitives/Handle.hpp"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/Public/AssetHandles.h" 
-#include "Engine/Renderer/Public/Handles.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/TextureAsset.h"
 
 namespace shz
 {
-    enum MATERIAL_ALPHA_MODE : uint8
-    {
-        MATERIAL_ALPHA_OPAQUE = 0,
-        MATERIAL_ALPHA_MASK,
-        MATERIAL_ALPHA_BLEND
-    };
-
     // ------------------------------------------------------------
     // MaterialInstance
     // - Runtime-side instance (CPU-side, no GPU dependency).
     // - References a parent material asset by handle (does NOT own/copy it).
     // - Stores optional overrides (texture asset refs + scalar/vector params).
+    //
+    // NOTE:
+    // - This class does NOT validate handle liveness.
+    // - The resolver (AssetManager/Renderer) must check IsAlive() before dereferencing.
     // ------------------------------------------------------------
     class MaterialInstance final
     {
     public:
         MaterialInstance() = default;
 
-        explicit MaterialInstance(MaterialAssetHandle parent) noexcept
+        explicit MaterialInstance(Handle<MaterialAsset> parent) noexcept
             : m_Parent(parent)
         {
         }
 
         // --------------------------------------------------------
-        // Getters
-        // --------------------------------------------------------
-        float3 GetBaseColorFactor(const float3& fallback) const noexcept
-        {
-            return m_BaseColorFactor ? *m_BaseColorFactor : fallback;
-        }
-
-        float GetOpacity(float fallback) const noexcept
-        {
-            return m_Opacity ? *m_Opacity : fallback;
-        }
-
-        float GetMetallic(float fallback) const noexcept
-        {
-            return m_Metallic ? *m_Metallic : fallback;
-        }
-
-        float GetRoughness(float fallback) const noexcept
-        {
-            return m_Roughness ? *m_Roughness : fallback;
-        }
-
-        float GetNormalScale(float fallback) const noexcept
-        {
-            return m_NormalScale ? *m_NormalScale : fallback;
-        }
-
-        float GetOcclusionStrength(float fallback) const noexcept
-        {
-            return m_OcclusionStrength ? *m_OcclusionStrength : fallback;
-        }
-
-        float3 GetEmissiveFactor(const float3& fallback) const noexcept
-        {
-            return m_EmissiveFactor ? *m_EmissiveFactor : fallback;
-        }
-
-        MATERIAL_ALPHA_MODE GetAlphaMode(MATERIAL_ALPHA_MODE fallback) const noexcept
-        {
-            return m_AlphaMode ? *m_AlphaMode : fallback;
-        }
-
-        float GetAlphaCutoff(float fallback) const noexcept
-        {
-            return m_AlphaCutoff ? *m_AlphaCutoff : fallback;
-        }
-
-        // --------------------------------------------------------
         // Parent
         // --------------------------------------------------------
-        void SetParent(MaterialAssetHandle parent) noexcept { m_Parent = parent; }
-        MaterialAssetHandle GetParent() const noexcept { return m_Parent; }
-        bool HasParent() const noexcept { return m_Parent.IsValid(); }
+        void SetParent(Handle<MaterialAsset> parent) noexcept
+        {
+            m_Parent = parent;
+        }
+
+        Handle<MaterialAsset> GetParent() const noexcept
+        {
+            return m_Parent;
+        }
+
+        // Returns true if the parent handle is non-zero (does not imply liveness).
+        bool HasParentValue() const noexcept
+        {
+            return m_Parent.IsValid();
+        }
 
         // --------------------------------------------------------
         // Texture overrides (asset references)
+        // - "No override" is represented by an invalid handle.
         // --------------------------------------------------------
         void ClearAllTextureOverrides() noexcept
         {
-            m_BaseColorTexture.reset();
-            m_NormalTexture.reset();
-            m_MetallicRoughnessTexture.reset();
-            m_AmbientOcclusionTexture.reset();
-            m_EmissiveTexture.reset();
+            m_BaseColorTextureOverride = {};
+            m_NormalTextureOverride = {};
+            m_MetallicRoughnessTextureOverride = {};
+            m_AmbientOcclusionTextureOverride = {};
+            m_EmissiveTextureOverride = {};
         }
 
-        void OverrideBaseColorTexture(TextureAssetHandle tex) noexcept { m_BaseColorTexture = tex; }
-        void OverrideNormalTexture(TextureAssetHandle tex) noexcept { m_NormalTexture = tex; }
-        void OverrideMetallicRoughnessTexture(TextureAssetHandle tex) noexcept { m_MetallicRoughnessTexture = tex; }
-        void OverrideAmbientOcclusionTexture(TextureAssetHandle tex) noexcept { m_AmbientOcclusionTexture = tex; }
-        void OverrideEmissiveTexture(TextureAssetHandle tex) noexcept { m_EmissiveTexture = tex; }
+        void OverrideBaseColorTexture(Handle<TextureAsset> tex) noexcept
+        {
+            m_BaseColorTextureOverride = tex;
+        }
 
-        void ClearBaseColorTextureOverride() noexcept { m_BaseColorTexture.reset(); }
-        void ClearNormalTextureOverride() noexcept { m_NormalTexture.reset(); }
-        void ClearMetallicRoughnessTextureOverride() noexcept { m_MetallicRoughnessTexture.reset(); }
-        void ClearAmbientOcclusionTextureOverride() noexcept { m_AmbientOcclusionTexture.reset(); }
-        void ClearEmissiveTextureOverride() noexcept { m_EmissiveTexture.reset(); }
+        void OverrideNormalTexture(Handle<TextureAsset> tex) noexcept
+        {
+            m_NormalTextureOverride = tex;
+        }
 
-        bool HasBaseColorTextureOverride() const noexcept { return m_BaseColorTexture.has_value(); }
-        bool HasNormalTextureOverride() const noexcept { return m_NormalTexture.has_value(); }
-        bool HasMetallicRoughnessTextureOverride() const noexcept { return m_MetallicRoughnessTexture.has_value(); }
-        bool HasAmbientOcclusionTextureOverride() const noexcept { return m_AmbientOcclusionTexture.has_value(); }
-        bool HasEmissiveTextureOverride() const noexcept { return m_EmissiveTexture.has_value(); }
+        void OverrideMetallicRoughnessTexture(Handle<TextureAsset> tex) noexcept
+        {
+            m_MetallicRoughnessTextureOverride = tex;
+        }
 
-        TextureAssetHandle GetBaseColorTextureOverrideOrInvalid() const noexcept { return m_BaseColorTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetNormalTextureOverrideOrInvalid() const noexcept { return m_NormalTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetMetallicRoughnessTextureOverrideOrInvalid() const noexcept { return m_MetallicRoughnessTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetAmbientOcclusionTextureOverrideOrInvalid() const noexcept { return m_AmbientOcclusionTexture.value_or(TextureAssetHandle{}); }
-        TextureAssetHandle GetEmissiveTextureOverrideOrInvalid() const noexcept { return m_EmissiveTexture.value_or(TextureAssetHandle{}); }
+        void OverrideAmbientOcclusionTexture(Handle<TextureAsset> tex) noexcept
+        {
+            m_AmbientOcclusionTextureOverride = tex;
+        }
+
+        void OverrideEmissiveTexture(Handle<TextureAsset> tex) noexcept
+        {
+            m_EmissiveTextureOverride = tex;
+        }
+
+        void ClearBaseColorTextureOverride() noexcept { m_BaseColorTextureOverride = {}; }
+        void ClearNormalTextureOverride() noexcept { m_NormalTextureOverride = {}; }
+        void ClearMetallicRoughnessTextureOverride() noexcept { m_MetallicRoughnessTextureOverride = {}; }
+        void ClearAmbientOcclusionTextureOverride() noexcept { m_AmbientOcclusionTextureOverride = {}; }
+        void ClearEmissiveTextureOverride() noexcept { m_EmissiveTextureOverride = {}; }
+
+        bool HasBaseColorTextureOverride() const noexcept { return m_BaseColorTextureOverride.IsValid(); }
+        bool HasNormalTextureOverride() const noexcept { return m_NormalTextureOverride.IsValid(); }
+        bool HasMetallicRoughnessTextureOverride() const noexcept { return m_MetallicRoughnessTextureOverride.IsValid(); }
+        bool HasAmbientOcclusionTextureOverride() const noexcept { return m_AmbientOcclusionTextureOverride.IsValid(); }
+        bool HasEmissiveTextureOverride() const noexcept { return m_EmissiveTextureOverride.IsValid(); }
+
+        Handle<TextureAsset> GetBaseColorTextureOverride() const noexcept { return m_BaseColorTextureOverride; }
+        Handle<TextureAsset> GetNormalTextureOverride() const noexcept { return m_NormalTextureOverride; }
+        Handle<TextureAsset> GetMetallicRoughnessTextureOverride() const noexcept { return m_MetallicRoughnessTextureOverride; }
+        Handle<TextureAsset> GetAmbientOcclusionTextureOverride() const noexcept { return m_AmbientOcclusionTextureOverride; }
+        Handle<TextureAsset> GetEmissiveTextureOverride() const noexcept { return m_EmissiveTextureOverride; }
 
         // --------------------------------------------------------
         // Parameter overrides
         // --------------------------------------------------------
+        float3 GetBaseColorFactor(const float3& fallback) const noexcept
+        {
+            if (m_BaseColorFactor.has_value())
+            {
+                return *m_BaseColorFactor;
+            }
+            return fallback;
+        }
+
+        float GetOpacity(float fallback) const noexcept
+        {
+            if (m_Opacity.has_value())
+            {
+                return *m_Opacity;
+            }
+            return fallback;
+        }
+
+        float GetMetallic(float fallback) const noexcept
+        {
+            if (m_Metallic.has_value())
+            {
+                return *m_Metallic;
+            }
+            return fallback;
+        }
+
+        float GetRoughness(float fallback) const noexcept
+        {
+            if (m_Roughness.has_value())
+            {
+                return *m_Roughness;
+            }
+            return fallback;
+        }
+
+        float GetNormalScale(float fallback) const noexcept
+        {
+            if (m_NormalScale.has_value())
+            {
+                return *m_NormalScale;
+            }
+            return fallback;
+        }
+
+        float GetOcclusionStrength(float fallback) const noexcept
+        {
+            if (m_OcclusionStrength.has_value())
+            {
+                return *m_OcclusionStrength;
+            }
+            return fallback;
+        }
+
+        float3 GetEmissiveFactor(const float3& fallback) const noexcept
+        {
+            if (m_EmissiveFactor.has_value())
+            {
+                return *m_EmissiveFactor;
+            }
+            return fallback;
+        }
+
+        MATERIAL_ALPHA_MODE GetAlphaMode(MATERIAL_ALPHA_MODE fallback) const noexcept
+        {
+            if (m_AlphaMode.has_value())
+            {
+                return *m_AlphaMode;
+            }
+            return fallback;
+        }
+
+        float GetAlphaCutoff(float fallback) const noexcept
+        {
+            if (m_AlphaCutoff.has_value())
+            {
+                return *m_AlphaCutoff;
+            }
+            return fallback;
+        }
+
         void ClearAllParameterOverrides() noexcept
         {
             m_BaseColorFactor.reset();
@@ -145,7 +208,6 @@ namespace shz
         void OverrideNormalScale(float v) noexcept { m_NormalScale = v; }
         void OverrideOcclusionStrength(float v) noexcept { m_OcclusionStrength = v; }
         void OverrideEmissiveFactor(const float3& v) noexcept { m_EmissiveFactor = v; }
-
         void OverrideAlphaMode(MATERIAL_ALPHA_MODE mode) noexcept { m_AlphaMode = mode; }
         void OverrideAlphaCutoff(float v) noexcept { m_AlphaCutoff = v; }
 
@@ -159,36 +221,48 @@ namespace shz
         void ClearAlphaModeOverride() noexcept { m_AlphaMode.reset(); }
         void ClearAlphaCutoffOverride() noexcept { m_AlphaCutoff.reset(); }
 
-        bool HasAlphaModeOverride() const noexcept { return m_AlphaMode.has_value(); }
-
-        // Resolve 전에는 "최종"을 모름 → 단독 판단은 override가 있을 때만 의미 있음
-        bool IsOpaqueOverrideOnly() const noexcept
+        bool HasAlphaModeOverride() const noexcept
         {
-            return m_AlphaMode.has_value() ? (*m_AlphaMode == MATERIAL_ALPHA_OPAQUE) : true;
+            return m_AlphaMode.has_value();
         }
 
-        bool IsAlphaMaskedOverrideOnly() const noexcept
+        // Returns true only when an override exists and equals the queried mode.
+        bool IsOpaqueIfOverridden() const noexcept
         {
-            return m_AlphaMode.has_value() ? (*m_AlphaMode == MATERIAL_ALPHA_MASK) : false;
+            if (!m_AlphaMode.has_value())
+            {
+                return false;
+            }
+            return (*m_AlphaMode == MATERIAL_ALPHA_OPAQUE);
         }
 
-        bool IsTranslucentOverrideOnly() const noexcept
+        bool IsMaskedIfOverridden() const noexcept
         {
-            return m_AlphaMode.has_value() ? (*m_AlphaMode == MATERIAL_ALPHA_BLEND) : false;
+            if (!m_AlphaMode.has_value())
+            {
+                return false;
+            }
+            return (*m_AlphaMode == MATERIAL_ALPHA_MASK);
+        }
+
+        bool IsBlendIfOverridden() const noexcept
+        {
+            if (!m_AlphaMode.has_value())
+            {
+                return false;
+            }
+            return (*m_AlphaMode == MATERIAL_ALPHA_BLEND);
         }
 
     private:
-        // Parent asset reference
-        MaterialAssetHandle m_Parent = {};
+        Handle<MaterialAsset> m_Parent = {};
 
-        // Texture overrides (asset refs)
-        std::optional<TextureAssetHandle> m_BaseColorTexture;
-        std::optional<TextureAssetHandle> m_NormalTexture;
-        std::optional<TextureAssetHandle> m_MetallicRoughnessTexture;
-        std::optional<TextureAssetHandle> m_AmbientOcclusionTexture;
-        std::optional<TextureAssetHandle> m_EmissiveTexture;
+        Handle<TextureAsset> m_BaseColorTextureOverride = {};
+        Handle<TextureAsset> m_NormalTextureOverride = {};
+        Handle<TextureAsset> m_MetallicRoughnessTextureOverride = {};
+        Handle<TextureAsset> m_AmbientOcclusionTextureOverride = {};
+        Handle<TextureAsset> m_EmissiveTextureOverride = {};
 
-        // Parameter overrides
         std::optional<float3> m_BaseColorFactor;
         std::optional<float>  m_Opacity;
         std::optional<float>  m_Metallic;

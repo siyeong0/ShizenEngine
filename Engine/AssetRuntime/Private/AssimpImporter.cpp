@@ -220,7 +220,7 @@ namespace shz
 
 				// Heuristic: if opacity is not 1, treat as translucent
 				if (opacity < 0.999f)
-					outMat.GetOptions().BlendMode = MaterialAsset::BLEND_TRANSLUCENT;
+					outMat.GetOptions().BlendMode = MATERIAL_BLEND_TRANSLUCENT;
 			}
 
 #if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
@@ -252,7 +252,7 @@ namespace shz
 			if (TryGetTexturePath(mat, aiTextureType_BASE_COLOR, sceneFilePath, path) ||
 				TryGetTexturePath(mat, aiTextureType_DIFFUSE, sceneFilePath, path))
 			{
-				outMat.SetTexture(MaterialAsset::TEX_ALBEDO, path, true);
+				outMat.SetTexture(MATERIAL_TEX_ALBEDO, path, true);
 			}
 
 			// Normal
@@ -260,7 +260,7 @@ namespace shz
 			if (TryGetTexturePath(mat, aiTextureType_NORMALS, sceneFilePath, path) ||
 				TryGetTexturePath(mat, aiTextureType_HEIGHT, sceneFilePath, path)) // exporter misuse fallback
 			{
-				outMat.SetTexture(MaterialAsset::TEX_NORMAL, path, false);
+				outMat.SetTexture(MATERIAL_TEX_NORMAL, path, false);
 			}
 
 			// ORM (Occlusion/Roughness/Metallic)
@@ -272,14 +272,14 @@ namespace shz
 				TryGetTexturePath(mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path) ||
 				TryGetTexturePath(mat, aiTextureType_UNKNOWN, sceneFilePath, path)) // conservative fallback
 			{
-				outMat.SetTexture(MaterialAsset::TEX_ORM, path, false);
+				outMat.SetTexture(MATERIAL_TEX_ORM, path, false);
 			}
 
 			// Emissive
 			path.clear();
 			if (TryGetTexturePath(mat, aiTextureType_EMISSIVE, sceneFilePath, path))
 			{
-				outMat.SetTexture(MaterialAsset::TEX_EMISSIVE, path, true);
+				outMat.SetTexture(MATERIAL_TEX_EMISSIVE, path, true);
 			}
 		}
 	}

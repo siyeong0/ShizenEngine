@@ -31,8 +31,8 @@
 
 		<!-- C/C++ compiler settings -->
 		<ClCompile>
-			<!-- Use C++17 -->
-			<LanguageStandard>stdcpp17</LanguageStandard>
+			<!-- Use C++20 -->
+			<LanguageStandard>stdcpp20</LanguageStandard>
 
 			<!-- High warning level and strict checks -->
 			<WarningLevel>Level4</WarningLevel>

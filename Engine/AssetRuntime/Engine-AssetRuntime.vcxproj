@@ -157,7 +157,6 @@
     <ClInclude Include="Public\AssetManager.h" />
     <ClInclude Include="Public\AssetObject.h" />
     <ClInclude Include="Public\AssimpImporter.h" />
-    <ClInclude Include="Public\AssetHandles.h" />
     <ClInclude Include="Public\MaterialAsset.h" />
     <ClInclude Include="Public\StaticMeshAsset.h" />
     <ClInclude Include="Public\TextureAsset.h" />

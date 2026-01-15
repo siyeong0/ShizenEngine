@@ -18,10 +18,18 @@
 
 static void OpenConsole()
 {
+	// If already attached to a console, do nothing
 	if (GetConsoleWindow() != nullptr)
+	{
 		return;
+	}
 
-	AllocConsole();
+	// Attach to parent console (cmd / PowerShell)
+	if (!AttachConsole(ATTACH_PARENT_PROCESS))
+	{
+		// Fallback: create a new console
+		AllocConsole();
+	}
 
 	FILE* fp = nullptr;
 	freopen_s(&fp, "CONOUT$", "w", stdout);
@@ -32,6 +40,11 @@ static void OpenConsole()
 	SetConsoleCP(CP_UTF8);
 
 	SetConsoleTitleW(L"ShizenEngine Console");
+}
+
+static void WaitConsoleOnExit()
+{
+	system("pause");
 }
 
 using namespace shz;
@@ -50,6 +63,7 @@ int WINAPI WinMain(
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 	OpenConsole();
+	atexit(WaitConsoleOnExit);
 
 	g_pEngine.reset(CreateApplication());
 

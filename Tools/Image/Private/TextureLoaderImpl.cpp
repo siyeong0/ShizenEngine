@@ -83,7 +83,7 @@ namespace shz
 			ImageLoadInfo ImgLoadInfo;
 			ImgLoadInfo.Format = ImgFileFormat;
 			ImgLoadInfo.IsSRGB = TexLoadInfo.IsSRGB;
-			ImgLoadInfo.PermultiplyAlpha = TexLoadInfo.PermultiplyAlpha;
+			ImgLoadInfo.PermultiplyAlpha = TexLoadInfo.PremultiplyAlpha;
 			ImgLoadInfo.pAllocator = TexLoadInfo.pAllocator;
 			RefCntAutoPtr<Image> pImage;
 			Image::CreateFromMemory(pData, DataSize, ImgLoadInfo, &pImage);
