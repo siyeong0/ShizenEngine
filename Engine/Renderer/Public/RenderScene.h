@@ -1,6 +1,6 @@
+// RenderScene.h
 #pragma once
 #include <vector>
-#include <optional>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -23,16 +23,16 @@ namespace shz
 		struct LightObject final
 		{
 			uint32 Type = 0; // TODO: replace with enum
-			float3  Color = { 1.0f, 1.0f, 1.0f };
+			float3 Color = { 1.0f, 1.0f, 1.0f };
 			float  Intensity = 1.0f;
 
-			float3  Position = { 0.0f, 0.0f, 0.0f };
-			float3  Direction = { 0.0f, -1.0f, 0.0f };
+			float3 Position = { 0.0f, 0.0f, 0.0f };
+			float3 Direction = { 0.0f, -1.0f, 0.0f };
 
-			float  Range = 10.0f;
-			float  SpotAngle = 30.0f;
+			float Range = 10.0f;
+			float SpotAngle = 30.0f;
 
-			bool   CastShadow = false;
+			bool CastShadow = false;
 		};
 
 	public:
@@ -44,59 +44,63 @@ namespace shz
 		void Reset();
 
 		Handle<RenderObject> AddObject(Handle<StaticMeshRenderData> meshHandle, const Matrix4x4& transform);
-		bool RemoveObject(Handle<RenderObject> h);
-
-		bool SetObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);
-		bool SetObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
+		void RemoveObject(Handle<RenderObject> h);
+		void UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);
+		void UpdateObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
 
 		Handle<LightObject> AddLight(const LightObject& light);
-		bool RemoveLight(Handle<LightObject> h);
-		bool UpdateLight(Handle<LightObject> h, const LightObject& light);
+		void RemoveLight(Handle<LightObject> h);
+		void UpdateLight(Handle<LightObject> h, const LightObject& light);
 
-		uint32 GetObjectCount() const noexcept { return m_ObjectCount; }
-		uint32 GetLightCount()  const noexcept { return m_LightCount; }
+		uint32 GetObjectCount() const noexcept { return static_cast<uint32>(m_Objects.size()); }
+		uint32 GetLightCount()  const noexcept { return static_cast<uint32>(m_Lights.size()); }
 
-		const std::vector<Handle<RenderObject>>& GetObjectHandles() const noexcept { return m_ObjectHandles; }
-		const std::vector<Handle<LightObject>>& GetLightHandles() const noexcept { return m_LightHandles; }
-
-		const RenderObject* TryGetObject(Handle<RenderObject> h) const noexcept;
-		const LightObject* TryGetLight(Handle<LightObject> h) const noexcept;
+		// Dense arrays for fast per-frame iteration
+		const std::vector<RenderObject>& GetObjects() const noexcept { return m_Objects; }
+		const std::vector<LightObject>& GetLights()  const noexcept { return m_Lights; }
 
 	private:
+		static constexpr uint32 INVALID_INDEX = 0xFFFFFFFFu;
+
 		template<typename T>
 		struct Slot final
 		{
-			UniqueHandle<T> Owner = {};     // Owns handle lifetime (Destroy on reset/removal)
-			std::optional<T> Value = {};    // Owns object lifetime (no assignment required)
+			UniqueHandle<T> Owner = {}; // owns handle lifetime
+			uint32 DenseIndex = INVALID_INDEX;
+			bool bOccupied = false; // fast flag (avoid optional<T>)
 		};
 
 	private:
-		static uint32 ToIndex(Handle<RenderObject> h) noexcept { return h.GetIndex(); }
-		static uint32 ToIndex(Handle<LightObject>  h) noexcept { return h.GetIndex(); }
-
-		template<typename THandle, typename TSlotVec>
-		static void EnsureSlotCapacity(uint32 index, TSlotVec& slots)
+		static void ensureCapacity(uint32 index, std::vector<uint32>& v)
 		{
-			if (index >= static_cast<uint32>(slots.size()))
-			{
-				slots.resize(static_cast<size_t>(index) + 1);
-			}
+			if (index >= static_cast<uint32>(v.size())) { v.resize(static_cast<size_t>(index) + 1024, INVALID_INDEX); }
 		}
 
-		static Slot<RenderObject>* FindSlot(Handle<RenderObject> h, std::vector<Slot<RenderObject>>& slots) noexcept;
-		static const Slot<RenderObject>* FindSlot(Handle<RenderObject> h, const std::vector<Slot<RenderObject>>& slots) noexcept;
+		template<typename T>
+		static void ensureCapacity(uint32 index, std::vector<Slot<T>>& v)
+		{
+			if (index >= static_cast<uint32>(v.size())) { v.resize(static_cast<size_t>(index) + 1024); }
+		}
 
-		static Slot<LightObject>* FindSlot(Handle<LightObject> h, std::vector<Slot<LightObject>>& slots) noexcept;
-		static const Slot<LightObject>* FindSlot(Handle<LightObject> h, const std::vector<Slot<LightObject>>& slots) noexcept;
+		template<typename T>
+		uint32 findDenseIndex(Handle<T> h, const std::vector<Slot<T>>& slots) const noexcept;
 
 	private:
-		std::vector<Slot<RenderObject>> m_ObjectSlots;
-		std::vector<Handle<RenderObject>> m_ObjectHandles;
-		uint32 m_ObjectCount = 0;
+		// ------------------------------------------------------------
+		// RenderObjects (Dense/Sparse set)
+		// ------------------------------------------------------------
+		std::vector<Slot<RenderObject>> m_ObjectSlots;        // indexed by Handle index
+		std::vector<uint32> m_ObjectSparse;       // Handle index -> dense index
+		std::vector<RenderObject> m_Objects;            // dense objects
+		std::vector<Handle<RenderObject>> m_ObjectHandles;      // dense handles aligned with m_Objects
 
+		// ------------------------------------------------------------
+		// Lights (Dense/Sparse set)
+		// ------------------------------------------------------------
 		std::vector<Slot<LightObject>> m_LightSlots;
+		std::vector<uint32> m_LightSparse;
+		std::vector<LightObject> m_Lights;
 		std::vector<Handle<LightObject>> m_LightHandles;
-		uint32 m_LightCount = 0;
 	};
 
 } // namespace shz

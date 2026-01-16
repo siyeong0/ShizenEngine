@@ -55,6 +55,11 @@ namespace shz
 			return m_Value != 0;
 		}
 
+		constexpr bool IsAlive() const noexcept
+		{
+			return IsAlive(*this);
+		}
+
 		constexpr ValueType GetValue() const noexcept
 		{
 			return m_Value;

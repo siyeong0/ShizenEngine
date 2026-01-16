@@ -245,9 +245,9 @@ namespace shz
 		float3 cameraWs = view.CameraPosition;
 
 		const RenderScene::LightObject* globalLight = nullptr;
-		for (auto hLight : scene.GetLightHandles())
+		for (const RenderScene::LightObject& light : scene.GetLights())
 		{
-			globalLight = scene.TryGetLight(hLight);
+			globalLight = &light;
 			break;
 		}
 
@@ -391,15 +391,9 @@ namespace shz
 		std::unordered_map<uint64, MaterialRenderData*> frameMatCache;
 		frameMatCache.reserve(128);
 
-		for (const Handle<RenderScene::RenderObject>& hObj : scene.GetObjectHandles())
+		for (const RenderScene::RenderObject& obj : scene.GetObjects())
 		{
-			const RenderScene::RenderObject* obj = scene.TryGetObject(hObj);
-			if (!obj)
-			{
-				continue;
-			}
-
-			const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj->MeshHandle);
+			const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj.MeshHandle);
 			if (!mesh)
 			{
 				continue;
@@ -531,15 +525,9 @@ namespace shz
 			ctx->SetPipelineState(m_ShadowPSO);
 			ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-			for (const Handle<RenderScene::RenderObject>& hObj : scene.GetObjectHandles())
+			for (const RenderScene::RenderObject& obj : scene.GetObjects())
 			{
-				const RenderScene::RenderObject* obj = scene.TryGetObject(hObj);
-				if (!obj)
-				{
-					continue;
-				}
-
-				const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj->MeshHandle);
+				const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj.MeshHandle);
 				if (!mesh)
 				{
 					continue;
@@ -547,8 +535,8 @@ namespace shz
 
 				{
 					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					cb->World = obj->Transform;
-					cb->WorldInvTranspose = obj->Transform.Inversed().Transposed();
+					cb->World = obj.Transform;
+					cb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
 				}
 
 				IBuffer* vbs[] = { mesh->VertexBuffer };
@@ -638,15 +626,9 @@ namespace shz
 
 			ctx->BeginRenderPass(rpBegin);
 
-			for (const Handle<RenderScene::RenderObject>& hObj : scene.GetObjectHandles())
+			for (const RenderScene::RenderObject& obj : scene.GetObjects())
 			{
-				const RenderScene::RenderObject* obj = scene.TryGetObject(hObj);
-				if (!obj)
-				{
-					continue;
-				}
-
-				const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj->MeshHandle);
+				const StaticMeshRenderData* mesh = m_pRenderResourceCache->TryGetMesh(obj.MeshHandle);
 				if (!mesh)
 				{
 					continue;
@@ -654,8 +636,8 @@ namespace shz
 
 				{
 					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					cb->World = obj->Transform;
-					cb->WorldInvTranspose = obj->Transform.Inversed().Transposed();
+					cb->World = obj.Transform;
+					cb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
 				}
 
 				IBuffer* vbs[] = { mesh->VertexBuffer };
