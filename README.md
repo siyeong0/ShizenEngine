@@ -45,12 +45,18 @@ ShizenEngine/
 │  ├─ RHI/               # Render Hardware Interface (API-agnostic)
 │  ├─ RHI_D3DBase/       # Shared Direct3D backend code
 │  ├─ RHI_D3D12/         # Direct3D 12 implementation
+│  ├─ Renderer/          # High-level renderer
 │  │
 │  ├─ GraphicsArchiver/  # Render state / pipeline archiving
 │  ├─ GraphicsTools/     # Runtime graphics helper utilities
 │  ├─ GraphicsUtils/     # Low-level rendering utilities
 │  ├─ ShaderTools/       # Shader compilation & reflection tools
+│  ├─ AssetRuntime/      # Asset load/save and management
+│  │
 │  ├─ ImGui/             # Engine-integrated ImGui layer
+│  ├─ Tools/             # Standalone tools
+│  │  ├─ Image/          # Image Load/Save/Processing tools
+│  │  └─ ...
 │  └─ ...
 │
 ├─ Platforms/            # Platform abstraction layer
@@ -60,16 +66,12 @@ ShizenEngine/
 │
 ├─ Primitives/           # Shared public headers and primitive types
 │
-├─ Samples/              # Tutorial projects and sample applications
+├─ Apps/              # Tutorial projects and sample applications
 │  ├─ Tutorial01
 │  ├─ Tutorial02
 │  ├─ ...
 │  ├─ Sample01
 │  ├─ Sample02
-│  └─ ...
-│
-├─ Tools/                # Standalone tools
-│  ├─ Image/             # Image Load/Save/Processing tools
 │  └─ ...
 │
 ├─ ThirdParty/           # External dependencies
@@ -88,7 +90,7 @@ ShizenEngine/
 
 ## Technology Stack
 
-* **Language**: C++17
+* **Language**: C++20
 * **Graphics APIs**:
 
   * Direct3D 12 (primary)
