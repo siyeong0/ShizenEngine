@@ -14,54 +14,59 @@
 
 namespace shz
 {
-    class ShizenEngine final : public SampleBase
-    {
-    public:
-        virtual void Initialize(const SampleInitInfo& InitInfo) override final;
+	class ShizenEngine final : public SampleBase
+	{
+	public:
+		virtual void Initialize(const SampleInitInfo& InitInfo) override final;
 
-        virtual void Render() override final;
-        virtual void Update(double CurrTime, double ElapsedTime, bool DoUpdateUI) override final;
+		virtual void Render() override final;
+		virtual void Update(double CurrTime, double ElapsedTime, bool DoUpdateUI) override final;
 
-        virtual const Char* GetSampleName() const override final { return "Shizen Engine"; }
+		virtual const Char* GetSampleName() const override final { return "Shizen Engine"; }
 
-    private:
-        struct LoadedMesh final
-        {
-            std::string Path = {};
+	protected:
+		void UpdateUI() override;
 
-            Handle<StaticMeshAsset>      AssetHandle = {};
-            Handle<StaticMeshRenderData> MeshHandle = {};
-            Handle<RenderScene::RenderObject> ObjectId = {};
+	private:
+		struct LoadedMesh final
+		{
+			std::string Path = {};
 
-            float3 Position = { 0, 0, 0 };
-            float3 BaseRotation = { 0, 0, 0 };
-            float3 Scale = { 1, 1, 1 };
+			Handle<StaticMeshAsset>      AssetHandle = {};
+			Handle<StaticMeshRenderData> MeshHandle = {};
+			Handle<RenderScene::RenderObject> ObjectId = {};
 
-            uint32 RotateAxis = 1;     // 0:X, 1:Y, 2:Z
-            float  RotateSpeed = 1.0f; // rad/sec
-        };
+			float3 Position = { 0, 0, 0 };
+			float3 BaseRotation = { 0, 0, 0 };
+			float3 Scale = { 1, 1, 1 };
 
-    private:
+			uint32 RotateAxis = 1;     // 0:X, 1:Y, 2:Z
+			float  RotateSpeed = 1.0f; // rad/sec
+		};
 
-        void spawnMeshesOnXYGrid(
-            const std::vector<const char*>& meshPaths,
-            float3 gridCenter,
-            float spacingX,
-            float spacingY);
+	private:
+		void spawnMeshesOnXYGrid(
+			const std::vector<const char*>& meshPaths,
+			float3 gridCenter,
+			float spacingX,
+			float spacingY,
+			float spacingZ);
+	private:
+		std::unique_ptr<Renderer>    m_pRenderer = nullptr;
+		std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
+		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
 
-    private:
-        std::unique_ptr<Renderer>    m_pRenderer = nullptr;
-        std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
-        std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
+		ViewFamily m_ViewFamily = {};
+		FirstPersonCamera m_Camera;
 
-        ViewFamily m_ViewFamily = {};
-        FirstPersonCamera m_Camera;
+		// Debug cube (renderer-owned)
+		Handle<StaticMeshRenderData> m_CubeHandle = {};
+		Handle<StaticMeshRenderData> m_FloorHandle = {};
 
-        // Debug cube (renderer-owned)
-        Handle<StaticMeshRenderData> m_CubeHandle = {};
-        Handle<StaticMeshRenderData> m_FloorHandle = {};
+		// Loaded meshes (1 object per path)
+		std::vector<LoadedMesh> m_Loaded = {};
 
-        // Loaded meshes (1 object per path)
-        std::vector<LoadedMesh> m_Loaded = {};
-    };
+		RenderScene::LightObject m_GlobalLight = {};
+		Handle<RenderScene::LightObject> m_GlobalLightHandle;
+	};
 } // namespace shz

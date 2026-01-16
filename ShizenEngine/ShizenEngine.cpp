@@ -4,6 +4,10 @@
 #include <iostream>
 #include <cmath>
 
+#include "ThirdParty/imgui/imgui.h"
+#include "Engine/ImGui/Public/ImGuiUtils.hpp"
+#include "Engine/ImGui/Public/imGuIZMO.h"
+
 namespace shz
 {
 	SampleBase* CreateSample()
@@ -36,7 +40,8 @@ namespace shz
 		const std::vector<const char*>& meshPaths,
 		float3 gridCenter,
 		float spacingX,
-		float spacingY)
+		float spacingY,
+		float spacingZ)
 	{
 		m_Loaded.clear();
 		m_Loaded.reserve(meshPaths.size());
@@ -51,6 +56,7 @@ namespace shz
 
 		const float totalX = (cols - 1) * spacingX;
 		const float totalY = (rows - 1) * spacingY;
+		const float totalZ = (rows - 1) * spacingZ;
 
 		const float startX = gridCenter.x - totalX * 0.5f;
 		const float startY = gridCenter.y - totalY * 0.5f;
@@ -98,7 +104,7 @@ namespace shz
 			entry.Position = float3(
 				startX + static_cast<float>(c) * spacingX,
 				startY + static_cast<float>(r) * spacingY,
-				startZ);
+				startZ + static_cast<float>(r) * spacingZ);
 
 			entry.BaseRotation = float3(0, 0, 0);
 
@@ -270,25 +276,28 @@ namespace shz
 		// Load mesh paths + spawn as ONE XZ grid
 		// ------------------------------------------------------------
 		std::vector<const char*> meshPaths;
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
 		// XZ grid settings
-		const float3 gridCenter = float3(0.0f, 1.0f, 5.0f);
+		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
 		const float spacingX = 1.0f;
 		const float spacingY = 1.0f;
+		const float spacingZ = 2.0f;
 
-		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY);
+		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
+
+		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 	}
 
 	void ShizenEngine::Render()
@@ -311,6 +320,7 @@ namespace shz
 
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.CurrentTime = currTime;
+		m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
 		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
 		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
 		m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
@@ -327,6 +337,19 @@ namespace shz
 
 			m_pRenderScene->SetObjectTransform(m.ObjectId, Matrix4x4::TRS(m.Position, rot, m.Scale));
 		}
+
+		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
 	}
 
+	void ShizenEngine::UpdateUI()
+	{
+		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::gizmo3D("##LightDirection", m_GlobalLight.Direction, ImGui::GetTextLineHeight() * 10);
+			ImGui::ColorEdit3("##LightColor", reinterpret_cast<float*>(&m_GlobalLight.Color));
+			ImGui::SliderFloat("Value", &m_GlobalLight.Intensity, 0.01f, 10.0f);
+		}
+		ImGui::End();
+	}
 } // namespace shz

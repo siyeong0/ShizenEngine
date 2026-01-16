@@ -81,6 +81,10 @@ namespace shz
 		bool createGBufferPSO();
 		bool createLightingPSO();
 		bool createPostPSO();
+		bool createShadowPSO();
+
+		bool createShadowTargets();
+		bool createShadowRenderPasses();
 
 		bool createDeferredTargets();
 		bool createDeferredRenderPasses();
@@ -96,16 +100,25 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
 		RefCntAutoPtr<IBuffer> m_pObjectCB;
+		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
 		RefCntAutoPtr<IPipelineState> m_pBasicPSO;
 
 		std::unique_ptr<RenderResourceCache> m_pRenderResourceCache;
 
 		// ------------------------------------------------------------
-// Deferred resources (GBuffer -> Lighting -> Post)
-// ------------------------------------------------------------
-		static constexpr uint32 kGBufferCount = 4;
+		// Deferred resources (Shadow -> GBuffer -> Lighting -> Post)
+		// ------------------------------------------------------------
+		static constexpr uint32 kShadowMapSize = 4096;
+		RefCntAutoPtr<ITexture>     m_ShadowMapTex;
+		RefCntAutoPtr<ITextureView> m_ShadowMapDSV;
+		RefCntAutoPtr<ITextureView> m_ShadowMapSRV;
 
+		RefCntAutoPtr<ITexture>     m_GBufferDepthTex;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthDSV;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthSRV;
+
+		static constexpr uint32 kGBufferCount = 4;
 		RefCntAutoPtr<ITexture>     m_GBufferTex[kGBufferCount];
 		RefCntAutoPtr<ITextureView> m_GBufferRTV[kGBufferCount];
 		RefCntAutoPtr<ITextureView> m_GBufferSRV[kGBufferCount];
@@ -115,6 +128,9 @@ namespace shz
 		RefCntAutoPtr<ITextureView> m_LightingSRV;
 
 		// Render passes + framebuffers
+		RefCntAutoPtr<IRenderPass>  m_RP_Shadow;
+		RefCntAutoPtr<IFramebuffer> m_FB_Shadow;
+
 		RefCntAutoPtr<IRenderPass>  m_RP_GBuffer;
 		RefCntAutoPtr<IFramebuffer> m_FB_GBuffer;
 
@@ -124,11 +140,14 @@ namespace shz
 		RefCntAutoPtr<IRenderPass>  m_RP_Post;
 		RefCntAutoPtr<IFramebuffer> m_FB_Post; // rebuilt every frame (backbuffer changes)
 
+		// Shadow PSO
+		RefCntAutoPtr<IPipelineState> m_PSO_Shadow;
+		RefCntAutoPtr<IShaderResourceBinding> m_SRB_Shadow;
+
 		// G-Buffer PSO
-		RefCntAutoPtr<IPipelineState> m_pGBufferPSO;
+		RefCntAutoPtr<IPipelineState> m_PSO_GBuffer;
 
 		// Fullscreen PSOs
-
 		RefCntAutoPtr<IPipelineState> m_PSO_Lighting;
 		RefCntAutoPtr<IShaderResourceBinding> m_SRB_Lighting;
 

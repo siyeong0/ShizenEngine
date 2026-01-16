@@ -11,8 +11,14 @@ Texture2D<float4> g_GBuffer0; // Albedo.rgb, Opacity.a
 Texture2D<float4> g_GBuffer1; // Normal packed 0..1 (world)
 Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, Reserved
 Texture2D<float4> g_GBuffer3; // Emissive.rgb, unused
+Texture2D<float> g_GBufferDepth; // Depth (same as camera depth, D3D 0..1)
 
 SamplerState g_LinearClampSampler;
+
+// Shadow map (Depth) + comparison sampler
+Texture2D<float> g_ShadowMap;
+SamplerComparisonState g_ShadowCmpSampler;
+
 
 struct PSInput
 {
@@ -31,6 +37,62 @@ static float3 UnpackNormal01(float3 n01)
     return normalize(n01 * 2.0 - 1.0);
 }
 
+// Reconstruct world position from depth + invViewProj.
+// Assumes D3D NDC: z in [0..1], xy in [-1..1]
+static float3 ReconstructWorldPos(float2 uv, float depth01)
+{
+    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0); // note Y flip if your UV is top-left origin
+    float4 ndc = float4(ndcXY, depth01, 1.0);
+
+    float4 ws = mul(ndc, g_FrameCB.InvViewProj);
+    ws.xyz /= max(ws.w, 1e-6);
+    return ws.xyz;
+}
+
+// Light-space UVZ (for shadow compare)
+static float3 WorldToShadowUVZ(float3 worldPos)
+{
+    float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
+    ls.xyz /= max(ls.w, 1e-6);
+
+    float2 uv = ls.xy * 0.5 + 0.5;
+    uv.y = 1.0 - uv.y;
+
+    return float3(uv, ls.z);
+}
+
+static float SampleShadowPCF3x3(float3 shadowUVZ)
+{
+	// Outside light frustum => treat as lit
+    if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
+        return 1.0;
+
+	// If z outside [0..1], consider lit (or clamp)
+    if (shadowUVZ.z <= 0.0)
+        return 1.0;
+    if (shadowUVZ.z >= 1.0)
+        return 1.0;
+
+    uint w = 1, h = 1;
+    g_ShadowMap.GetDimensions(w, h);
+    float2 texel = 1.0 / float2(w, h);
+
+    float compareZ = shadowUVZ.z;
+
+    float sum = 0.0;
+	[unroll]
+    for (int y = -1; y <= 1; ++y)
+    {
+		[unroll]
+        for (int x = -1; x <= 1; ++x)
+        {
+            float2 uv = shadowUVZ.xy + float2(x, y) * texel;
+            sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, uv, compareZ);
+        }
+    }
+    return sum / 9.0;
+}
+
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
@@ -40,48 +102,43 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-
+    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
+	
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
 
     float3 N = UnpackNormal01(gb1.xyz);
-	
+
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
     float ao = saturate(gb2.z);
 
     float3 emissive = gb3.rgb;
 
-	// ------------------------------------------------------------
-	// Reconstruct view direction (no world pos in GBuffer right now)
-	// ------------------------------------------------------------
-	// You didn't store depth or world position in GBuffer in this simplified path.
-	// So we can't do physically correct V. We'll fake V as "camera forward".
-	//
-	// Later upgrade options:
-	//  1) Store depth in separate buffer and reconstruct world pos
-	//  2) Store view-space position (expensive)
-	//  3) Store linear depth in gb2.w etc.
-	//
-	// For now, approximate V as facing -Z in view space (or any stable vector).
-    float3 V = float3(0.0, 0.0, 1.0);
+	// World pos reconstruct (required for shadows)
+    float3 worldPos = ReconstructWorldPos(uv, depth01);
+	
+	// View vector (now correct)
+    float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
 
-	// ------------------------------------------------------------
-	// Fixed directional light
-	// ------------------------------------------------------------
-    const float3 LightDirWS = normalize(float3(0.1, -1.0, 0.1)); // light direction in world
-    const float3 LightColor = float3(1.0, 1.0, 1.0);
-    const float LightIntensity = 1.0;
-
-    float3 L = normalize(-LightDirWS); // surface->light dir
+	// Light
+    float3 L = normalize(-g_FrameCB.LightDirWS); // surface->light
     float NdotL = saturate(dot(N, L));
 
+	// Shadow factor
+	// Bias: constant + slope based (reduce acne)
+    float biasConst = 0.008; // Æ©´× ÇÊ¿ä (shadow map res/scene scale¿¡ µû¶ó)
+    float biasSlope = 0.0025 * (1.0 - NdotL);
+    float3 shadowUVZ = WorldToShadowUVZ(worldPos);
+    shadowUVZ.z -= (biasConst + biasSlope);
+	
+    float shadow = SampleShadowPCF3x3(shadowUVZ);
+
 	// ------------------------------------------------------------
-	// Cheap PBR-ish shading (not full GGX; minimal + stable)
+	// Cheap PBR-ish shading
 	// ------------------------------------------------------------
     float3 diffuse = baseColor * NdotL;
 
-	// Spec: roughness -> shininess (same idea you used)
     float shininess = lerp(256.0, 8.0, roughness);
     float3 H = normalize(L + V);
     float specTerm = pow(saturate(dot(N, H)), shininess);
@@ -94,7 +151,11 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float3 ambient = baseColor * 0.03;
 
-    float3 lit = (ambient + (diffuse + specular) * LightColor * LightIntensity) * ao + emissive;
+	// Apply shadow ONLY to direct lighting (diffuse+spec)
+    float3 direct = (diffuse + specular) * g_FrameCB.LightColor * g_FrameCB.LightIntensity;
+    direct *= shadow;
+
+    float3 lit = (ambient + direct) * ao + emissive;
 
     OutColor = float4(lit, opacity);
 }

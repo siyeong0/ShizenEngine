@@ -35,6 +35,12 @@ namespace shz
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants CB", &m_pFrameCB);
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants CB", &m_pObjectCB);
 
+		if (!createShadowTargets())
+		{
+			ASSERT(false, "Failed to create shadow targets.");
+			return false;
+		}
+
 		if (!createDeferredTargets())
 		{
 			ASSERT(false, "Failed to create deferred render targets.");
@@ -44,6 +50,12 @@ namespace shz
 		if (!createDeferredRenderPasses())
 		{
 			ASSERT(false, "Failed to create deferred render passes.");
+			return false;
+		}
+
+		if (!createShadowRenderPasses())
+		{
+			ASSERT(false, "Failed to create shadow render passes.");
 			return false;
 		}
 
@@ -65,6 +77,11 @@ namespace shz
 		if (!createPostPSO())
 		{
 			ASSERT(false, "Failed to create Post PSO.");
+			return false;
+		}
+		if (!createShadowPSO())
+		{
+			ASSERT(false, "Failed to create shadow PSO.");
 			return false;
 		}
 
@@ -91,20 +108,31 @@ namespace shz
 	void Renderer::Cleanup()
 	{
 		m_pBasicPSO.Release();
-
-		m_pGBufferPSO.Release();
+		m_PSO_Shadow.Release();
+		m_PSO_GBuffer.Release();
 		m_PSO_Lighting.Release();
-		m_SRB_Lighting.Release();
-
 		m_PSO_Post.Release();
+
+		m_ShadowMapTex.Release();
+		m_ShadowMapDSV.Release();
+		m_ShadowMapSRV.Release();
+		m_SRB_Shadow.Release();
+
+		m_SRB_Lighting.Release();
 		m_SRB_Post.Release();
 
+		m_RP_Shadow.Release();
+		m_FB_Shadow.Release();
 		m_RP_GBuffer.Release();
 		m_FB_GBuffer.Release();
 		m_RP_Lighting.Release();
 		m_FB_Lighting.Release();
 		m_RP_Post.Release();
 		m_FB_Post.Release();
+
+		m_GBufferDepthTex.Release();
+		m_GBufferDepthDSV.Release();
+		m_GBufferDepthSRV.Release();
 
 		for (uint32 i = 0; i < kGBufferCount; ++i)
 		{
@@ -117,7 +145,7 @@ namespace shz
 		m_LightingRTV.Release();
 		m_LightingSRV.Release();
 
-
+		m_pShadowCB.Release();
 		m_pFrameCB.Release();
 		m_pObjectCB.Release();
 
@@ -215,29 +243,39 @@ namespace shz
 			return;
 
 		// ensureDeferredTargets/RenderPass/PSO... 는 이전 답변 그대로 사용한다고 가정
+		if (!createShadowTargets())          return;
+		if (!createShadowRenderPasses())     return;
+		if (!createShadowPSO())              return;
 		if (!createDeferredTargets())       return;
 		if (!createDeferredRenderPasses())  return;
 		if (!createLightingPSO())           return;
 		if (!createPostPSO())               return;
 
 		const View& view = viewFamily.Views[0];
+		float3 cameraWS = view.CameraPosition;
+
+
+		const RenderScene::LightObject* pGlobalLight = nullptr;
+		for (auto h : scene.GetLightHandles())
+		{
+			pGlobalLight = scene.TryGetLight(h);
+			// ASSERT 1 globla light
+			break;
+		}
+
+		float3 lightDirWS = pGlobalLight->Direction.Normalized();
+		float3 lightColor = pGlobalLight->Color;
+		float lightIntensity = pGlobalLight->Intensity;
+		Matrix4x4 lightViewProj = {};
 
 		// viewport + frame CB update (너 코드 그대로)
 		{
-			Viewport vp;
-			vp.TopLeftX = static_cast<float>(view.Viewport.left);
-			vp.TopLeftY = static_cast<float>(view.Viewport.top);
-			vp.Width = static_cast<float>(view.Viewport.right - view.Viewport.left);
-			vp.Height = static_cast<float>(view.Viewport.bottom - view.Viewport.top);
-			vp.MinDepth = 0.f;
-			vp.MaxDepth = 1.f;
-			pCtx->SetViewports(1, &vp, 0, 0);
-
 			MapHelper<hlsl::FrameConstants> cbData(pCtx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 			cbData->View = view.ViewMatrix;
 			cbData->Proj = view.ProjMatrix;
 			cbData->ViewProj = view.ViewMatrix * view.ProjMatrix;
-			cbData->CameraPosition = { view.ViewMatrix._m03, view.ViewMatrix._m13, view.ViewMatrix._m23 };
+			cbData->InvViewProj = cbData->ViewProj.Inversed();
+			cbData->CameraPosition = cameraWS;
 			cbData->ViewportSize = {
 				static_cast<float>(view.Viewport.right - view.Viewport.left),
 				static_cast<float>(view.Viewport.bottom - view.Viewport.top)
@@ -247,19 +285,83 @@ namespace shz
 			cbData->FarPlane = view.FarPlane;
 			cbData->DeltaTime = viewFamily.DeltaTime;
 			cbData->CurrTime = viewFamily.CurrentTime;
+
+			const float3 L = lightDirWS.Normalized();
+			const float3 lightForward = L;
+			const float3 centerWS = cameraWS;
+			float shadowDistance = 20.0f;
+			const float3 lightPosWS = centerWS - lightForward * shadowDistance;
+			float3 up = float3(0, 1, 0);
+			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f)
+				up = float3(0, 0, 1);
+			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWS, centerWS, up);
+			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+			const Matrix4x4 invViewProj = viewProj.Inversed();
+
+			float3 cornersWS[8];
+			{
+				const float xs[2] = { -1.f, +1.f };
+				const float ys[2] = { -1.f, +1.f };
+				const float zs[2] = { 0.f, +1.f };
+				int idx = 0;
+				for (int iz = 0; iz < 2; ++iz)
+				{
+					for (int iy = 0; iy < 2; ++iy)
+					{
+						for (int ix = 0; ix < 2; ++ix)
+						{
+							const float4 ndc = float4(xs[ix], ys[iy], zs[iz], 1.f);
+							float4 ws = invViewProj.MulVector4(ndc);
+							const float invW = (ws.w != 0.f) ? (1.f / ws.w) : 0.f;
+							ws.x *= invW; ws.y *= invW; ws.z *= invW;
+							cornersWS[idx++] = float3(ws.x, ws.y, ws.z);
+						}
+					}
+				}
+			}
+			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
+			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+
+			for (int i = 0; i < 8; ++i)
+			{
+				const float4 p = lightView.MulVector4(float4(cornersWS[i].x, cornersWS[i].y, cornersWS[i].z, 1.f));
+				minX = std::min(minX, p.x);  maxX = std::max(maxX, p.x);
+				minY = std::min(minY, p.y);  maxY = std::max(maxY, p.y);
+				minZ = std::min(minZ, p.z);  maxZ = std::max(maxZ, p.z);
+			}
+			float xyPadding = 1.f;
+			float zPadding = 2.f;
+			minX -= xyPadding; maxX += xyPadding;
+			minY -= xyPadding; maxY += xyPadding;
+			minZ -= zPadding;  maxZ += zPadding;
+			const float l = minX;
+			const float r = maxX;
+			const float b = minY;
+			const float t = maxY;
+			const float zn = minZ;
+			const float zf = maxZ;
+
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(l, r, b, t, zn, zf);
+			lightViewProj = lightView * lightProj;
+
+			cbData->LightViewProj = lightViewProj;
+			cbData->LightDirWS = lightDirWS;
+			cbData->LightColor = lightColor;
+			cbData->LightIntensity = lightIntensity;
 		}
 
-		auto DrawFullScreenTriangle = [&]()
+		{
+			MapHelper<hlsl::ShadowConstants> CB(pCtx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			CB->LightViewProj = lightViewProj;
+		}
+
+		auto drawFullScreenTriangle = [&]()
 		{
 			DrawAttribs DA = {};
 			DA.NumVertices = 3;
 			DA.Flags = DRAW_FLAG_VERIFY_ALL;
 			pCtx->Draw(DA);
 		};
-
-		// ============================================================
-		// PASS 1: GBuffer
-		// ============================================================
 
 		// 1) RenderPass 들어가기 전에:
 		//    - 이번 프레임에 필요한 MaterialRenderData를 "미리" 준비
@@ -314,7 +416,7 @@ namespace shz
 					MaterialRenderData* matRD =
 						m_pRenderResourceCache->GetOrCreateMaterialRenderData(
 							matHandle,
-							m_pGBufferPSO,
+							m_PSO_GBuffer,
 							m_pObjectCB,
 							pCtx /* 여기서 TRANSITION 발생해도 RenderPass 밖이니 OK */);
 
@@ -343,11 +445,120 @@ namespace shz
 			PreBarriers.push_back(StateTransitionDesc{ m_pFrameCB,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE });
 		if (m_pObjectCB)
 			PreBarriers.push_back(StateTransitionDesc{ m_pObjectCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE });
-
+		if (m_pShadowCB)
+			PreBarriers.push_back(StateTransitionDesc{ m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE });
 		if (!PreBarriers.empty())
 			pCtx->TransitionResourceStates(static_cast<uint32>(PreBarriers.size()), PreBarriers.data());
 
-		// 2) 이제 BeginRenderPass 이후에는 VERIFY-only
+
+		// ============================================================
+		// PASS 0: Shadow
+		// ============================================================
+
+		{
+			StateTransitionDesc B = { m_ShadowMapTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE, STATE_TRANSITION_FLAG_UPDATE_STATE };
+			pCtx->TransitionResourceStates(1, &B);
+		}
+
+		// Shadow viewport
+		{
+			Viewport vp;
+			vp.TopLeftX = 0.f;
+			vp.TopLeftY = 0.f;
+			vp.Width = static_cast<float>(kShadowMapSize);
+			vp.Height = static_cast<float>(kShadowMapSize);
+			vp.MinDepth = 0.f;
+			vp.MaxDepth = 1.f;
+			pCtx->SetViewports(1, &vp, 0, 0);
+		}
+
+		// Begin RP
+		{
+			OptimizedClearValue ClearVals[1] = {};
+			ClearVals[0].DepthStencil.Depth = 1.f;
+			ClearVals[0].DepthStencil.Stencil = 0;
+
+			BeginRenderPassAttribs RPBegin = {};
+			RPBegin.pRenderPass = m_RP_Shadow;
+			RPBegin.pFramebuffer = m_FB_Shadow;
+			RPBegin.ClearValueCount = 1;
+			RPBegin.pClearValues = ClearVals;
+
+			pCtx->BeginRenderPass(RPBegin);
+
+			pCtx->SetPipelineState(m_PSO_Shadow);
+			pCtx->CommitShaderResources(m_SRB_Shadow, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+			for (const Handle<RenderScene::RenderObject>& hObj : scene.GetObjectHandles())
+			{
+				const RenderScene::RenderObject* renderObject = scene.TryGetObject(hObj);
+				if (!renderObject) continue;
+
+				const StaticMeshRenderData* pMesh = m_pRenderResourceCache->TryGetMesh(renderObject->MeshHandle);
+				if (!pMesh) continue;
+
+				// Object CB (ShadowDepth VS가 OBJECT_CONSTANTS를 dynamic으로 받는다고 가정)
+				{
+					MapHelper<hlsl::ObjectConstants> CBData(pCtx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
+					CBData->World = renderObject->Transform;
+					CBData->WorldInvTranspose = renderObject->Transform.Inversed().Transposed();
+				}
+
+				// Shadow PSO는 input layout이 Pos만이라서,
+				// 네 VertexBuffer가 Pos+UV+Normal+Tangent interleaved면 그대로 SetVertexBuffers하면 됨.
+				// (ATTRIB0만 읽음)
+				IBuffer* pVBs[] = { pMesh->VertexBuffer };
+				uint64 Offsets[] = { 0 };
+				pCtx->SetVertexBuffers(0, 1, pVBs, Offsets, RESOURCE_STATE_TRANSITION_MODE_VERIFY, SET_VERTEX_BUFFERS_FLAG_RESET);
+				for (const MeshSection& section : pMesh->Sections)
+				{
+					pCtx->SetIndexBuffer(section.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+					DrawIndexedAttribs DIA = {};
+					DIA.NumIndices = section.NumIndices;
+					DIA.IndexType = (section.IndexType == VT_UINT16) ? VT_UINT16 : VT_UINT32;
+					DIA.Flags = DRAW_FLAG_VERIFY_ALL;
+					DIA.FirstIndexLocation = section.StartIndex;
+
+					pCtx->DrawIndexed(DIA);
+				}
+			}
+
+			pCtx->EndRenderPass();
+		}
+
+		// ShadowMap -> SRV
+		{
+			StateTransitionDesc B = { m_ShadowMapTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE };
+			pCtx->TransitionResourceStates(1, &B);
+		}
+
+		{
+			Viewport vp;
+			vp.TopLeftX = static_cast<float>(view.Viewport.left);
+			vp.TopLeftY = static_cast<float>(view.Viewport.top);
+			vp.Width = static_cast<float>(view.Viewport.right - view.Viewport.left);
+			vp.Height = static_cast<float>(view.Viewport.bottom - view.Viewport.top);
+			vp.MinDepth = 0.f;
+			vp.MaxDepth = 1.f;
+			pCtx->SetViewports(1, &vp, 0, 0);
+		}
+
+		// ============================================================
+		// PASS 1: GBuffer
+		// ============================================================
+		// // GBuffer attachments: SRV -> RT/DSV (frame-to-frame fix)
+		{
+			StateTransitionDesc B[] =
+			{
+				{ m_GBufferTex[0],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GBufferTex[1],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GBufferTex[2],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GBufferTex[3],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GBufferDepthTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+			};
+			pCtx->TransitionResourceStates(_countof(B), B);
+		}
 		{
 			OptimizedClearValue ClearVals[5] = {};
 			for (int i = 0; i < 4; ++i)
@@ -435,14 +646,15 @@ namespace shz
 
 		// 3) GBuffer RT -> SRV
 		{
-			StateTransitionDesc Barriers[4] =
+			StateTransitionDesc Barriers[] =
 			{
 				{ m_GBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_GBufferTex[1], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_GBufferTex[2], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_GBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GBufferDepthTex,   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
-			pCtx->TransitionResourceStates(4, Barriers);
+			pCtx->TransitionResourceStates(_countof(Barriers), Barriers);
 		}
 
 		// ============================================================
@@ -462,7 +674,7 @@ namespace shz
 
 			pCtx->SetPipelineState(m_PSO_Lighting);
 			pCtx->CommitShaderResources(m_SRB_Lighting, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-			DrawFullScreenTriangle();
+			drawFullScreenTriangle();
 
 			pCtx->EndRenderPass();
 		}
@@ -504,7 +716,7 @@ namespace shz
 
 			pCtx->SetPipelineState(m_PSO_Post);
 			pCtx->CommitShaderResources(m_SRB_Post, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-			DrawFullScreenTriangle();
+			drawFullScreenTriangle();
 
 			pCtx->EndRenderPass();
 		}
@@ -888,8 +1100,8 @@ namespace shz
 		// ------------------------------------------------------------
 		// Create PSO
 		// ------------------------------------------------------------
-		pDevice->CreateGraphicsPipelineState(psoCreateInfo, &m_pGBufferPSO);
-		if (!m_pGBufferPSO)
+		pDevice->CreateGraphicsPipelineState(psoCreateInfo, &m_PSO_GBuffer);
+		if (!m_PSO_GBuffer)
 		{
 			ASSERT(false, "Failed to create GBuffer PSO.");
 			return false;
@@ -900,10 +1112,10 @@ namespace shz
 		// ------------------------------------------------------------
 		// FRAME_CONSTANTS is assumed STATIC (DefaultVariableType=STATIC), so set it here.
 		{
-			if (auto* Var = m_pGBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+			if (auto* Var = m_PSO_GBuffer->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
 				Var->Set(m_pFrameCB);
 
-			if (auto* Var = m_pGBufferPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+			if (auto* Var = m_PSO_GBuffer->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 				Var->Set(m_pFrameCB);
 		}
 
@@ -924,7 +1136,7 @@ namespace shz
 
 		auto& gp = PSO.GraphicsPipeline;
 
-		gp.pRenderPass = m_RP_Lighting;
+		gp.pRenderPass = m_RP_Post;
 		gp.SubpassIndex = 0;
 		gp.NumRenderTargets = 0;
 
@@ -978,6 +1190,9 @@ namespace shz
 			{ SHADER_TYPE_PIXEL, "g_GBuffer1", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBuffer2", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBuffer3", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+			{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_ShadowMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		PSO.PSODesc.ResourceLayout.Variables = Vars;
 		PSO.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
@@ -987,9 +1202,18 @@ namespace shz
 			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 			TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 		};
+		SamplerDesc ShadowClamp = {};
+		ShadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+		ShadowClamp.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+		ShadowClamp.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+		ShadowClamp.AddressU = TEXTURE_ADDRESS_CLAMP;
+		ShadowClamp.AddressV = TEXTURE_ADDRESS_CLAMP;
+		ShadowClamp.AddressW = TEXTURE_ADDRESS_CLAMP;
+		ShadowClamp.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
 		ImmutableSamplerDesc Samplers[] =
 		{
-			{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", LinearClamp }
+			{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", LinearClamp },
+			{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   ShadowClamp  },
 		};
 		PSO.PSODesc.ResourceLayout.ImmutableSamplers = Samplers;
 		PSO.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(Samplers);
@@ -998,8 +1222,6 @@ namespace shz
 		ASSERT(m_PSO_Lighting, "Failed to create Lighting PSO.");
 
 		// Bind FRAME_CONSTANTS as static
-		if (auto* Var = m_PSO_Lighting->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
-			Var->Set(m_pFrameCB);
 		if (auto* Var = m_PSO_Lighting->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 			Var->Set(m_pFrameCB);
 
@@ -1011,7 +1233,8 @@ namespace shz
 		if (auto var = m_SRB_Lighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer1")) var->Set(m_GBufferSRV[1]);
 		if (auto var = m_SRB_Lighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer2")) var->Set(m_GBufferSRV[2]);
 		if (auto var = m_SRB_Lighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer3")) var->Set(m_GBufferSRV[3]);
-
+		if (auto var = m_SRB_Lighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap")) var->Set(m_ShadowMapSRV);
+		if (auto var = m_SRB_Lighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBufferDepth")) var->Set(m_GBufferDepthSRV);
 		return true;
 	}
 
@@ -1030,7 +1253,7 @@ namespace shz
 
 		auto& gp = PSO.GraphicsPipeline;
 
-		gp.pRenderPass = m_RP_Lighting; 
+		gp.pRenderPass = m_RP_Lighting;
 		gp.SubpassIndex = 0;
 
 		gp.NumRenderTargets = 0;
@@ -1102,6 +1325,211 @@ namespace shz
 		return true;
 	}
 
+	bool Renderer::createShadowPSO()
+	{
+		IRenderDevice* pDevice = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(pDevice, "createShadowPSO(): device null.");
+
+		if (m_PSO_Shadow)
+			return true;
+
+		GraphicsPipelineStateCreateInfo PSO = {};
+		PSO.PSODesc.Name = "Shadow Depth PSO";
+		PSO.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+		auto& gp = PSO.GraphicsPipeline;
+		gp.pRenderPass = m_RP_Shadow;
+		gp.SubpassIndex = 0;
+
+		gp.NumRenderTargets = 0;
+		gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+		gp.DSVFormat = TEX_FORMAT_UNKNOWN; // RenderPass 기반
+
+		gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+		gp.RasterizerDesc.FrontCounterClockwise = true;
+
+		gp.DepthStencilDesc.DepthEnable = true;
+		gp.DepthStencilDesc.DepthWriteEnable = true;
+		gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+		LayoutElement layoutElems[] =
+		{
+			LayoutElement{0, 0, 3, VT_FLOAT32, false},
+		};
+		layoutElems[0].Stride = sizeof(float) * 11;
+		gp.InputLayout.LayoutElements = layoutElems;
+		gp.InputLayout.NumElements = _countof(layoutElems);
+
+
+		ShaderCreateInfo sci = {};
+		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
+		sci.EntryPoint = "main";
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+
+		RefCntAutoPtr<IShader> VS;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "Shadow VS";
+			sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
+			sci.FilePath = "Shadow.vsh";
+			sci.Desc.UseCombinedTextureSamplers = false;
+
+			pDevice->CreateShader(sci, &VS);
+			ASSERT(VS, "Failed to create ShadowDepth VS.");
+		}
+
+		RefCntAutoPtr<IShader> PS;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "Shadow PS";
+			sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
+			sci.FilePath = "Shadow.psh";
+			sci.Desc.UseCombinedTextureSamplers = false;
+
+			pDevice->CreateShader(sci, &PS);
+			ASSERT(PS, "Failed to create ShadowDepth PS.");
+		}
+
+		PSO.pVS = VS;
+		PSO.pPS = PS;
+
+		// Resource layout
+		PSO.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+		ShaderResourceVariableDesc Vars[] =
+		{
+			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+			{ SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_STATIC  },
+		};
+		PSO.PSODesc.ResourceLayout.Variables = Vars;
+		PSO.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+
+		pDevice->CreateGraphicsPipelineState(PSO, &m_PSO_Shadow);
+		ASSERT(m_PSO_Shadow, "Failed to create Shadow PSO.");
+
+		// Bind SHADOW_CONSTANTS as static
+		if (auto* Var = m_PSO_Shadow->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+			Var->Set(m_pShadowCB);
+
+		m_PSO_Shadow->CreateShaderResourceBinding(&m_SRB_Shadow, true);
+		ASSERT(m_SRB_Shadow, "Failed to create SRB_Shadow.");
+
+		// OBJECT_CONSTANTS는 Dynamic이므로 SRB에 세팅
+		if (auto* Var = m_SRB_Shadow->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
+			Var->Set(m_pObjectCB);
+
+		return true;
+	}
+
+
+	bool Renderer::createShadowTargets()
+	{
+		IRenderDevice* pDevice = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(pDevice, "createShadowTargets(): device null.");
+
+		if (m_ShadowMapTex && m_ShadowMapDSV && m_ShadowMapSRV)
+			return true;
+
+		TextureDesc td = {};
+		td.Name = "ShadowMap";
+		td.Type = RESOURCE_DIM_TEX_2D;
+		td.Width = kShadowMapSize;
+		td.Height = kShadowMapSize;
+		td.MipLevels = 1;
+		td.SampleCount = 1;
+		td.Usage = USAGE_DEFAULT;
+
+		// 핵심: typeless + depth-stencil + shader-resource
+		td.Format = TEX_FORMAT_R32_TYPELESS;
+		td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+		m_ShadowMapTex.Release();
+		m_ShadowMapDSV.Release();
+		m_ShadowMapSRV.Release();
+
+		pDevice->CreateTexture(td, nullptr, &m_ShadowMapTex);
+		ASSERT(m_ShadowMapTex, "Failed to create ShadowMap texture.");
+
+		// DSV view
+		{
+			TextureViewDesc vd = {};
+			vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+			vd.Format = TEX_FORMAT_D32_FLOAT;
+			m_ShadowMapTex->CreateView(vd, &m_ShadowMapDSV);
+			ASSERT(m_ShadowMapDSV, "Failed to create ShadowMap DSV.");
+		}
+
+		// SRV view (depth compare용으로 sampling할 거라 R32_FLOAT로)
+		{
+			TextureViewDesc vd = {};
+			vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+			vd.Format = TEX_FORMAT_R32_FLOAT;
+			m_ShadowMapTex->CreateView(vd, &m_ShadowMapSRV);
+			ASSERT(m_ShadowMapSRV, "Failed to create ShadowMap SRV.");
+		}
+
+		// Shadow constants CB
+		if (!m_pShadowCB)
+			CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants CB", &m_pShadowCB);
+
+		return true;
+	}
+
+	bool Renderer::createShadowRenderPasses()
+	{
+		IRenderDevice* pDevice = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(pDevice, "createShadowRenderPasses(): device null.");
+
+		if (m_RP_Shadow && m_FB_Shadow)
+			return true;
+
+		// Depth-only RP
+		RenderPassAttachmentDesc Attach[1] = {};
+		Attach[0].Format = TEX_FORMAT_D32_FLOAT;
+		Attach[0].SampleCount = 1;
+		Attach[0].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+		Attach[0].StoreOp = ATTACHMENT_STORE_OP_STORE;
+		Attach[0].InitialState = RESOURCE_STATE_DEPTH_WRITE;
+		Attach[0].FinalState = RESOURCE_STATE_DEPTH_WRITE;
+
+		AttachmentReference DepthRef = {};
+		DepthRef.AttachmentIndex = 0;
+		DepthRef.State = RESOURCE_STATE_DEPTH_WRITE;
+
+		SubpassDesc Subpass = {};
+		Subpass.RenderTargetAttachmentCount = 0;
+		Subpass.pDepthStencilAttachment = &DepthRef;
+
+		RenderPassDesc RP = {};
+		RP.Name = "RP_Shadow";
+		RP.AttachmentCount = 1;
+		RP.pAttachments = Attach;
+		RP.SubpassCount = 1;
+		RP.pSubpasses = &Subpass;
+
+		m_RP_Shadow.Release();
+		pDevice->CreateRenderPass(RP, &m_RP_Shadow);
+		ASSERT(m_RP_Shadow, "CreateRenderPass(RP_Shadow) failed.");
+
+		// FB
+		{
+			ITextureView* Atch[1] = { m_ShadowMapDSV };
+
+			FramebufferDesc FB = {};
+			FB.Name = "FB_Shadow";
+			FB.pRenderPass = m_RP_Shadow;
+			FB.AttachmentCount = 1;
+			FB.ppAttachments = Atch;
+
+			m_FB_Shadow.Release();
+			pDevice->CreateFramebuffer(FB, &m_FB_Shadow);
+			ASSERT(m_FB_Shadow, "CreateFramebuffer(FB_Shadow) failed.");
+		}
+
+		return true;
+	}
 
 
 	bool Renderer::createDeferredTargets()
@@ -1118,6 +1546,7 @@ namespace shz
 			(m_DeferredWidth != W) ||
 			(m_DeferredHeight != H) ||
 			!m_GBufferTex[0] || !m_GBufferTex[1] || !m_GBufferTex[2] || !m_GBufferTex[3] ||
+			!m_GBufferDepthTex ||
 			!m_LightingTex;
 
 		if (!needRebuild)
@@ -1134,6 +1563,47 @@ namespace shz
 
 		// Lighting intermediate: simplest = swapchain format (LDR). HDR 원하면 RGBA16F로 변경.
 		CreateRTTexture2D(pDevice, W, H, sc.ColorBufferFormat, "LightingColor", m_LightingTex, m_LightingRTV, m_LightingSRV);
+
+		// GBuffer depth: typeless + DSV + SRV
+		{
+			TextureDesc td = {};
+			td.Name = "GBufferDepth";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = W;
+			td.Height = H;
+			td.MipLevels = 1;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+
+			// typeless so we can create DSV(D32) and SRV(R32)
+			td.Format = TEX_FORMAT_R32_TYPELESS;
+			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+			m_GBufferDepthTex.Release();
+			m_GBufferDepthDSV.Release();
+			m_GBufferDepthSRV.Release();
+
+			pDevice->CreateTexture(td, nullptr, &m_GBufferDepthTex);
+			ASSERT(m_GBufferDepthTex, "Failed to create GBufferDepth texture.");
+
+			// DSV
+			{
+				TextureViewDesc vd = {};
+				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+				vd.Format = TEX_FORMAT_D32_FLOAT;
+				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDSV);
+				ASSERT(m_GBufferDepthDSV, "Failed to create GBufferDepth DSV.");
+			}
+
+			// SRV
+			{
+				TextureViewDesc vd = {};
+				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+				vd.Format = TEX_FORMAT_R32_FLOAT;
+				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSRV);
+				ASSERT(m_GBufferDepthSRV, "Failed to create GBufferDepth SRV.");
+			}
+		}
 
 		// RenderPass/Framebuffer는 타겟이 바뀌었으니 재생성 필요
 		m_RP_GBuffer.Release();   m_FB_GBuffer.Release();
@@ -1173,7 +1643,7 @@ namespace shz
 				Attach[i].FinalState = RESOURCE_STATE_RENDER_TARGET;
 			}
 
-			Attach[4].Format = sc.DepthBufferFormat;
+			Attach[4].Format = TEX_FORMAT_D32_FLOAT;
 			Attach[4].SampleCount = 1;
 			Attach[4].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			Attach[4].StoreOp = ATTACHMENT_STORE_OP_STORE;
@@ -1209,7 +1679,7 @@ namespace shz
 			ITextureView* Atch[5] =
 			{
 				m_GBufferRTV[0], m_GBufferRTV[1], m_GBufferRTV[2], m_GBufferRTV[3],
-				pSwap->GetDepthBufferDSV()
+				m_GBufferDepthDSV
 			};
 
 			FramebufferDesc FB = {};

@@ -9,7 +9,8 @@ struct FrameConstants
     float4x4 View;
     float4x4 Proj;
     float4x4 ViewProj;
-
+    float4x4 InvViewProj;
+    
     float3 CameraPosition;
     float _pad0;
 
@@ -20,6 +21,17 @@ struct FrameConstants
     float FarPlane;
     float DeltaTime;
     float CurrTime;
+    
+    float4x4 LightViewProj;
+    float3 LightDirWS;
+    float _pad1;
+    float3 LightColor;
+    float LightIntensity;
+};
+
+struct ShadowConstants
+{
+    float4x4 LightViewProj;
 };
 
 struct MaterialConstants

@@ -69,6 +69,8 @@
     <FxCompile Include="Shaders\DeferredLighting.psh" />
     <FxCompile Include="Shaders\PostCopy.psh" />
     <FxCompile Include="Shaders\PostCopy.vsh" />
+    <FxCompile Include="Shaders\Shadow.vsh" />
+    <FxCompile Include="Shaders\Shadow.psh" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\HLSL_Structures.hlsli" />

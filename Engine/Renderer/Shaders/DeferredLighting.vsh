@@ -1,10 +1,5 @@
 #include "HLSL_Structures.hlsli"
 
-cbuffer FRAME_CONSTANTS
-{
-    FrameConstants g_FrameCB;
-};
-
 struct VSOutput
 {
     float4 Pos : SV_POSITION;

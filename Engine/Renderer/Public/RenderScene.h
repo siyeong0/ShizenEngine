@@ -23,11 +23,11 @@ namespace shz
 		struct LightObject final
 		{
 			uint32 Type = 0; // TODO: replace with enum
-			float  Color[3] = { 1.0f, 1.0f, 1.0f };
+			float3  Color = { 1.0f, 1.0f, 1.0f };
 			float  Intensity = 1.0f;
 
-			float  Position[3] = { 0.0f, 0.0f, 0.0f };
-			float  Direction[3] = { 0.0f, -1.0f, 0.0f };
+			float3  Position = { 0.0f, 0.0f, 0.0f };
+			float3  Direction = { 0.0f, -1.0f, 0.0f };
 
 			float  Range = 10.0f;
 			float  SpotAngle = 30.0f;
