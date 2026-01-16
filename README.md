@@ -33,7 +33,7 @@ The engine is built with a strong focus on large-scale natural environments such
 ShizenEngine uses a **clear top-level separation** between engine code, platform layers, tools, samples, and third-party dependencies. This layout is designed to scale from research prototypes to full applications while keeping dependencies explicit.
 
 ```
-ShizenEngine/
+Root/
 ├─ Engine/               # Core engine implementation
 │  ├─ Core/              # Fundamental engine systems
 │  │  ├─ Common/         # Core types, utilities, macros
@@ -66,20 +66,17 @@ ShizenEngine/
 │
 ├─ Primitives/           # Shared public headers and primitive types
 │
-├─ Apps/              # Tutorial projects and sample applications
-│  ├─ Tutorial01
-│  ├─ Tutorial02
-│  ├─ ...
-│  ├─ Sample01
-│  ├─ Sample02
+├─ Apps/
+│  ├─ Editor
+│  ├─ Viewer
 │  └─ ...
 │
 ├─ ThirdParty/           # External dependencies
 │  ├─ imgui/             # ImGui 1.92.1 (tracked directly)
-│  ├─ zlib/
+│  ├─ assimp/
+│  ├─ spirv/
 │  ├─ libjpeg/
 │  ├─ libpng/
-│  ├─ spirv/
 │  ├─ stb/
 │  ├─ tiff/
 │  └─ xxhash/
