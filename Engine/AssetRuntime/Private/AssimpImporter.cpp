@@ -447,8 +447,8 @@ namespace shz
 				if (opacity < 0.999f)
 				{
 					outMat.GetOptions().BlendMode = MATERIAL_BLEND_TRANSLUCENT;
+				}
 			}
-		}
 
 #if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
 			float cutoff = outMat.GetParams().AlphaCutoff;
@@ -457,7 +457,7 @@ namespace shz
 				outMat.GetParams().AlphaCutoff = cutoff;
 			}
 #endif
-	}
+		}
 
 		// Two-sided (best effort)
 		{
@@ -485,7 +485,7 @@ namespace shz
 			// Normal
 			path.clear();
 			if (tryGetTexturePath(scene, mat, aiTextureType_NORMALS, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
+				tryGetTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
 			{
 				outMat.SetTexture(MATERIAL_TEX_NORMAL, path, false);
 			}
@@ -506,8 +506,15 @@ namespace shz
 			{
 				outMat.SetTexture(MATERIAL_TEX_EMISSIVE, path, true);
 			}
+
+			// Height / Displacement
+			path.clear();
+			if (tryGetTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
+			{
+				outMat.SetTexture(MATERIAL_TEX_HEIGHT, path, false);
+			}
 		}
-}
+	}
 
 	// ------------------------------------------------------------
 	// AssimpImporter

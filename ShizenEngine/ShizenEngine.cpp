@@ -260,6 +260,7 @@ namespace shz
 		//auto dummy1 = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
 
 		StaticMeshAsset floorMeshAsset;
+		AssimpImportOptions options = {};
 		AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx", &floorMeshAsset);
 		auto floorMeshHandle = m_pAssetManager->RegisterStaticMesh(floorMeshAsset);
 		m_FloorHandle = m_pRenderer->CreateStaticMesh(floorMeshHandle);

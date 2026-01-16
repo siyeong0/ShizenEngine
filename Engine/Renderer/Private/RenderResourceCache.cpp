@@ -795,16 +795,11 @@ namespace shz
 
 		uint32 Flags = 0;
 
-		ITextureView* pBaseColorSRV =
-			ResolveSRV(MatInst.GetBaseColorTextureOverride(), pDefaultBaseColorSRV, hlsl::MAT_HAS_BASECOLOR, Flags);
-		ITextureView* pNormalSRV =
-			ResolveSRV(MatInst.GetNormalTextureOverride(), pDefaultNormalSRV, hlsl::MAT_HAS_NORMAL, Flags);
-		ITextureView* pMRSRV =
-			ResolveSRV(MatInst.GetMetallicRoughnessTextureOverride(), pDefaultMRSRV, hlsl::MAT_HAS_MR, Flags);
-		ITextureView* pAOSRV =
-			ResolveSRV(MatInst.GetAmbientOcclusionTextureOverride(), pDefaultAOSRV, hlsl::MAT_HAS_AO, Flags);
-		ITextureView* pEmissiveSRV =
-			ResolveSRV(MatInst.GetEmissiveTextureOverride(), pDefaultEmissiveSRV, hlsl::MAT_HAS_EMISSIVE, Flags);
+		ITextureView* pBaseColorSRV = ResolveSRV(MatInst.GetBaseColorTextureOverride(), pDefaultBaseColorSRV, hlsl::MAT_HAS_BASECOLOR, Flags);
+		ITextureView* pNormalSRV = ResolveSRV(MatInst.GetNormalTextureOverride(), pDefaultNormalSRV, hlsl::MAT_HAS_NORMAL, Flags);
+		ITextureView* pMRSRV = ResolveSRV(MatInst.GetMetallicRoughnessTextureOverride(), pDefaultMRSRV, hlsl::MAT_HAS_MR, Flags);
+		ITextureView* pAOSRV = ResolveSRV(MatInst.GetAmbientOcclusionTextureOverride(), pDefaultAOSRV, hlsl::MAT_HAS_AO, Flags);
+		ITextureView* pEmissiveSRV = ResolveSRV(MatInst.GetEmissiveTextureOverride(), pDefaultEmissiveSRV, hlsl::MAT_HAS_EMISSIVE, Flags);
 
 		RD.MaterialFlags = Flags;
 

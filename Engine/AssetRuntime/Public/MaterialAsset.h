@@ -35,6 +35,7 @@ namespace shz
 		MATERIAL_TEX_NORMAL,
 		MATERIAL_TEX_ORM,      // Occlusion(R), Roughness(G), Metallic(B)
 		MATERIAL_TEX_EMISSIVE,
+		MATERIAL_TEX_HEIGHT,
 
 		MATERIAL_TEX_COUNT
 	};
