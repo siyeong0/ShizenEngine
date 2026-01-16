@@ -38,8 +38,8 @@ namespace shz
 			&m_pShaderSourceFactory
 		);
 
-		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants CB", &m_pFrameCb);
-		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants CB", &m_pObjectCb);
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants CB", &m_pFrameCB);
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants CB", &m_pObjectCB);
 
 		if (!createShadowTargets()) { ASSERT(false, "Failed to create shadow targets."); return false; }
 		if (!createDeferredTargets()) { ASSERT(false, "Failed to create deferred render targets."); return false; }
@@ -99,24 +99,24 @@ namespace shz
 	void Renderer::Cleanup()
 	{
 		m_PsoBasic.Release();
-		m_PsoShadow.Release();
-		m_PsoGBuffer.Release();
-		m_PsoLighting.Release();
-		m_PsoPost.Release();
+		m_ShadowPSO.Release();
+		m_GBufferPSO.Release();
+		m_LightingPSO.Release();
+		m_PostPSO.Release();
 
-		m_SrbShadow.Release();
-		m_SrbLighting.Release();
-		m_SrbPost.Release();
+		m_ShadowSRB.Release();
+		m_LightingSRB.Release();
+		m_PostSRB.Release();
 
 		m_ShadowMapTex.Release();
 		m_ShadowMapDsv.Release();
 		m_ShadowMapSrv.Release();
 
 		m_GBufferDepthTex.Release();
-		m_GBufferDepthDsv.Release();
-		m_GBufferDepthSrv.Release();
+		m_GBufferDepthDSV.Release();
+		m_GBufferDepthSRV.Release();
 
-		for (uint32 i = 0; i < kGBufferCount; ++i)
+		for (uint32 i = 0; i < NUM_GBUFFERS; ++i)
 		{
 			m_GBufferTex[i].Release();
 			m_GBufferRtv[i].Release();
@@ -124,21 +124,21 @@ namespace shz
 		}
 
 		m_LightingTex.Release();
-		m_LightingRtv.Release();
-		m_LightingSrv.Release();
+		m_LightingRTV.Release();
+		m_LightingSRV.Release();
 
-		m_RpShadow.Release();
-		m_FbShadow.Release();
-		m_RpGBuffer.Release();
-		m_FbGBuffer.Release();
-		m_RpLighting.Release();
-		m_FbLighting.Release();
-		m_RpPost.Release();
-		m_FbPost.Release();
+		m_RenderPassShadow.Release();
+		m_FrameBufferShadow.Release();
+		m_RenderPassGBuffer.Release();
+		m_FrameBufferGBuffer.Release();
+		m_RenderPassLighting.Release();
+		m_FrameBufferLighting.Release();
+		m_RenderPassPost.Release();
+		m_FrameBufferPost.Release();
 
-		m_pShadowCb.Release();
-		m_pFrameCb.Release();
-		m_pObjectCb.Release();
+		m_pShadowCB.Release();
+		m_pFrameCB.Release();
+		m_pObjectCB.Release();
 
 		m_pShaderSourceFactory.Release();
 
@@ -261,7 +261,7 @@ namespace shz
 
 		// Update frame constants (including light matrices).
 		{
-			MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCb, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
 			cb->View = view.ViewMatrix;
 			cb->Proj = view.ProjMatrix;
@@ -372,7 +372,7 @@ namespace shz
 		}
 
 		{
-			MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCb, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
 			cb->LightViewProj = lightViewProj;
 		}
 
@@ -441,8 +441,8 @@ namespace shz
 					MaterialRenderData* matRd =
 						m_pRenderResourceCache->GetOrCreateMaterialRenderData(
 							matHandle,
-							m_PsoGBuffer,
-							m_pObjectCb,
+							m_GBufferPSO,
+							m_pObjectCB,
 							ctx
 						);
 
@@ -465,22 +465,22 @@ namespace shz
 			}
 		}
 
-		if (m_pFrameCb)
+		if (m_pFrameCB)
 		{
 			preBarriers.push_back(
-				StateTransitionDesc{ m_pFrameCb, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
+				StateTransitionDesc{ m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
 			);
 		}
-		if (m_pObjectCb)
+		if (m_pObjectCB)
 		{
 			preBarriers.push_back(
-				StateTransitionDesc{ m_pObjectCb, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
+				StateTransitionDesc{ m_pObjectCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
 			);
 		}
-		if (m_pShadowCb)
+		if (m_pShadowCB)
 		{
 			preBarriers.push_back(
-				StateTransitionDesc{ m_pShadowCb, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
+				StateTransitionDesc{ m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE }
 			);
 		}
 
@@ -508,8 +508,8 @@ namespace shz
 			Viewport vp = {};
 			vp.TopLeftX = 0.f;
 			vp.TopLeftY = 0.f;
-			vp.Width = static_cast<float>(kShadowMapSize);
-			vp.Height = static_cast<float>(kShadowMapSize);
+			vp.Width = static_cast<float>(SHADOW_MAP_SIZE);
+			vp.Height = static_cast<float>(SHADOW_MAP_SIZE);
 			vp.MinDepth = 0.f;
 			vp.MaxDepth = 1.f;
 			ctx->SetViewports(1, &vp, 0, 0);
@@ -521,15 +521,15 @@ namespace shz
 			clearVals[0].DepthStencil.Stencil = 0;
 
 			BeginRenderPassAttribs rpBegin = {};
-			rpBegin.pRenderPass = m_RpShadow;
-			rpBegin.pFramebuffer = m_FbShadow;
+			rpBegin.pRenderPass = m_RenderPassShadow;
+			rpBegin.pFramebuffer = m_FrameBufferShadow;
 			rpBegin.ClearValueCount = 1;
 			rpBegin.pClearValues = clearVals;
 
 			ctx->BeginRenderPass(rpBegin);
 
-			ctx->SetPipelineState(m_PsoShadow);
-			ctx->CommitShaderResources(m_SrbShadow, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+			ctx->SetPipelineState(m_ShadowPSO);
+			ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 			for (const Handle<RenderScene::RenderObject>& hObj : scene.GetObjectHandles())
 			{
@@ -546,7 +546,7 @@ namespace shz
 				}
 
 				{
-					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCb, MAP_WRITE, MAP_FLAG_DISCARD);
+					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
 					cb->World = obj->Transform;
 					cb->WorldInvTranspose = obj->Transform.Inversed().Transposed();
 				}
@@ -631,8 +631,8 @@ namespace shz
 			clearVals[4].DepthStencil.Stencil = 0;
 
 			BeginRenderPassAttribs rpBegin = {};
-			rpBegin.pRenderPass = m_RpGBuffer;
-			rpBegin.pFramebuffer = m_FbGBuffer;
+			rpBegin.pRenderPass = m_RenderPassGBuffer;
+			rpBegin.pFramebuffer = m_FrameBufferGBuffer;
 			rpBegin.ClearValueCount = 5;
 			rpBegin.pClearValues = clearVals;
 
@@ -653,7 +653,7 @@ namespace shz
 				}
 
 				{
-					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCb, MAP_WRITE, MAP_FLAG_DISCARD);
+					MapHelper<hlsl::ObjectConstants> cb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
 					cb->World = obj->Transform;
 					cb->WorldInvTranspose = obj->Transform.Inversed().Transposed();
 				}
@@ -736,15 +736,15 @@ namespace shz
 			clearVals[0].Color[3] = 1.f;
 
 			BeginRenderPassAttribs rpBegin = {};
-			rpBegin.pRenderPass = m_RpLighting;
-			rpBegin.pFramebuffer = m_FbLighting;
+			rpBegin.pRenderPass = m_RenderPassLighting;
+			rpBegin.pFramebuffer = m_FrameBufferLighting;
 			rpBegin.ClearValueCount = 1;
 			rpBegin.pClearValues = clearVals;
 
 			ctx->BeginRenderPass(rpBegin);
 
-			ctx->SetPipelineState(m_PsoLighting);
-			ctx->CommitShaderResources(m_SrbLighting, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+			ctx->SetPipelineState(m_LightingPSO);
+			ctx->CommitShaderResources(m_LightingSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			drawFullScreenTriangle();
 
 			ctx->EndRenderPass();
@@ -770,29 +770,29 @@ namespace shz
 
 			FramebufferDesc fbDesc = {};
 			fbDesc.Name = "FB_Post_Frame";
-			fbDesc.pRenderPass = m_RpPost;
+			fbDesc.pRenderPass = m_RenderPassPost;
 			fbDesc.AttachmentCount = 1;
 			fbDesc.ppAttachments = &bbRtv;
 
-			m_FbPost.Release();
-			device->CreateFramebuffer(fbDesc, &m_FbPost);
+			m_FrameBufferPost.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferPost);
 
 			// Bind input.
-			m_SrbPost->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor")->Set(m_LightingSrv);
+			m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor")->Set(m_LightingSRV);
 
 			OptimizedClearValue clearVals[1] = {};
 			clearVals[0].Color[3] = 1.f;
 
 			BeginRenderPassAttribs rpBegin = {};
-			rpBegin.pRenderPass = m_RpPost;
-			rpBegin.pFramebuffer = m_FbPost;
+			rpBegin.pRenderPass = m_RenderPassPost;
+			rpBegin.pFramebuffer = m_FrameBufferPost;
 			rpBegin.ClearValueCount = 1;
 			rpBegin.pClearValues = clearVals;
 
 			ctx->BeginRenderPass(rpBegin);
 
-			ctx->SetPipelineState(m_PsoPost);
-			ctx->CommitShaderResources(m_SrbPost, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+			ctx->SetPipelineState(m_PostPSO);
+			ctx->CommitShaderResources(m_PostSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			drawFullScreenTriangle();
 
 			ctx->EndRenderPass();
@@ -913,11 +913,11 @@ namespace shz
 		{
 			if (auto* var = m_PsoBasic->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
 			{
-				var->Set(m_pFrameCb);
+				var->Set(m_pFrameCB);
 			}
 			if (auto* var = m_PsoBasic->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 			{
-				var->Set(m_pFrameCb);
+				var->Set(m_pFrameCB);
 			}
 		}
 
@@ -935,7 +935,7 @@ namespace shz
 
 		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
 
-		gp.pRenderPass = m_RpGBuffer;
+		gp.pRenderPass = m_RenderPassGBuffer;
 		gp.SubpassIndex = 0;
 
 		// Render targets are defined by the render pass.
@@ -1034,8 +1034,8 @@ namespace shz
 		psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 		psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-		device->CreateGraphicsPipelineState(psoCi, &m_PsoGBuffer);
-		if (!m_PsoGBuffer)
+		device->CreateGraphicsPipelineState(psoCi, &m_GBufferPSO);
+		if (!m_GBufferPSO)
 		{
 			ASSERT(false, "Failed to create GBuffer PSO.");
 			return false;
@@ -1043,13 +1043,13 @@ namespace shz
 
 		// Bind FRAME_CONSTANTS as static.
 		{
-			if (auto* var = m_PsoGBuffer->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
 			{
-				var->Set(m_pFrameCb);
+				var->Set(m_pFrameCB);
 			}
-			if (auto* var = m_PsoGBuffer->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 			{
-				var->Set(m_pFrameCb);
+				var->Set(m_pFrameCB);
 			}
 		}
 
@@ -1061,7 +1061,7 @@ namespace shz
 		IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
 		ASSERT(device, "createLightingPso(): device is null.");
 
-		if (m_PsoLighting && m_SrbLighting)
+		if (m_LightingPSO && m_LightingSRB)
 		{
 			return true;
 		}
@@ -1072,7 +1072,7 @@ namespace shz
 
 		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
 
-		gp.pRenderPass = m_RpLighting;
+		gp.pRenderPass = m_RenderPassLighting;
 		gp.SubpassIndex = 0;
 
 		// Render targets are defined by the render pass.
@@ -1163,8 +1163,8 @@ namespace shz
 		psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 		psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-		device->CreateGraphicsPipelineState(psoCi, &m_PsoLighting);
-		if (!m_PsoLighting)
+		device->CreateGraphicsPipelineState(psoCi, &m_LightingPSO);
+		if (!m_LightingPSO)
 		{
 			ASSERT(false, "Failed to create Lighting PSO.");
 			return false;
@@ -1172,14 +1172,14 @@ namespace shz
 
 		// Bind FRAME_CONSTANTS as static.
 		{
-			if (auto* var = m_PsoLighting->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+			if (auto* var = m_LightingPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 			{
-				var->Set(m_pFrameCb);
+				var->Set(m_pFrameCB);
 			}
 		}
 
-		m_PsoLighting->CreateShaderResourceBinding(&m_SrbLighting, true);
-		if (!m_SrbLighting)
+		m_LightingPSO->CreateShaderResourceBinding(&m_LightingSRB, true);
+		if (!m_LightingSRB)
 		{
 			ASSERT(false, "Failed to create SRB_Lighting.");
 			return false;
@@ -1187,29 +1187,29 @@ namespace shz
 
 		// Bind SRVs (mutable).
 		{
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer0"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer0"))
 			{
 				var->Set(m_GBufferSrv[0]);
 			}
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer1"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer1"))
 			{
 				var->Set(m_GBufferSrv[1]);
 			}
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer2"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer2"))
 			{
 				var->Set(m_GBufferSrv[2]);
 			}
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer3"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer3"))
 			{
 				var->Set(m_GBufferSrv[3]);
 			}
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
 			{
 				var->Set(m_ShadowMapSrv);
 			}
-			if (auto var = m_SrbLighting->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBufferDepth"))
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBufferDepth"))
 			{
-				var->Set(m_GBufferDepthSrv);
+				var->Set(m_GBufferDepthSRV);
 			}
 		}
 
@@ -1222,7 +1222,7 @@ namespace shz
 		ISwapChain* swapChain = m_CreateInfo.pSwapChain.RawPtr();
 		ASSERT(device && swapChain, "createPostPso(): device/swapchain is null.");
 
-		if (m_PsoPost && m_SrbPost)
+		if (m_PostPSO && m_PostSRB)
 		{
 			return true;
 		}
@@ -1233,7 +1233,7 @@ namespace shz
 
 		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
 
-		gp.pRenderPass = m_RpPost;
+		gp.pRenderPass = m_RenderPassPost;
 		gp.SubpassIndex = 0;
 
 		// Render targets are defined by the render pass.
@@ -1309,15 +1309,15 @@ namespace shz
 		psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 		psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-		device->CreateGraphicsPipelineState(psoCi, &m_PsoPost);
-		if (!m_PsoPost)
+		device->CreateGraphicsPipelineState(psoCi, &m_PostPSO);
+		if (!m_PostPSO)
 		{
 			ASSERT(false, "Failed to create Post PSO.");
 			return false;
 		}
 
-		m_PsoPost->CreateShaderResourceBinding(&m_SrbPost, true);
-		if (!m_SrbPost)
+		m_PostPSO->CreateShaderResourceBinding(&m_PostSRB, true);
+		if (!m_PostSRB)
 		{
 			ASSERT(false, "Failed to create SRB_Post.");
 			return false;
@@ -1331,7 +1331,7 @@ namespace shz
 		IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
 		ASSERT(device, "createShadowPso(): device is null.");
 
-		if (m_PsoShadow)
+		if (m_ShadowPSO)
 		{
 			return true;
 		}
@@ -1342,7 +1342,7 @@ namespace shz
 
 		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
 
-		gp.pRenderPass = m_RpShadow;
+		gp.pRenderPass = m_RenderPassShadow;
 		gp.SubpassIndex = 0;
 
 		// Render targets are defined by the render pass.
@@ -1420,8 +1420,8 @@ namespace shz
 		psoCi.PSODesc.ResourceLayout.Variables = vars;
 		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
 
-		device->CreateGraphicsPipelineState(psoCi, &m_PsoShadow);
-		if (!m_PsoShadow)
+		device->CreateGraphicsPipelineState(psoCi, &m_ShadowPSO);
+		if (!m_ShadowPSO)
 		{
 			ASSERT(false, "Failed to create Shadow PSO.");
 			return false;
@@ -1429,14 +1429,14 @@ namespace shz
 
 		// Bind SHADOW_CONSTANTS as static.
 		{
-			if (auto* var = m_PsoShadow->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
 			{
-				var->Set(m_pShadowCb);
+				var->Set(m_pShadowCB);
 			}
 		}
 
-		m_PsoShadow->CreateShaderResourceBinding(&m_SrbShadow, true);
-		if (!m_SrbShadow)
+		m_ShadowPSO->CreateShaderResourceBinding(&m_ShadowSRB, true);
+		if (!m_ShadowSRB)
 		{
 			ASSERT(false, "Failed to create SRB_Shadow.");
 			return false;
@@ -1444,9 +1444,9 @@ namespace shz
 
 		// OBJECT_CONSTANTS is dynamic, so it is bound on the SRB.
 		{
-			if (auto* var = m_SrbShadow->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
+			if (auto* var = m_ShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
 			{
-				var->Set(m_pObjectCb);
+				var->Set(m_pObjectCB);
 			}
 		}
 
@@ -1467,8 +1467,8 @@ namespace shz
 		TextureDesc td = {};
 		td.Name = "ShadowMap";
 		td.Type = RESOURCE_DIM_TEX_2D;
-		td.Width = kShadowMapSize;
-		td.Height = kShadowMapSize;
+		td.Width = SHADOW_MAP_SIZE;
+		td.Height = SHADOW_MAP_SIZE;
 		td.MipLevels = 1;
 		td.SampleCount = 1;
 		td.Usage = USAGE_DEFAULT;
@@ -1505,9 +1505,9 @@ namespace shz
 		}
 
 		// Shadow constants CB.
-		if (!m_pShadowCb)
+		if (!m_pShadowCB)
 		{
-			CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants CB", &m_pShadowCb);
+			CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants CB", &m_pShadowCB);
 		}
 
 		return true;
@@ -1575,7 +1575,7 @@ namespace shz
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_GBufferTex[3], m_GBufferRtv[3], m_GBufferSrv[3]);
 
 		// Lighting intermediate: LDR = swapchain format. For HDR, use RGBA16F.
-		createRtTexture2d(w, h, sc.ColorBufferFormat, "LightingColor", m_LightingTex, m_LightingRtv, m_LightingSrv);
+		createRtTexture2d(w, h, sc.ColorBufferFormat, "LightingColor", m_LightingTex, m_LightingRTV, m_LightingSRV);
 
 		// GBuffer depth: typeless + DSV + SRV.
 		{
@@ -1592,8 +1592,8 @@ namespace shz
 			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
 			m_GBufferDepthTex.Release();
-			m_GBufferDepthDsv.Release();
-			m_GBufferDepthSrv.Release();
+			m_GBufferDepthDSV.Release();
+			m_GBufferDepthSRV.Release();
 
 			device->CreateTexture(td, nullptr, &m_GBufferDepthTex);
 			ASSERT(m_GBufferDepthTex, "Failed to create GBufferDepth texture.");
@@ -1603,8 +1603,8 @@ namespace shz
 				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
 				vd.Format = TEX_FORMAT_D32_FLOAT;
 
-				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDsv);
-				ASSERT(m_GBufferDepthDsv, "Failed to create GBufferDepth DSV.");
+				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDSV);
+				ASSERT(m_GBufferDepthDSV, "Failed to create GBufferDepth DSV.");
 			}
 
 			{
@@ -1612,22 +1612,22 @@ namespace shz
 				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
 				vd.Format = TEX_FORMAT_R32_FLOAT;
 
-				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSrv);
-				ASSERT(m_GBufferDepthSrv, "Failed to create GBufferDepth SRV.");
+				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSRV);
+				ASSERT(m_GBufferDepthSRV, "Failed to create GBufferDepth SRV.");
 			}
 		}
 
 		// Render passes/framebuffers must be recreated because attachments changed.
-		m_RpGBuffer.Release();
-		m_FbGBuffer.Release();
-		m_RpLighting.Release();
-		m_FbLighting.Release();
-		m_RpPost.Release();
-		m_FbPost.Release();
+		m_RenderPassGBuffer.Release();
+		m_FrameBufferGBuffer.Release();
+		m_RenderPassLighting.Release();
+		m_FrameBufferLighting.Release();
+		m_RenderPassPost.Release();
+		m_FrameBufferPost.Release();
 
 		// SRBs depend on views, so rebuild them too.
-		m_SrbLighting.Release();
-		m_SrbPost.Release();
+		m_LightingSRB.Release();
+		m_PostSRB.Release();
 
 		return true;
 	}
@@ -1638,7 +1638,7 @@ namespace shz
 		ASSERT(device, "createShadowRenderPasses(): device is null.");
 
 		// Already created.
-		if (m_RpShadow && m_FbShadow)
+		if (m_RenderPassShadow && m_FrameBufferShadow)
 		{
 			return true;
 		}
@@ -1671,9 +1671,9 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RpShadow.Release();
-			device->CreateRenderPass(rpDesc, &m_RpShadow);
-			if (!m_RpShadow)
+			m_RenderPassShadow.Release();
+			device->CreateRenderPass(rpDesc, &m_RenderPassShadow);
+			if (!m_RenderPassShadow)
 			{
 				ASSERT(false, "createShadowRenderPasses(): CreateRenderPass failed.");
 				return false;
@@ -1686,13 +1686,13 @@ namespace shz
 
 			FramebufferDesc fbDesc = {};
 			fbDesc.Name = "FB_Shadow";
-			fbDesc.pRenderPass = m_RpShadow;
+			fbDesc.pRenderPass = m_RenderPassShadow;
 			fbDesc.AttachmentCount = 1;
 			fbDesc.ppAttachments = atch;
 
-			m_FbShadow.Release();
-			device->CreateFramebuffer(fbDesc, &m_FbShadow);
-			if (!m_FbShadow)
+			m_FrameBufferShadow.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferShadow);
+			if (!m_FrameBufferShadow)
 			{
 				ASSERT(false, "createShadowRenderPasses(): CreateFramebuffer failed.");
 				return false;
@@ -1713,7 +1713,7 @@ namespace shz
 		// ----------------------------
 		// GBuffer render pass + FB
 		// ----------------------------
-		if (!m_RpGBuffer || !m_FbGBuffer)
+		if (!m_RenderPassGBuffer || !m_FrameBufferGBuffer)
 		{
 			RenderPassAttachmentDesc attachments[5] = {};
 
@@ -1763,9 +1763,9 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RpGBuffer.Release();
-			device->CreateRenderPass(rpDesc, &m_RpGBuffer);
-			if (!m_RpGBuffer)
+			m_RenderPassGBuffer.Release();
+			device->CreateRenderPass(rpDesc, &m_RenderPassGBuffer);
+			if (!m_RenderPassGBuffer)
 			{
 				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_GBuffer) failed.");
 				return false;
@@ -1777,18 +1777,18 @@ namespace shz
 				m_GBufferRtv[1],
 				m_GBufferRtv[2],
 				m_GBufferRtv[3],
-				m_GBufferDepthDsv
+				m_GBufferDepthDSV
 			};
 
 			FramebufferDesc fbDesc = {};
 			fbDesc.Name = "FB_GBuffer";
-			fbDesc.pRenderPass = m_RpGBuffer;
+			fbDesc.pRenderPass = m_RenderPassGBuffer;
 			fbDesc.AttachmentCount = 5;
 			fbDesc.ppAttachments = atch;
 
-			m_FbGBuffer.Release();
-			device->CreateFramebuffer(fbDesc, &m_FbGBuffer);
-			if (!m_FbGBuffer)
+			m_FrameBufferGBuffer.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferGBuffer);
+			if (!m_FrameBufferGBuffer)
 			{
 				ASSERT(false, "createDeferredRenderPasses(): CreateFramebuffer(FB_GBuffer) failed.");
 				return false;
@@ -1798,7 +1798,7 @@ namespace shz
 		// ----------------------------
 		// Lighting render pass + FB
 		// ----------------------------
-		if (!m_RpLighting || !m_FbLighting)
+		if (!m_RenderPassLighting || !m_FrameBufferLighting)
 		{
 			ASSERT(m_LightingTex, "createDeferredRenderPasses(): Lighting texture is null.");
 
@@ -1826,25 +1826,25 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RpLighting.Release();
-			device->CreateRenderPass(rpDesc, &m_RpLighting);
-			if (!m_RpLighting)
+			m_RenderPassLighting.Release();
+			device->CreateRenderPass(rpDesc, &m_RenderPassLighting);
+			if (!m_RenderPassLighting)
 			{
 				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_Lighting) failed.");
 				return false;
 			}
 
-			ITextureView* atch[1] = { m_LightingRtv };
+			ITextureView* atch[1] = { m_LightingRTV };
 
 			FramebufferDesc fbDesc = {};
 			fbDesc.Name = "FB_Lighting";
-			fbDesc.pRenderPass = m_RpLighting;
+			fbDesc.pRenderPass = m_RenderPassLighting;
 			fbDesc.AttachmentCount = 1;
 			fbDesc.ppAttachments = atch;
 
-			m_FbLighting.Release();
-			device->CreateFramebuffer(fbDesc, &m_FbLighting);
-			if (!m_FbLighting)
+			m_FrameBufferLighting.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferLighting);
+			if (!m_FrameBufferLighting)
 			{
 				ASSERT(false, "createDeferredRenderPasses(): CreateFramebuffer(FB_Lighting) failed.");
 				return false;
@@ -1854,7 +1854,7 @@ namespace shz
 		// ----------------------------
 		// Post render pass (FB is rebuilt per-frame using current backbuffer RTV)
 		// ----------------------------
-		if (!m_RpPost)
+		if (!m_RenderPassPost)
 		{
 			RenderPassAttachmentDesc attachments[1] = {};
 			attachments[0].Format = scDesc.ColorBufferFormat;
@@ -1880,9 +1880,9 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RpPost.Release();
-			device->CreateRenderPass(rpDesc, &m_RpPost);
-			if (!m_RpPost)
+			m_RenderPassPost.Release();
+			device->CreateRenderPass(rpDesc, &m_RenderPassPost);
+			if (!m_RenderPassPost)
 			{
 				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_Post) failed.");
 				return false;

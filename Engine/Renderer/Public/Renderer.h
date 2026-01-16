@@ -97,9 +97,9 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		RefCntAutoPtr<IBuffer> m_pFrameCb;
-		RefCntAutoPtr<IBuffer> m_pObjectCb;
-		RefCntAutoPtr<IBuffer> m_pShadowCb;
+		RefCntAutoPtr<IBuffer> m_pFrameCB;
+		RefCntAutoPtr<IBuffer> m_pObjectCB;
+		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
 		RefCntAutoPtr<IPipelineState> m_PsoBasic;
 
@@ -108,49 +108,49 @@ namespace shz
 		// ------------------------------------------------------------
 		// Deferred resources (Shadow -> GBuffer -> Lighting -> Post)
 		// ------------------------------------------------------------
-		static constexpr uint32 kShadowMapSize = 4096;
+		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
 
-		RefCntAutoPtr<ITexture>     m_ShadowMapTex;
+		RefCntAutoPtr<ITexture> m_ShadowMapTex;
 		RefCntAutoPtr<ITextureView> m_ShadowMapDsv;
 		RefCntAutoPtr<ITextureView> m_ShadowMapSrv;
 
-		RefCntAutoPtr<ITexture>     m_GBufferDepthTex;
-		RefCntAutoPtr<ITextureView> m_GBufferDepthDsv;
-		RefCntAutoPtr<ITextureView> m_GBufferDepthSrv;
+		RefCntAutoPtr<ITexture> m_GBufferDepthTex;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthDSV;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthSRV;
 
-		static constexpr uint32 kGBufferCount = 4;
-		RefCntAutoPtr<ITexture>     m_GBufferTex[kGBufferCount];
-		RefCntAutoPtr<ITextureView> m_GBufferRtv[kGBufferCount];
-		RefCntAutoPtr<ITextureView> m_GBufferSrv[kGBufferCount];
+		static constexpr uint32 NUM_GBUFFERS = 4;
+		RefCntAutoPtr<ITexture> m_GBufferTex[NUM_GBUFFERS];
+		RefCntAutoPtr<ITextureView> m_GBufferRtv[NUM_GBUFFERS];
+		RefCntAutoPtr<ITextureView> m_GBufferSrv[NUM_GBUFFERS];
 
-		RefCntAutoPtr<ITexture>     m_LightingTex;
-		RefCntAutoPtr<ITextureView> m_LightingRtv;
-		RefCntAutoPtr<ITextureView> m_LightingSrv;
+		RefCntAutoPtr<ITexture> m_LightingTex;
+		RefCntAutoPtr<ITextureView> m_LightingRTV;
+		RefCntAutoPtr<ITextureView> m_LightingSRV;
 
 		// Render passes + framebuffers.
-		RefCntAutoPtr<IRenderPass>  m_RpShadow;
-		RefCntAutoPtr<IFramebuffer> m_FbShadow;
+		RefCntAutoPtr<IRenderPass> m_RenderPassShadow;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferShadow;
 
-		RefCntAutoPtr<IRenderPass>  m_RpGBuffer;
-		RefCntAutoPtr<IFramebuffer> m_FbGBuffer;
+		RefCntAutoPtr<IRenderPass> m_RenderPassGBuffer;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferGBuffer;
 
-		RefCntAutoPtr<IRenderPass>  m_RpLighting;
-		RefCntAutoPtr<IFramebuffer> m_FbLighting;
+		RefCntAutoPtr<IRenderPass> m_RenderPassLighting;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferLighting;
 
-		RefCntAutoPtr<IRenderPass>  m_RpPost;
-		RefCntAutoPtr<IFramebuffer> m_FbPost; // Rebuilt every frame (backbuffer changes).
+		RefCntAutoPtr<IRenderPass> m_RenderPassPost;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferPost; // Rebuilt every frame (backbuffer changes).
 
 		// PSOs / SRBs.
-		RefCntAutoPtr<IPipelineState>         m_PsoShadow;
-		RefCntAutoPtr<IShaderResourceBinding> m_SrbShadow;
+		RefCntAutoPtr<IPipelineState> m_ShadowPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
 
-		RefCntAutoPtr<IPipelineState> m_PsoGBuffer;
+		RefCntAutoPtr<IPipelineState> m_GBufferPSO;
 
-		RefCntAutoPtr<IPipelineState>         m_PsoLighting;
-		RefCntAutoPtr<IShaderResourceBinding> m_SrbLighting;
+		RefCntAutoPtr<IPipelineState> m_LightingPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_PsoPost;
-		RefCntAutoPtr<IShaderResourceBinding> m_SrbPost;
+		RefCntAutoPtr<IPipelineState> m_PostPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
 
 		// Bookkeeping.
 		uint32 m_DeferredWidth = 0;
