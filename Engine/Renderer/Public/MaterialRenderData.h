@@ -1,72 +1,58 @@
 #pragma once
-#include "Primitives/BasicTypes.h"
-#include "Primitives/Handle.hpp"
+#include <vector>
 
-#include "Engine/Core/Math/Math.h"
+#include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
-#include "Engine/Renderer/Public/MaterialInstance.h"
+#include "Engine/RHI/Interface/IBuffer.h"
+#include "Engine/RHI/Interface/IRenderDevice.h"
+#include "Engine/RHI/Interface/IPipelineState.h"
+#include "Engine/RHI/Interface/IShaderResourceBinding.h"
+#include "Engine/RHI/Interface/IShaderResourceVariable.h"
 
-// RHI forward decls
+#include "Engine/Material/Public/MaterialTemplate.h"
+#include "Engine/Material/Public/MaterialInstance.h"
+
+#include "Engine/Renderer/Public/TextureRenderData.h"
+
 namespace shz
 {
-    struct IPipelineState;
-    struct IShaderResourceBinding;
-    struct ITextureView;
-    struct ISampler;
+	class RenderResourceCache;
 
-    enum MATERIAL_RENDER_QUEUE : uint8
-    {
-        MATERIAL_RENDER_QUEUE_OPAQUE = 0,
-        MATERIAL_RENDER_QUEUE_MASKED,
-        MATERIAL_RENDER_QUEUE_TRANSLUCENT,
-    };
+	class MaterialRenderData final
+	{
+	public:
+		MaterialRenderData() = default;
+		~MaterialRenderData() = default;
 
-    // ------------------------------------------------------------
-    // MaterialRenderData
-    // - GPU-side binding data for a material instance (PSO/SRB + textures).
-    // - Cached by Renderer.
-    //
-    // NOTE:
-    // - This struct does NOT manage lifetime of the instance handle.
-    // - Handle liveness must be validated by the cache/registry that owns it.
-    // ------------------------------------------------------------
-    struct MaterialRenderData final
-    {
-        // Identity (instance this render data belongs to)
-        Handle<MaterialInstance> InstanceHandle = {};
+		bool Initialize(IRenderDevice* pDevice, IPipelineState* pPSO, const MaterialTemplate* pTemplate);
 
-        // Derived render policy
-        MATERIAL_RENDER_QUEUE RenderQueue = MATERIAL_RENDER_QUEUE_OPAQUE;
+		bool IsValid() const noexcept
+		{
+			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_pTemplate != nullptr);
+		}
 
-        bool TwoSided = false;
-        bool CastShadow = true;
+		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
+		IShaderResourceBinding* GetSRB() const noexcept { return m_pSRB; }
 
-        uint64 SortKey = 0;
+		IBuffer* GetMaterialConstantsBuffer() const noexcept { return m_pMaterialConstants; }
+		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
 
-        // GPU bindings
-        RefCntAutoPtr<IPipelineState> pPSO;
-        RefCntAutoPtr<IShaderResourceBinding> pSRB;
+		bool Apply(RenderResourceCache* pCache, const MaterialInstance& inst, IDeviceContext* pCtx);
 
-        RefCntAutoPtr<IBuffer> pMaterialCB;
-        uint32 MaterialFlags = 0;
+	private:
+		bool bindAllTextures(RenderResourceCache* pCache, const MaterialInstance& inst);
+		bool updateMaterialConstants(const MaterialInstance& inst, IDeviceContext* pCtx);
 
-        RefCntAutoPtr<ISampler> pDefaultSampler;
+		IShaderResourceVariable* findVarAnyStage(const char* name) const;
 
-        // Runtime constants
-        float4 BaseColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
-        float  Metallic = 0.0f;
-        float  Roughness = 0.5f;
-        float  NormalScale = 1.0f;
-        float  OcclusionStrength = 1.0f;
-        float3 Emissive = float3(0.0f, 0.0f, 0.0f);
-        float  AlphaCutoff = 0.5f;
+	private:
+		RefCntAutoPtr<IPipelineState>         m_pPSO = {};
+		RefCntAutoPtr<IShaderResourceBinding> m_pSRB = {};
+		RefCntAutoPtr<IBuffer>                m_pMaterialConstants = {};
+		std::vector<Handle<TextureRenderData>> m_BoundTextures = {};
 
-        MaterialRenderData() = default;
-
-        void Clear();
-        bool IsValid() const noexcept;
-
-        static MATERIAL_RENDER_QUEUE GetQueueFromAlphaMode(MATERIAL_ALPHA_MODE mode) noexcept;
-    };
-} // namespace shz
+		const MaterialTemplate* m_pTemplate = nullptr;
+		uint32 m_MaterialCBufferIndex = 0;
+	};
+}

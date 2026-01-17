@@ -27,9 +27,6 @@
     <ClInclude Include="Public\StaticMeshRenderData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\MaterialInstance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\ViewFamily.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -40,6 +37,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\RenderResourceCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\TextureRenderData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -53,16 +53,20 @@
     <ClCompile Include="Private\RenderScene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Private\RenderResourceCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Private\MaterialRenderData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\RenderResourceCache.cpp">
+    <ClCompile Include="Private\TextureRenderData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\StaticMeshRenderData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\Basic.psh" />
-    <FxCompile Include="Shaders\Basic.vsh" />
     <FxCompile Include="Shaders\GBuffer.vsh" />
     <FxCompile Include="Shaders\GBuffer.psh" />
     <FxCompile Include="Shaders\DeferredLighting.vsh" />

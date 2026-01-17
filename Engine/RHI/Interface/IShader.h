@@ -977,11 +977,6 @@ namespace shz
 	};
 
 
-
-
-
-
-
 	// Shader interface
 	struct SHZ_INTERFACE IShader : public IDeviceObject
 	{

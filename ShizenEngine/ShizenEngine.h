@@ -32,7 +32,7 @@ namespace shz
 		{
 			std::string Path = {};
 
-			Handle<StaticMeshAsset>      AssetHandle = {};
+			Handle<StaticMeshAsset> AssetHandle = {};
 			Handle<StaticMeshRenderData> MeshHandle = {};
 			Handle<RenderScene::RenderObject> ObjectId = {};
 
@@ -45,6 +45,7 @@ namespace shz
 		};
 
 	private:
+		MaterialInstance CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset);
 		void spawnMeshesOnXYGrid(
 			const std::vector<const char*>& meshPaths,
 			float3 gridCenter,
@@ -52,9 +53,10 @@ namespace shz
 			float spacingY,
 			float spacingZ);
 	private:
-		std::unique_ptr<Renderer>    m_pRenderer = nullptr;
+		std::unique_ptr<Renderer> m_pRenderer = nullptr;
 		std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
 		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
 		ViewFamily m_ViewFamily = {};
 		FirstPersonCamera m_Camera;
@@ -68,5 +70,21 @@ namespace shz
 
 		RenderScene::LightObject m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle;
+
+
+
+		MaterialTemplate m_PBRMaterialTemplate = {};
+
+		struct DefaultMaterialTextures
+		{
+			RefCntAutoPtr<ITexture> Black;
+			RefCntAutoPtr<ITexture> White;
+			RefCntAutoPtr<ITexture> Normal;
+			RefCntAutoPtr<ITexture> MetallicRoughness;
+			RefCntAutoPtr<ITexture> AO;
+			RefCntAutoPtr<ITexture> Emissive;
+		};
+
+		DefaultMaterialTextures m_DefaultTextures;
 	};
 } // namespace shz

@@ -25,31 +25,32 @@ namespace shz
 
 	enum MATERIAL_SHADING_MODEL : uint8
 	{
-		MATERIAL_SHADING_DEFAULT_LIT = 0,
-		MATERIAL_SHADING_UNLIT,
+		MATERIAL_SHADING_MODE_LIT = 0,
+		MATERIAL_SHADING_MODE_UNLIT,
 	};
 
+	// 최소 유지: 현재 importer/renderer가 기대하는 고정 슬롯
 	enum MATERIAL_TEXTURE_SLOT : uint8
 	{
 		MATERIAL_TEX_ALBEDO = 0,
 		MATERIAL_TEX_NORMAL,
 		MATERIAL_TEX_ORM,      // Occlusion(R), Roughness(G), Metallic(B)
 		MATERIAL_TEX_EMISSIVE,
+		MATERIAL_TEX_AO,
 		MATERIAL_TEX_HEIGHT,
 
 		MATERIAL_TEX_COUNT
 	};
 
 	// ------------------------------------------------------------
-	// MaterialAsset
-	// - CPU-side material asset (no GPU/RHI dependency).
-	// - Holds texture assets + scalar/vector parameters + render options.
-	// - Consumed by Renderer to create MaterialRenderData / MaterialInstance.
+	// MaterialInstanceAsset
+	// - CPU-side "instance" data only.
+	// - MaterialTemplate is referenced by TemplateKey (string).
+	// - Keeps your current PBR fixed layout for now (simple).
 	// ------------------------------------------------------------
-	class MaterialAsset final : public AssetObject
+	class MaterialInstanceAsset final : public AssetObject
 	{
 	public:
-
 		struct Parameters final
 		{
 			// Base Color (Albedo)
@@ -71,28 +72,29 @@ namespace shz
 
 			// Normal strength
 			float NormalScale = 1.0f;
+
+			float OcclusionStrength = 1.0f; // For ORM texture
 		};
 
 		struct Options final
 		{
-			// NOTE:
-			// BlendMode is a render pipeline policy (what the renderer actually does).
+			// BlendMode is what renderer actually does.
 			// AlphaMode is authoring/source intent (glTF alphaMode etc.).
-			MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_OPAQUE;
-			MATERIAL_ALPHA_MODE AlphaMode = MATERIAL_ALPHA_OPAQUE;
-			MATERIAL_SHADING_MODEL ShadingModel = MATERIAL_SHADING_DEFAULT_LIT;
+			MATERIAL_BLEND_MODE   BlendMode = MATERIAL_BLEND_OPAQUE;
+			MATERIAL_ALPHA_MODE   AlphaMode = MATERIAL_ALPHA_OPAQUE;
+			MATERIAL_SHADING_MODEL ShadingModel = MATERIAL_SHADING_MODE_LIT;
 
 			bool TwoSided = false;
 			bool CastShadow = true;
 		};
 
 	public:
-		MaterialAsset() = default;
-		MaterialAsset(const MaterialAsset&) = default;
-		MaterialAsset(MaterialAsset&&) noexcept = default;
-		MaterialAsset& operator=(const MaterialAsset&) = default;
-		MaterialAsset& operator=(MaterialAsset&&) noexcept = default;
-		~MaterialAsset() = default;
+		MaterialInstanceAsset() = default;
+		MaterialInstanceAsset(const MaterialInstanceAsset&) = default;
+		MaterialInstanceAsset(MaterialInstanceAsset&&) noexcept = default;
+		MaterialInstanceAsset& operator=(const MaterialInstanceAsset&) = default;
+		MaterialInstanceAsset& operator=(MaterialInstanceAsset&&) noexcept = default;
+		~MaterialInstanceAsset() = default;
 
 		// ------------------------------------------------------------
 		// Metadata
@@ -103,20 +105,40 @@ namespace shz
 		void SetSourcePath(const std::string& path) { m_SourcePath = path; }
 		const std::string& GetSourcePath() const noexcept { return m_SourcePath; }
 
-		// Optional: shader/material template key (e.g. "GBufferPBR", "Unlit")
-		void SetShaderKey(const std::string& key) { m_ShaderKey = key; }
-		const std::string& GetShaderKey() const noexcept { return m_ShaderKey; }
+		// MaterialTemplate key (string only, no handle).
+		void SetTemplateKey(const std::string& key) { m_TemplateKey = key; }
+		const std::string& GetTemplateKey() const noexcept { return m_TemplateKey; }
 
 		// ------------------------------------------------------------
 		// Textures
 		// ------------------------------------------------------------
-		// Sets texture source path and color-space hint.
-		// Typical: Albedo/Emissive are sRGB, Normal/ORM are linear.
-		void SetTexture(MATERIAL_TEXTURE_SLOT slot, const std::string& path, bool isSRGB);
-		void ClearTexture(MATERIAL_TEXTURE_SLOT slot);
+		void SetTexture(MATERIAL_TEXTURE_SLOT slot, const std::string& path, bool isSRGB)
+		{
+			TextureAsset& t = m_Textures[SlotToIndex(slot)];
+			t.Clear();
+			t.SetSourcePath(path);
+			t.SetIsSRGB(isSRGB);
 
-		TextureAsset& GetTexture(MATERIAL_TEXTURE_SLOT slot) noexcept;
-		const TextureAsset& GetTexture(MATERIAL_TEXTURE_SLOT slot) const noexcept;
+			// sensible defaults
+			t.SetGenerateMips(true);
+			t.SetFlipVertically(false);
+			t.SetPremultiplyAlpha(false);
+		}
+
+		void ClearTexture(MATERIAL_TEXTURE_SLOT slot)
+		{
+			m_Textures[SlotToIndex(slot)].Clear();
+		}
+
+		TextureAsset& GetTexture(MATERIAL_TEXTURE_SLOT slot) noexcept
+		{
+			return m_Textures[SlotToIndex(slot)];
+		}
+
+		const TextureAsset& GetTexture(MATERIAL_TEXTURE_SLOT slot) const noexcept
+		{
+			return m_Textures[SlotToIndex(slot)];
+		}
 
 		bool HasTexture(MATERIAL_TEXTURE_SLOT slot) const noexcept
 		{
@@ -137,28 +159,53 @@ namespace shz
 		Options& GetOptions() noexcept { return m_Options; }
 		const Options& GetOptions() const noexcept { return m_Options; }
 
-		// Maps AlphaMode -> BlendMode.
-		// Importers can call this after parsing alpha mode.
-		void ApplyAlphaModeToBlendMode() noexcept;
+		// Maps AlphaMode -> BlendMode (simple policy).
+		void ApplyAlphaModeToBlendMode() noexcept
+		{
+			switch (m_Options.AlphaMode)
+			{
+			default:
+			case MATERIAL_ALPHA_OPAQUE: m_Options.BlendMode = MATERIAL_BLEND_OPAQUE; break;
+			case MATERIAL_ALPHA_MASK:   m_Options.BlendMode = MATERIAL_BLEND_MASKED; break;
+			case MATERIAL_ALPHA_BLEND:  m_Options.BlendMode = MATERIAL_BLEND_TRANSLUCENT; break;
+			}
+		}
 
 		// ------------------------------------------------------------
 		// Reset / Validation
 		// ------------------------------------------------------------
-		// Clears authoring data and resets parameters/options.
-		// Note: AssetObject identity (AssetId) is not changed.
-		void Clear();
+		void Clear()
+		{
+			m_Name.clear();
+			m_SourcePath.clear();
+			m_TemplateKey.clear();
 
-		// Minimal validation for authoring parameters.
-		// Materials can be valid even without any textures.
-		bool IsValid() const noexcept;
+			for (uint32 i = 0; i < MATERIAL_TEX_COUNT; ++i)
+			{
+				m_Textures[i].Clear();
+			}
+
+			m_Params = {};
+			m_Options = {};
+		}
+
+		bool IsValid() const noexcept
+		{
+			// Instance can be valid without textures.
+			// Minimal checks: nothing fatal.
+			return true;
+		}
 
 	private:
-		static uint32 SlotToIndex(MATERIAL_TEXTURE_SLOT slot) noexcept;
+		static uint32 SlotToIndex(MATERIAL_TEXTURE_SLOT slot) noexcept
+		{
+			return static_cast<uint32>(slot);
+		}
 
 	private:
 		std::string m_Name;
 		std::string m_SourcePath;
-		std::string m_ShaderKey;
+		std::string m_TemplateKey;
 
 		TextureAsset m_Textures[MATERIAL_TEX_COUNT];
 

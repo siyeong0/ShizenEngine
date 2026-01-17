@@ -166,9 +166,9 @@ namespace shz
 		return RegisterAsset<TextureAsset>(asset, m_TextureSlots, m_TextureIdToHandle, m_TextureCount);
 	}
 
-	Handle<MaterialAsset> AssetManager::RegisterMaterial(const MaterialAsset& asset)
+	Handle<MaterialInstanceAsset> AssetManager::RegisterMaterialInstance(const MaterialInstanceAsset& asset)
 	{
-		return RegisterAsset<MaterialAsset>(asset, m_MaterialSlots, m_MaterialIdToHandle, m_MaterialCount);
+		return RegisterAsset<MaterialInstanceAsset>(asset, m_MaterialInstanceSlots, m_MaterialInstanceIdToHandle, m_MaterialInstanceCount);
 	}
 
 	Handle<StaticMeshAsset> AssetManager::RegisterStaticMesh(const StaticMeshAsset& asset)
@@ -181,9 +181,9 @@ namespace shz
 		return GetAsset<TextureAsset>(h, m_TextureSlots);
 	}
 
-	const MaterialAsset& AssetManager::GetMaterial(Handle<MaterialAsset> h) const noexcept
+	const MaterialInstanceAsset& AssetManager::GetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept
 	{
-		return GetAsset<MaterialAsset>(h, m_MaterialSlots);
+		return GetAsset<MaterialInstanceAsset>(h, m_MaterialInstanceSlots);
 	}
 
 	const StaticMeshAsset& AssetManager::GetStaticMesh(Handle<StaticMeshAsset> h) const noexcept
@@ -196,9 +196,9 @@ namespace shz
 		return TryGetAsset<TextureAsset>(h, m_TextureSlots);
 	}
 
-	const MaterialAsset* AssetManager::TryGetMaterial(Handle<MaterialAsset> h) const noexcept
+	const MaterialInstanceAsset* AssetManager::TryGetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept
 	{
-		return TryGetAsset<MaterialAsset>(h, m_MaterialSlots);
+		return TryGetAsset<MaterialInstanceAsset>(h, m_MaterialInstanceSlots);
 	}
 
 	const StaticMeshAsset* AssetManager::TryGetStaticMesh(Handle<StaticMeshAsset> h) const noexcept
@@ -211,9 +211,9 @@ namespace shz
 		return FindById<TextureAsset>(id, m_TextureSlots, m_TextureIdToHandle);
 	}
 
-	Handle<MaterialAsset> AssetManager::FindMaterialById(const AssetId& id) const noexcept
+	Handle<MaterialInstanceAsset> AssetManager::FindMaterialInstanceById(const AssetId& id) const noexcept
 	{
-		return FindById<MaterialAsset>(id, m_MaterialSlots, m_MaterialIdToHandle);
+		return FindById<MaterialInstanceAsset>(id, m_MaterialInstanceSlots, m_MaterialInstanceIdToHandle);
 	}
 
 	Handle<StaticMeshAsset> AssetManager::FindStaticMeshById(const AssetId& id) const noexcept
@@ -226,9 +226,9 @@ namespace shz
 		return RemoveAsset<TextureAsset>(h, m_TextureSlots, m_TextureIdToHandle, m_TextureCount);
 	}
 
-	bool AssetManager::RemoveMaterial(Handle<MaterialAsset> h)
+	bool AssetManager::RemoveMaterialInstance(Handle<MaterialInstanceAsset> h)
 	{
-		return RemoveAsset<MaterialAsset>(h, m_MaterialSlots, m_MaterialIdToHandle, m_MaterialCount);
+		return RemoveAsset<MaterialInstanceAsset>(h, m_MaterialInstanceSlots, m_MaterialInstanceIdToHandle, m_MaterialInstanceCount);
 	}
 
 	bool AssetManager::RemoveStaticMesh(Handle<StaticMeshAsset> h)
@@ -239,7 +239,7 @@ namespace shz
 	void AssetManager::Clear()
 	{
 		ClearTable<TextureAsset>(m_TextureSlots, m_TextureIdToHandle, m_TextureCount);
-		ClearTable<MaterialAsset>(m_MaterialSlots, m_MaterialIdToHandle, m_MaterialCount);
+		ClearTable<MaterialInstanceAsset>(m_MaterialInstanceSlots, m_MaterialInstanceIdToHandle, m_MaterialInstanceCount);
 		ClearTable<StaticMeshAsset>(m_StaticMeshSlots, m_StaticMeshIdToHandle, m_StaticMeshCount);
 	}
 

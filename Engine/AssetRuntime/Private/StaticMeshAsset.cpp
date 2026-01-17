@@ -96,13 +96,13 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-	MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
+	MaterialInstanceAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()));
 		return m_MaterialSlots[slot];
 	}
 
-	const MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
+	const MaterialInstanceAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()));
 		return m_MaterialSlots[slot];
@@ -176,19 +176,6 @@ namespace shz
 				}
 			}
 		}
-
-		// Optional strict check (debug): index values must be < vertex count.
-		// Uncomment if you want strict validation.
-		/*
-		for (uint32 i = 0; i < indexCount; ++i)
-		{
-			const uint32 idx = GetIndexAt(i);
-			if (idx >= static_cast<uint32>(vtxCount))
-			{
-				return false;
-			}
-		}
-		*/
 
 		return true;
 	}
@@ -288,8 +275,6 @@ namespace shz
 			{
 				const uint32 idx = GetIndexAt(i);
 
-				// If invalid indices exist, we skip them to avoid crashes.
-				// For strict behavior, you can assert here instead.
 				if (idx >= static_cast<uint32>(m_Positions.size()))
 				{
 					continue;
@@ -315,10 +300,6 @@ namespace shz
 	// ------------------------------------------------------------
 	void StaticMeshAsset::StripCPUData()
 	{
-		// Do not call shrink_to_fit() here to avoid expensive reallocations
-		// and potential stalls. If you need to aggressively return memory,
-		// add a separate function dedicated to that policy.
-
 		m_Positions.clear();
 		m_Normals.clear();
 		m_Tangents.clear();

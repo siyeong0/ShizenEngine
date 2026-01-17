@@ -34,26 +34,12 @@ struct ShadowConstants
     float4x4 LightViewProj;
 };
 
-struct MaterialConstants
-{
-    float4 BaseColorFactor; // rgb = base color, a = opacity
-    float3 EmissiveFactor; // emissive rgb
-    float MetallicFactor; // scalar
-
-    float RoughnessFactor; // scalar
-    float NormalScale; // scalar
-    float OcclusionStrength; // scalar
-    float AlphaCutoff; // scalar (for MASK)
-
-    uint Flags; // bitmask HAS_*
-    uint3 _pad0; // 16-byte align
-};
-
 static const uint MAT_HAS_BASECOLOR = 1u << 0;
 static const uint MAT_HAS_NORMAL = 1u << 1;
 static const uint MAT_HAS_MR = 1u << 2;
 static const uint MAT_HAS_AO = 1u << 3;
 static const uint MAT_HAS_EMISSIVE = 1u << 4;
+static const uint MAT_HAS_HEIGHT = 1u << 5;
 
 
 struct ObjectConstants

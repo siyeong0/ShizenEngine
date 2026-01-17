@@ -8,6 +8,7 @@
 
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Material/Public/MaterialInstance.h"
 
 namespace shz
 {
@@ -17,6 +18,7 @@ namespace shz
 		struct RenderObject final
 		{
 			Handle<StaticMeshRenderData> MeshHandle = {};
+			std::vector<MaterialInstance> Materials = {};
 			Matrix4x4 Transform = {};
 		};
 
@@ -43,10 +45,12 @@ namespace shz
 
 		void Reset();
 
-		Handle<RenderObject> AddObject(Handle<StaticMeshRenderData> meshHandle, const Matrix4x4& transform);
+		Handle<RenderObject> AddObject(Handle<StaticMeshRenderData> meshHandle, const std::vector<MaterialInstance>& materials, const Matrix4x4& transform);
 		void RemoveObject(Handle<RenderObject> h);
-		void UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);
 		void UpdateObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
+		void UpdateObjectMaterial(Handle<RenderObject> h, uint32 materialSlot, const MaterialInstance& material);
+		void UpdateObjectMaterials(Handle<RenderObject> h, const std::vector<MaterialInstance>& materials);
+		void UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);
 
 		Handle<LightObject> AddLight(const LightObject& light);
 		void RemoveLight(Handle<LightObject> h);

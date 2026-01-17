@@ -8,11 +8,393 @@
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
+#include "Engine/Material/Public/MaterialTemplate.h"
+#include "Engine/Material/Public/MaterialInstance.h"
+
 namespace shz
 {
+	namespace
+	{
+#include "Engine/Renderer/Shaders/HLSL_Structures.hlsli"
+	}
 	SampleBase* CreateSample()
 	{
 		return new ShizenEngine();
+	}
+
+	MaterialInstance ShizenEngine::CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset)
+	{
+		// ------------------------------------
+		ShaderCreateInfo sci = {};
+		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+		sci.EntryPoint = "main";
+		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+		sci.LoadConstantBufferReflection = true;
+		RefCntAutoPtr<IShader> vs;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "GBuffer VS";
+			sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
+			sci.FilePath = "GBuffer.vsh";
+			sci.Desc.UseCombinedTextureSamplers = false;
+
+			m_pDevice->CreateShader(sci, &vs);
+			ASSERT(vs, "Failed to create Basic VS.");
+		}
+
+		RefCntAutoPtr<IShader> ps;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "GBuffer PS";
+			sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
+			sci.FilePath = "GBuffer.psh";
+			sci.Desc.UseCombinedTextureSamplers = false;
+
+			m_pDevice->CreateShader(sci, &ps);
+			ASSERT(ps, "Failed to create Basic PS.");
+		}
+
+		IShader* shaders[] = { vs, ps };
+		m_PBRMaterialTemplate.BuildFromShaders(shaders, 2);
+		MaterialInstance materialInstance;
+		materialInstance.Initialize(&m_PBRMaterialTemplate);
+
+		{
+			float bc[4] =
+			{
+				matInstanceAsset.GetParams().BaseColor.x,
+				matInstanceAsset.GetParams().BaseColor.y,
+				matInstanceAsset.GetParams().BaseColor.z,
+				matInstanceAsset.GetParams().BaseColor.w
+			};
+			materialInstance.SetFloat4("g_BaseColorFactor", bc);
+		}
+
+		// Roughness / Metallic (float)
+		materialInstance.SetFloat("g_RoughnessFactor", matInstanceAsset.GetParams().Roughness);
+		materialInstance.SetFloat("g_MetallicFactor", matInstanceAsset.GetParams().Metallic);
+
+		// Occlusion (float)
+		materialInstance.SetFloat("g_OcclusionStrength", matInstanceAsset.GetParams().Occlusion);
+
+		// EmissiveColor (float3) + EmissiveIntensity (float)
+		{
+			float ec[3] =
+			{
+				matInstanceAsset.GetParams().EmissiveColor.x,
+				matInstanceAsset.GetParams().EmissiveColor.y,
+				matInstanceAsset.GetParams().EmissiveColor.z
+			};
+			materialInstance.SetFloat3("g_EmissiveFactor", ec);
+			materialInstance.SetFloat("g_EmissiveIntensity", matInstanceAsset.GetParams().EmissiveIntensity);
+		}
+
+		// AlphaCutoff / NormalScale
+		materialInstance.SetFloat("g_AlphaCutoff", matInstanceAsset.GetParams().AlphaCutoff);
+		materialInstance.SetFloat("g_NormalScale", matInstanceAsset.GetParams().NormalScale);
+
+		uint materialFlags = 0;
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_ALBEDO).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_BaseColorTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_ALBEDO)));
+			materialFlags |= MAT_HAS_BASECOLOR;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_BaseColorTex", m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_NORMAL).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_NormalTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_NORMAL)));
+			materialFlags |= MAT_HAS_NORMAL;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_NormalTex", m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_ORM).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_MetallicRoughnessTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_ORM)));
+			materialFlags |= MAT_HAS_MR;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_EMISSIVE).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_EmissiveTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_EMISSIVE)));
+			materialFlags |= MAT_HAS_EMISSIVE;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_EmissiveTex", m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_AO).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_AOTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_AO)));
+			materialFlags |= MAT_HAS_AO;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_AOTex", m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		if (matInstanceAsset.GetTexture(MATERIAL_TEX_HEIGHT).IsValid())
+		{
+			materialInstance.SetTextureAsset("g_HeightTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_HEIGHT)));
+			materialFlags |= MAT_HAS_HEIGHT;
+		}
+		else
+		{
+			materialInstance.SetTextureRuntimeView("g_HeightTex", m_DefaultTextures.Black->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		}
+
+		materialInstance.SetUint("g_MaterialFlags", materialFlags);
+
+		materialInstance.MarkAllDirty();
+
+		return materialInstance;
+	}
+
+	// ------------------------------------------------------------
+	// Initialize
+	// ------------------------------------------------------------
+
+	void ShizenEngine::Initialize(const SampleInitInfo& InitInfo)
+	{
+		SampleBase::Initialize(InitInfo);
+
+		// 1) AssetManager
+		m_pAssetManager = std::make_unique<AssetManager>();
+
+		// 2) Renderer
+		m_pRenderer = std::make_unique<Renderer>();
+
+		m_pEngineFactory->CreateDefaultShaderSourceStreamFactory("C:/Dev/ShizenEngine/Engine/Renderer/Shaders", &m_pShaderSourceFactory);
+
+		RendererCreateInfo rendererCreateInfo = {};
+		rendererCreateInfo.pEngineFactory = m_pEngineFactory;
+		rendererCreateInfo.pShaderSourceFactory = m_pShaderSourceFactory;
+		rendererCreateInfo.pDevice = m_pDevice;
+		rendererCreateInfo.pImmediateContext = m_pImmediateContext;
+		rendererCreateInfo.pDeferredContexts = m_pDeferredContexts;
+		rendererCreateInfo.pSwapChain = m_pSwapChain;
+		rendererCreateInfo.pImGui = m_pImGui;
+		rendererCreateInfo.BackBufferWidth = m_pSwapChain->GetDesc().Width;
+		rendererCreateInfo.BackBufferHeight = m_pSwapChain->GetDesc().Height;
+		rendererCreateInfo.pAssetManager = m_pAssetManager.get();
+
+		m_pRenderer->Initialize(rendererCreateInfo);
+
+		// 3) RenderScene
+		m_pRenderScene = std::make_unique<RenderScene>();
+
+
+		auto PackRGBA8 = [](uint8 r, uint8 g, uint8 b, uint8 a) -> uint32
+			{
+				return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
+			};
+
+		auto Create1x1Texture = [&](const char* name, uint32 rgba, RefCntAutoPtr<ITexture>& outTex) -> bool
+			{
+				TextureDesc desc = {};
+				desc.Name = name;
+				desc.Type = RESOURCE_DIM_TEX_2D;
+				desc.Width = 1;
+				desc.Height = 1;
+				desc.MipLevels = 1;
+				desc.Format = TEX_FORMAT_RGBA8_UNORM;
+				desc.Usage = USAGE_IMMUTABLE;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+
+				TextureSubResData sub = {};
+				sub.pData = &rgba;
+				sub.Stride = sizeof(uint32);
+
+				TextureData data = {};
+				data.pSubResources = &sub;
+				data.NumSubresources = 1;
+
+				m_pDevice->CreateTexture(desc, &data, &outTex);
+				return (outTex != nullptr);
+			};
+
+		std::vector<StateTransitionDesc> Barriers;
+		Barriers.reserve(32);
+
+		auto AddTexToSRVState = [&](ITextureView* pView)
+			{
+				if (!m_pImmediateContext || !pView)
+					return;
+
+				ITexture* pTex = pView->GetTexture();
+				if (!pTex)
+					return;
+
+				Barriers.push_back(StateTransitionDesc{
+					pTex,
+					RESOURCE_STATE_UNKNOWN,
+					RESOURCE_STATE_SHADER_RESOURCE,
+					STATE_TRANSITION_FLAG_UPDATE_STATE
+					});
+			};
+
+		auto AddBufToCBState = [&](IBuffer* pBuf)
+			{
+				if (!m_pImmediateContext || !pBuf)
+					return;
+
+				Barriers.push_back(StateTransitionDesc{
+					pBuf,
+					RESOURCE_STATE_UNKNOWN,
+					RESOURCE_STATE_CONSTANT_BUFFER,
+					STATE_TRANSITION_FLAG_UPDATE_STATE
+					});
+			};
+
+		// ------------------------------------------------------------
+		// Default 1x1 textures (created once per cache)
+		// ------------------------------------------------------------
+		Create1x1Texture("DefaultWhite1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
+		Create1x1Texture("DefaultBlack1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
+		// Normal default: (0.5, 0.5, 1.0) in UNORM => (128, 128, 255)
+		Create1x1Texture("DefaultNormal1x1", PackRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal);
+		// MetallicRoughness default (glTF): roughness=1 (G=255), metallic=0 (B=0)
+		Create1x1Texture("DefaultMR1x1", PackRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness);
+		// AO default: 1
+		Create1x1Texture("DefaultAO1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.AO);
+		// Emissive default: 0
+		Create1x1Texture("DefaultEmissive1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive);
+		// Force states + update tracking (important for render pass usage)
+		AddTexToSRVState(m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		AddTexToSRVState(m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		AddTexToSRVState(m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		AddTexToSRVState(m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		AddTexToSRVState(m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+
+		if (m_pImmediateContext && !Barriers.empty())
+		{
+			m_pImmediateContext->TransitionResourceStates(static_cast<uint32>(Barriers.size()), Barriers.data());
+		}
+
+		// 4) Camera/ViewFamily
+		m_Camera.SetProjAttribs(
+			0.1f, 
+			100.0f,
+			static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight,
+			PI / 4.0f,
+			SURFACE_TRANSFORM_IDENTITY);
+
+		m_ViewFamily.Views.clear();
+		m_ViewFamily.Views.push_back({});
+		m_ViewFamily.Views[0].Viewport = {};
+
+		// ------------------------------------------------------------
+		// Debug cubes (optional)
+		// ------------------------------------------------------------
+		//StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
+		//auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
+		//m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
+		//auto dummy1 = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
+
+		StaticMeshAsset floorMeshAsset;
+		AssimpImportOptions options = {};
+		AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx", &floorMeshAsset);
+		auto floorMeshHandle = m_pAssetManager->RegisterStaticMesh(floorMeshAsset);
+		std::vector<MaterialInstance> materials;
+		for (const MaterialInstanceAsset& matInstanceAsset : floorMeshAsset.GetMaterialSlots())
+		{
+			materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
+		}
+		m_FloorHandle = m_pRenderer->CreateStaticMesh(floorMeshHandle);
+		auto dummy2 = m_pRenderScene->AddObject(m_FloorHandle, materials, Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0, 1.0f, 1.0f }));
+
+		// ------------------------------------------------------------
+		// Load mesh paths + spawn as ONE XZ grid
+		// ------------------------------------------------------------
+		std::vector<const char*> meshPaths;
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+
+		// XZ grid settings
+		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
+		const float spacingX = 1.0f;
+		const float spacingY = 1.0f;
+		const float spacingZ = 2.0f;
+
+		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
+
+		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
+	}
+
+	void ShizenEngine::Render()
+	{
+		m_ViewFamily.FrameIndex++;
+
+		m_pRenderer->BeginFrame();
+		m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
+		m_pRenderer->EndFrame();
+	}
+
+	void ShizenEngine::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
+	{
+		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
+
+		const float dt = static_cast<float>(ElapsedTime);
+		const float currTime = static_cast<float>(CurrTime);
+
+		m_Camera.Update(m_InputController, dt);
+
+		m_ViewFamily.DeltaTime = dt;
+		m_ViewFamily.CurrentTime = currTime;
+		m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
+		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
+		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
+		m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
+		m_ViewFamily.Views[0].FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
+
+		for (auto& m : m_Loaded)
+		{
+			if (!m.ObjectId.IsValid())
+				continue;
+
+			const float angle = currTime * m.RotateSpeed;
+			float3 rot = m.BaseRotation;
+			rot[m.RotateAxis] += angle;
+
+			m_pRenderScene->UpdateObjectTransform(m.ObjectId, Matrix4x4::TRS(m.Position, rot, m.Scale));
+		}
+
+		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
+	}
+
+	void ShizenEngine::UpdateUI()
+	{
+		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::gizmo3D("##LightDirection", m_GlobalLight.Direction, ImGui::GetTextLineHeight() * 10);
+			ImGui::ColorEdit3("##LightColor", reinterpret_cast<float*>(&m_GlobalLight.Color));
+			ImGui::SliderFloat("Value", &m_GlobalLight.Intensity, 0.01f, 10.0f);
+		}
+		ImGui::End();
 	}
 
 	// ------------------------------------------------------------
@@ -111,8 +493,15 @@ namespace shz
 			entry.RotateAxis = 1;
 			entry.RotateSpeed = 0.6f + 0.2f * static_cast<float>(i % 5);
 
+			std::vector<MaterialInstance> materials;
+			for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh.GetMaterialSlots())
+			{
+				materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
+			}
+
 			entry.ObjectId = m_pRenderScene->AddObject(
 				entry.MeshHandle,
+				materials,
 				Matrix4x4::TRS(entry.Position, entry.BaseRotation, entry.Scale));
 
 			m_Loaded.push_back(std::move(entry));
@@ -137,14 +526,14 @@ namespace shz
 		UVs.reserve(24);
 
 		auto PushFace = [&](float3 v0, float3 v1, float3 v2, float3 v3, float3 n, float3 t) // v0..v3 in CCW order
-		{
-			// UV convention:
-			// v0: (0,1), v1: (1,1), v2: (1,0), v3: (0,0)
-			Positions.push_back(v0); UVs.push_back(float2(0, 1)); Normals.push_back(n); Tangents.push_back(t);
-			Positions.push_back(v1); UVs.push_back(float2(1, 1)); Normals.push_back(n); Tangents.push_back(t);
-			Positions.push_back(v2); UVs.push_back(float2(1, 0)); Normals.push_back(n); Tangents.push_back(t);
-			Positions.push_back(v3); UVs.push_back(float2(0, 0)); Normals.push_back(n); Tangents.push_back(t);
-		};
+			{
+				// UV convention:
+				// v0: (0,1), v1: (1,1), v2: (1,0), v3: (0,0)
+				Positions.push_back(v0); UVs.push_back(float2(0, 1)); Normals.push_back(n); Tangents.push_back(t);
+				Positions.push_back(v1); UVs.push_back(float2(1, 1)); Normals.push_back(n); Tangents.push_back(t);
+				Positions.push_back(v2); UVs.push_back(float2(1, 0)); Normals.push_back(n); Tangents.push_back(t);
+				Positions.push_back(v3); UVs.push_back(float2(0, 0)); Normals.push_back(n); Tangents.push_back(t);
+			};
 
 		// Cube corners (unit cube centered at origin)
 		const float3 p000 = float3(-0.5f, -0.5f, -0.5f);
@@ -214,142 +603,4 @@ namespace shz
 		return Mesh;
 	}
 
-
-	// ------------------------------------------------------------
-	// Initialize
-	// ------------------------------------------------------------
-
-	void ShizenEngine::Initialize(const SampleInitInfo& InitInfo)
-	{
-		SampleBase::Initialize(InitInfo);
-
-		// 1) AssetManager
-		m_pAssetManager = std::make_unique<AssetManager>();
-
-		// 2) Renderer
-		m_pRenderer = std::make_unique<Renderer>();
-
-		RendererCreateInfo rendererCreateInfo = {};
-		rendererCreateInfo.pEngineFactory = m_pEngineFactory;
-		rendererCreateInfo.pDevice = m_pDevice;
-		rendererCreateInfo.pImmediateContext = m_pImmediateContext;
-		rendererCreateInfo.pDeferredContexts = m_pDeferredContexts;
-		rendererCreateInfo.pSwapChain = m_pSwapChain;
-		rendererCreateInfo.pImGui = m_pImGui;
-		rendererCreateInfo.BackBufferWidth = m_pSwapChain->GetDesc().Width;
-		rendererCreateInfo.BackBufferHeight = m_pSwapChain->GetDesc().Height;
-		rendererCreateInfo.pAssetManager = m_pAssetManager.get();
-
-		m_pRenderer->Initialize(rendererCreateInfo);
-
-		// 3) RenderScene
-		m_pRenderScene = std::make_unique<RenderScene>();
-
-		// 4) Camera/ViewFamily
-		m_Camera.SetProjAttribs(
-			0.1f,
-			100.0f,
-			static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight,
-			PI / 4.0f,
-			SURFACE_TRANSFORM_IDENTITY);
-
-		m_ViewFamily.Views.clear();
-		m_ViewFamily.Views.push_back({});
-		m_ViewFamily.Views[0].Viewport = {};
-
-		// ------------------------------------------------------------
-		// Debug cubes (optional)
-		// ------------------------------------------------------------
-		//StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
-		//auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
-		//m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
-		//auto dummy1 = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
-
-		StaticMeshAsset floorMeshAsset;
-		AssimpImportOptions options = {};
-		AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx", &floorMeshAsset);
-		auto floorMeshHandle = m_pAssetManager->RegisterStaticMesh(floorMeshAsset);
-		m_FloorHandle = m_pRenderer->CreateStaticMesh(floorMeshHandle);
-		auto dummy2 = m_pRenderScene->AddObject(m_FloorHandle, Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0, 1.0f, 1.0f }));
-
-		// ------------------------------------------------------------
-		// Load mesh paths + spawn as ONE XZ grid
-		// ------------------------------------------------------------
-		std::vector<const char*> meshPaths;
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
-
-		// XZ grid settings
-		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
-		const float spacingX = 1.0f;
-		const float spacingY = 1.0f;
-		const float spacingZ = 2.0f;
-
-		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
-
-		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
-	}
-
-	void ShizenEngine::Render()
-	{
-		m_ViewFamily.FrameIndex++;
-
-		m_pRenderer->BeginFrame();
-		m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
-		m_pRenderer->EndFrame();
-	}
-
-	void ShizenEngine::Update(double CurrTime, double ElapsedTime, bool DoUpdateUI)
-	{
-		SampleBase::Update(CurrTime, ElapsedTime, DoUpdateUI);
-
-		const float dt = static_cast<float>(ElapsedTime);
-		const float currTime = static_cast<float>(CurrTime);
-
-		m_Camera.Update(m_InputController, dt);
-
-		m_ViewFamily.DeltaTime = dt;
-		m_ViewFamily.CurrentTime = currTime;
-		m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
-		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
-		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
-		m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
-		m_ViewFamily.Views[0].FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
-
-		for (auto& m : m_Loaded)
-		{
-			if (!m.ObjectId.IsValid())
-				continue;
-
-			const float angle = currTime * m.RotateSpeed;
-			float3 rot = m.BaseRotation;
-			rot[m.RotateAxis] += angle;
-
-			m_pRenderScene->UpdateObjectTransform(m.ObjectId, Matrix4x4::TRS(m.Position, rot, m.Scale));
-		}
-
-		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
-	}
-
-	void ShizenEngine::UpdateUI()
-	{
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-		{
-			ImGui::gizmo3D("##LightDirection", m_GlobalLight.Direction, ImGui::GetTextLineHeight() * 10);
-			ImGui::ColorEdit3("##LightColor", reinterpret_cast<float*>(&m_GlobalLight.Color));
-			ImGui::SliderFloat("Value", &m_GlobalLight.Intensity, 0.01f, 10.0f);
-		}
-		ImGui::End();
-	}
 } // namespace shz

@@ -7,86 +7,78 @@
 #include "Primitives/Handle.hpp"
 #include "Primitives/UniqueHandle.hpp"
 
-#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/Public/AssetManager.h"
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
+#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
-#include "Engine/RHI/Interface/ITexture.h"
-#include "Engine/RHI/Interface/ITextureView.h"
-#include "Engine/RHI/Interface/IBuffer.h"
-#include "Engine/RHI/Interface/IPipelineState.h"
-#include "Engine/RHI/Interface/ISampler.h"
-#include "Engine/RHI/Interface/GraphicsTypes.h"
+#include "Engine/RHI/Interface/IDeviceContext.h"
 
+#include "Engine/Renderer/Public/TextureRenderData.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/Renderer/Public/MaterialInstance.h"
 #include "Engine/Renderer/Public/MaterialRenderData.h"
 
 namespace shz
 {
-	// TODO: 리팩토링 필요.
-
-	class AssetManager;
-
-	struct RenderResourceCacheCreateInfo
-	{
-		RefCntAutoPtr<IRenderDevice> pDevice;
-		AssetManager* pAssetManager = nullptr; // not owned
-	};
-
 	class RenderResourceCache final
 	{
 	public:
 		RenderResourceCache() = default;
 		RenderResourceCache(const RenderResourceCache&) = delete;
 		RenderResourceCache& operator=(const RenderResourceCache&) = delete;
-		~RenderResourceCache() { Cleanup(); };
+		~RenderResourceCache() = default;
 
-		bool Initialize(const RenderResourceCacheCreateInfo& createInfo);
-		void Cleanup();
+		bool Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager);
+		void Shutdown();
+		void Clear();
 
 		// ------------------------------------------------------------
-		// Public APIs used by Renderer
+		// TextureRenderData
 		// ------------------------------------------------------------
-		Handle<StaticMeshRenderData> CreateStaticMesh(Handle<StaticMeshAsset> h);
+		Handle<TextureRenderData> GetOrCreateTextureRenderData(Handle<TextureAsset> hTexAsset);
+		const TextureRenderData* TryGetTextureRenderData(Handle<TextureRenderData> h) const noexcept;
+		TextureRenderData* TryGetTextureRenderData(Handle<TextureRenderData> h) noexcept;
+		bool DestroyTextureRenderData(Handle<TextureRenderData> h);
+		void InvalidateTextureByAsset(Handle<TextureAsset> hTexAsset);
 
-		bool DestroyStaticMesh(Handle<StaticMeshRenderData> h);
-		bool DestroyMaterialInstance(Handle<MaterialInstance> h);
-		bool DestroyTextureGPU(Handle<ITexture> h);
+		// ------------------------------------------------------------
+		// StaticMeshRenderData  (요청했던 4개 + invalidate)
+		// ------------------------------------------------------------
+		Handle<StaticMeshRenderData> GetOrCreateStaticMeshRenderData(Handle<StaticMeshAsset> hMeshAsset, IDeviceContext* pCtx);
 
-		const StaticMeshRenderData* TryGetMesh(Handle<StaticMeshRenderData> h) const noexcept;
+		const StaticMeshRenderData* TryGetStaticMeshRenderData(Handle<StaticMeshRenderData> h) const noexcept;
+		StaticMeshRenderData* TryGetStaticMeshRenderData(Handle<StaticMeshRenderData> h) noexcept;
 
-		// Material SRB cache builder (needs Renderer-owned PSO + frame/object CBs)
-		MaterialRenderData* GetOrCreateMaterialRenderData(
-			Handle<MaterialInstance> h,
-			const RefCntAutoPtr<IPipelineState>& pPSO,
-			const RefCntAutoPtr<IBuffer>& pObjectCB,
-			IDeviceContext* pCtx);
+		bool DestroyStaticMeshRenderData(Handle<StaticMeshRenderData> h);
+		void InvalidateStaticMeshByAsset(Handle<StaticMeshAsset> hMeshAsset);
+
+		// ------------------------------------------------------------
+		// MaterialRenderData
+		// - keyed by (MaterialInstance pointer) for now (simple & safe)
+		// - if you want asset-based caching, we can extend later.
+		// ------------------------------------------------------------
+		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(
+			const MaterialInstance* pInstance,
+			IPipelineState* pPSO,
+			const MaterialTemplate* pTemplate);
+
+		const MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept;
+		MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) noexcept;
+
+		bool DestroyMaterialRenderData(Handle<MaterialRenderData> h);
+		void InvalidateMaterialByInstance(const MaterialInstance* pInstance);
 
 	private:
-		// ------------------------------------------------------------
-		// Internal storage policy: Slot + UniqueHandle
-		// NOTE: For textures, handle type (ITexture) differs from stored value type (RefCntAutoPtr<ITexture>).
-		// ------------------------------------------------------------
-		template<typename T>
+		template<class T>
 		struct Slot final
 		{
-			UniqueHandle<T> Owner = {};
+			UniqueHandle<T>  Owner = {};
 			std::optional<T> Value = {};
 		};
 
-		template<typename HandleT, typename ValueT>
-		struct SlotHV final
-		{
-			UniqueHandle<HandleT> Owner = {};
-			std::optional<ValueT> Value = {};
-		};
-
-		template<typename TSlot>
-		static void ensureSlotCapacity(uint32 index, std::vector<TSlot>& slots)
+		template<class T>
+		static void EnsureSlotCapacity(uint32 index, std::vector<Slot<T>>& slots)
 		{
 			if (index >= static_cast<uint32>(slots.size()))
 			{
@@ -94,48 +86,70 @@ namespace shz
 			}
 		}
 
-		static Slot<StaticMeshRenderData>* findSlot(Handle<StaticMeshRenderData> h, std::vector<Slot<StaticMeshRenderData>>& slots) noexcept;
-		static const Slot<StaticMeshRenderData>* findSlot(Handle<StaticMeshRenderData> h, const std::vector<Slot<StaticMeshRenderData>>& slots) noexcept;
+		template<class T>
+		static Slot<T>* FindSlot(Handle<T> h, std::vector<Slot<T>>& slots) noexcept
+		{
+			if (!h.IsValid())
+				return nullptr;
 
-		static Slot<MaterialInstance>* findSlot(Handle<MaterialInstance> h, std::vector<Slot<MaterialInstance>>& slots) noexcept;
-		static const Slot<MaterialInstance>* findSlot(Handle<MaterialInstance> h, const std::vector<Slot<MaterialInstance>>& slots) noexcept;
+			const uint32 index = h.GetIndex();
+			if (index == 0 || index >= static_cast<uint32>(slots.size()))
+				return nullptr;
 
-		static SlotHV<ITexture, RefCntAutoPtr<ITexture>>* findTexSlot(Handle<ITexture> h, std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>>& slots) noexcept;
-		static const SlotHV<ITexture, RefCntAutoPtr<ITexture>>* findTexSlot(Handle<ITexture> h, const std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>>& slots) noexcept;
+			auto& slot = slots[index];
+
+			if (!slot.Value.has_value())
+				return nullptr;
+
+			if (slot.Owner.Get() != h)
+				return nullptr;
+
+			return &slot;
+		}
+
+		template<class T>
+		static const Slot<T>* FindSlot(Handle<T> h, const std::vector<Slot<T>>& slots) noexcept
+		{
+			if (!h.IsValid())
+				return nullptr;
+
+			const uint32 index = h.GetIndex();
+			if (index == 0 || index >= static_cast<uint32>(slots.size()))
+				return nullptr;
+
+			const auto& slot = slots[index];
+
+			if (!slot.Value.has_value())
+				return nullptr;
+
+			if (slot.Owner.Get() != h)
+				return nullptr;
+
+			return &slot;
+		}
 
 	private:
-		Handle<ITexture> createTextureGPU(Handle<TextureAsset> h);
-		Handle<MaterialInstance> createMaterialInstance(Handle<MaterialAsset> h);
+		// NOTE: 실제 로더는 프로젝트마다 다르므로 여기만 너 코드로 채우면 됨.
+		// 이 함수는 "구조상 반드시 필요"한 부분이라 stub로 분리.
+		bool createTextureFromAsset(const TextureAsset& asset, TextureRenderData* outRD);
+
+		bool createStaticMeshFromAsset(const StaticMeshAsset& asset, StaticMeshRenderData& outRD, IDeviceContext* pCtx);
 
 	private:
-		RenderResourceCacheCreateInfo m_CreateInfo = {};
+		IRenderDevice* m_pDevice = nullptr;
 		AssetManager* m_pAssetManager = nullptr;
 
-		Handle<MaterialInstance> m_DefaultMaterial = {};
+		// Texture: TextureAssetHandleValue -> TextureRenderDataHandle
+		std::unordered_map<uint64, Handle<TextureRenderData>> m_TexAssetToRD = {};
+		std::vector<Slot<TextureRenderData>> m_TexRDSlots = {};
 
-		std::vector<Slot<StaticMeshRenderData>> m_MeshSlots;
+		// Mesh: StaticMeshAssetHandleValue -> StaticMeshRenderDataHandle
+		std::unordered_map<uint64, Handle<StaticMeshRenderData>> m_MeshAssetToRD = {};
+		std::vector<Slot<StaticMeshRenderData>> m_MeshRDSlots = {};
 
-		// TextureAsset -> GPU texture handle cache
-		std::unordered_map<Handle<TextureAsset>, Handle<ITexture>> m_TexAssetToGpuHandle;
-
-		// Texture slots: Handle<ITexture> -> RefCntAutoPtr<ITexture>
-		std::vector<SlotHV<ITexture, RefCntAutoPtr<ITexture>>> m_TextureSlots;
-
-		std::vector<Slot<MaterialInstance>> m_MaterialSlots;
-
-		// Per material instance render binding cache (SRB etc)
-		std::unordered_map<Handle<MaterialInstance>, MaterialRenderData> m_MatRenderDataTable;
-
-
-		struct DefaultMaterialTextures
-		{
-			RefCntAutoPtr<ITexture> White;
-			RefCntAutoPtr<ITexture> Normal;
-			RefCntAutoPtr<ITexture> MetallicRoughness;
-			RefCntAutoPtr<ITexture> AO;
-			RefCntAutoPtr<ITexture> Emissive;
-		};
-
-		DefaultMaterialTextures m_DefaultTextures;
+		// Material: instance pointer -> MaterialRenderDataHandle
+		std::unordered_map<uint64, Handle<MaterialRenderData>> m_MaterialInstToRD = {};
+		std::vector<Slot<MaterialRenderData>> m_MaterialRDSlots = {};
 	};
+
 } // namespace shz

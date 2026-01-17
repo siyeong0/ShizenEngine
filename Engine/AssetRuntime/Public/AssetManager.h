@@ -10,7 +10,7 @@
 
 #include "Engine/AssetRuntime/Public/AssetObject.h"
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
 
 namespace shz
@@ -30,30 +30,30 @@ namespace shz
 		AssetManager& operator=(const AssetManager&) = delete;
 		~AssetManager() = default;
 
-		Handle<TextureAsset>    RegisterTexture(const TextureAsset& asset);
-		Handle<MaterialAsset>   RegisterMaterial(const MaterialAsset& asset);
-		Handle<StaticMeshAsset> RegisterStaticMesh(const StaticMeshAsset& asset);
+		Handle<TextureAsset>           RegisterTexture(const TextureAsset& asset);
+		Handle<MaterialInstanceAsset>  RegisterMaterialInstance(const MaterialInstanceAsset& asset);
+		Handle<StaticMeshAsset>        RegisterStaticMesh(const StaticMeshAsset& asset);
 
 		const TextureAsset& GetTexture(Handle<TextureAsset> h) const noexcept;
-		const MaterialAsset& GetMaterial(Handle<MaterialAsset> h) const noexcept;
+		const MaterialInstanceAsset& GetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept;
 		const StaticMeshAsset& GetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
 
 		const TextureAsset* TryGetTexture(Handle<TextureAsset> h) const noexcept;
-		const MaterialAsset* TryGetMaterial(Handle<MaterialAsset> h) const noexcept;
+		const MaterialInstanceAsset* TryGetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept;
 		const StaticMeshAsset* TryGetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
 
-		Handle<TextureAsset>    FindTextureById(const AssetId& id) const noexcept;
-		Handle<MaterialAsset>   FindMaterialById(const AssetId& id) const noexcept;
-		Handle<StaticMeshAsset> FindStaticMeshById(const AssetId& id) const noexcept;
+		Handle<TextureAsset>           FindTextureById(const AssetId& id) const noexcept;
+		Handle<MaterialInstanceAsset>  FindMaterialInstanceById(const AssetId& id) const noexcept;
+		Handle<StaticMeshAsset>        FindStaticMeshById(const AssetId& id) const noexcept;
 
 		bool RemoveTexture(Handle<TextureAsset> h);
-		bool RemoveMaterial(Handle<MaterialAsset> h);
+		bool RemoveMaterialInstance(Handle<MaterialInstanceAsset> h);
 		bool RemoveStaticMesh(Handle<StaticMeshAsset> h);
 
 		void Clear();
 
 		uint32 GetTextureCount() const noexcept { return m_TextureCount; }
-		uint32 GetMaterialCount() const noexcept { return m_MaterialCount; }
+		uint32 GetMaterialInstanceCount() const noexcept { return m_MaterialInstanceCount; }
 		uint32 GetStaticMeshCount() const noexcept { return m_StaticMeshCount; }
 
 	private:
@@ -176,9 +176,9 @@ namespace shz
 		std::unordered_map<AssetId, Handle<TextureAsset>> m_TextureIdToHandle;
 		uint32 m_TextureCount = 0;
 
-		std::vector<AssetSlot<MaterialAsset>> m_MaterialSlots;
-		std::unordered_map<AssetId, Handle<MaterialAsset>> m_MaterialIdToHandle;
-		uint32 m_MaterialCount = 0;
+		std::vector<AssetSlot<MaterialInstanceAsset>> m_MaterialInstanceSlots;
+		std::unordered_map<AssetId, Handle<MaterialInstanceAsset>> m_MaterialInstanceIdToHandle;
+		uint32 m_MaterialInstanceCount = 0;
 
 		std::vector<AssetSlot<StaticMeshAsset>> m_StaticMeshSlots;
 		std::unordered_map<AssetId, Handle<StaticMeshAsset>> m_StaticMeshIdToHandle;

@@ -2,7 +2,18 @@
 
 cbuffer MATERIAL_CONSTANTS
 {
-    MaterialConstants g_MaterialCB;
+    float4 g_BaseColorFactor; // rgb = base color, a = opacity
+    float3 g_EmissiveFactor; // emissive rgb
+    float g_EmissiveIntensity; // scalar
+
+    float g_RoughnessFactor; // scalar
+    float g_NormalScale; // scalar
+    float g_OcclusionStrength; // scalar
+    float g_AlphaCutoff; // scalar (for MASK)
+
+    float g_MetallicFactor; // scalar
+    uint g_MaterialFlags; // bitmask HAS_*
+    uint2 _pad0; // 16-byte align
 }
 
 Texture2D g_BaseColorTex;
@@ -50,12 +61,12 @@ static float3 packNormal01(float3 n)
 void main(in PSInput PSIn, out PSOutput PSOut)
 {
     float2 uv = PSIn.UV;
-    
+	
 	// ----------------------------
 	// BaseColor / Opacity
 	// ----------------------------
-    float4 baseColor = g_MaterialCB.BaseColorFactor;
-    if ((g_MaterialCB.Flags & MAT_HAS_BASECOLOR) != 0)
+    float4 baseColor = g_BaseColorFactor;
+    if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
     {
         baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
     }
@@ -67,10 +78,10 @@ void main(in PSInput PSIn, out PSOutput PSOut)
 	// ----------------------------
 	// Metallic / Roughness
 	// ----------------------------
-    float metallic = g_MaterialCB.MetallicFactor;
-    float roughness = g_MaterialCB.RoughnessFactor;
+    float metallic = g_MetallicFactor;
+    float roughness = g_RoughnessFactor;
 
-    if ((g_MaterialCB.Flags & MAT_HAS_MR) != 0)
+    if ((g_MaterialFlags & MAT_HAS_MR) != 0)
     {
         float4 mr = g_MetallicRoughnessTex.Sample(g_LinearWrapSampler, uv);
         metallic *= mr.b; // glTF: B = metallic
@@ -83,17 +94,17 @@ void main(in PSInput PSIn, out PSOutput PSOut)
 	// AO
 	// ----------------------------
     float ao = 1.0;
-    if ((g_MaterialCB.Flags & MAT_HAS_AO) != 0)
+    if ((g_MaterialFlags & MAT_HAS_AO) != 0)
     {
         ao = g_AOTex.Sample(g_LinearWrapSampler, uv).r;
-        ao = lerp(1.0, ao, g_MaterialCB.OcclusionStrength);
+        ao = lerp(1.0, ao, g_OcclusionStrength);
     }
 
 	// ----------------------------
 	// Emissive
 	// ----------------------------
-    float3 emissive = g_MaterialCB.EmissiveFactor;
-    if ((g_MaterialCB.Flags & MAT_HAS_EMISSIVE) != 0)
+    float3 emissive = g_EmissiveFactor;
+    if ((g_MaterialFlags & MAT_HAS_EMISSIVE) != 0)
         emissive *= g_EmissiveTex.Sample(g_LinearWrapSampler, uv).rgb;
 
 	// ----------------------------
@@ -101,13 +112,13 @@ void main(in PSInput PSIn, out PSOutput PSOut)
 	// ----------------------------
     float3 N = normalize(PSIn.WorldN);
 
-    if ((g_MaterialCB.Flags & MAT_HAS_NORMAL) != 0)
+    if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
     {
         float3 T = normalize(PSIn.WorldT);
         float3 B = normalize(cross(N, T));
 
         float3 nTS = unpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
-        nTS.xy *= g_MaterialCB.NormalScale;
+        nTS.xy *= g_NormalScale;
 
         float3x3 TBN = float3x3(T, B, N);
         N = normalize(mul(nTS, TBN));

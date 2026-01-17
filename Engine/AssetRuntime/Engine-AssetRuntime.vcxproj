@@ -157,7 +157,7 @@
     <ClInclude Include="Public\AssetManager.h" />
     <ClInclude Include="Public\AssetObject.h" />
     <ClInclude Include="Public\AssimpImporter.h" />
-    <ClInclude Include="Public\MaterialAsset.h" />
+    <ClInclude Include="Public\MaterialInstanceAsset.h" />
     <ClInclude Include="Public\StaticMeshAsset.h" />
     <ClInclude Include="Public\TextureAsset.h" />
   </ItemGroup>
@@ -171,7 +171,6 @@
     <ClCompile Include="Private\AssetManager.cpp" />
     <ClCompile Include="Private\AssetObject.cpp" />
     <ClCompile Include="Private\AssimpImporter.cpp" />
-    <ClCompile Include="Private\MaterialAsset.cpp" />
     <ClCompile Include="Private\StaticMeshAsset.cpp" />
     <ClCompile Include="Private\TextureAsset.cpp" />
   </ItemGroup>

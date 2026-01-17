@@ -4,7 +4,7 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
 #include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
@@ -23,7 +23,7 @@ namespace shz
 			uint32 FirstIndex = 0;
 			uint32 IndexCount = 0;
 			uint32 BaseVertex = 0;     // Optional for some pipelines
-			uint32 MaterialSlot = 0;   // Index into material slots
+			uint32 MaterialSlot = 0;     // Index into material slots
 
 			Box LocalBounds = {};
 		};
@@ -70,15 +70,15 @@ namespace shz
 		// Materials (slots)
 		// ------------------------------------------------------------
 		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
-		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
+		void SetMaterialSlots(std::vector<MaterialInstanceAsset>&& materials) { m_MaterialSlots = std::move(materials); }
 
-		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
-		const std::vector<MaterialAsset>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
+		std::vector<MaterialInstanceAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
+		const std::vector<MaterialInstanceAsset>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		MaterialAsset& GetMaterialSlot(uint32 slot) noexcept;
-		const MaterialAsset& GetMaterialSlot(uint32 slot) const noexcept;
+		MaterialInstanceAsset& GetMaterialSlot(uint32 slot) noexcept;
+		const MaterialInstanceAsset& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
@@ -104,14 +104,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Validation / bounds
 		// ------------------------------------------------------------
-		// Minimal validity:
-		// - Positions must exist
-		// - Indices must exist
-		// - Optional streams, if present, must match vertex count
-		// - Sections, if present, must be in-range
 		bool IsValid() const noexcept;
-
-		// Returns true if the mesh has enough CPU data to build GPU buffers.
 		bool HasCPUData() const noexcept;
 
 		void RecomputeBounds();
@@ -120,10 +113,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Memory policy
 		// ------------------------------------------------------------
-		// Strips CPU-side geometry data. Keeps metadata/sections/material slots.
-		// Note: does not guarantee immediate memory release (no shrink_to_fit).
 		void StripCPUData();
-
 		void Clear();
 
 	private:
@@ -144,7 +134,7 @@ namespace shz
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-		std::vector<MaterialAsset> m_MaterialSlots;
+		std::vector<MaterialInstanceAsset> m_MaterialSlots;
 
 		Box m_Bounds = {};
 	};

@@ -1037,10 +1037,6 @@ namespace shz
 	{ 0x6084ae5, 0x6a71, 0x4fe8, {0x84, 0xb9, 0x39, 0x5d, 0xd4, 0x89, 0xa2, 0x8c} };
 
 
-
-
-
-
 	// Pipeline state interface
 	struct SHZ_INTERFACE IPipelineState : public IDeviceObject
 	{

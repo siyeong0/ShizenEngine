@@ -227,9 +227,8 @@ namespace shz
 		const std::string dumpDir = sceneDir + "_embedded_textures/";
 
 		std::error_code ec;
-		if (!std::filesystem::exists(dumpDir, ec)) // Ensure directory
+		if (!std::filesystem::exists(dumpDir, ec))
 		{
-
 			if (!std::filesystem::create_directories(dumpDir, ec))
 			{
 				if (outError)
@@ -240,11 +239,11 @@ namespace shz
 			}
 		}
 
-		const std::string ext = ".bin";
+		std::string ext = ".bin";
 		const char* hint = tex->achFormatHint;
 		if (hint != nullptr && hint[0] != '\0')
 		{
-			std::string ext = ".";
+			ext = ".";
 			ext += hint;
 		}
 
@@ -320,7 +319,7 @@ namespace shz
 		}
 
 		// Embedded texture "*0", "*1", ...
-		if (cstr != nullptr && cstr[0] == '*')
+		if (cstr[0] == '*')
 		{
 			bool isValid = true;
 			uint32 embeddedIndex = 0;
@@ -346,14 +345,11 @@ namespace shz
 					return true;
 				}
 
-				// Dump failed -> treat as missing texture (fallback)
 				return false;
 			}
 
-			// "*" but not a valid numeric index ¡æ treat as missing texture
 			return false;
 		}
-
 
 		// Assimp commonly returns relative texture paths (especially for glTF).
 		const std::string rel = cstr;
@@ -367,7 +363,7 @@ namespace shz
 		const aiMaterial* mat,
 		uint32 materialIndex,
 		const std::string& sceneFilePath,
-		MaterialAsset& outMat,
+		MaterialInstanceAsset& outMat,
 		std::string* outError)
 	{
 		(void)materialIndex;
@@ -385,7 +381,7 @@ namespace shz
 		}
 
 		// Default template key (Renderer can map this later)
-		outMat.SetShaderKey("DefaultLit");
+		outMat.SetTemplateKey("DefaultLit");
 
 		// BaseColor (Diffuse / BaseColor)
 		{
@@ -447,6 +443,7 @@ namespace shz
 				if (opacity < 0.999f)
 				{
 					outMat.GetOptions().BlendMode = MATERIAL_BLEND_TRANSLUCENT;
+					outMat.GetOptions().AlphaMode = MATERIAL_ALPHA_BLEND;
 				}
 			}
 
@@ -570,10 +567,10 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Import materials (slots)
+		// Import materials (slots) -> MaterialInstanceAsset
 		// ------------------------------------------------------------
 		{
-			std::vector<MaterialAsset> materials;
+			std::vector<MaterialInstanceAsset> materials;
 			materials.resize(scene->mNumMaterials);
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
@@ -587,10 +584,6 @@ namespace shz
 
 		// ------------------------------------------------------------
 		// Decide index type (estimate)
-		// NOTE:
-		// With node traversal, the same aiMesh can be referenced multiple times.
-		// For now we keep it simple: sum unique mesh vertex counts as a lower bound.
-		// If your glTF heavily instances, this may underestimate, but still safe for U32.
 		// ------------------------------------------------------------
 		uint32 totalVertexCount = 0;
 
@@ -627,16 +620,16 @@ namespace shz
 		auto& idx16 = pOutMesh->GetIndicesU16();
 
 		auto pushIndex = [&](uint32 idx)
-		{
-			if (indexType == VT_UINT32)
 			{
-				idx32.push_back(idx);
-			}
-			else
-			{
-				idx16.push_back(static_cast<uint16>(idx));
-			}
-		};
+				if (indexType == VT_UINT32)
+				{
+					idx32.push_back(idx);
+				}
+				else
+				{
+					idx16.push_back(static_cast<uint16>(idx));
+				}
+			};
 
 		// ------------------------------------------------------------
 		// Import meshes by traversing nodes (BAKE node transforms)
@@ -655,126 +648,130 @@ namespace shz
 		sections.reserve(options.MergeMeshes ? scene->mNumMeshes : 1);
 
 		auto ImportMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global) -> bool
-		{
-			if (mesh == nullptr)
 			{
-				return true;
-			}
-
-			if (!mesh->HasPositions())
-			{
-				return false;
-			}
-
-			const uint32 baseVertex = static_cast<uint32>(positions.size());
-			const uint32 vertexCount = mesh->mNumVertices;
-
-			const bool hasNormals = mesh->HasNormals();
-			const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
-			const bool hasUV0 = mesh->HasTextureCoords(0);
-
-			const aiMatrix3x3 normalM = makeNormalMatrix(global);
-
-			for (uint32 v = 0; v < vertexCount; ++v)
-			{
-				const aiVector3D& pA = mesh->mVertices[v];
-				float3 p = float3(pA.x, pA.y, pA.z) * options.UniformScale;
-				p = transformPoint(global, p);
-				positions.push_back(p);
-
-				float3 n = hasNormals ? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z) : float3(0.0f, 1.0f, 0.0f);
-				normals.push_back(transformNormal(normalM, n));
-
-				float3 t = hasTangents ? float3(mesh->mTangents[v].z, mesh->mTangents[v].y, mesh->mTangents[v].z) : float3(1.0f, 0.0f, 0.0f);
-				tangents.push_back(transformNormal(normalM, t));
-
-				if (hasUV0)
-				{
-					texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
-				}
-				else
-				{
-					texCoords.push_back(float2(0.0f, 0.0f));
-				}
-			}
-
-			StaticMeshAsset::Section sec{};
-			sec.BaseVertex = baseVertex;
-			sec.MaterialSlot = mesh->mMaterialIndex;
-
-			const uint32 firstIndex = pOutMesh->GetIndexCount();
-			uint32 indexCount = 0;
-
-			for (uint32 f = 0; f < mesh->mNumFaces; ++f)
-			{
-				const aiFace& face = mesh->mFaces[f];
-				if (face.mNumIndices != 3)
-				{
-					continue;
-				}
-
-				const uint32 i0 = baseVertex + face.mIndices[0];
-				const uint32 i1 = baseVertex + face.mIndices[1];
-				const uint32 i2 = baseVertex + face.mIndices[2];
-
-				pushIndex(i0);
-				pushIndex(i1);
-				pushIndex(i2);
-				indexCount += 3;
-			}
-
-			sec.FirstIndex = firstIndex;
-			sec.IndexCount = indexCount;
-
-			sections.push_back(sec);
-			return true;
-		};
-
-		auto TraverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
-		{
-			if (node == nullptr)
-			{
-				return true;
-			}
-
-			aiMatrix4x4 global = parent * node->mTransformation;
-
-			for (uint32 i = 0; i < node->mNumMeshes; ++i)
-			{
-				const uint32 meshIndex = node->mMeshes[i];
-				if (meshIndex >= scene->mNumMeshes)
-				{
-					continue;
-				}
-
-				if (!options.MergeMeshes)
-				{
-					const aiMesh* mesh0 = scene->mMeshes[meshIndex];
-					return ImportMeshAsSection(mesh0, global);
-				}
-
-				const aiMesh* mesh = scene->mMeshes[meshIndex];
-				if (!ImportMeshAsSection(mesh, global))
-				{
-					return false;
-				}
-			}
-
-			for (uint32 c = 0; c < node->mNumChildren; ++c)
-			{
-				if (!self(self, node->mChildren[c], global))
-				{
-					return false;
-				}
-
-				if (!options.MergeMeshes && !sections.empty())
+				if (mesh == nullptr)
 				{
 					return true;
 				}
-			}
 
-			return true;
-		};
+				if (!mesh->HasPositions())
+				{
+					return false;
+				}
+
+				const uint32 baseVertex = static_cast<uint32>(positions.size());
+				const uint32 vertexCount = mesh->mNumVertices;
+
+				const bool hasNormals = mesh->HasNormals();
+				const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
+				const bool hasUV0 = mesh->HasTextureCoords(0);
+
+				const aiMatrix3x3 normalM = makeNormalMatrix(global);
+
+				for (uint32 v = 0; v < vertexCount; ++v)
+				{
+					const aiVector3D& pA = mesh->mVertices[v];
+					float3 p = float3(pA.x, pA.y, pA.z) * options.UniformScale;
+					p = transformPoint(global, p);
+					positions.push_back(p);
+
+					float3 n = hasNormals
+						? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
+						: float3(0.0f, 1.0f, 0.0f);
+					normals.push_back(transformNormal(normalM, n));
+
+					float3 t = hasTangents
+						? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
+						: float3(1.0f, 0.0f, 0.0f);
+					tangents.push_back(transformNormal(normalM, t));
+
+					if (hasUV0)
+					{
+						texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
+					}
+					else
+					{
+						texCoords.push_back(float2(0.0f, 0.0f));
+					}
+				}
+
+				StaticMeshAsset::Section sec{};
+				sec.BaseVertex = 0; // baseVertex;
+				sec.MaterialSlot = mesh->mMaterialIndex;
+
+				const uint32 firstIndex = pOutMesh->GetIndexCount();
+				uint32 indexCount = 0;
+
+				for (uint32 f = 0; f < mesh->mNumFaces; ++f)
+				{
+					const aiFace& face = mesh->mFaces[f];
+					if (face.mNumIndices != 3)
+					{
+						continue;
+					}
+
+					const uint32 i0 = baseVertex + face.mIndices[0];
+					const uint32 i1 = baseVertex + face.mIndices[1];
+					const uint32 i2 = baseVertex + face.mIndices[2];
+
+					pushIndex(i0);
+					pushIndex(i1);
+					pushIndex(i2);
+					indexCount += 3;
+				}
+
+				sec.FirstIndex = firstIndex;
+				sec.IndexCount = indexCount;
+
+				sections.push_back(sec);
+				return true;
+			};
+
+		auto TraverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
+			{
+				if (node == nullptr)
+				{
+					return true;
+				}
+
+				aiMatrix4x4 global = parent * node->mTransformation;
+
+				for (uint32 i = 0; i < node->mNumMeshes; ++i)
+				{
+					const uint32 meshIndex = node->mMeshes[i];
+					if (meshIndex >= scene->mNumMeshes)
+					{
+						continue;
+					}
+
+					if (!options.MergeMeshes)
+					{
+						const aiMesh* mesh0 = scene->mMeshes[meshIndex];
+						return ImportMeshAsSection(mesh0, global);
+					}
+
+					const aiMesh* mesh = scene->mMeshes[meshIndex];
+					if (!ImportMeshAsSection(mesh, global))
+					{
+						return false;
+					}
+				}
+
+				for (uint32 c = 0; c < node->mNumChildren; ++c)
+				{
+					if (!self(self, node->mChildren[c], global))
+					{
+						return false;
+					}
+
+					if (!options.MergeMeshes && !sections.empty())
+					{
+						return true;
+					}
+				}
+
+				return true;
+			};
 
 		{
 			const aiMatrix4x4 identity;

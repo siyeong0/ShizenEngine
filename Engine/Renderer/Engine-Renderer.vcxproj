@@ -153,12 +153,12 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\RenderResourceCache.h" />
-    <ClInclude Include="Public\MaterialInstance.h" />
     <ClInclude Include="Public\MaterialRenderData.h" />
     <ClInclude Include="Public\Renderer.h" />
     <ClInclude Include="Public\RenderScene.h" />
     <ClInclude Include="Public\RenderTarget.h" />
     <ClInclude Include="Public\StaticMeshRenderData.h" />
+    <ClInclude Include="Public\TextureRenderData.h" />
     <ClInclude Include="Public\ViewFamily.h" />
   </ItemGroup>
   <ItemGroup>
@@ -172,24 +172,10 @@
     <ClCompile Include="Private\Renderer.cpp" />
     <ClCompile Include="Private\RenderResourceCache.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
+    <ClCompile Include="Private\StaticMeshRenderData.cpp" />
+    <ClCompile Include="Private\TextureRenderData.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\Basic.psh">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Basic.vsh">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.1</ShaderModel>
-    </FxCompile>
     <FxCompile Include="Shaders\DeferredLighting.psh">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
