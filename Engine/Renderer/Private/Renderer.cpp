@@ -40,8 +40,9 @@ namespace shz
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants", &m_pFrameCB);
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants", &m_pShadowCB);
 
-		// Object index CB (uint + padding)
-		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectIndexConstants), "Object index constants", &m_pObjectIndexCB);
+		// ObjectIndex instance VB (1x uint, updated per draw)
+		if (!ensureObjectIndexInstanceBuffer())
+			return false;
 
 		// Object table (StructuredBuffer<ObjectConstants>)
 		m_ObjectTableCapacity = 0;
@@ -65,7 +66,6 @@ namespace shz
 
 		return true;
 	}
-
 
 	void Renderer::Cleanup()
 	{
@@ -110,7 +110,7 @@ namespace shz
 		m_pShadowCB.Release();
 		m_pFrameCB.Release();
 
-		m_pObjectIndexCB.Release();
+		m_pObjectIndexVB.Release();
 		m_pObjectTableSB.Release();
 		m_ObjectTableCapacity = 0;
 
@@ -280,8 +280,10 @@ namespace shz
 
 		pushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		pushBarrier(m_pObjectIndexCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+
+		// Object indirection resources
 		pushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(m_pObjectIndexVB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 
 		for (const auto& obj : scene.GetObjects())
 		{
@@ -394,15 +396,12 @@ namespace shz
 				if (!mesh || !mesh->IsValid())
 					continue;
 
-				// Update only index CB per object
-				{
-					MapHelper<hlsl::ObjectIndexConstants> icb(ctx, m_pObjectIndexCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					icb->ObjectIndex = objIndex;
-				}
+				// Upload per-draw instance ObjectIndex (ATTRIB4)
+				uploadObjectIndexInstance(ctx, objIndex);
 
-				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-				uint64 offs[] = { 0 };
-				ctx->SetVertexBuffers(0, 1, vbs, offs,
+				IBuffer* vbs[] = { mesh->GetVertexBuffer(), m_pObjectIndexVB.RawPtr() };
+				uint64 offs[] = { 0, 0 };
+				ctx->SetVertexBuffers(0, 2, vbs, offs,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
@@ -421,6 +420,7 @@ namespace shz
 					dia.Flags = DRAW_FLAG_VERIFY_ALL;
 					dia.FirstIndexLocation = sec.FirstIndex;
 					dia.BaseVertex = static_cast<int32>(sec.BaseVertex);
+					dia.NumInstances = 1;
 
 					ctx->DrawIndexed(dia);
 				}
@@ -484,15 +484,12 @@ namespace shz
 				if (!mesh || !mesh->IsValid())
 					continue;
 
-				// Update only index CB per object
-				{
-					MapHelper<hlsl::ObjectIndexConstants> icb(ctx, m_pObjectIndexCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					icb->ObjectIndex = objIndex;
-				}
+				// Upload per-draw instance ObjectIndex (ATTRIB4)
+				uploadObjectIndexInstance(ctx, objIndex);
 
-				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-				uint64 offs[] = { 0 };
-				ctx->SetVertexBuffers(0, 1, vbs, offs,
+				IBuffer* vbs[] = { mesh->GetVertexBuffer(), m_pObjectIndexVB.RawPtr() };
+				uint64 offs[] = { 0, 0 };
+				ctx->SetVertexBuffers(0, 2, vbs, offs,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
@@ -532,6 +529,7 @@ namespace shz
 					dia.Flags = DRAW_FLAG_VERIFY_ALL;
 					dia.FirstIndexLocation = sec.FirstIndex;
 					dia.BaseVertex = static_cast<int32>(sec.BaseVertex);
+					dia.NumInstances = 1;
 
 					ctx->DrawIndexed(dia);
 				}
@@ -626,7 +624,6 @@ namespace shz
 			ctx->EndRenderPass();
 		}
 	}
-
 
 	void Renderer::EndFrame()
 	{
@@ -1126,10 +1123,15 @@ namespace shz
 
 		LayoutElement layoutElems[] =
 		{
-			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position
+			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
+			LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ATTRIB4 ObjectIndex (instance stream)
 		};
 
+		// NOTE:
+		// Your mesh VB is interleaved with stride 11 floats.
+		// Keep the same stride on the vertex stream element as your original code.
 		layoutElems[0].Stride = sizeof(float) * 11;
+		layoutElems[1].Stride = sizeof(uint32);
 
 		gp.InputLayout.LayoutElements = layoutElems;
 		gp.InputLayout.NumElements = _countof(layoutElems);
@@ -1193,8 +1195,7 @@ namespace shz
 			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
 				var->Set(m_pShadowCB);
 
-			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "OBJECT_INDEX"))
-				var->Set(m_pObjectIndexCB);
+			// OBJECT_INDEX cbuffer is removed.
 
 			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
@@ -1209,7 +1210,6 @@ namespace shz
 
 		return true;
 	}
-
 
 	bool Renderer::createGBufferPso()
 	{
@@ -1251,7 +1251,11 @@ namespace shz
 			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // ATTRIB1 UV
 			LayoutElement{2, 0, 3, VT_FLOAT32, false}, // ATTRIB2 Normal
 			LayoutElement{3, 0, 3, VT_FLOAT32, false}, // ATTRIB3 Tangent
+
+			LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ATTRIB4 ObjectIndex (instance stream)
 		};
+		layoutElems[4].Stride = sizeof(uint32);
+
 		gp.InputLayout.LayoutElements = layoutElems;
 		gp.InputLayout.NumElements = _countof(layoutElems);
 
@@ -1338,8 +1342,7 @@ namespace shz
 			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 				var->Set(m_pFrameCB);
 
-			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "OBJECT_INDEX"))
-				var->Set(m_pObjectIndexCB);
+			// OBJECT_INDEX cbuffer is removed.
 
 			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
@@ -1784,5 +1787,48 @@ namespace shz
 			dst[i] = oc;
 		}
 	}
+
+	bool Renderer::ensureObjectIndexInstanceBuffer()
+	{
+		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(dev, "ensureObjectIndexInstanceBuffer(): device is null.");
+
+		if (m_pObjectIndexVB)
+			return true;
+
+		BufferDesc desc = {};
+		desc.Name = "ObjectIndexInstanceVB";
+		desc.Usage = USAGE_DYNAMIC;
+		desc.BindFlags = BIND_VERTEX_BUFFER;
+		desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+		// One uint32 per draw (we use NumInstances = 1 for now).
+		desc.Size = sizeof(uint32);
+
+		m_pObjectIndexVB.Release();
+
+		// IMPORTANT:
+		// Dynamic buffers must be created with null initial data.
+		dev->CreateBuffer(desc, nullptr, &m_pObjectIndexVB);
+
+		if (!m_pObjectIndexVB)
+		{
+			ASSERT(false, "Failed to create ObjectIndexInstanceVB.");
+			return false;
+		}
+
+		return true;
+	}
+
+
+	void Renderer::uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex)
+	{
+		ASSERT(pCtx, "uploadObjectIndexInstance(): context is null.");
+		ASSERT(m_pObjectIndexVB, "uploadObjectIndexInstance(): instance VB is null.");
+
+		MapHelper<uint32> map(pCtx, m_pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
+		*map = objectIndex;
+	}
+
 
 } // namespace shz

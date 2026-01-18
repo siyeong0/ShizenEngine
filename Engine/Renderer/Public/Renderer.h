@@ -96,6 +96,12 @@ namespace shz
 		bool ensureObjectTableCapacity(uint32 objectCount);
 		void uploadObjectTable(IDeviceContext* pCtx, const RenderScene& scene);
 
+		// ------------------------------------------------------------
+		// Per-draw object indirection (ATTRIB4 as PER_INSTANCE)
+		// ------------------------------------------------------------
+		bool ensureObjectIndexInstanceBuffer();
+		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
+
 	private:
 		RendererCreateInfo m_CreateInfo = {};
 		AssetManagerBase* m_pAssetManager = nullptr;
@@ -116,9 +122,9 @@ namespace shz
 
 		// Object indirection:
 		// - Object table: StructuredBuffer<ObjectConstants> (SRV)
-		// - Object index: small constant buffer updated per draw/object (uint g_ObjectIndex)
+		// - Object index: 1x uint instance VB (ATTRIB4, PER_INSTANCE)
 		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
-		RefCntAutoPtr<IBuffer> m_pObjectIndexCB;
+		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
 
 		uint32 m_ObjectTableCapacity = 0;
 
