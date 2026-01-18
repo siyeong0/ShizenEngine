@@ -26,6 +26,9 @@ namespace shz
 		virtual void Render() override final;
 		virtual void Update(double CurrTime, double ElapsedTime, bool DoUpdateUI) override final;
 
+		virtual void ReleaseSwapChainBuffers() override final;
+		virtual void WindowResize(uint32 Width, uint32 Height) override final;
+
 		virtual const Char* GetSampleName() const override final { return "Shizen Engine"; }
 
 	protected:

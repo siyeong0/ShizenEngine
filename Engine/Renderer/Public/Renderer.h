@@ -31,122 +31,139 @@
 
 namespace shz
 {
-    class AssetManager;
+	class AssetManager;
 
-    struct RendererCreateInfo
-    {
-        RefCntAutoPtr<IEngineFactory> pEngineFactory;
-        RefCntAutoPtr<IRenderDevice>  pDevice;
-        RefCntAutoPtr<IDeviceContext> pImmediateContext;
-        std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
-        RefCntAutoPtr<ISwapChain> pSwapChain;
-        RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+	struct RendererCreateInfo
+	{
+		RefCntAutoPtr<IEngineFactory> pEngineFactory;
+		RefCntAutoPtr<IRenderDevice>  pDevice;
+		RefCntAutoPtr<IDeviceContext> pImmediateContext;
+		std::vector<RefCntAutoPtr<IDeviceContext>> pDeferredContexts;
+		RefCntAutoPtr<ISwapChain> pSwapChain;
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
 
-        ImGuiImplShizen* pImGui = nullptr;
-        AssetManager* pAssetManager = nullptr; // not owned
+		ImGuiImplShizen* pImGui = nullptr;
+		AssetManager* pAssetManager = nullptr; // not owned
 
-        uint32 BackBufferWidth = 0;
-        uint32 BackBufferHeight = 0;
-    };
+		uint32 BackBufferWidth = 0;
+		uint32 BackBufferHeight = 0;
+	};
 
-    class Renderer final
-    {
-    public:
-        Renderer() = default;
-        Renderer(const Renderer&) = delete;
-        Renderer& operator=(const Renderer&) = delete;
-        ~Renderer() = default;
+	class Renderer final
+	{
+	public:
+		Renderer() = default;
+		Renderer(const Renderer&) = delete;
+		Renderer& operator=(const Renderer&) = delete;
+		~Renderer() = default;
 
-        bool Initialize(const RendererCreateInfo& createInfo);
-        void Cleanup();
+		bool Initialize(const RendererCreateInfo& createInfo);
+		void Cleanup();
 
-        void OnResize(uint32 width, uint32 height);
+		// Must be called before swap-chain resize/fullscreen toggle.
+		// Releases all refs that can indirectly hold swap-chain backbuffers (framebuffers, cached RTVs, etc).
+		void ReleaseSwapChainBuffers();
 
-        void BeginFrame();
-        void Render(const RenderScene& scene, const ViewFamily& viewFamily);
-        void EndFrame();
+		// Call after swap-chain resize is completed and new width/height is known.
+		void OnResize(uint32 width, uint32 height);
 
-        // Forwarding (Asset -> RD)
-        Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
-        bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
+		void BeginFrame();
+		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
+		void EndFrame();
 
-    private:
-        bool createShadowTargets();
-        bool createDeferredTargets();
+		// Forwarding (Asset -> RD)
+		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
+		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
-        bool createShadowRenderPasses();
-        bool createDeferredRenderPasses();
+	private:
+		bool createShadowTargets();
+		bool createDeferredTargets();
 
-        bool createShadowPso();
-        bool createGBufferPso();
-        bool createLightingPso();
-        bool createPostPso();
+		bool createShadowRenderPasses();
+		bool createDeferredRenderPasses();
 
-        void setViewportFromView(const View& view);
+		bool createShadowPso();
+		bool createGBufferPso();
+		bool createLightingPso();
+		bool createPostPso();
 
-    private:
-        RendererCreateInfo m_CreateInfo = {};
-        AssetManager* m_pAssetManager = nullptr;
+		bool recreateShadowResources();
+		bool recreateSizeDependentResources();
 
-        uint32 m_Width = 0;
-        uint32 m_Height = 0;
+		// Framebuffer for current backbuffer (created in BeginFrame, released in EndFrame)
+		bool buildPostFramebufferForCurrentBackBuffer();
 
-        uint32 m_DeferredWidth = 0;
-        uint32 m_DeferredHeight = 0;
+		void setViewportFromView(const View& view);
 
-        RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+	private:
+		RendererCreateInfo m_CreateInfo = {};
+		AssetManager* m_pAssetManager = nullptr;
 
-        std::unique_ptr<RenderResourceCache> m_pCache;
+		uint32 m_Width = 0;
+		uint32 m_Height = 0;
 
-        // Frame/Object/Shadow CBs
-        RefCntAutoPtr<IBuffer> m_pFrameCB;
-        RefCntAutoPtr<IBuffer> m_pObjectCB;
-        RefCntAutoPtr<IBuffer> m_pShadowCB;
+		uint32 m_DeferredWidth = 0;
+		uint32 m_DeferredHeight = 0;
 
-        // Targets
-        static constexpr uint32 SHADOW_MAP_SIZE = 1024;
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-        RefCntAutoPtr<ITexture>     m_ShadowMapTex;
-        RefCntAutoPtr<ITextureView> m_ShadowMapDsv;
-        RefCntAutoPtr<ITextureView> m_ShadowMapSrv;
+		std::unique_ptr<RenderResourceCache> m_pCache;
 
-        RefCntAutoPtr<ITexture>     m_GBufferDepthTex;
-        RefCntAutoPtr<ITextureView> m_GBufferDepthDSV;
-        RefCntAutoPtr<ITextureView> m_GBufferDepthSRV;
+		// Frame/Object/Shadow CBs
+		RefCntAutoPtr<IBuffer> m_pFrameCB;
+		RefCntAutoPtr<IBuffer> m_pObjectCB;
+		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
-        static constexpr uint32 NUM_GBUFFERS = 4;
-        RefCntAutoPtr<ITexture>     m_GBufferTex[NUM_GBUFFERS];
-        RefCntAutoPtr<ITextureView> m_GBufferRtv[NUM_GBUFFERS];
-        RefCntAutoPtr<ITextureView> m_GBufferSrv[NUM_GBUFFERS];
+		// Targets
+		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
 
-        RefCntAutoPtr<ITexture>     m_LightingTex;
-        RefCntAutoPtr<ITextureView> m_LightingRTV;
-        RefCntAutoPtr<ITextureView> m_LightingSRV;
+		RefCntAutoPtr<ITexture>     m_ShadowMapTex;
+		RefCntAutoPtr<ITextureView> m_ShadowMapDsv;
+		RefCntAutoPtr<ITextureView> m_ShadowMapSrv;
 
-        // RenderPass/FB
-        RefCntAutoPtr<IRenderPass>  m_RenderPassShadow;
-        RefCntAutoPtr<IFramebuffer> m_FrameBufferShadow;
+		RefCntAutoPtr<ITexture>     m_GBufferDepthTex;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthDSV;
+		RefCntAutoPtr<ITextureView> m_GBufferDepthSRV;
 
-        RefCntAutoPtr<IRenderPass>  m_RenderPassGBuffer;
-        RefCntAutoPtr<IFramebuffer> m_FrameBufferGBuffer;
+		static constexpr uint32 NUM_GBUFFERS = 4;
+		RefCntAutoPtr<ITexture>     m_GBufferTex[NUM_GBUFFERS];
+		RefCntAutoPtr<ITextureView> m_GBufferRtv[NUM_GBUFFERS];
+		RefCntAutoPtr<ITextureView> m_GBufferSrv[NUM_GBUFFERS];
 
-        RefCntAutoPtr<IRenderPass>  m_RenderPassLighting;
-        RefCntAutoPtr<IFramebuffer> m_FrameBufferLighting;
+		RefCntAutoPtr<ITexture>     m_LightingTex;
+		RefCntAutoPtr<ITextureView> m_LightingRTV;
+		RefCntAutoPtr<ITextureView> m_LightingSRV;
 
-        RefCntAutoPtr<IRenderPass>  m_RenderPassPost;
-        RefCntAutoPtr<IFramebuffer> m_FrameBufferPost;
+		// RenderPass/FB (offscreen FBs can be persistent)
+		RefCntAutoPtr<IRenderPass>  m_RenderPassShadow;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferShadow;
 
-        // PSO/SRB
-        RefCntAutoPtr<IPipelineState>         m_ShadowPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
+		RefCntAutoPtr<IRenderPass>  m_RenderPassGBuffer;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferGBuffer;
 
-        RefCntAutoPtr<IPipelineState> m_GBufferPSO;
+		RefCntAutoPtr<IRenderPass>  m_RenderPassLighting;
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferLighting;
 
-        RefCntAutoPtr<IPipelineState>         m_LightingPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;
+		RefCntAutoPtr<IRenderPass>  m_RenderPassPost;
 
-        RefCntAutoPtr<IPipelineState>         m_PostPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
-    };
+		// IMPORTANT:
+		// This framebuffer references swapchain backbuffer RTV -> must NOT be kept alive across frames.
+		RefCntAutoPtr<IFramebuffer> m_FrameBufferPostCurrent;
+
+		// PSO/SRB
+		RefCntAutoPtr<IPipelineState>         m_ShadowPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
+
+		RefCntAutoPtr<IPipelineState> m_GBufferPSO;
+
+		RefCntAutoPtr<IPipelineState>         m_LightingPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;
+
+		RefCntAutoPtr<IPipelineState>         m_PostPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
+
+		bool m_ShadowDirty = true;
+		bool m_DeferredDirty = true;
+	};
 
 } // namespace shz

@@ -15,23 +15,6 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Helpers
-	// ------------------------------------------------------------
-
-	void Renderer::setViewportFromView(const View& view)
-	{
-		Viewport vp = {};
-		vp.TopLeftX = float(view.Viewport.left);
-		vp.TopLeftY = float(view.Viewport.top);
-		vp.Width = float(view.Viewport.right - view.Viewport.left);
-		vp.Height = float(view.Viewport.bottom - view.Viewport.top);
-		vp.MinDepth = 0.f;
-		vp.MaxDepth = 1.f;
-
-		m_CreateInfo.pImmediateContext->SetViewports(1, &vp, 0, 0);
-	}
-
-	// ------------------------------------------------------------
 	// Lifecycle
 	// ------------------------------------------------------------
 
@@ -47,6 +30,9 @@ namespace shz
 		m_pAssetManager = createInfo.pAssetManager;
 		m_pShaderSourceFactory = createInfo.pShaderSourceFactory;
 
+		m_pCache = std::make_unique<RenderResourceCache>();
+		m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr());
+
 		const SwapChainDesc& scDesc = m_CreateInfo.pSwapChain->GetDesc();
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : scDesc.Height;
@@ -55,29 +41,26 @@ namespace shz
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants", &m_pObjectCB);
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants", &m_pShadowCB);
 
-		// Cache (너가 올린 RenderResourceCache 시그니처에 맞춤)
-		{
-			m_pCache = std::make_unique<RenderResourceCache>();
-			if (!m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr()))
-				return false;
-		}
+		m_ShadowDirty = true;
+		m_DeferredDirty = true;
 
-		if (!createShadowTargets())        return false;
-		if (!createDeferredTargets())      return false;
+		// Post FB is per-frame (swapchain-backed). Keep it null here.
+		m_FrameBufferPostCurrent.Release();
 
-		if (!createShadowRenderPasses())   return false;
-		if (!createDeferredRenderPasses()) return false;
+		if (!recreateShadowResources())
+			return false;
 
-		if (!createShadowPso())            return false;
-		if (!createGBufferPso())           return false;
-		if (!createLightingPso())          return false;
-		if (!createPostPso())              return false;
+		if (!recreateSizeDependentResources())
+			return false;
 
 		return true;
 	}
 
 	void Renderer::Cleanup()
 	{
+		// Swapchain-backed refs must be released first.
+		ReleaseSwapChainBuffers();
+
 		m_ShadowPSO.Release();
 		m_GBufferPSO.Release();
 		m_LightingPSO.Release();
@@ -113,7 +96,6 @@ namespace shz
 		m_RenderPassLighting.Release();
 		m_FrameBufferLighting.Release();
 		m_RenderPassPost.Release();
-		m_FrameBufferPost.Release();
 
 		m_pShadowCB.Release();
 		m_pFrameCB.Release();
@@ -135,52 +117,134 @@ namespace shz
 		m_DeferredHeight = 0;
 	}
 
+	void Renderer::ReleaseSwapChainBuffers()
+	{
+		// IMPORTANT:
+		// Release anything that can hold references to swapchain backbuffers.
+		// If any framebuffer references backbuffer RTV, DXGI fullscreen/ResizeBuffers may fail. :contentReference[oaicite:1]{index=1}
+		m_FrameBufferPostCurrent.Release();
+
+		// If you ever add per-backbuffer caches, clear them here as well.
+
+		// Note:
+		// Offscreen resources are not swapchain buffers, so they don't have to be released for fullscreen toggle.
+		// But if your platform path also recreates them, releasing is fine.
+	}
+
 	void Renderer::OnResize(uint32 width, uint32 height)
 	{
 		m_Width = width;
 		m_Height = height;
+
+		m_DeferredDirty = true;
+
+		// Size-dependent resources must be rebuilt after swapchain resize is done.
+		recreateSizeDependentResources();
 	}
 
-	void Renderer::BeginFrame() {}
-	void Renderer::EndFrame() {}
+	// ------------------------------------------------------------
+	// Frame
+	// ------------------------------------------------------------
 
-	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
+	void Renderer::BeginFrame()
 	{
-		ASSERT(m_pCache, "RenderResourceCache is null.");
-		return m_pCache->GetOrCreateStaticMeshRenderData(asset, m_CreateInfo.pImmediateContext.RawPtr());
+		// Ensure we don't keep swapchain backbuffer refs across frames.
+		// This makes fullscreen toggle much more robust even if the app toggles right after Present.
+		m_FrameBufferPostCurrent.Release();
+
+		// Build swapchain-backed framebuffer for the current backbuffer in BeginFrame (NOT in Render).
+		// If this fails, Render() should early-out via ASSERT checks or nullptr checks.
+		buildPostFramebufferForCurrentBackBuffer();
 	}
 
-	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh)
+	void Renderer::EndFrame()
 	{
-		ASSERT(m_pCache, "RenderResourceCache is null.");
-		return m_pCache->DestroyStaticMeshRenderData(hMesh);
+		// Release swapchain-backed framebuffer at end of the frame
+		// so that DXGI can freely resize/toggle fullscreen next frame. :contentReference[oaicite:2]{index=2}
+		m_FrameBufferPostCurrent.Release();
+	}
+
+	bool Renderer::buildPostFramebufferForCurrentBackBuffer()
+	{
+		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
+
+		ASSERT(dev, "Render device is null.");
+		ASSERT(sc, "SwapChain is null.");
+		ASSERT(m_RenderPassPost, "Post render pass is null.");
+
+		ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
+		if (!bbRtv)
+		{
+			// Some backends (e.g. GL path) may handle this differently.
+			// For now, enforce having RTV.
+			ASSERT(false, "Current backbuffer RTV is null.");
+			return false;
+		}
+
+		FramebufferDesc fb = {};
+		fb.Name = "FB_Post_CurrentBackBuffer";
+		fb.pRenderPass = m_RenderPassPost;
+		fb.AttachmentCount = 1;
+		fb.ppAttachments = &bbRtv;
+
+		m_FrameBufferPostCurrent.Release();
+		dev->CreateFramebuffer(fb, &m_FrameBufferPostCurrent);
+
+		if (!m_FrameBufferPostCurrent)
+		{
+			ASSERT(false, "Failed to create post framebuffer for current backbuffer.");
+			return false;
+		}
+
+		// Bind post SRB input here (per-frame is ok).
+		if (m_PostSRB)
+		{
+			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+				v->Set(m_LightingSRV);
+		}
+
+		return true;
 	}
 
 	// ------------------------------------------------------------
 	// Render
 	// ------------------------------------------------------------
+
 	void Renderer::Render(const RenderScene& scene, const ViewFamily& viewFamily)
 	{
 		IDeviceContext* ctx = m_CreateInfo.pImmediateContext.RawPtr();
 		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
 		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
 
-		if (!ctx || !sc || !dev || !m_pCache)
-			return;
+		ASSERT(ctx, "Immediate context is null.");
+		ASSERT(sc, "Swap chain is null.");
+		ASSERT(dev, "Render device is null.");
+		ASSERT(m_pCache, "RenderResourceCache is null.");
 
-		if (viewFamily.Views.empty())
-			return;
+		ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
+		ASSERT(viewFamily.Views.size() <= 1, "Only single view is supported currently.");
 
-		// size dependent targets
-		if (!createShadowTargets())        return;
-		if (!createShadowRenderPasses())   return;
-		if (!createDeferredTargets())      return;
-		if (!createDeferredRenderPasses()) return;
+		// Post FB must be created in BeginFrame.
+		ASSERT(m_RenderPassPost, "Post-process render pass is null.");
+		ASSERT(m_PostPSO, "Post-process PSO is null.");
+		ASSERT(m_PostSRB, "Post-process SRB is null.");
+		ASSERT(m_FrameBufferPostCurrent, "Post framebuffer (current backbuffer) is null. Call BeginFrame() first.");
 
-		if (!createShadowPso())            return;
-		if (!createGBufferPso())           return;
-		if (!createLightingPso())          return;
-		if (!createPostPso())              return;
+		ASSERT(m_ShadowMapTex, "Shadow map texture is null.");
+		ASSERT(m_RenderPassShadow, "Shadow render pass is null.");
+		ASSERT(m_ShadowPSO, "Shadow PSO is null.");
+		ASSERT(m_ShadowSRB, "Shadow SRB is null.");
+
+		ASSERT(m_GBufferTex[0], "G-Buffer texture is null.");
+		ASSERT(m_GBufferDepthTex, "G-Buffer depth texture is null.");
+		ASSERT(m_RenderPassGBuffer, "G-Buffer render pass is null.");
+		ASSERT(m_GBufferPSO, "G-Buffer PSO is null.");
+
+		ASSERT(m_LightingTex, "Lighting texture is null.");
+		ASSERT(m_RenderPassLighting, "Lighting render pass is null.");
+		ASSERT(m_LightingPSO, "Lighting PSO is null.");
+		ASSERT(m_LightingSRB, "Lighting SRB is null.");
 
 		const View& view = viewFamily.Views[0];
 
@@ -216,7 +280,7 @@ namespace shz
 			cb->DeltaTime = viewFamily.DeltaTime;
 			cb->CurrTime = viewFamily.CurrentTime;
 
-			// Light (간단히 첫 라이트)
+			// Light (pick the first one)
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights())
 			{
@@ -264,11 +328,7 @@ namespace shz
 			};
 
 		// ============================================================
-		// (추가) PRE-TRANSITION: VERIFY 모드에서 깨지는 핵심 원인
-		//  - VB/IB -> VERTEX/INDEX
-		//  - Frame/Object/Shadow CB -> CONSTANT_BUFFER
-		//  - (가능하면) MaterialRenderData를 프레임 시작에 미리 만들어서
-		//    MaterialCB도 CONSTANT_BUFFER로 전환
+		// Pre-Transition (VERIFY safe)
 		// ============================================================
 
 		std::vector<StateTransitionDesc> preBarriers;
@@ -285,29 +345,22 @@ namespace shz
 				preBarriers.push_back(b);
 			};
 
-		// (1) 자주 빠지는 CB들
 		pushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pObjectCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		// (2) GBuffer에서 쓰던 "per-frame material RD cache"를 여기로 끌어올림
-		//     -> 여기서 RD를 한번 만들고, material CB도 transition 시켜둔다.
 		std::unordered_map<uint64, Handle<MaterialRenderData>> frameMat;
 		frameMat.reserve(256);
 
-		// (3) 오브젝트 순회하며 VB/IB + MaterialCB transition 준비
 		for (const auto& obj : scene.GetObjects())
 		{
 			const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 			if (!mesh || !mesh->IsValid())
 				continue;
 
-			// VB/IB: VERIFY에서 SetVertexBuffers/SetIndexBuffer 할 때 이미 상태가 맞아야 함
 			pushBarrier(mesh->GetVertexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 			pushBarrier(mesh->GetIndexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
-			// 섹션별 머터리얼 RD를 미리 만든다(없으면 생성).
-			// NOTE: 네 현재 코드의 "obj.Materials[sec.MaterialSlot]" 방식을 그대로 사용.
 			for (const auto& sec : mesh->GetSections())
 			{
 				if (sec.IndexCount == 0)
@@ -330,41 +383,34 @@ namespace shz
 				}
 				else
 				{
-					// 네 기존 "현재 코드" 가정 그대로
 					hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl);
 					frameMat.emplace(key, hRD);
 				}
 
-				// MaterialCB를 여기서 transition(이게 빠지면 CommitShaderResources VERIFY에서 터짐)
 				MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(hRD);
 				if (rd)
 				{
 					if (auto* matCB = rd->GetMaterialConstantsBuffer())
-					{
 						pushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-					}
 
 					rd->Apply(m_pCache.get(), *inst, ctx);
 
 					for (const auto& hTexRD : rd->GetBoundTextures())
 					{
 						if (auto* texRD = m_pCache->TryGetTextureRenderData(hTexRD))
-						{
 							pushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-						}
 					}
 				}
 			}
 		}
 
 		if (!preBarriers.empty())
-		{
 			ctx->TransitionResourceStates(static_cast<uint32>(preBarriers.size()), preBarriers.data());
-		}
 
 		// ============================================================
 		// PASS 0: Shadow
 		// ============================================================
+
 		{
 			StateTransitionDesc tr =
 			{
@@ -454,6 +500,7 @@ namespace shz
 		// ============================================================
 		// PASS 1: GBuffer
 		// ============================================================
+
 		{
 			StateTransitionDesc tr[] =
 			{
@@ -483,9 +530,6 @@ namespace shz
 			rp.pClearValues = clearVals;
 
 			ctx->BeginRenderPass(rp);
-
-			const MaterialInstance* lastMat = nullptr;
-			Handle<MaterialRenderData> lastMatRD = {};
 
 			for (const auto& obj : scene.GetObjects())
 			{
@@ -529,8 +573,6 @@ namespace shz
 					}
 					else
 					{
-						// 여기로 떨어지면 prepass에서 캐시가 못 만들어진 케이스.
-						// 그래도 안전하게 생성은 한다.
 						const MaterialTemplate* tmpl = inst->GetTemplate();
 						if (!tmpl)
 							continue;
@@ -546,13 +588,8 @@ namespace shz
 					if (auto* v = rd->GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
 						v->Set(m_pObjectCB);
 
-					//if (!rd->Apply(m_pCache.get(), *inst, ctx))
-					//	continue;
-
 					ctx->SetPipelineState(rd->GetPSO());
 					ctx->CommitShaderResources(rd->GetSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					lastMat = inst;
-					lastMatRD = hRD;
 
 					DrawIndexedAttribs dia = {};
 					dia.NumIndices = sec.IndexCount;
@@ -581,6 +618,7 @@ namespace shz
 		// ============================================================
 		// PASS 2: Lighting
 		// ============================================================
+
 		{
 			StateTransitionDesc tr =
 			{
@@ -620,29 +658,32 @@ namespace shz
 		}
 
 		// ============================================================
-		// PASS 3: PostCopy
+		// PASS 3: Post (swapchain backbuffer)
 		// ============================================================
+
 		{
+			// Ensure backbuffer is in RT state before render pass.
 			ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
+			ASSERT(bbRtv, "Backbuffer RTV is null.");
 
-			FramebufferDesc fb = {};
-			fb.Name = "FB_Post_Frame";
-			fb.pRenderPass = m_RenderPassPost;
-			fb.AttachmentCount = 1;
-			fb.ppAttachments = &bbRtv;
-
-			m_FrameBufferPost.Release();
-			dev->CreateFramebuffer(fb, &m_FrameBufferPost);
-
-			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
-				v->Set(m_LightingSRV);
+			StateTransitionDesc tr =
+			{
+				bbRtv->GetTexture(),
+				RESOURCE_STATE_UNKNOWN,
+				RESOURCE_STATE_RENDER_TARGET,
+				STATE_TRANSITION_FLAG_UPDATE_STATE
+			};
+			ctx->TransitionResourceStates(1, &tr);
 
 			OptimizedClearValue cv[1] = {};
+			cv[0].Color[0] = 0.f;
+			cv[0].Color[1] = 0.f;
+			cv[0].Color[2] = 0.f;
 			cv[0].Color[3] = 1.f;
 
 			BeginRenderPassAttribs rp = {};
 			rp.pRenderPass = m_RenderPassPost;
-			rp.pFramebuffer = m_FrameBufferPost;
+			rp.pFramebuffer = m_FrameBufferPostCurrent;
 			rp.ClearValueCount = 1;
 			rp.pClearValues = cv;
 
@@ -654,6 +695,21 @@ namespace shz
 		}
 	}
 
+	// ------------------------------------------------------------
+	// Assets -> RD
+	// ------------------------------------------------------------
+
+	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
+	{
+		ASSERT(m_pCache, "RenderResourceCache is null.");
+		return m_pCache->GetOrCreateStaticMeshRenderData(asset, m_CreateInfo.pImmediateContext.RawPtr());
+	}
+
+	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh)
+	{
+		ASSERT(m_pCache, "RenderResourceCache is null.");
+		return m_pCache->DestroyStaticMeshRenderData(hMesh);
+	}
 
 	// ============================================================
 	// Targets / RenderPass
@@ -722,14 +778,11 @@ namespace shz
 			!m_LightingTex;
 
 		if (!needRebuild)
-		{
 			return true;
-		}
 
 		m_DeferredWidth = w;
 		m_DeferredHeight = h;
 
-		// Single-use helper is expressed as a local lambda (per your rule).
 		auto createRtTexture2d = [&](uint32 width, uint32 height, TEXTURE_FORMAT fmt, const char* name,
 			RefCntAutoPtr<ITexture>& outTex,
 			RefCntAutoPtr<ITextureView>& outRtv,
@@ -758,16 +811,13 @@ namespace shz
 				ASSERT(outRtv && outSrv, "RTV/SRV is null.");
 			};
 
-		// Must match createGBufferPso() formats.
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_GBufferTex[0], m_GBufferRtv[0], m_GBufferSrv[0]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_GBufferTex[1], m_GBufferRtv[1], m_GBufferSrv[1]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO", m_GBufferTex[2], m_GBufferRtv[2], m_GBufferSrv[2]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_GBufferTex[3], m_GBufferRtv[3], m_GBufferSrv[3]);
 
-		// Lighting intermediate: LDR = swapchain format. For HDR, use RGBA16F.
 		createRtTexture2d(w, h, sc.ColorBufferFormat, "LightingColor", m_LightingTex, m_LightingRTV, m_LightingSRV);
 
-		// GBuffer depth: typeless + DSV + SRV.
 		{
 			TextureDesc td = {};
 			td.Name = "GBufferDepth";
@@ -777,7 +827,6 @@ namespace shz
 			td.MipLevels = 1;
 			td.SampleCount = 1;
 			td.Usage = USAGE_DEFAULT;
-
 			td.Format = TEX_FORMAT_R32_TYPELESS;
 			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
@@ -792,7 +841,6 @@ namespace shz
 				TextureViewDesc vd = {};
 				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
 				vd.Format = TEX_FORMAT_D32_FLOAT;
-
 				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDSV);
 				ASSERT(m_GBufferDepthDSV, "Failed to create GBufferDepth DSV.");
 			}
@@ -801,24 +849,29 @@ namespace shz
 				TextureViewDesc vd = {};
 				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
 				vd.Format = TEX_FORMAT_R32_FLOAT;
-
 				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSRV);
 				ASSERT(m_GBufferDepthSRV, "Failed to create GBufferDepth SRV.");
 			}
 		}
 
-		// Render passes/framebuffers must be recreated because attachments changed.
+		// Size-dependent pipeline objects should be re-created.
 		m_RenderPassGBuffer.Release();
 		m_FrameBufferGBuffer.Release();
 		m_RenderPassLighting.Release();
 		m_FrameBufferLighting.Release();
 		m_RenderPassPost.Release();
-		m_FrameBufferPost.Release();
 
-		// SRBs depend on views, so rebuild them too.
+		m_GBufferPSO.Release();
+		m_LightingPSO.Release();
+		m_PostPSO.Release();
+
 		m_LightingSRB.Release();
 		m_PostSRB.Release();
 
+		// Swapchain-backed fb is per-frame.
+		m_FrameBufferPostCurrent.Release();
+
+		m_DeferredDirty = false;
 		return true;
 	}
 
@@ -836,6 +889,8 @@ namespace shz
 			at[0].SampleCount = 1;
 			at[0].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			at[0].StoreOp = ATTACHMENT_STORE_OP_STORE;
+			at[0].StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
+			at[0].StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
 			at[0].InitialState = RESOURCE_STATE_DEPTH_WRITE;
 			at[0].FinalState = RESOURCE_STATE_DEPTH_WRITE;
 
@@ -902,7 +957,8 @@ namespace shz
 				attachments[i].SampleCount = 1;
 				attachments[i].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 				attachments[i].StoreOp = ATTACHMENT_STORE_OP_STORE;
-
+				attachments[i].StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
+				attachments[i].StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
 				attachments[i].InitialState = RESOURCE_STATE_RENDER_TARGET;
 				attachments[i].FinalState = RESOURCE_STATE_RENDER_TARGET;
 			}
@@ -912,7 +968,8 @@ namespace shz
 			attachments[4].SampleCount = 1;
 			attachments[4].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[4].StoreOp = ATTACHMENT_STORE_OP_STORE;
-
+			attachments[4].StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
+			attachments[4].StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
 			attachments[4].InitialState = RESOURCE_STATE_DEPTH_WRITE;
 			attachments[4].FinalState = RESOURCE_STATE_DEPTH_WRITE;
 
@@ -1605,6 +1662,56 @@ namespace shz
 		}
 
 		return true;
+	}
+
+	bool Renderer::recreateShadowResources()
+	{
+		if (!createShadowTargets())
+			return false;
+
+		if (!createShadowRenderPasses())
+			return false;
+
+		if (!createShadowPso())
+			return false;
+
+		return true;
+	}
+
+	bool Renderer::recreateSizeDependentResources()
+	{
+		if (!m_CreateInfo.pDevice || !m_CreateInfo.pImmediateContext || !m_CreateInfo.pSwapChain)
+			return false;
+
+		if (!createDeferredTargets())
+			return false;
+
+		if (!createDeferredRenderPasses())
+			return false;
+
+		if (!createGBufferPso())
+			return false;
+
+		if (!createLightingPso())
+			return false;
+
+		if (!createPostPso())
+			return false;
+
+		return true;
+	}
+
+	void Renderer::setViewportFromView(const View& view)
+	{
+		Viewport vp = {};
+		vp.TopLeftX = float(view.Viewport.left);
+		vp.TopLeftY = float(view.Viewport.top);
+		vp.Width = float(view.Viewport.right - view.Viewport.left);
+		vp.Height = float(view.Viewport.bottom - view.Viewport.top);
+		vp.MinDepth = 0.f;
+		vp.MaxDepth = 1.f;
+
+		m_CreateInfo.pImmediateContext->SetViewports(1, &vp, 0, 0);
 	}
 
 } // namespace shz
