@@ -11,26 +11,190 @@
 #include "Engine/Material/Public/MaterialTemplate.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 
+#include "Tools/Image/Public/TextureUtilities.h"
+
+#include "Engine/AssetRuntime/Public/AssetTypeTraits.h"
+
 namespace shz
 {
 	namespace
 	{
 #include "Engine/Renderer/Shaders/HLSL_Structures.hlsli"
+
+		static float computeUniformScaleToFitUnitCube(const Box& bounds, float targetSize = 1.0f) noexcept
+		{
+			const float3 size = bounds.Max - bounds.Min;
+
+			float maxDim = size.x;
+			if (size.y > maxDim) maxDim = size.y;
+			if (size.z > maxDim) maxDim = size.z;
+
+			const float eps = 1e-6f;
+			if (maxDim < eps)
+				return 1.0f;
+
+			return targetSize / maxDim;
+		}
 	}
+
 	SampleBase* CreateSample()
 	{
 		return new ShizenEngine();
 	}
 
+	// ------------------------------------------------------------
+	// AssetManager integration helpers
+	// ------------------------------------------------------------
+
+	AssetID ShizenEngine::makeAssetIDFromPath(AssetTypeID typeId, const std::string& path) const
+	{
+		const size_t h0 = std::hash<std::string>{}(path);
+		const size_t h1 = std::hash<std::string>{}(path + std::to_string(static_cast<uint64>(typeId)));
+
+		const uint64 hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeId) * 0x9E3779B185EBCA87ull);
+		const uint64 lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeId) * 0xC2B2AE3D27D4EB4Full);
+
+		return AssetID(hi, lo);
+	}
+
+	void ShizenEngine::registerAssetLoaders()
+	{
+		ASSERT(m_pAssetManager, "registerAssetLoaders: AssetManagerImpl is null.");
+
+		// StaticMeshAsset loader (Assimp)
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID,
+			[](const AssetRegistry::AssetMeta& meta,
+				std::unique_ptr<AssetObject>& outObject,
+				uint64& outResidentBytes,
+				std::string& outError) -> bool
+			{
+				StaticMeshAsset mesh = {};
+				if (!AssimpImporter::LoadStaticMeshAsset(meta.SourcePath.c_str(), &mesh))
+				{
+					outError = "AssimpImporter::LoadStaticMeshAsset failed.";
+					return false;
+				}
+
+				outObject = std::make_unique<TypedAssetObject<StaticMeshAsset>>(static_cast<StaticMeshAsset&&>(mesh));
+				outResidentBytes = 0;
+				outError.clear();
+				return true;
+			});
+
+		// TextureAsset loader (optional / stub)
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID,
+			[](const AssetRegistry::AssetMeta& meta,
+				std::unique_ptr<AssetObject>& outObject,
+				uint64& outResidentBytes,
+				std::string& outError) -> bool
+			{
+				TextureAsset tex = {};
+				(void)meta;
+
+				outObject = std::make_unique<TypedAssetObject<TextureAsset>>(static_cast<TextureAsset&&>(tex));
+				outResidentBytes = 0;
+				outError.clear();
+				return true;
+			});
+
+		// MaterialInstanceAsset loader (optional / stub)
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<MaterialInstanceAsset>::TypeID,
+			[](const AssetRegistry::AssetMeta& meta,
+				std::unique_ptr<AssetObject>& outObject,
+				uint64& outResidentBytes,
+				std::string& outError) -> bool
+			{
+				MaterialInstanceAsset mi = {};
+				(void)meta;
+
+				outObject = std::make_unique<TypedAssetObject<MaterialInstanceAsset>>(static_cast<MaterialInstanceAsset&&>(mi));
+				outResidentBytes = 0;
+				outError.clear();
+				return true;
+			});
+	}
+
+	AssetRef<StaticMeshAsset> ShizenEngine::registerStaticMeshPath(const std::string& path)
+	{
+		const AssetID id = makeAssetIDFromPath(AssetTypeTraits<StaticMeshAsset>::TypeID, path);
+		m_pAssetManager->RegisterAsset(id, AssetTypeTraits<StaticMeshAsset>::TypeID, path);
+		return AssetRef<StaticMeshAsset>(id);
+	}
+
+	AssetRef<TextureAsset> ShizenEngine::registerTexturePath(const std::string& path)
+	{
+		const AssetID id = makeAssetIDFromPath(AssetTypeTraits<TextureAsset>::TypeID, path);
+		m_pAssetManager->RegisterAsset(id, AssetTypeTraits<TextureAsset>::TypeID, path);
+		return AssetRef<TextureAsset>(id);
+	}
+
+	AssetPtr<StaticMeshAsset> ShizenEngine::loadStaticMeshBlocking(AssetRef<StaticMeshAsset> ref, EAssetLoadFlags flags)
+	{
+		return m_pAssetManager->LoadBlocking(ref, flags);
+	}
+
+	AssetPtr<TextureAsset> ShizenEngine::loadTextureBlocking(AssetRef<TextureAsset> ref, EAssetLoadFlags flags)
+	{
+		return m_pAssetManager->LoadBlocking(ref, flags);
+	}
+
+	void ShizenEngine::ensureResourceStateSRV(ITexture* pTex)
+	{
+		if (!m_pImmediateContext || !pTex)
+			return;
+
+		StateTransitionDesc barrier = {};
+		barrier.pResource = pTex;
+		barrier.OldState = RESOURCE_STATE_UNKNOWN;
+		barrier.NewState = RESOURCE_STATE_SHADER_RESOURCE;
+		barrier.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+
+		m_pImmediateContext->TransitionResourceStates(1, &barrier);
+	}
+
+	ITextureView* ShizenEngine::getOrCreateTextureSRV(const std::string& path)
+	{
+		if (path.empty())
+			return nullptr;
+
+		auto it = m_RuntimeTextureCache.find(path);
+		if (it != m_RuntimeTextureCache.end() && it->second)
+		{
+			return it->second->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		}
+
+		// Register + load in AssetManagerImpl (pipeline validation)
+		AssetRef<TextureAsset> texRef = registerTexturePath(path);
+		(void)loadTextureBlocking(texRef, EAssetLoadFlags::AllowFallback);
+
+		RefCntAutoPtr<ITexture> tex;
+
+		TextureLoadInfo tli = {};
+		tli.IsSRGB = true;
+
+		CreateTextureFromFile(path.c_str(), tli, m_pDevice, &tex);
+		if (!tex)
+			return nullptr;
+
+		ensureResourceStateSRV(tex.RawPtr());
+
+		m_RuntimeTextureCache.emplace(path, tex);
+		return tex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+	}
+
+	// ------------------------------------------------------------
+	// Material creation
+	// ------------------------------------------------------------
+
 	MaterialInstance ShizenEngine::CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset)
 	{
-		// ------------------------------------
 		ShaderCreateInfo sci = {};
 		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		sci.EntryPoint = "main";
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
 		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
 		sci.LoadConstantBufferReflection = true;
+
 		RefCntAutoPtr<IShader> vs;
 		{
 			sci.Desc = {};
@@ -40,7 +204,7 @@ namespace shz
 			sci.Desc.UseCombinedTextureSamplers = false;
 
 			m_pDevice->CreateShader(sci, &vs);
-			ASSERT(vs, "Failed to create Basic VS.");
+			ASSERT(vs, "Failed to create GBuffer VS.");
 		}
 
 		RefCntAutoPtr<IShader> ps;
@@ -52,14 +216,16 @@ namespace shz
 			sci.Desc.UseCombinedTextureSamplers = false;
 
 			m_pDevice->CreateShader(sci, &ps);
-			ASSERT(ps, "Failed to create Basic PS.");
+			ASSERT(ps, "Failed to create GBuffer PS.");
 		}
 
 		IShader* shaders[] = { vs, ps };
 		m_PBRMaterialTemplate.BuildFromShaders(shaders, 2);
+
 		MaterialInstance materialInstance;
 		materialInstance.Initialize(&m_PBRMaterialTemplate);
 
+		// BaseColorFactor
 		{
 			float bc[4] =
 			{
@@ -71,14 +237,10 @@ namespace shz
 			materialInstance.SetFloat4("g_BaseColorFactor", bc);
 		}
 
-		// Roughness / Metallic (float)
 		materialInstance.SetFloat("g_RoughnessFactor", matInstanceAsset.GetParams().Roughness);
 		materialInstance.SetFloat("g_MetallicFactor", matInstanceAsset.GetParams().Metallic);
-
-		// Occlusion (float)
 		materialInstance.SetFloat("g_OcclusionStrength", matInstanceAsset.GetParams().Occlusion);
 
-		// EmissiveColor (float3) + EmissiveIntensity (float)
 		{
 			float ec[3] =
 			{
@@ -90,74 +252,36 @@ namespace shz
 			materialInstance.SetFloat("g_EmissiveIntensity", matInstanceAsset.GetParams().EmissiveIntensity);
 		}
 
-		// AlphaCutoff / NormalScale
 		materialInstance.SetFloat("g_AlphaCutoff", matInstanceAsset.GetParams().AlphaCutoff);
 		materialInstance.SetFloat("g_NormalScale", matInstanceAsset.GetParams().NormalScale);
 
 		uint materialFlags = 0;
 
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_ALBEDO).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_BaseColorTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_ALBEDO)));
-			materialFlags |= MAT_HAS_BASECOLOR;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_BaseColorTex", m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
+		auto BindOrDefault = [&](MATERIAL_TEXTURE_SLOT texSlot, const char* shaderVar, const RefCntAutoPtr<ITexture>& defaultTex, uint flagBit)
+			{
+				if (matInstanceAsset.GetTexture(texSlot).IsValid())
+				{
+					const std::string texPath = matInstanceAsset.GetTexture(texSlot).GetSourcePath();
+					ITextureView* srv = getOrCreateTextureSRV(texPath);
+					if (srv)
+					{
+						materialInstance.SetTextureRuntimeView(shaderVar, srv);
+						materialFlags |= flagBit;
+						return;
+					}
+				}
 
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_NORMAL).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_NormalTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_NORMAL)));
-			materialFlags |= MAT_HAS_NORMAL;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_NormalTex", m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
+				materialInstance.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			};
 
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_ORM).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_MetallicRoughnessTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_ORM)));
-			materialFlags |= MAT_HAS_MR;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
-
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_EMISSIVE).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_EmissiveTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_EMISSIVE)));
-			materialFlags |= MAT_HAS_EMISSIVE;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_EmissiveTex", m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
-
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_AO).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_AOTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_AO)));
-			materialFlags |= MAT_HAS_AO;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_AOTex", m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
-
-		if (matInstanceAsset.GetTexture(MATERIAL_TEX_HEIGHT).IsValid())
-		{
-			materialInstance.SetTextureAsset("g_HeightTex", m_pAssetManager->RegisterTexture(matInstanceAsset.GetTexture(MATERIAL_TEX_HEIGHT)));
-			materialFlags |= MAT_HAS_HEIGHT;
-		}
-		else
-		{
-			materialInstance.SetTextureRuntimeView("g_HeightTex", m_DefaultTextures.Black->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		}
+		BindOrDefault(MATERIAL_TEX_ALBEDO, "g_BaseColorTex", m_DefaultTextures.White, MAT_HAS_BASECOLOR);
+		BindOrDefault(MATERIAL_TEX_NORMAL, "g_NormalTex", m_DefaultTextures.Normal, MAT_HAS_NORMAL);
+		BindOrDefault(MATERIAL_TEX_ORM, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, MAT_HAS_MR);
+		BindOrDefault(MATERIAL_TEX_EMISSIVE, "g_EmissiveTex", m_DefaultTextures.Emissive, MAT_HAS_EMISSIVE);
+		BindOrDefault(MATERIAL_TEX_AO, "g_AOTex", m_DefaultTextures.AO, MAT_HAS_AO);
+		BindOrDefault(MATERIAL_TEX_HEIGHT, "g_HeightTex", m_DefaultTextures.Black, MAT_HAS_HEIGHT);
 
 		materialInstance.SetUint("g_MaterialFlags", materialFlags);
-
 		materialInstance.MarkAllDirty();
 
 		return materialInstance;
@@ -171,8 +295,9 @@ namespace shz
 	{
 		SampleBase::Initialize(InitInfo);
 
-		// 1) AssetManager
-		m_pAssetManager = std::make_unique<AssetManager>();
+		// 1) New AssetManagerImpl
+		m_pAssetManager = std::make_unique<AssetManagerImpl>();
+		registerAssetLoaders();
 
 		// 2) Renderer
 		m_pRenderer = std::make_unique<Renderer>();
@@ -189,6 +314,8 @@ namespace shz
 		rendererCreateInfo.pImGui = m_pImGui;
 		rendererCreateInfo.BackBufferWidth = m_pSwapChain->GetDesc().Width;
 		rendererCreateInfo.BackBufferHeight = m_pSwapChain->GetDesc().Height;
+
+		// If your RendererCreateInfo expects IAssetManager*, AssetManagerImpl should be compatible (inherits IAssetManager).
 		rendererCreateInfo.pAssetManager = m_pAssetManager.get();
 
 		m_pRenderer->Initialize(rendererCreateInfo);
@@ -196,7 +323,9 @@ namespace shz
 		// 3) RenderScene
 		m_pRenderScene = std::make_unique<RenderScene>();
 
-
+		// ------------------------------------------------------------
+		// Default 1x1 textures
+		// ------------------------------------------------------------
 		auto PackRGBA8 = [](uint8 r, uint8 g, uint8 b, uint8 a) -> uint32
 			{
 				return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
@@ -226,67 +355,23 @@ namespace shz
 				return (outTex != nullptr);
 			};
 
-		std::vector<StateTransitionDesc> Barriers;
-		Barriers.reserve(32);
-
-		auto AddTexToSRVState = [&](ITextureView* pView)
-			{
-				if (!m_pImmediateContext || !pView)
-					return;
-
-				ITexture* pTex = pView->GetTexture();
-				if (!pTex)
-					return;
-
-				Barriers.push_back(StateTransitionDesc{
-					pTex,
-					RESOURCE_STATE_UNKNOWN,
-					RESOURCE_STATE_SHADER_RESOURCE,
-					STATE_TRANSITION_FLAG_UPDATE_STATE
-					});
-			};
-
-		auto AddBufToCBState = [&](IBuffer* pBuf)
-			{
-				if (!m_pImmediateContext || !pBuf)
-					return;
-
-				Barriers.push_back(StateTransitionDesc{
-					pBuf,
-					RESOURCE_STATE_UNKNOWN,
-					RESOURCE_STATE_CONSTANT_BUFFER,
-					STATE_TRANSITION_FLAG_UPDATE_STATE
-					});
-			};
-
-		// ------------------------------------------------------------
-		// Default 1x1 textures (created once per cache)
-		// ------------------------------------------------------------
 		Create1x1Texture("DefaultWhite1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
 		Create1x1Texture("DefaultBlack1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
-		// Normal default: (0.5, 0.5, 1.0) in UNORM => (128, 128, 255)
 		Create1x1Texture("DefaultNormal1x1", PackRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal);
-		// MetallicRoughness default (glTF): roughness=1 (G=255), metallic=0 (B=0)
 		Create1x1Texture("DefaultMR1x1", PackRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness);
-		// AO default: 1
 		Create1x1Texture("DefaultAO1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.AO);
-		// Emissive default: 0
 		Create1x1Texture("DefaultEmissive1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive);
-		// Force states + update tracking (important for render pass usage)
-		AddTexToSRVState(m_DefaultTextures.White->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		AddTexToSRVState(m_DefaultTextures.Normal->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		AddTexToSRVState(m_DefaultTextures.MetallicRoughness->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		AddTexToSRVState(m_DefaultTextures.AO->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-		AddTexToSRVState(m_DefaultTextures.Emissive->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 
-		if (m_pImmediateContext && !Barriers.empty())
-		{
-			m_pImmediateContext->TransitionResourceStates(static_cast<uint32>(Barriers.size()), Barriers.data());
-		}
+		ensureResourceStateSRV(m_DefaultTextures.White.RawPtr());
+		ensureResourceStateSRV(m_DefaultTextures.Black.RawPtr());
+		ensureResourceStateSRV(m_DefaultTextures.Normal.RawPtr());
+		ensureResourceStateSRV(m_DefaultTextures.MetallicRoughness.RawPtr());
+		ensureResourceStateSRV(m_DefaultTextures.AO.RawPtr());
+		ensureResourceStateSRV(m_DefaultTextures.Emissive.RawPtr());
 
 		// 4) Camera/ViewFamily
 		m_Camera.SetProjAttribs(
-			0.1f, 
+			0.1f,
 			100.0f,
 			static_cast<float>(rendererCreateInfo.BackBufferWidth) / rendererCreateInfo.BackBufferHeight,
 			PI / 4.0f,
@@ -297,43 +382,49 @@ namespace shz
 		m_ViewFamily.Views[0].Viewport = {};
 
 		// ------------------------------------------------------------
-		// Debug cubes (optional)
+		// Floor
 		// ------------------------------------------------------------
-		//StaticMeshAsset cubeMeshAsset = CreateCubeStaticMeshAsset();
-		//auto cubeMeshHandle = m_pAssetManager->RegisterStaticMesh(cubeMeshAsset);
-		//m_CubeHandle = m_pRenderer->CreateStaticMesh(cubeMeshHandle);
-		//auto dummy1 = m_pRenderScene->AddObject(m_CubeHandle, Matrix4x4::TRS({ 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 20.0f, 0.2f, 20.0f }));
-
-		StaticMeshAsset floorMeshAsset;
-		AssimpImportOptions options = {};
-		AssimpImporter::LoadStaticMeshAsset("C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx", &floorMeshAsset);
-		auto floorMeshHandle = m_pAssetManager->RegisterStaticMesh(floorMeshAsset);
-		std::vector<MaterialInstance> materials;
-		for (const MaterialInstanceAsset& matInstanceAsset : floorMeshAsset.GetMaterialSlots())
 		{
-			materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
+			const std::string floorPath = "C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx";
+
+			AssetRef<StaticMeshAsset> floorRef = registerStaticMeshPath(floorPath);
+			AssetPtr<StaticMeshAsset> floorPtr = loadStaticMeshBlocking(floorRef);
+
+			const StaticMeshAsset* cpuMesh = floorPtr.Get();
+			ASSERT(cpuMesh, "Floor mesh load failed.");
+
+			std::vector<MaterialInstance> materials;
+			for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh->GetMaterialSlots())
+			{
+				materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
+			}
+
+			m_FloorHandle = m_pRenderer->CreateStaticMesh(*cpuMesh);
+			ASSERT(m_FloorHandle.IsValid(), "CreateStaticMesh failed.");
+
+			(void)m_pRenderScene->AddObject(
+				m_FloorHandle,
+				materials,
+				Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }));
 		}
-		m_FloorHandle = m_pRenderer->CreateStaticMesh(floorMeshHandle);
-		auto dummy2 = m_pRenderScene->AddObject(m_FloorHandle, materials, Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0, 1.0f, 1.0f }));
 
 		// ------------------------------------------------------------
-		// Load mesh paths + spawn as ONE XZ grid
+		// Load mesh paths + spawn as grid
 		// ------------------------------------------------------------
 		std::vector<const char*> meshPaths;
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
 		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
-		// XZ grid settings
 		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
 		const float spacingX = 1.0f;
 		const float spacingY = 1.0f;
@@ -398,25 +489,8 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Helpers
+	// Mesh spawn
 	// ------------------------------------------------------------
-
-	static float computeUniformScaleToFitUnitCube(const Box& bounds, float targetSize = 1.0f) noexcept
-	{
-		const float3 size = bounds.Max - bounds.Min;
-
-		float maxDim = size.x;
-		if (size.y > maxDim) maxDim = size.y;
-		if (size.z > maxDim) maxDim = size.z;
-
-		// Degenerate safety
-		const float eps = 1e-6f;
-		if (maxDim < eps)
-			return 1.0f;
-
-		return targetSize / maxDim;
-	}
-
 
 	void ShizenEngine::spawnMeshesOnXYGrid(
 		const std::vector<const char*>& meshPaths,
@@ -452,37 +526,30 @@ namespace shz
 			LoadedMesh entry = {};
 			entry.Path = meshPaths[static_cast<size_t>(i)];
 
-			// --------------------------------------------------------
-			// Load CPU asset
-			// --------------------------------------------------------
-			StaticMeshAsset cpuMesh = {};
-			if (!AssimpImporter::LoadStaticMeshAsset(entry.Path.c_str(), &cpuMesh))
+			// Register + load through new AssetManagerImpl
+			entry.MeshRef = registerStaticMeshPath(entry.Path);
+			entry.MeshID = makeAssetIDFromPath(AssetTypeTraits<StaticMeshAsset>::TypeID, entry.Path);
+			entry.MeshPtr = loadStaticMeshBlocking(entry.MeshRef);
+
+			const StaticMeshAsset* cpuMesh = entry.MeshPtr.Get();
+			if (!cpuMesh)
 			{
 				std::cout << "Load Failed: " << entry.Path << std::endl;
 				continue;
 			}
 
-			// --------------------------------------------------------
-			// Compute uniform scale so mesh fits inside 1x1x1
-			// --------------------------------------------------------
-			const Box& bounds = cpuMesh.GetBounds(); // AABB {Min,Max} 라고 가정
+			const Box& bounds = cpuMesh->GetBounds();
 			const float uniform = computeUniformScaleToFitUnitCube(bounds, 1.0f);
 			entry.Scale = float3(uniform, uniform, uniform);
 
-			// Register CPU asset
-			entry.AssetHandle = m_pAssetManager->RegisterStaticMesh(cpuMesh);
-
-			// Create GPU mesh
-			entry.MeshHandle = m_pRenderer->CreateStaticMesh(entry.AssetHandle);
+			// GPU mesh
+			entry.MeshHandle = m_pRenderer->CreateStaticMesh(*cpuMesh);
 			if (!entry.MeshHandle.IsValid())
 			{
 				std::cout << "CreateStaticMesh failed: " << entry.Path << std::endl;
 				continue;
 			}
 
-			// --------------------------------------------------------
-			// XZ grid placement (y fixed)
-			// --------------------------------------------------------
 			entry.Position = float3(
 				startX + static_cast<float>(c) * spacingX,
 				startY + static_cast<float>(r) * spacingY,
@@ -494,7 +561,7 @@ namespace shz
 			entry.RotateSpeed = 0.6f + 0.2f * static_cast<float>(i % 5);
 
 			std::vector<MaterialInstance> materials;
-			for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh.GetMaterialSlots())
+			for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh->GetMaterialSlots())
 			{
 				materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
 			}
@@ -506,101 +573,6 @@ namespace shz
 
 			m_Loaded.push_back(std::move(entry));
 		}
-	}
-
-	static inline StaticMeshAsset CreateCubeStaticMeshAsset(const char* Name = "Cube")
-	{
-		StaticMeshAsset Mesh = {};
-		Mesh.SetName(Name ? std::string(Name) : std::string("Cube"));
-		Mesh.SetSourcePath("builtin://Cube");
-
-		// 24 vertices (4 per face)
-		std::vector<float3> Positions;
-		std::vector<float3> Normals;
-		std::vector<float3> Tangents;
-		std::vector<float2> UVs;
-
-		Positions.reserve(24);
-		Normals.reserve(24);
-		Tangents.reserve(24);
-		UVs.reserve(24);
-
-		auto PushFace = [&](float3 v0, float3 v1, float3 v2, float3 v3, float3 n, float3 t) // v0..v3 in CCW order
-			{
-				// UV convention:
-				// v0: (0,1), v1: (1,1), v2: (1,0), v3: (0,0)
-				Positions.push_back(v0); UVs.push_back(float2(0, 1)); Normals.push_back(n); Tangents.push_back(t);
-				Positions.push_back(v1); UVs.push_back(float2(1, 1)); Normals.push_back(n); Tangents.push_back(t);
-				Positions.push_back(v2); UVs.push_back(float2(1, 0)); Normals.push_back(n); Tangents.push_back(t);
-				Positions.push_back(v3); UVs.push_back(float2(0, 0)); Normals.push_back(n); Tangents.push_back(t);
-			};
-
-		// Cube corners (unit cube centered at origin)
-		const float3 p000 = float3(-0.5f, -0.5f, -0.5f);
-		const float3 p001 = float3(-0.5f, -0.5f, +0.5f);
-		const float3 p010 = float3(-0.5f, +0.5f, -0.5f);
-		const float3 p011 = float3(-0.5f, +0.5f, +0.5f);
-		const float3 p100 = float3(+0.5f, -0.5f, -0.5f);
-		const float3 p101 = float3(+0.5f, -0.5f, +0.5f);
-		const float3 p110 = float3(+0.5f, +0.5f, -0.5f);
-		const float3 p111 = float3(+0.5f, +0.5f, +0.5f);
-
-		// Faces (each face: 4 verts, CCW when looking at the face from outside)
-		// -Z (back)
-		PushFace(p000, p100, p110, p010, float3(0, 0, -1), float3(+1, 0, 0));
-		// +Z (front)
-		PushFace(p101, p001, p011, p111, float3(0, 0, +1), float3(+1, 0, 0));
-		// -X (left)
-		PushFace(p001, p000, p010, p011, float3(-1, 0, 0), float3(0, 0, -1));
-		// +X (right)
-		PushFace(p100, p101, p111, p110, float3(+1, 0, 0), float3(0, 0, +1));
-		// -Y (bottom)
-		PushFace(p001, p101, p100, p000, float3(0, -1, 0), float3(+1, 0, 0));
-		// +Y (top)
-		PushFace(p010, p110, p111, p011, float3(0, +1, 0), float3(+1, 0, 0));
-
-		// Indices: 6 faces * 2 triangles * 3 = 36
-		std::vector<uint32> Indices;
-		Indices.reserve(36);
-
-		for (uint32 face = 0; face < 6; ++face)
-		{
-			const uint32 base = face * 4;
-
-			Indices.push_back(base + 0);
-			Indices.push_back(base + 1);
-			Indices.push_back(base + 2);
-
-			Indices.push_back(base + 0);
-			Indices.push_back(base + 2);
-			Indices.push_back(base + 3);
-		}
-
-		Mesh.SetPositions(std::move(Positions));
-		Mesh.SetNormals(std::move(Normals));
-		Mesh.SetTangents(std::move(Tangents));
-		Mesh.SetTexCoords(std::move(UVs));
-		Mesh.SetIndicesU32(std::move(Indices));
-
-		// One section that covers the whole mesh
-		{
-			StaticMeshAsset::Section Sec = {};
-			Sec.FirstIndex = 0;
-			Sec.IndexCount = Mesh.GetIndexCount();
-			Sec.BaseVertex = 0;
-			Sec.MaterialSlot = 0;
-			Sec.LocalBounds = Box{ float3(-0.5f, -0.5f, -0.5f), float3(+0.5f, +0.5f, +0.5f) };
-
-			std::vector<StaticMeshAsset::Section> Sections;
-			Sections.push_back(Sec);
-			Mesh.SetSections(std::move(Sections));
-		}
-
-		// Bounds (if your Box ctor above is correct, this is enough)
-		// If you want robust: Mesh.RecomputeBounds();
-		Mesh.RecomputeBounds();
-
-		return Mesh;
 	}
 
 } // namespace shz

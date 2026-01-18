@@ -67,7 +67,7 @@ namespace shz
         void EndFrame();
 
         // Forwarding (Asset -> RD)
-        Handle<StaticMeshRenderData> CreateStaticMesh(Handle<StaticMeshAsset> hAsset);
+        Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
         bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
     private:

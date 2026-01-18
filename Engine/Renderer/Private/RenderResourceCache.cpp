@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "Engine/RHI/Interface/IBuffer.h"
-
 #include "Tools/Image/Public/TextureUtilities.h"
 
 namespace shz
@@ -74,13 +73,11 @@ namespace shz
 	// ------------------------------------------------------------
 	// RenderResourceCache
 	// ------------------------------------------------------------
-	bool RenderResourceCache::Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager)
+	bool RenderResourceCache::Initialize(IRenderDevice* pDevice)
 	{
 		m_pDevice = pDevice;
-		m_pAssetManager = pAssetManager;
-
 		Clear();
-		return (m_pDevice != nullptr) && (m_pAssetManager != nullptr);
+		return (m_pDevice != nullptr);
 	}
 
 	void RenderResourceCache::Shutdown()
@@ -93,6 +90,7 @@ namespace shz
 	void RenderResourceCache::Clear()
 	{
 		m_TexAssetToRD.clear();
+		m_TexIDToRD.clear();
 		m_MeshAssetToRD.clear();
 		m_MaterialInstToRD.clear();
 
@@ -106,48 +104,35 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Texture (stub creation)
+	// Texture
 	// ------------------------------------------------------------
 	bool RenderResourceCache::createTextureFromAsset(const TextureAsset& asset, TextureRenderData* outRD)
 	{
-		TextureLoadInfo loadInfo = {};
-		loadInfo.Name = asset.GetName().c_str();
-		loadInfo.Usage = asset.GetUsage();
-		loadInfo.BindFlags = asset.GetBindFlags();
-		loadInfo.MipLevels = asset.GetMipLevels();
-		loadInfo.IsSRGB = asset.GetIsSRGB();
-		loadInfo.GenerateMips = asset.GetGenerateMips();
-		loadInfo.FlipVertically = asset.GetFlipVertically();
-		loadInfo.PremultiplyAlpha = asset.GetPremultiplyAlpha();
-		loadInfo.MipFilter = asset.GetMipFilter();
-		loadInfo.CompressMode = asset.GetCompressMode();
-		loadInfo.Format = asset.GetFormat();
-		loadInfo.AlphaCutoff = asset.GetAlphaCutoff();
-		loadInfo.MipFilter = asset.GetMipFilter();
-		loadInfo.CompressMode = asset.GetCompressMode();
-		loadInfo.Swizzle = asset.GetSwizzle();
-		loadInfo.UniformImageClipDim = asset.GetUniformImageClipDim();
+		if (!outRD || !m_pDevice)
+			return false;
+
+		// Prefer using the asset helper (less bug-prone).
+		TextureLoadInfo loadInfo = asset.BuildTextureLoadInfo();
 
 		ITexture* outTex = nullptr;
 		CreateTextureFromFile(asset.GetSourcePath().c_str(), loadInfo, m_pDevice, &outTex);
 
 		if (!outTex)
 		{
-			ASSERT(false, "Failed to create texture from asset");
+			ASSERT(false, "RenderResourceCache: Failed to create texture from asset.");
 			return false;
 		}
 
 		outRD->SetTexture(outTex);
-
 		return true;
 	}
 
-	Handle<TextureRenderData> RenderResourceCache::GetOrCreateTextureRenderData(Handle<TextureAsset> hTexAsset)
+	Handle<TextureRenderData> RenderResourceCache::GetOrCreateTextureRenderData(const TextureAsset& asset)
 	{
-		if (!m_pDevice || !m_pAssetManager || !hTexAsset.IsValid())
+		if (!m_pDevice || !asset.IsValid())
 			return {};
 
-		const uint64 key = static_cast<uint64>(hTexAsset.GetValue());
+		const uint64 key = ptrKey(&asset);
 
 		if (auto it = m_TexAssetToRD.find(key); it != m_TexAssetToRD.end())
 		{
@@ -158,14 +143,10 @@ namespace shz
 			m_TexAssetToRD.erase(it);
 		}
 
-		const TextureAsset& asset = m_pAssetManager->GetTexture(hTexAsset);
-		if (!asset.IsValid())
-			return {};
-
 		TextureRenderData rd = {};
 		if (!createTextureFromAsset(asset, &rd))
 		{
-			ASSERT(false, "Failed to create TextureRenderData from TextureAsset");
+			ASSERT(false, "RenderResourceCache: Failed to create TextureRenderData.");
 			return {};
 		}
 
@@ -181,6 +162,47 @@ namespace shz
 		slot.Value.emplace(std::move(rd));
 
 		m_TexAssetToRD.emplace(key, hRD);
+		return hRD;
+	}
+
+	Handle<TextureRenderData> RenderResourceCache::GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef,EAssetLoadFlags flags)
+	{
+		if (!m_pDevice || !texRef)
+			return {};
+
+		// AssetID-based cache first (stable across loads)
+		const uint64 idKey = assetIDKey(texRef.GetID());
+
+		if (auto it = m_TexIDToRD.find(idKey); it != m_TexIDToRD.end())
+		{
+			const Handle<TextureRenderData> cached = it->second;
+			if (FindSlot<TextureRenderData>(cached, m_TexRDSlots) != nullptr)
+				return cached;
+
+			m_TexIDToRD.erase(it);
+		}
+
+		// Resolve CPU asset through new asset manager
+		if (!m_pAssetManager)
+		{
+			ASSERT(false, "RenderResourceCache: AssetManagerImpl is null (required for AssetRef-based textures).");
+			return {};
+		}
+
+		AssetPtr<TextureAsset> texPtr = m_pAssetManager->LoadBlocking(texRef, flags);
+		const TextureAsset* pTex = texPtr.Get();
+		if (!pTex)
+		{
+			ASSERT(false, "RenderResourceCache: Failed to load TextureAsset from AssetRef.");
+			return {};
+		}
+
+		// Route to pointer-key path (also fills pointer cache)
+		const Handle<TextureRenderData> hRD = GetOrCreateTextureRenderData(*pTex);
+		if (hRD.IsValid())
+		{
+			m_TexIDToRD.emplace(idKey, hRD);
+		}
 		return hRD;
 	}
 
@@ -208,17 +230,20 @@ namespace shz
 			else { ++it; }
 		}
 
+		for (auto it = m_TexIDToRD.begin(); it != m_TexIDToRD.end(); )
+		{
+			if (it->second == h) { it = m_TexIDToRD.erase(it); break; }
+			else { ++it; }
+		}
+
 		slot->Value.reset();
 		slot->Owner.Reset();
 		return true;
 	}
 
-	void RenderResourceCache::InvalidateTextureByAsset(Handle<TextureAsset> hTexAsset)
+	void RenderResourceCache::InvalidateTextureByAsset(const TextureAsset& asset)
 	{
-		if (!hTexAsset.IsValid())
-			return;
-
-		const uint64 key = static_cast<uint64>(hTexAsset.GetValue());
+		const uint64 key = ptrKey(&asset);
 
 		auto it = m_TexAssetToRD.find(key);
 		if (it == m_TexAssetToRD.end())
@@ -229,8 +254,24 @@ namespace shz
 		DestroyTextureRenderData(hRD);
 	}
 
+	void RenderResourceCache::InvalidateTextureByRef(const AssetRef<TextureAsset>& texRef)
+	{
+		if (!texRef)
+			return;
+
+		const uint64 idKey = assetIDKey(texRef.GetID());
+
+		auto it = m_TexIDToRD.find(idKey);
+		if (it == m_TexIDToRD.end())
+			return;
+
+		const Handle<TextureRenderData> hRD = it->second;
+		m_TexIDToRD.erase(it);
+		DestroyTextureRenderData(hRD);
+	}
+
 	// ------------------------------------------------------------
-	// StaticMesh creation
+	// StaticMesh
 	// ------------------------------------------------------------
 	bool RenderResourceCache::createStaticMeshFromAsset(const StaticMeshAsset& asset, StaticMeshRenderData& outRD, IDeviceContext* /*pCtx*/)
 	{
@@ -283,15 +324,12 @@ namespace shz
 		return outRD.IsValid();
 	}
 
-	// ============================================================================================
-	// 요청했던 4개 함수 + invalidate (정확 구현)
-	// ============================================================================================
-	Handle<StaticMeshRenderData> RenderResourceCache::GetOrCreateStaticMeshRenderData(Handle<StaticMeshAsset> hMeshAsset, IDeviceContext* pCtx)
+	Handle<StaticMeshRenderData> RenderResourceCache::GetOrCreateStaticMeshRenderData(const StaticMeshAsset& asset, IDeviceContext* pCtx)
 	{
-		if (!m_pDevice || !m_pAssetManager || !hMeshAsset.IsValid())
+		if (!m_pDevice || !asset.IsValid())
 			return {};
 
-		const uint64 key = static_cast<uint64>(hMeshAsset.GetValue());
+		const uint64 key = ptrKey(&asset);
 
 		if (auto it = m_MeshAssetToRD.find(key); it != m_MeshAssetToRD.end())
 		{
@@ -302,13 +340,12 @@ namespace shz
 			m_MeshAssetToRD.erase(it);
 		}
 
-		const StaticMeshAsset& asset = m_pAssetManager->GetStaticMesh(hMeshAsset);
-		if (!asset.IsValid() || !asset.HasCPUData())
-			return {};
-
 		StaticMeshRenderData rd = {};
 		if (!createStaticMeshFromAsset(asset, rd, pCtx))
+		{
+			ASSERT(false, "RenderResourceCache: Failed to create StaticMeshRenderData.");
 			return {};
+		}
 
 		UniqueHandle<StaticMeshRenderData> owner = UniqueHandle<StaticMeshRenderData>::Make();
 		const Handle<StaticMeshRenderData> hRD = owner.Get();
@@ -354,12 +391,9 @@ namespace shz
 		return true;
 	}
 
-	void RenderResourceCache::InvalidateStaticMeshByAsset(Handle<StaticMeshAsset> hMeshAsset)
+	void RenderResourceCache::InvalidateStaticMeshByAsset(const StaticMeshAsset& asset)
 	{
-		if (!hMeshAsset.IsValid())
-			return;
-
-		const uint64 key = static_cast<uint64>(hMeshAsset.GetValue());
+		const uint64 key = ptrKey(&asset);
 
 		auto it = m_MeshAssetToRD.find(key);
 		if (it == m_MeshAssetToRD.end())
@@ -378,10 +412,10 @@ namespace shz
 		IPipelineState* pPSO,
 		const MaterialTemplate* pTemplate)
 	{
-		if (!pInstance || !pPSO || !pTemplate)
+		if (!pInstance || !pPSO || !pTemplate || !m_pDevice)
 			return {};
 
-		const uint64 key = reinterpret_cast<uint64>(pInstance);
+		const uint64 key = ptrKey(pInstance);
 
 		if (auto it = m_MaterialInstToRD.find(key); it != m_MaterialInstToRD.end())
 		{
@@ -445,7 +479,7 @@ namespace shz
 		if (!pInstance)
 			return;
 
-		const uint64 key = reinterpret_cast<uint64>(pInstance);
+		const uint64 key = ptrKey(pInstance);
 
 		auto it = m_MaterialInstToRD.find(key);
 		if (it == m_MaterialInstToRD.end())

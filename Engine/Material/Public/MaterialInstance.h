@@ -4,9 +4,9 @@
 #include <vector>
 
 #include "Primitives/BasicTypes.h"
-#include "Primitives/Handle.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
+#include "Engine/AssetRuntime/Public/AssetRef.hpp"
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
 
 #include "Engine/RHI/Interface/ITextureView.h"
@@ -16,89 +16,102 @@
 
 namespace shz
 {
-    struct TextureBinding final
-    {
+	struct TextureBinding final
+	{
 		std::string Name = {};
-        Handle<TextureAsset> TextureHandle = {};
-        ITextureView* pRuntimeView = nullptr;
-        ISampler* pSamplerOverride = nullptr;
-    };
 
-    class MaterialInstance final
-    {
-    public:
-        MaterialInstance() = default;
-        ~MaterialInstance() = default;
+		AssetRef<TextureAsset> TextureRef = {}; // NEW: replaces Handle<TextureAsset>
 
-        MaterialInstance(const MaterialInstance&) = default;
-        MaterialInstance& operator=(const MaterialInstance&) = default;
+		ITextureView* pRuntimeView = nullptr;
+		ISampler* pSamplerOverride = nullptr;
+	};
 
-        MaterialInstance(MaterialInstance&&) noexcept = default;
-        MaterialInstance& operator=(MaterialInstance&&) noexcept = default;
+	class MaterialInstance final
+	{
+	public:
+		MaterialInstance() = default;
+		~MaterialInstance() = default;
 
-        bool Initialize(const MaterialTemplate* pTemplate);
+		MaterialInstance(const MaterialInstance&) = default;
+		MaterialInstance& operator=(const MaterialInstance&) = default;
 
-        const MaterialTemplate* GetTemplate() const { return m_pTemplate; }
+		MaterialInstance(MaterialInstance&&) noexcept = default;
+		MaterialInstance& operator=(MaterialInstance&&) noexcept = default;
 
-        // Values
-        bool SetFloat(const char* name, float  v);
-        bool SetFloat2(const char* name, const float v[2]);
-        bool SetFloat3(const char* name, const float v[3]);
-        bool SetFloat4(const char* name, const float v[4]);
+		bool Initialize(const MaterialTemplate* pTemplate);
 
-        bool SetInt(const char* name, int32  v);
-        bool SetInt2(const char* name, const int32 v[2]);
-        bool SetInt3(const char* name, const int32 v[3]);
-        bool SetInt4(const char* name, const int32 v[4]);
+		const MaterialTemplate* GetTemplate() const { return m_pTemplate; }
 
-        bool SetUint(const char* name, uint32  v);
-        bool SetUint2(const char* name, const uint32 v[2]);
-        bool SetUint3(const char* name, const uint32 v[3]);
-        bool SetUint4(const char* name, const uint32 v[4]);
+		// ------------------------------------------------------------
+		// Values
+		// ------------------------------------------------------------
+		bool SetFloat(const char* name, float  v);
+		bool SetFloat2(const char* name, const float v[2]);
+		bool SetFloat3(const char* name, const float v[3]);
+		bool SetFloat4(const char* name, const float v[4]);
 
-        bool SetFloat4x4(const char* name, const float m16[16]);
+		bool SetInt(const char* name, int32  v);
+		bool SetInt2(const char* name, const int32 v[2]);
+		bool SetInt3(const char* name, const int32 v[3]);
+		bool SetInt4(const char* name, const int32 v[4]);
 
-        bool SetRaw(const char* name, const void* pData, uint32 byteSize);
+		bool SetUint(const char* name, uint32  v);
+		bool SetUint2(const char* name, const uint32 v[2]);
+		bool SetUint3(const char* name, const uint32 v[3]);
+		bool SetUint4(const char* name, const uint32 v[4]);
 
-        // Resources
-        bool SetTextureAsset(const char* textureName, const Handle<TextureAsset>& textureHandle, const char* debugPath = nullptr);
-        bool SetTextureRuntimeView(const char* textureName, ITextureView* pView);
-        bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
+		bool SetFloat4x4(const char* name, const float m16[16]);
 
-        // For RenderResourceCache
-        uint32 GetCBufferBlobCount() const { return static_cast<uint32>(m_CBufferBlobs.size()); }
-        const uint8* GetCBufferBlobData(uint32 cbufferIndex) const;
-        uint32 GetCBufferBlobSize(uint32 cbufferIndex) const;
+		bool SetRaw(const char* name, const void* pData, uint32 byteSize);
 
-        bool IsCBufferDirty(uint32 cbufferIndex) const;
-        void ClearCBufferDirty(uint32 cbufferIndex);
+		// ------------------------------------------------------------
+		// Resources
+		// ------------------------------------------------------------
 
-        uint32 GetTextureBindingCount() const { return static_cast<uint32>(m_TextureBindings.size()); }
-        const TextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
+		// NEW: Set by AssetRef (new AssetManagerImpl path)
+		bool SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef);
 
-        bool IsTextureDirty(uint32 resourceIndex) const;
-        void ClearTextureDirty(uint32 resourceIndex);
+		// Runtime SRV override (editor/debug)
+		bool SetTextureRuntimeView(const char* textureName, ITextureView* pView);
 
-        void MarkAllDirty();
+		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
 
-    private:
-        bool writeValueInternal(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedValueType);
+		// ------------------------------------------------------------
+		// For RenderResourceCache
+		// ------------------------------------------------------------
+		uint32 GetCBufferBlobCount() const { return static_cast<uint32>(m_CBufferBlobs.size()); }
+		const uint8* GetCBufferBlobData(uint32 cbufferIndex) const;
+		uint32 GetCBufferBlobSize(uint32 cbufferIndex) const;
 
-        static inline bool isTextureType(MATERIAL_RESOURCE_TYPE t)
-        {
-            return (t == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
-                (t == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
-                (t == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
-        }
+		bool IsCBufferDirty(uint32 cbufferIndex) const;
+		void ClearCBufferDirty(uint32 cbufferIndex);
 
-    private:
-        const MaterialTemplate* m_pTemplate = nullptr;
+		uint32 GetTextureBindingCount() const { return static_cast<uint32>(m_TextureBindings.size()); }
+		const TextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
 
-        std::vector<std::vector<uint8>> m_CBufferBlobs = {};
-        std::vector<uint8> m_bCBufferDirties = {};
+		bool IsTextureDirty(uint32 resourceIndex) const;
+		void ClearTextureDirty(uint32 resourceIndex);
 
-        std::vector<TextureBinding> m_TextureBindings = {};
-        std::vector<uint8> m_bTextureDirties = {};
-    };
+		void MarkAllDirty();
+
+	private:
+		bool writeValueInternal(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedValueType);
+
+		static inline bool isTextureType(MATERIAL_RESOURCE_TYPE t)
+		{
+			return (t == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
+				(t == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
+				(t == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
+		}
+
+	private:
+		const MaterialTemplate* m_pTemplate = nullptr;
+
+		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
+		std::vector<uint8> m_bCBufferDirties = {};
+
+		std::vector<TextureBinding> m_TextureBindings = {};
+		std::vector<uint8> m_bTextureDirties = {};
+	};
 
 } // namespace shz

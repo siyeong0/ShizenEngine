@@ -7,10 +7,14 @@
 #include "Primitives/Handle.hpp"
 #include "Primitives/UniqueHandle.hpp"
 
-#include "Engine/AssetRuntime/Public/AssetManager.h"
+#include "Engine/AssetRuntime/Public/AssetID.hpp"
+#include "Engine/AssetRuntime/Public/AssetRef.hpp"
+#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
+#include "Engine/AssetRuntime/Public/AssetManagerImpl.h"
+
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"
@@ -29,39 +33,49 @@ namespace shz
 		RenderResourceCache& operator=(const RenderResourceCache&) = delete;
 		~RenderResourceCache() = default;
 
-		bool Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager);
+		bool Initialize(IRenderDevice* pDevice);
 		void Shutdown();
 		void Clear();
 
+		// New asset manager hook (optional, but required for AssetRef-based texture path)
+		void SetAssetManager(AssetManagerImpl* pAssetManager) noexcept { m_pAssetManager = pAssetManager; }
+		AssetManagerImpl* GetAssetManager() const noexcept { return m_pAssetManager; }
+
 		// ------------------------------------------------------------
 		// TextureRenderData
+		// - 기존: Cache key = TextureAsset pointer (address)
+		// - 신규: AssetRef 기반을 위해 AssetID 기반 key 캐시도 제공
 		// ------------------------------------------------------------
-		Handle<TextureRenderData> GetOrCreateTextureRenderData(Handle<TextureAsset> hTexAsset);
+		Handle<TextureRenderData> GetOrCreateTextureRenderData(const TextureAsset& asset);
+
+		// NEW: AssetRef 기반 진입점 (MaterialInstance -> TextureBinding::TextureRef)
+		Handle<TextureRenderData> GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef, EAssetLoadFlags flags = EAssetLoadFlags::AllowFallback);
+
 		const TextureRenderData* TryGetTextureRenderData(Handle<TextureRenderData> h) const noexcept;
 		TextureRenderData* TryGetTextureRenderData(Handle<TextureRenderData> h) noexcept;
 		bool DestroyTextureRenderData(Handle<TextureRenderData> h);
-		void InvalidateTextureByAsset(Handle<TextureAsset> hTexAsset);
+		void InvalidateTextureByAsset(const TextureAsset& asset);
+
+		// NEW: AssetID 기반 invalidate (optional)
+		void InvalidateTextureByRef(const AssetRef<TextureAsset>& texRef);
 
 		// ------------------------------------------------------------
-		// StaticMeshRenderData  (요청했던 4개 + invalidate)
+		// StaticMeshRenderData
+		// - Cache key: StaticMeshAsset pointer (address)
 		// ------------------------------------------------------------
-		Handle<StaticMeshRenderData> GetOrCreateStaticMeshRenderData(Handle<StaticMeshAsset> hMeshAsset, IDeviceContext* pCtx);
+		Handle<StaticMeshRenderData> GetOrCreateStaticMeshRenderData(const StaticMeshAsset& asset, IDeviceContext* pCtx);
 
 		const StaticMeshRenderData* TryGetStaticMeshRenderData(Handle<StaticMeshRenderData> h) const noexcept;
 		StaticMeshRenderData* TryGetStaticMeshRenderData(Handle<StaticMeshRenderData> h) noexcept;
 
 		bool DestroyStaticMeshRenderData(Handle<StaticMeshRenderData> h);
-		void InvalidateStaticMeshByAsset(Handle<StaticMeshAsset> hMeshAsset);
+		void InvalidateStaticMeshByAsset(const StaticMeshAsset& asset);
 
 		// ------------------------------------------------------------
 		// MaterialRenderData
-		// - keyed by (MaterialInstance pointer) for now (simple & safe)
-		// - if you want asset-based caching, we can extend later.
+		// - Cache key: MaterialInstance pointer (address)
 		// ------------------------------------------------------------
-		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(
-			const MaterialInstance* pInstance,
-			IPipelineState* pPSO,
-			const MaterialTemplate* pTemplate);
+		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(const MaterialInstance* pInstance, IPipelineState* pPSO, const MaterialTemplate* pTemplate);
 
 		const MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept;
 		MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) noexcept;
@@ -129,21 +143,36 @@ namespace shz
 		}
 
 	private:
-		// NOTE: 실제 로더는 프로젝트마다 다르므로 여기만 너 코드로 채우면 됨.
-		// 이 함수는 "구조상 반드시 필요"한 부분이라 stub로 분리.
-		bool createTextureFromAsset(const TextureAsset& asset, TextureRenderData* outRD);
+		static inline uint64 ptrKey(const void* p) noexcept
+		{
+			return static_cast<uint64>(reinterpret_cast<uintptr_t>(p));
+		}
 
+		static inline uint64 assetIDKey(const AssetID& id) noexcept
+		{
+			// Engine already has std::hash<AssetID> specialization (per your snapshot).
+			const size_t h = std::hash<AssetID>{}(id);
+			return static_cast<uint64>(h);
+		}
+
+	private:
+		bool createTextureFromAsset(const TextureAsset& asset, TextureRenderData* outRD);
 		bool createStaticMeshFromAsset(const StaticMeshAsset& asset, StaticMeshRenderData& outRD, IDeviceContext* pCtx);
 
 	private:
 		IRenderDevice* m_pDevice = nullptr;
-		AssetManager* m_pAssetManager = nullptr;
 
-		// Texture: TextureAssetHandleValue -> TextureRenderDataHandle
+		// NEW: required to resolve AssetRef<TextureAsset> -> CPU TextureAsset
+		AssetManagerImpl* m_pAssetManager = nullptr;
+
+		// Texture (legacy pointer-key): TextureAsset* -> TextureRenderDataHandle
 		std::unordered_map<uint64, Handle<TextureRenderData>> m_TexAssetToRD = {};
+		// Texture (new AssetID-key): AssetID(hash) -> TextureRenderDataHandle
+		std::unordered_map<uint64, Handle<TextureRenderData>> m_TexIDToRD = {};
+
 		std::vector<Slot<TextureRenderData>> m_TexRDSlots = {};
 
-		// Mesh: StaticMeshAssetHandleValue -> StaticMeshRenderDataHandle
+		// Mesh: StaticMeshAsset* -> StaticMeshRenderDataHandle
 		std::unordered_map<uint64, Handle<StaticMeshRenderData>> m_MeshAssetToRD = {};
 		std::vector<Slot<StaticMeshRenderData>> m_MeshRDSlots = {};
 

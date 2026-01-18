@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 #include "Engine/Core/Runtime/Public/SampleBase.h"
 
@@ -9,7 +10,10 @@
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
-#include "Engine/AssetRuntime/Public/AssetManager.h"
+#include "Engine/AssetRuntime/Public/AssetManagerImpl.h"
+#include "Engine/AssetRuntime/Public/AssetRef.hpp"
+#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
+
 #include "FirstPersonCamera.h"
 
 namespace shz
@@ -32,7 +36,10 @@ namespace shz
 		{
 			std::string Path = {};
 
-			Handle<StaticMeshAsset> AssetHandle = {};
+			AssetID MeshID = {};
+			AssetRef<StaticMeshAsset> MeshRef = {};
+			AssetPtr<StaticMeshAsset> MeshPtr = {}; // keeps resident (strong ref)
+
 			Handle<StaticMeshRenderData> MeshHandle = {};
 			Handle<RenderScene::RenderObject> ObjectId = {};
 
@@ -46,16 +53,38 @@ namespace shz
 
 	private:
 		MaterialInstance CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset);
+
 		void spawnMeshesOnXYGrid(
 			const std::vector<const char*>& meshPaths,
 			float3 gridCenter,
 			float spacingX,
 			float spacingY,
 			float spacingZ);
+
+	private:
+		// ------------------------------------------------------------
+		// Asset helpers (new asset manager integration)
+		// ------------------------------------------------------------
+		void registerAssetLoaders();
+		AssetID makeAssetIDFromPath(AssetTypeID typeId, const std::string& path) const;
+
+		AssetRef<StaticMeshAsset> registerStaticMeshPath(const std::string& path);
+		AssetRef<TextureAsset>    registerTexturePath(const std::string& path);
+
+		AssetPtr<StaticMeshAsset> loadStaticMeshBlocking(AssetRef<StaticMeshAsset> ref, EAssetLoadFlags flags = EAssetLoadFlags::None);
+		AssetPtr<TextureAsset>    loadTextureBlocking(AssetRef<TextureAsset> ref, EAssetLoadFlags flags = EAssetLoadFlags::None);
+
+		ITextureView* getOrCreateTextureSRV(const std::string& path);
+
+		void ensureResourceStateSRV(ITexture* pTex);
+
 	private:
 		std::unique_ptr<Renderer> m_pRenderer = nullptr;
 		std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
-		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
+
+		// New asset system
+		std::unique_ptr<AssetManagerImpl> m_pAssetManager = nullptr;
+
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
 		ViewFamily m_ViewFamily = {};
@@ -71,8 +100,6 @@ namespace shz
 		RenderScene::LightObject m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle;
 
-
-
 		MaterialTemplate m_PBRMaterialTemplate = {};
 
 		struct DefaultMaterialTextures
@@ -86,5 +113,8 @@ namespace shz
 		};
 
 		DefaultMaterialTextures m_DefaultTextures;
+
+		// Runtime GPU texture cache for material bindings (path -> texture)
+		std::unordered_map<std::string, RefCntAutoPtr<ITexture>> m_RuntimeTextureCache = {};
 	};
 } // namespace shz

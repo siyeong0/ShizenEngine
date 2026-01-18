@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "Primitives/BasicTypes.h"
+#include "Primitives/Handle.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/IBuffer.h"
@@ -47,8 +48,8 @@ namespace shz
 		IShaderResourceVariable* findVarAnyStage(const char* name) const;
 
 	private:
-		RefCntAutoPtr<IPipelineState>         m_pPSO = {};
-		RefCntAutoPtr<IShaderResourceBinding> m_pSRB = {};
+		RefCntAutoPtr<IPipelineState>          m_pPSO = {};
+		RefCntAutoPtr<IShaderResourceBinding>  m_pSRB = {};
 		RefCntAutoPtr<IBuffer>                m_pMaterialConstants = {};
 		std::vector<Handle<TextureRenderData>> m_BoundTextures = {};
 

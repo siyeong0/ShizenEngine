@@ -1,188 +1,91 @@
+// AssetManager.h
 #pragma once
-#include <vector>
-#include <concepts>
-#include <unordered_map>
-#include <optional>
-
 #include "Primitives/BasicTypes.h"
-#include "Primitives/Handle.hpp"
-#include "Primitives/UniqueHandle.hpp"
-
-#include "Engine/AssetRuntime/Public/AssetObject.h"
-#include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/Public/IAssetManager.h"
+#include "Engine/AssetRuntime/Public/AssetRef.hpp"
+#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// AssetManager
-	// - CPU-side registry/cache for assets (no GPU/RHI dependency).
-	// - Slot table (vector) + AssetId -> Handle map
-	// - Handle safety:
-	//   * slot.Owner.Get() == requested handle (index+generation match)
-	// ------------------------------------------------------------
-	class AssetManager final
+	enum class EAssetLoadFlags : uint32
 	{
-	public:
-		AssetManager() = default;
-		AssetManager(const AssetManager&) = delete;
-		AssetManager& operator=(const AssetManager&) = delete;
-		~AssetManager() = default;
-
-		Handle<TextureAsset>           RegisterTexture(const TextureAsset& asset);
-		Handle<MaterialInstanceAsset>  RegisterMaterialInstance(const MaterialInstanceAsset& asset);
-		Handle<StaticMeshAsset>        RegisterStaticMesh(const StaticMeshAsset& asset);
-
-		const TextureAsset& GetTexture(Handle<TextureAsset> h) const noexcept;
-		const MaterialInstanceAsset& GetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept;
-		const StaticMeshAsset& GetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
-
-		const TextureAsset* TryGetTexture(Handle<TextureAsset> h) const noexcept;
-		const MaterialInstanceAsset* TryGetMaterialInstance(Handle<MaterialInstanceAsset> h) const noexcept;
-		const StaticMeshAsset* TryGetStaticMesh(Handle<StaticMeshAsset> h) const noexcept;
-
-		Handle<TextureAsset>           FindTextureById(const AssetId& id) const noexcept;
-		Handle<MaterialInstanceAsset>  FindMaterialInstanceById(const AssetId& id) const noexcept;
-		Handle<StaticMeshAsset>        FindStaticMeshById(const AssetId& id) const noexcept;
-
-		bool RemoveTexture(Handle<TextureAsset> h);
-		bool RemoveMaterialInstance(Handle<MaterialInstanceAsset> h);
-		bool RemoveStaticMesh(Handle<StaticMeshAsset> h);
-
-		void Clear();
-
-		uint32 GetTextureCount() const noexcept { return m_TextureCount; }
-		uint32 GetMaterialInstanceCount() const noexcept { return m_MaterialInstanceCount; }
-		uint32 GetStaticMeshCount() const noexcept { return m_StaticMeshCount; }
-
-	private:
-		template<AssetTypeConcept AssetType>
-		struct AssetSlot final
-		{
-			UniqueHandle<AssetType>  Owner = {}; // owns handle lifetime
-			std::optional<AssetType> Value = {}; // owns asset lifetime (no assignment required)
-		};
-
-	private:
-		template<AssetTypeConcept AssetType>
-		static void EnsureSlotCapacity(uint32 index, std::vector<AssetSlot<AssetType>>& slots)
-		{
-			if (index >= static_cast<uint32>(slots.size()))
-			{
-				slots.resize(static_cast<size_t>(index) + 1);
-			}
-		}
-
-		template<AssetTypeConcept AssetType>
-		static AssetSlot<AssetType>* FindSlot(Handle<AssetType> h, std::vector<AssetSlot<AssetType>>& slots) noexcept
-		{
-			if (!h.IsValid())
-			{
-				return nullptr;
-			}
-
-			const uint32 index = h.GetIndex();
-			if (index == 0 || index >= static_cast<uint32>(slots.size()))
-			{
-				return nullptr;
-			}
-
-			auto& slot = slots[index];
-
-			if (!slot.Value.has_value())
-			{
-				return nullptr;
-			}
-
-			// generation-safe check:
-			// stale handle(index same, gen different) -> Owner.Get() != h
-			if (slot.Owner.Get() != h)
-			{
-				return nullptr;
-			}
-
-			return &slot;
-		}
-
-		template<AssetTypeConcept AssetType>
-		static const AssetSlot<AssetType>* FindSlot(Handle<AssetType> h, const std::vector<AssetSlot<AssetType>>& slots) noexcept
-		{
-			if (!h.IsValid())
-			{
-				return nullptr;
-			}
-
-			const uint32 index = h.GetIndex();
-			if (index == 0 || index >= static_cast<uint32>(slots.size()))
-			{
-				return nullptr;
-			}
-
-			const auto& slot = slots[index];
-
-			if (!slot.Value.has_value())
-			{
-				return nullptr;
-			}
-
-			if (slot.Owner.Get() != h)
-			{
-				return nullptr;
-			}
-
-			return &slot;
-		}
-
-	private:
-		template<AssetTypeConcept AssetType>
-		static Handle<AssetType> RegisterAsset(
-			const AssetType& asset,
-			std::vector<AssetSlot<AssetType>>& slots,
-			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
-			uint32& count);
-
-		template<AssetTypeConcept AssetType>
-		static const AssetType& GetAsset(
-			Handle<AssetType> h,
-			const std::vector<AssetSlot<AssetType>>& slots) noexcept;
-
-		template<AssetTypeConcept AssetType>
-		static const AssetType* TryGetAsset(
-			Handle<AssetType> h,
-			const std::vector<AssetSlot<AssetType>>& slots) noexcept;
-
-		template<AssetTypeConcept AssetType>
-		static Handle<AssetType> FindById(
-			const AssetId& id,
-			const std::vector<AssetSlot<AssetType>>& slots,
-			const std::unordered_map<AssetId, Handle<AssetType>>& idToHandle) noexcept;
-
-		template<AssetTypeConcept AssetType>
-		static bool RemoveAsset(
-			Handle<AssetType> h,
-			std::vector<AssetSlot<AssetType>>& slots,
-			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
-			uint32& count);
-
-		template<AssetTypeConcept AssetType>
-		static void ClearTable(
-			std::vector<AssetSlot<AssetType>>& slots,
-			std::unordered_map<AssetId, Handle<AssetType>>& idToHandle,
-			uint32& count);
-
-	private:
-		std::vector<AssetSlot<TextureAsset>> m_TextureSlots;
-		std::unordered_map<AssetId, Handle<TextureAsset>> m_TextureIdToHandle;
-		uint32 m_TextureCount = 0;
-
-		std::vector<AssetSlot<MaterialInstanceAsset>> m_MaterialInstanceSlots;
-		std::unordered_map<AssetId, Handle<MaterialInstanceAsset>> m_MaterialInstanceIdToHandle;
-		uint32 m_MaterialInstanceCount = 0;
-
-		std::vector<AssetSlot<StaticMeshAsset>> m_StaticMeshSlots;
-		std::unordered_map<AssetId, Handle<StaticMeshAsset>> m_StaticMeshIdToHandle;
-		uint32 m_StaticMeshCount = 0;
+		None = 0,
+		HighPriority = 1u << 0,
+		KeepResident = 1u << 1,
+		AllowFallback = 1u << 2,
 	};
 
-} // namespace shz
+	constexpr EAssetLoadFlags operator|(EAssetLoadFlags a, EAssetLoadFlags b) noexcept
+	{
+		return static_cast<EAssetLoadFlags>(static_cast<uint32>(a) | static_cast<uint32>(b));
+	}
+
+	constexpr EAssetLoadFlags operator&(EAssetLoadFlags a, EAssetLoadFlags b) noexcept
+	{
+		return static_cast<EAssetLoadFlags>(static_cast<uint32>(a) & static_cast<uint32>(b));
+	}
+
+	class AssetManager : public IAssetManager
+	{
+	public:
+		virtual ~AssetManager() = default;
+
+		template<typename T>
+		[[nodiscard]] AssetPtr<T> Acquire(const AssetRef<T>& ref, EAssetLoadFlags flags = EAssetLoadFlags::None)
+		{
+			ASSERT(ref, "Cannot acquire null AssetRef.");
+
+			this->RequestLoad(ref.GetID(), AssetTypeTraits<T>::TypeID, static_cast<uint32>(flags));
+			return AssetPtr<T>(this, ref.GetID());
+		}
+
+		template<typename T>
+		void Prefetch(const AssetRef<T>& ref, EAssetLoadFlags flags = EAssetLoadFlags::None)
+		{
+			ASSERT(ref, "Cannot prefetch null AssetRef.");
+			this->RequestLoad(ref.GetID(), AssetTypeTraits<T>::TypeID, static_cast<uint32>(flags));
+		}
+
+		template<typename T>
+		[[nodiscard]] AssetPtr<T> LoadBlocking(const AssetRef<T>& ref, EAssetLoadFlags flags = EAssetLoadFlags::None)
+		{
+			AssetPtr<T> ptr = Acquire(ref, flags);
+			ptr.Wait();
+			return ptr;
+		}
+
+		template<typename T>
+		EAssetStatus GetStatus(const AssetRef<T>& ref) const noexcept
+		{
+			ASSERT(ref, "Cannot get status of null AssetRef.");
+			return this->GetStatusByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
+		}
+
+		template<typename T>
+		[[nodiscard]] T* TryGet(const AssetRef<T>& ref) noexcept
+		{
+			ASSERT(ref, "Cannot TryGet null AssetRef.");
+
+			AssetObject* obj = this->TryGetByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
+			if (!obj) return nullptr;
+
+			return AssetObjectCast<T>(obj);
+		}
+
+		template<typename T>
+		[[nodiscard]] const T* TryGet(const AssetRef<T>& ref) const noexcept
+		{
+			ASSERT(ref, "Cannot TryGet null AssetRef.");
+
+			const AssetObject* obj = this->TryGetByIDConst(ref.GetID(), AssetTypeTraits<T>::TypeID);
+			if (!obj) return nullptr;
+
+			return AssetObjectCast<T>(obj);
+		}
+
+	public:
+		virtual bool Unload(const AssetID& id) = 0;
+		virtual void CollectGarbage() = 0;
+		virtual void Tick(float deltaSeconds) = 0;
+	};
+}

@@ -5,7 +5,6 @@
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
 #include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
-#include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
 {
@@ -15,7 +14,7 @@ namespace shz
 	// - Stored as SoA for easy vertex stream split later.
 	// - Importers may feed AoS and deinterleave into these streams.
 	// ------------------------------------------------------------
-	class StaticMeshAsset final : public AssetObject
+	class StaticMeshAsset final
 	{
 	public:
 		struct Section final

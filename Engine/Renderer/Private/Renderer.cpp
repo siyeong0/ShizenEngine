@@ -58,7 +58,7 @@ namespace shz
 		// Cache (너가 올린 RenderResourceCache 시그니처에 맞춤)
 		{
 			m_pCache = std::make_unique<RenderResourceCache>();
-			if (!m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr(), m_pAssetManager))
+			if (!m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr()))
 				return false;
 		}
 
@@ -144,10 +144,10 @@ namespace shz
 	void Renderer::BeginFrame() {}
 	void Renderer::EndFrame() {}
 
-	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(Handle<StaticMeshAsset> hAsset)
+	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
 	{
 		ASSERT(m_pCache, "RenderResourceCache is null.");
-		return m_pCache->GetOrCreateStaticMeshRenderData(hAsset, m_CreateInfo.pImmediateContext.RawPtr());
+		return m_pCache->GetOrCreateStaticMeshRenderData(asset, m_CreateInfo.pImmediateContext.RawPtr());
 	}
 
 	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh)

@@ -5,7 +5,6 @@
 #include "Engine/Core/Math/Math.h"
 
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/AssetObject.h"
 
 namespace shz
 {
@@ -29,7 +28,6 @@ namespace shz
 		MATERIAL_SHADING_MODE_UNLIT,
 	};
 
-	// 최소 유지: 현재 importer/renderer가 기대하는 고정 슬롯
 	enum MATERIAL_TEXTURE_SLOT : uint8
 	{
 		MATERIAL_TEX_ALBEDO = 0,
@@ -48,7 +46,7 @@ namespace shz
 	// - MaterialTemplate is referenced by TemplateKey (string).
 	// - Keeps your current PBR fixed layout for now (simple).
 	// ------------------------------------------------------------
-	class MaterialInstanceAsset final : public AssetObject
+	class MaterialInstanceAsset final
 	{
 	public:
 		struct Parameters final

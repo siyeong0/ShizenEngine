@@ -36,6 +36,7 @@ namespace shz
 
 		m_pSRB.Release();
 		m_pMaterialConstants.Release();
+		m_BoundTextures.clear();
 
 		if (!pDevice || !m_pPSO || !m_pTemplate)
 			return false;
@@ -119,6 +120,9 @@ namespace shz
 		if (!m_pTemplate || !m_pSRB || !pCache)
 			return false;
 
+		// IMPORTANT: prevent unbounded growth across frames
+		m_BoundTextures.clear();
+
 		const uint32 resCount = m_pTemplate->GetResourceCount();
 		for (uint32 i = 0; i < resCount; ++i)
 		{
@@ -135,9 +139,16 @@ namespace shz
 
 			ITextureView* pView = b.pRuntimeView;
 
-			if (pView == nullptr && b.TextureHandle.IsValid())
+			// NEW: AssetRef<TextureAsset> path
+			// Policy:
+			// - runtime view wins
+			// - otherwise resolve via RenderResourceCache using asset ref
+			if (pView == nullptr && b.TextureRef)
 			{
-				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(b.TextureHandle);
+				// NOTE:
+				// RenderResourceCache must provide an overload that accepts AssetRef<TextureAsset>
+				// and resolves/loads the CPU TextureAsset via AssetManagerImpl internally.
+				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(b.TextureRef);
 				if (const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD))
 				{
 					pView = texRD->GetSRV();
