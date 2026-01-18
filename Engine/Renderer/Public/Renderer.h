@@ -31,7 +31,7 @@
 
 namespace shz
 {
-	class AssetManager;
+	class AssetManagerBase;
 
 	struct RendererCreateInfo
 	{
@@ -43,7 +43,7 @@ namespace shz
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
 
 		ImGuiImplShizen* pImGui = nullptr;
-		AssetManager* pAssetManager = nullptr; // not owned
+		AssetManagerBase* pAssetManager = nullptr; // not owned
 
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
@@ -97,7 +97,7 @@ namespace shz
 
 	private:
 		RendererCreateInfo m_CreateInfo = {};
-		AssetManager* m_pAssetManager = nullptr;
+		AssetManagerBase* m_pAssetManager = nullptr;
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;

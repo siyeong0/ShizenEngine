@@ -10,7 +10,7 @@
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
-#include "Engine/AssetRuntime/Public/AssetManagerImpl.h"
+#include "Engine/AssetRuntime/Public/AssetManager.h"
 #include "Engine/AssetRuntime/Public/AssetRef.hpp"
 #include "Engine/AssetRuntime/Public/AssetPtr.hpp"
 
@@ -86,7 +86,7 @@ namespace shz
 		std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
 
 		// New asset system
-		std::unique_ptr<AssetManagerImpl> m_pAssetManager = nullptr;
+		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 

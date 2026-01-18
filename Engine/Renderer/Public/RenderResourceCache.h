@@ -10,7 +10,7 @@
 #include "Engine/AssetRuntime/Public/AssetID.hpp"
 #include "Engine/AssetRuntime/Public/AssetRef.hpp"
 #include "Engine/AssetRuntime/Public/AssetPtr.hpp"
-#include "Engine/AssetRuntime/Public/AssetManagerImpl.h"
+#include "Engine/AssetRuntime/Public/AssetManager.h"
 
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
@@ -38,8 +38,8 @@ namespace shz
 		void Clear();
 
 		// New asset manager hook (optional, but required for AssetRef-based texture path)
-		void SetAssetManager(AssetManagerImpl* pAssetManager) noexcept { m_pAssetManager = pAssetManager; }
-		AssetManagerImpl* GetAssetManager() const noexcept { return m_pAssetManager; }
+		void SetAssetManager(AssetManager* pAssetManager) noexcept { m_pAssetManager = pAssetManager; }
+		AssetManager* GetAssetManager() const noexcept { return m_pAssetManager; }
 
 		// ------------------------------------------------------------
 		// TextureRenderData
@@ -163,7 +163,7 @@ namespace shz
 		IRenderDevice* m_pDevice = nullptr;
 
 		// NEW: required to resolve AssetRef<TextureAsset> -> CPU TextureAsset
-		AssetManagerImpl* m_pAssetManager = nullptr;
+		AssetManager* m_pAssetManager = nullptr;
 
 		// Texture (legacy pointer-key): TextureAsset* -> TextureRenderDataHandle
 		std::unordered_map<uint64, Handle<TextureRenderData>> m_TexAssetToRD = {};

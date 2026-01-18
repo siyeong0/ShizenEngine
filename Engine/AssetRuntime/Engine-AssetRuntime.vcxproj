@@ -153,9 +153,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\AssetManagerImpl.h" />
-    <ClInclude Include="Public\AssetID.hpp" />
     <ClInclude Include="Public\AssetManager.h" />
+    <ClInclude Include="Public\AssetID.hpp" />
+    <ClInclude Include="Public\AssetManagerBase.h" />
     <ClInclude Include="Public\AssetObject.h" />
     <ClInclude Include="Public\AssetPtr.hpp" />
     <ClInclude Include="Public\AssetRecord.h" />
@@ -176,8 +176,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Private\AssetManagerBase.cpp" />
     <ClCompile Include="Private\AssetManager.cpp" />
-    <ClCompile Include="Private\AssetManagerImpl.cpp" />
     <ClCompile Include="Private\AssimpImporter.cpp" />
     <ClCompile Include="Private\StaticMeshAsset.cpp" />
     <ClCompile Include="Private\TextureAsset.cpp" />

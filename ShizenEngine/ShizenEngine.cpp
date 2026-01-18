@@ -296,7 +296,7 @@ namespace shz
 		SampleBase::Initialize(InitInfo);
 
 		// 1) New AssetManagerImpl
-		m_pAssetManager = std::make_unique<AssetManagerImpl>();
+		m_pAssetManager = std::make_unique<AssetManager>();
 		registerAssetLoaders();
 
 		// 2) Renderer

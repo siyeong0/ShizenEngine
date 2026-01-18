@@ -96,7 +96,7 @@ static float SampleShadowPCF3x3(float3 shadowUVZ)
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
-
+    
 	// Fetch GBuffer
     float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);

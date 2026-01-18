@@ -280,7 +280,10 @@ namespace shz
 			cb->DeltaTime = viewFamily.DeltaTime;
 			cb->CurrTime = viewFamily.CurrentTime;
 
-			// Light (pick the first one)
+			// -----------------------------
+			// Shadow: fit ortho to camera frustum slice (single cascade)
+			// -----------------------------
+
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights())
 			{
@@ -292,20 +295,102 @@ namespace shz
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
 
-			const float3 lightForward = lightDirWs;
-			const float3 centerWs = view.CameraPosition;
+			// Coverage: how far shadows are needed from the camera.
+			// Increase this if shadows disappear too early.
+			const float shadowFar = 80.0f;                 // <-- tweak
+			const float shadowNear = Max(0.1f, view.NearPlane);
 
-			const float shadowDistance = 20.0f;
-			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
+			// Build camera basis (world space)
+			// Assumes ViewMatrix is LH row-vector convention used in your math.
+			const Matrix4x4 invView = view.ViewMatrix.Inversed();
+			const float3 camPos = view.CameraPosition;
 
+			// Extract camera axes from invView (row-vector convention caveat).
+			// If your Matrix4x4 stores basis in columns (as your earlier comment says),
+			// use column vectors for right/up/forward:
+			const float3 camRight = float3(invView._m00, invView._m10, invView._m20);
+			const float3 camUp = float3(invView._m01, invView._m11, invView._m21);
+			const float3 camForward = float3(invView._m02, invView._m12, invView._m22);
+
+			// Compute frustum slice corners in world space.
+			// We need FOV/aspect. If View already has them, use that.
+			// Otherwise infer from projection matrix. We'll do a robust inference for standard perspective.
+			const float aspect =
+				(cb->ViewportSize.y != 0.0f) ? (cb->ViewportSize.x / cb->ViewportSize.y) : 1.0f;
+
+			// For a standard LH perspective matrix, proj._m11 = 1/tan(fovY/2)
+			const float proj_m11 = view.ProjMatrix._m11;
+			const float tanHalfFovY = (proj_m11 != 0.0f) ? (1.0f / proj_m11) : 1.0f;
+
+			auto computePlane = [&](float z, float3 outCorners[4])
+				{
+					const float h = z * tanHalfFovY;
+					const float w = h * aspect;
+
+					const float3 center = camPos + camForward * z;
+
+					outCorners[0] = center - camRight * w - camUp * h; // left-bottom
+					outCorners[1] = center + camRight * w - camUp * h; // right-bottom
+					outCorners[2] = center + camRight * w + camUp * h; // right-top
+					outCorners[3] = center - camRight * w + camUp * h; // left-top
+				};
+
+			float3 nearC[4], farC[4];
+			computePlane(shadowNear, nearC);
+			computePlane(shadowFar, farC);
+
+			// Pick an up vector that is not parallel to lightDir
 			float3 up = float3(0, 1, 0);
-			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f)
+			if (Abs(Vector3::Dot(up, lightDirWs)) > 0.99f)
 				up = float3(0, 0, 1);
 
-			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+			// Choose a frustum center as look-at target (world)
+			float3 frustumCenter = {};
+			for (int i = 0; i < 4; ++i)
+				frustumCenter += nearC[i] + farC[i];
+			frustumCenter *= (1.0f / 8.0f);
 
-			const float r = 25.0f;
-			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(-r, +r, -r, +r, -r, +r);
+			// Place light "back" enough so that near plane won't clip casters.
+			// We’ll compute bounds in light space anyway, but this gives stable view.
+			const float lightBackOffset = shadowFar;
+			const float3 lightPosWs = frustumCenter - lightDirWs * lightBackOffset;
+
+			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, frustumCenter, up);
+
+			// Transform frustum corners into light view space and compute AABB
+			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
+			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+
+			auto expand = [&](const float3& pWs)
+				{
+					const float4 p = float4(pWs.x, pWs.y, pWs.z, 1.0f);
+					const float4 pl = lightView.MulVector4(p); // row-vector: v' = v * M
+
+					minX = Min(minX, pl.x); minY = Min(minY, pl.y); minZ = Min(minZ, pl.z);
+					maxX = Max(maxX, pl.x); maxY = Max(maxY, pl.y); maxZ = Max(maxZ, pl.z);
+				};
+
+			for (int i = 0; i < 4; ++i)
+			{
+				expand(nearC[i]);
+				expand(farC[i]);
+			}
+
+			// Add small padding to avoid edge clipping / shimmering
+			const float padXY = 2.0f;
+			minX -= padXY; minY -= padXY;
+			maxX += padXY; maxY += padXY;
+
+			// Depth range padding: important to avoid clipping casters/receivers
+			const float padZ = 10.0f;
+			minZ -= padZ;
+			maxZ += padZ;
+
+			// IMPORTANT: OrthoOffCenter expects (left,right,bottom,top,near,far)
+			// For LH, near/far should be positive forward along +Z in view space.
+			// If your LookAtLH produces +Z forward, minZ/maxZ are in that space.
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(minX, maxX, minY, maxY, minZ, maxZ);
+
 			lightViewProj = lightView * lightProj;
 
 			cb->LightViewProj = lightViewProj;

@@ -27,7 +27,7 @@
     <ClInclude Include="Public\TextureAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetManager.h">
+    <ClInclude Include="Public\AssetManagerBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\AssetID.hpp">
@@ -57,7 +57,7 @@
     <ClInclude Include="Public\AssetRecord.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetManagerImpl.h">
+    <ClInclude Include="Public\AssetManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\AssetTypeTraits.h">
@@ -77,10 +77,10 @@
     <ClCompile Include="Private\TextureAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\AssetManager.cpp">
+    <ClCompile Include="Private\AssetManagerBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\AssetManagerImpl.cpp">
+    <ClCompile Include="Private\AssetManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
