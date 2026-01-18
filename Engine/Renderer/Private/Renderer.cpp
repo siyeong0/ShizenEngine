@@ -53,6 +53,10 @@ namespace shz
 		if (!recreateSizeDependentResources())
 			return false;
 
+		m_PreBarriers.reserve(512);
+		m_FrameMat.reserve(512);
+		m_FrameMatKeys.reserve(512);
+
 		return true;
 	}
 
@@ -117,35 +121,6 @@ namespace shz
 		m_DeferredHeight = 0;
 	}
 
-	void Renderer::ReleaseSwapChainBuffers()
-	{
-		// IMPORTANT:
-		// Release anything that can hold references to swapchain backbuffers.
-		// If any framebuffer references backbuffer RTV, DXGI fullscreen/ResizeBuffers may fail. :contentReference[oaicite:1]{index=1}
-		m_FrameBufferPostCurrent.Release();
-
-		// If you ever add per-backbuffer caches, clear them here as well.
-
-		// Note:
-		// Offscreen resources are not swapchain buffers, so they don't have to be released for fullscreen toggle.
-		// But if your platform path also recreates them, releasing is fine.
-	}
-
-	void Renderer::OnResize(uint32 width, uint32 height)
-	{
-		m_Width = width;
-		m_Height = height;
-
-		m_DeferredDirty = true;
-
-		// Size-dependent resources must be rebuilt after swapchain resize is done.
-		recreateSizeDependentResources();
-	}
-
-	// ------------------------------------------------------------
-	// Frame
-	// ------------------------------------------------------------
-
 	void Renderer::BeginFrame()
 	{
 		// Ensure we don't keep swapchain backbuffer refs across frames.
@@ -156,60 +131,6 @@ namespace shz
 		// If this fails, Render() should early-out via ASSERT checks or nullptr checks.
 		buildPostFramebufferForCurrentBackBuffer();
 	}
-
-	void Renderer::EndFrame()
-	{
-		// Release swapchain-backed framebuffer at end of the frame
-		// so that DXGI can freely resize/toggle fullscreen next frame. :contentReference[oaicite:2]{index=2}
-		m_FrameBufferPostCurrent.Release();
-	}
-
-	bool Renderer::buildPostFramebufferForCurrentBackBuffer()
-	{
-		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
-		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
-
-		ASSERT(dev, "Render device is null.");
-		ASSERT(sc, "SwapChain is null.");
-		ASSERT(m_RenderPassPost, "Post render pass is null.");
-
-		ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
-		if (!bbRtv)
-		{
-			// Some backends (e.g. GL path) may handle this differently.
-			// For now, enforce having RTV.
-			ASSERT(false, "Current backbuffer RTV is null.");
-			return false;
-		}
-
-		FramebufferDesc fb = {};
-		fb.Name = "FB_Post_CurrentBackBuffer";
-		fb.pRenderPass = m_RenderPassPost;
-		fb.AttachmentCount = 1;
-		fb.ppAttachments = &bbRtv;
-
-		m_FrameBufferPostCurrent.Release();
-		dev->CreateFramebuffer(fb, &m_FrameBufferPostCurrent);
-
-		if (!m_FrameBufferPostCurrent)
-		{
-			ASSERT(false, "Failed to create post framebuffer for current backbuffer.");
-			return false;
-		}
-
-		// Bind post SRB input here (per-frame is ok).
-		if (m_PostSRB)
-		{
-			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
-				v->Set(m_LightingSRV);
-		}
-
-		return true;
-	}
-
-	// ------------------------------------------------------------
-	// Render
-	// ------------------------------------------------------------
 
 	void Renderer::Render(const RenderScene& scene, const ViewFamily& viewFamily)
 	{
@@ -225,34 +146,14 @@ namespace shz
 		ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
 		ASSERT(viewFamily.Views.size() <= 1, "Only single view is supported currently.");
 
-		// Post FB must be created in BeginFrame.
-		ASSERT(m_RenderPassPost, "Post-process render pass is null.");
-		ASSERT(m_PostPSO, "Post-process PSO is null.");
-		ASSERT(m_PostSRB, "Post-process SRB is null.");
-		ASSERT(m_FrameBufferPostCurrent, "Post framebuffer (current backbuffer) is null. Call BeginFrame() first.");
-
-		ASSERT(m_ShadowMapTex, "Shadow map texture is null.");
-		ASSERT(m_RenderPassShadow, "Shadow render pass is null.");
-		ASSERT(m_ShadowPSO, "Shadow PSO is null.");
-		ASSERT(m_ShadowSRB, "Shadow SRB is null.");
-
-		ASSERT(m_GBufferTex[0], "G-Buffer texture is null.");
-		ASSERT(m_GBufferDepthTex, "G-Buffer depth texture is null.");
-		ASSERT(m_RenderPassGBuffer, "G-Buffer render pass is null.");
-		ASSERT(m_GBufferPSO, "G-Buffer PSO is null.");
-
-		ASSERT(m_LightingTex, "Lighting texture is null.");
-		ASSERT(m_RenderPassLighting, "Lighting render pass is null.");
-		ASSERT(m_LightingPSO, "Lighting PSO is null.");
-		ASSERT(m_LightingSRB, "Lighting SRB is null.");
+		ASSERT(m_FrameBufferPostCurrent, "Post framebuffer is null. Call BeginFrame().");
 
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------
-		// Update frame constants
+		// 0) Update Frame / Shadow constants (1 map each)
 		// ------------------------------------------------------------
 		Matrix4x4 lightViewProj = {};
-
 		{
 			MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
@@ -281,7 +182,7 @@ namespace shz
 			cb->CurrTime = viewFamily.CurrentTime;
 
 			// -----------------------------
-			// Shadow: fit ortho to camera frustum slice (single cascade)
+			// Shadow (simple fixed ortho)
 			// -----------------------------
 
 			const RenderScene::LightObject* globalLight = nullptr;
@@ -295,101 +196,20 @@ namespace shz
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
 
-			// Coverage: how far shadows are needed from the camera.
-			// Increase this if shadows disappear too early.
-			const float shadowFar = 80.0f;                 // <-- tweak
-			const float shadowNear = Max(0.1f, view.NearPlane);
+			const float3 lightForward = lightDirWs;
+			const float3 centerWs = view.CameraPosition;
 
-			// Build camera basis (world space)
-			// Assumes ViewMatrix is LH row-vector convention used in your math.
-			const Matrix4x4 invView = view.ViewMatrix.Inversed();
-			const float3 camPos = view.CameraPosition;
+			const float shadowDistance = 20.0f;
+			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
 
-			// Extract camera axes from invView (row-vector convention caveat).
-			// If your Matrix4x4 stores basis in columns (as your earlier comment says),
-			// use column vectors for right/up/forward:
-			const float3 camRight = float3(invView._m00, invView._m10, invView._m20);
-			const float3 camUp = float3(invView._m01, invView._m11, invView._m21);
-			const float3 camForward = float3(invView._m02, invView._m12, invView._m22);
-
-			// Compute frustum slice corners in world space.
-			// We need FOV/aspect. If View already has them, use that.
-			// Otherwise infer from projection matrix. We'll do a robust inference for standard perspective.
-			const float aspect =
-				(cb->ViewportSize.y != 0.0f) ? (cb->ViewportSize.x / cb->ViewportSize.y) : 1.0f;
-
-			// For a standard LH perspective matrix, proj._m11 = 1/tan(fovY/2)
-			const float proj_m11 = view.ProjMatrix._m11;
-			const float tanHalfFovY = (proj_m11 != 0.0f) ? (1.0f / proj_m11) : 1.0f;
-
-			auto computePlane = [&](float z, float3 outCorners[4])
-				{
-					const float h = z * tanHalfFovY;
-					const float w = h * aspect;
-
-					const float3 center = camPos + camForward * z;
-
-					outCorners[0] = center - camRight * w - camUp * h; // left-bottom
-					outCorners[1] = center + camRight * w - camUp * h; // right-bottom
-					outCorners[2] = center + camRight * w + camUp * h; // right-top
-					outCorners[3] = center - camRight * w + camUp * h; // left-top
-				};
-
-			float3 nearC[4], farC[4];
-			computePlane(shadowNear, nearC);
-			computePlane(shadowFar, farC);
-
-			// Pick an up vector that is not parallel to lightDir
 			float3 up = float3(0, 1, 0);
-			if (Abs(Vector3::Dot(up, lightDirWs)) > 0.99f)
+			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f)
 				up = float3(0, 0, 1);
 
-			// Choose a frustum center as look-at target (world)
-			float3 frustumCenter = {};
-			for (int i = 0; i < 4; ++i)
-				frustumCenter += nearC[i] + farC[i];
-			frustumCenter *= (1.0f / 8.0f);
+			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
-			// Place light "back" enough so that near plane won't clip casters.
-			// We’ll compute bounds in light space anyway, but this gives stable view.
-			const float lightBackOffset = shadowFar;
-			const float3 lightPosWs = frustumCenter - lightDirWs * lightBackOffset;
-
-			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, frustumCenter, up);
-
-			// Transform frustum corners into light view space and compute AABB
-			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
-			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
-
-			auto expand = [&](const float3& pWs)
-				{
-					const float4 p = float4(pWs.x, pWs.y, pWs.z, 1.0f);
-					const float4 pl = lightView.MulVector4(p); // row-vector: v' = v * M
-
-					minX = Min(minX, pl.x); minY = Min(minY, pl.y); minZ = Min(minZ, pl.z);
-					maxX = Max(maxX, pl.x); maxY = Max(maxY, pl.y); maxZ = Max(maxZ, pl.z);
-				};
-
-			for (int i = 0; i < 4; ++i)
-			{
-				expand(nearC[i]);
-				expand(farC[i]);
-			}
-
-			// Add small padding to avoid edge clipping / shimmering
-			const float padXY = 2.0f;
-			minX -= padXY; minY -= padXY;
-			maxX += padXY; maxY += padXY;
-
-			// Depth range padding: important to avoid clipping casters/receivers
-			const float padZ = 10.0f;
-			minZ -= padZ;
-			maxZ += padZ;
-
-			// IMPORTANT: OrthoOffCenter expects (left,right,bottom,top,near,far)
-			// For LH, near/far should be positive forward along +Z in view space.
-			// If your LookAtLH produces +Z forward, minZ/maxZ are in that space.
-			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(minX, maxX, minY, maxY, minZ, maxZ);
+			const float r = 25.0f;
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(-r, +r, -r, +r, -r, +r);
 
 			lightViewProj = lightView * lightProj;
 
@@ -397,6 +217,7 @@ namespace shz
 			cb->LightDirWS = lightDirWs;
 			cb->LightColor = lightColor;
 			cb->LightIntensity = lightIntensity;
+			cb->LightViewProj = lightViewProj;
 		}
 
 		{
@@ -412,12 +233,12 @@ namespace shz
 				ctx->Draw(da);
 			};
 
-		// ============================================================
-		// Pre-Transition (VERIFY safe)
-		// ============================================================
-
-		std::vector<StateTransitionDesc> preBarriers;
-		preBarriers.reserve(512);
+		// ------------------------------------------------------------
+		// 1) Pre-Transition: reuse vectors, avoid per-frame allocations
+		// ------------------------------------------------------------
+		m_PreBarriers.clear();
+		m_FrameMat.clear();
+		m_FrameMatKeys.clear();
 
 		auto pushBarrier = [&](IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
 			{
@@ -427,16 +248,15 @@ namespace shz
 				b.OldState = from;
 				b.NewState = to;
 				b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-				preBarriers.push_back(b);
+				m_PreBarriers.push_back(b);
 			};
 
 		pushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pObjectCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		std::unordered_map<uint64, Handle<MaterialRenderData>> frameMat;
-		frameMat.reserve(256);
-
+		// Gather materials once per frame; Apply() only once per material
+		// Also collect barriers for mesh buffers (VB/IB) once per object.
 		for (const auto& obj : scene.GetObjects())
 		{
 			const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
@@ -461,41 +281,62 @@ namespace shz
 
 				const uint64 key = reinterpret_cast<uint64>(inst);
 
-				Handle<MaterialRenderData> hRD = {};
-				if (auto it = frameMat.find(key); it != frameMat.end())
+				auto it = m_FrameMat.find(key);
+				if (it == m_FrameMat.end())
 				{
-					hRD = it->second;
-				}
-				else
-				{
-					hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl);
-					frameMat.emplace(key, hRD);
+					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl, m_pObjectCB, m_pFrameCB);
+					it = m_FrameMat.emplace(key, hRD).first;
+					m_FrameMatKeys.push_back(key);
 				}
 
-				MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(hRD);
-				if (rd)
-				{
-					if (auto* matCB = rd->GetMaterialConstantsBuffer())
-						pushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+				MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
+				if (!rd)
+					continue;
 
-					rd->Apply(m_pCache.get(), *inst, ctx);
+				// Material constants buffer barrier (once is fine)
+				if (auto* matCB = rd->GetMaterialConstantsBuffer())
+					pushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-					for (const auto& hTexRD : rd->GetBoundTextures())
-					{
-						if (auto* texRD = m_pCache->TryGetTextureRenderData(hTexRD))
-							pushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-					}
-				}
+				// IMPORTANT: Apply only once per material per frame.
+				// This should set SRB vars (textures) and upload material params as needed.
+				// To guarantee "once", do it only when first inserted above.
+				// However we don't have a direct "first inserted" flag here anymore after find().
+				// Use the key list as "unique materials" and run Apply in a second pass below.
 			}
 		}
 
-		if (!preBarriers.empty())
-			ctx->TransitionResourceStates(static_cast<uint32>(preBarriers.size()), preBarriers.data());
+		// Apply (unique materials only)
+		// This ensures rd->Apply doesn't run per section.
+		for (uint64 key : m_FrameMatKeys)
+		{
+			auto it = m_FrameMat.find(key);
+			if (it == m_FrameMat.end())
+				continue;
 
-		// ============================================================
+			MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
+			if (!rd)
+				continue;
+
+			// We need the MaterialInstance to apply. Key is inst ptr.
+			const MaterialInstance* inst = reinterpret_cast<const MaterialInstance*>(key);
+			if (!inst)
+				continue;
+
+			rd->Apply(m_pCache.get(), *inst, ctx);
+
+			for (const auto& hTexRD : rd->GetBoundTextures())
+			{
+				if (auto* texRD = m_pCache->TryGetTextureRenderData(hTexRD))
+					pushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+			}
+		}
+
+		if (!m_PreBarriers.empty())
+			ctx->TransitionResourceStates(static_cast<uint32>(m_PreBarriers.size()), m_PreBarriers.data());
+
+		// ------------------------------------------------------------
 		// PASS 0: Shadow
-		// ============================================================
-
+		// ------------------------------------------------------------
 		{
 			StateTransitionDesc tr =
 			{
@@ -540,15 +381,13 @@ namespace shz
 					ocb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
 				}
 
-				{
-					IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-					uint64   offs[] = { 0 };
-					ctx->SetVertexBuffers(0, 1, vbs, offs,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
+				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
+				uint64   offs[] = { 0 };
+				ctx->SetVertexBuffers(0, 1, vbs, offs,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
 
-					ctx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-				}
+				ctx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				const VALUE_TYPE indexType = mesh->GetIndexType();
 
@@ -582,10 +421,9 @@ namespace shz
 			setViewportFromView(view);
 		}
 
-		// ============================================================
-		// PASS 1: GBuffer
-		// ============================================================
-
+		// ------------------------------------------------------------
+		// PASS 1: GBuffer (material batching)
+		// ------------------------------------------------------------
 		{
 			StateTransitionDesc tr[] =
 			{
@@ -616,6 +454,9 @@ namespace shz
 
 			ctx->BeginRenderPass(rp);
 
+			// Cache currently bound material to avoid redundant SetPipelineState/CommitShaderResources.
+			const MaterialRenderData* currMat = nullptr;
+
 			for (const auto& obj : scene.GetObjects())
 			{
 				const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
@@ -628,15 +469,13 @@ namespace shz
 					ocb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
 				}
 
-				{
-					IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-					uint64   offs[] = { 0 };
-					ctx->SetVertexBuffers(0, 1, vbs, offs,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
+				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
+				uint64   offs[] = { 0 };
+				ctx->SetVertexBuffers(0, 1, vbs, offs,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
 
-					ctx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-				}
+				ctx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				const VALUE_TYPE indexType = mesh->GetIndexType();
 
@@ -650,31 +489,22 @@ namespace shz
 						continue;
 
 					const uint64 key = reinterpret_cast<uint64>(inst);
+					auto it = m_FrameMat.find(key);
+					if (it == m_FrameMat.end())
+						continue;
 
-					Handle<MaterialRenderData> hRD = {};
-					if (auto it = frameMat.find(key); it != frameMat.end())
-					{
-						hRD = it->second;
-					}
-					else
-					{
-						const MaterialTemplate* tmpl = inst->GetTemplate();
-						if (!tmpl)
-							continue;
-
-						hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl);
-						frameMat.emplace(key, hRD);
-					}
-
-					MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(hRD);
+					MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
 					if (!rd || !rd->GetPSO() || !rd->GetSRB())
 						continue;
 
-					if (auto* v = rd->GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
-						v->Set(m_pObjectCB);
 
-					ctx->SetPipelineState(rd->GetPSO());
-					ctx->CommitShaderResources(rd->GetSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					if (currMat != rd)
+					{
+						currMat = rd;
+
+						ctx->SetPipelineState(rd->GetPSO());
+						ctx->CommitShaderResources(rd->GetSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					}
 
 					DrawIndexedAttribs dia = {};
 					dia.NumIndices = sec.IndexCount;
@@ -700,10 +530,9 @@ namespace shz
 			ctx->TransitionResourceStates(_countof(tr2), tr2);
 		}
 
-		// ============================================================
+		// ------------------------------------------------------------
 		// PASS 2: Lighting
-		// ============================================================
-
+		// ------------------------------------------------------------
 		{
 			StateTransitionDesc tr =
 			{
@@ -742,12 +571,10 @@ namespace shz
 			ctx->TransitionResourceStates(1, &tr2);
 		}
 
-		// ============================================================
-		// PASS 3: Post (swapchain backbuffer)
-		// ============================================================
-
+		// ------------------------------------------------------------
+		// PASS 3: Post
+		// ------------------------------------------------------------
 		{
-			// Ensure backbuffer is in RT state before render pass.
 			ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
 			ASSERT(bbRtv, "Backbuffer RTV is null.");
 
@@ -778,6 +605,39 @@ namespace shz
 			drawFullScreenTriangle();
 			ctx->EndRenderPass();
 		}
+	}
+
+
+	void Renderer::EndFrame()
+	{
+		// Release swapchain-backed framebuffer at end of the frame
+		// so that DXGI can freely resize/toggle fullscreen next frame. :contentReference[oaicite:2]{index=2}
+		m_FrameBufferPostCurrent.Release();
+	}
+
+	void Renderer::ReleaseSwapChainBuffers()
+	{
+		// IMPORTANT:
+		// Release anything that can hold references to swapchain backbuffers.
+		// If any framebuffer references backbuffer RTV, DXGI fullscreen/ResizeBuffers may fail. :contentReference[oaicite:1]{index=1}
+		m_FrameBufferPostCurrent.Release();
+
+		// If you ever add per-backbuffer caches, clear them here as well.
+
+		// Note:
+		// Offscreen resources are not swapchain buffers, so they don't have to be released for fullscreen toggle.
+		// But if your platform path also recreates them, releasing is fine.
+	}
+
+	void Renderer::OnResize(uint32 width, uint32 height)
+	{
+		m_Width = width;
+		m_Height = height;
+
+		m_DeferredDirty = true;
+
+		// Size-dependent resources must be rebuilt after swapchain resize is done.
+		recreateSizeDependentResources();
 	}
 
 	// ------------------------------------------------------------
@@ -1261,7 +1121,7 @@ namespace shz
 		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
 		sci.EntryPoint = "main";
-		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
 		RefCntAutoPtr<IShader> vs;
 		{
@@ -1390,7 +1250,7 @@ namespace shz
 		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
 		sci.EntryPoint = "main";
-		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
 		RefCntAutoPtr<IShader> vs;
 		{
@@ -1512,7 +1372,7 @@ namespace shz
 		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		sci.EntryPoint = "main";
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
 		RefCntAutoPtr<IShader> vs;
 		{
@@ -1673,7 +1533,7 @@ namespace shz
 		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		sci.EntryPoint = "main";
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
 		RefCntAutoPtr<IShader> vs;
 		{
@@ -1785,6 +1645,50 @@ namespace shz
 
 		return true;
 	}
+
+	bool Renderer::buildPostFramebufferForCurrentBackBuffer()
+	{
+		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
+
+		ASSERT(dev, "Render device is null.");
+		ASSERT(sc, "SwapChain is null.");
+		ASSERT(m_RenderPassPost, "Post render pass is null.");
+
+		ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
+		if (!bbRtv)
+		{
+			// Some backends (e.g. GL path) may handle this differently.
+			// For now, enforce having RTV.
+			ASSERT(false, "Current backbuffer RTV is null.");
+			return false;
+		}
+
+		FramebufferDesc fb = {};
+		fb.Name = "FB_Post_CurrentBackBuffer";
+		fb.pRenderPass = m_RenderPassPost;
+		fb.AttachmentCount = 1;
+		fb.ppAttachments = &bbRtv;
+
+		m_FrameBufferPostCurrent.Release();
+		dev->CreateFramebuffer(fb, &m_FrameBufferPostCurrent);
+
+		if (!m_FrameBufferPostCurrent)
+		{
+			ASSERT(false, "Failed to create post framebuffer for current backbuffer.");
+			return false;
+		}
+
+		// Bind post SRB input here (per-frame is ok).
+		if (m_PostSRB)
+		{
+			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+				v->Set(m_LightingSRV);
+		}
+
+		return true;
+	}
+
 
 	void Renderer::setViewportFromView(const View& view)
 	{

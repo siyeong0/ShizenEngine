@@ -75,7 +75,12 @@ namespace shz
 		// MaterialRenderData
 		// - Cache key: MaterialInstance pointer (address)
 		// ------------------------------------------------------------
-		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(const MaterialInstance* pInstance, IPipelineState* pPSO, const MaterialTemplate* pTemplate);
+		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(
+			const MaterialInstance* pInstance, 
+			IPipelineState* pPSO, 
+			const MaterialTemplate* pTemplate,
+			IBuffer* pObjectCB,
+			IBuffer* pFrameCB);
 
 		const MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept;
 		MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) noexcept;

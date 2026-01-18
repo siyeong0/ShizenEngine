@@ -60,16 +60,16 @@ namespace shz
 		bool Initialize(const RendererCreateInfo& createInfo);
 		void Cleanup();
 
+		void BeginFrame();
+		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
+		void EndFrame();
+
 		// Must be called before swap-chain resize/fullscreen toggle.
 		// Releases all refs that can indirectly hold swap-chain backbuffers (framebuffers, cached RTVs, etc).
 		void ReleaseSwapChainBuffers();
 
 		// Call after swap-chain resize is completed and new width/height is known.
 		void OnResize(uint32 width, uint32 height);
-
-		void BeginFrame();
-		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
-		void EndFrame();
 
 		// Forwarding (Asset -> RD)
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
@@ -161,6 +161,11 @@ namespace shz
 
 		RefCntAutoPtr<IPipelineState>         m_PostPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
+
+		// Per-frame data
+		std::vector<StateTransitionDesc> m_PreBarriers;
+		std::vector<uint64> m_FrameMatKeys;
+		std::unordered_map<uint64, Handle<MaterialRenderData>> m_FrameMat; // reused map (reserve once)
 
 		bool m_ShadowDirty = true;
 		bool m_DeferredDirty = true;

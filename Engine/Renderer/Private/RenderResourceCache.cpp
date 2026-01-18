@@ -165,7 +165,7 @@ namespace shz
 		return hRD;
 	}
 
-	Handle<TextureRenderData> RenderResourceCache::GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef,EAssetLoadFlags flags)
+	Handle<TextureRenderData> RenderResourceCache::GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef, EAssetLoadFlags flags)
 	{
 		if (!m_pDevice || !texRef)
 			return {};
@@ -410,7 +410,9 @@ namespace shz
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
 		const MaterialInstance* pInstance,
 		IPipelineState* pPSO,
-		const MaterialTemplate* pTemplate)
+		const MaterialTemplate* pTemplate,
+		IBuffer* pObjectCB,
+		IBuffer* pFrameCB)
 	{
 		if (!pInstance || !pPSO || !pTemplate || !m_pDevice)
 			return {};
@@ -429,6 +431,16 @@ namespace shz
 		MaterialRenderData rd = {};
 		if (!rd.Initialize(m_pDevice, pPSO, pTemplate))
 			return {};
+
+		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+			var->Set(pFrameCB);
+		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+			var->Set(pFrameCB);
+
+		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
+			var->Set(pObjectCB);
+		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_PIXEL, "OBJECT_CONSTANTS"))
+			var->Set(pObjectCB);
 
 		UniqueHandle<MaterialRenderData> owner = UniqueHandle<MaterialRenderData>::Make();
 		const Handle<MaterialRenderData> hRD = owner.Get();
