@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -64,14 +65,9 @@ namespace shz
 		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
 		void EndFrame();
 
-		// Must be called before swap-chain resize/fullscreen toggle.
-		// Releases all refs that can indirectly hold swap-chain backbuffers (framebuffers, cached RTVs, etc).
 		void ReleaseSwapChainBuffers();
-
-		// Call after swap-chain resize is completed and new width/height is known.
 		void OnResize(uint32 width, uint32 height);
 
-		// Forwarding (Asset -> RD)
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
@@ -90,10 +86,15 @@ namespace shz
 		bool recreateShadowResources();
 		bool recreateSizeDependentResources();
 
-		// Framebuffer for current backbuffer (created in BeginFrame, released in EndFrame)
 		bool buildPostFramebufferForCurrentBackBuffer();
 
 		void setViewportFromView(const View& view);
+
+		// ------------------------------------------------------------
+		// Object table (GPU Scene-lite)
+		// ------------------------------------------------------------
+		bool ensureObjectTableCapacity(uint32 objectCount);
+		void uploadObjectTable(IDeviceContext* pCtx, const RenderScene& scene);
 
 	private:
 		RendererCreateInfo m_CreateInfo = {};
@@ -109,10 +110,17 @@ namespace shz
 
 		std::unique_ptr<RenderResourceCache> m_pCache;
 
-		// Frame/Object/Shadow CBs
+		// Frame/Shadow CBs
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
-		RefCntAutoPtr<IBuffer> m_pObjectCB;
 		RefCntAutoPtr<IBuffer> m_pShadowCB;
+
+		// Object indirection:
+		// - Object table: StructuredBuffer<ObjectConstants> (SRV)
+		// - Object index: small constant buffer updated per draw/object (uint g_ObjectIndex)
+		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
+		RefCntAutoPtr<IBuffer> m_pObjectIndexCB;
+
+		uint32 m_ObjectTableCapacity = 0;
 
 		// Targets
 		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
@@ -134,7 +142,7 @@ namespace shz
 		RefCntAutoPtr<ITextureView> m_LightingRTV;
 		RefCntAutoPtr<ITextureView> m_LightingSRV;
 
-		// RenderPass/FB (offscreen FBs can be persistent)
+		// RenderPass/FB
 		RefCntAutoPtr<IRenderPass>  m_RenderPassShadow;
 		RefCntAutoPtr<IFramebuffer> m_FrameBufferShadow;
 
@@ -146,8 +154,6 @@ namespace shz
 
 		RefCntAutoPtr<IRenderPass>  m_RenderPassPost;
 
-		// IMPORTANT:
-		// This framebuffer references swapchain backbuffer RTV -> must NOT be kept alive across frames.
 		RefCntAutoPtr<IFramebuffer> m_FrameBufferPostCurrent;
 
 		// PSO/SRB
@@ -165,7 +171,7 @@ namespace shz
 		// Per-frame data
 		std::vector<StateTransitionDesc> m_PreBarriers;
 		std::vector<uint64> m_FrameMatKeys;
-		std::unordered_map<uint64, Handle<MaterialRenderData>> m_FrameMat; // reused map (reserve once)
+		std::unordered_map<uint64, Handle<MaterialRenderData>> m_FrameMat;
 
 		bool m_ShadowDirty = true;
 		bool m_DeferredDirty = true;

@@ -410,9 +410,7 @@ namespace shz
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
 		const MaterialInstance* pInstance,
 		IPipelineState* pPSO,
-		const MaterialTemplate* pTemplate,
-		IBuffer* pObjectCB,
-		IBuffer* pFrameCB)
+		const MaterialTemplate* pTemplate)
 	{
 		if (!pInstance || !pPSO || !pTemplate || !m_pDevice)
 			return {};
@@ -432,15 +430,9 @@ namespace shz
 		if (!rd.Initialize(m_pDevice, pPSO, pTemplate))
 			return {};
 
-		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
-			var->Set(pFrameCB);
-		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
-			var->Set(pFrameCB);
-
-		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
-			var->Set(pObjectCB);
-		if (auto* var = rd.GetSRB()->GetVariableByName(SHADER_TYPE_PIXEL, "OBJECT_CONSTANTS"))
-			var->Set(pObjectCB);
+		// NOTE:
+		// - FRAME_CONSTANTS / OBJECT_TABLE / OBJECT_INDEX are bound as PSO static vars (Renderer::create*Pso()).
+		// - MaterialRenderData SRB is used for material constants & textures only.
 
 		UniqueHandle<MaterialRenderData> owner = UniqueHandle<MaterialRenderData>::Make();
 		const Handle<MaterialRenderData> hRD = owner.Get();
@@ -456,6 +448,7 @@ namespace shz
 		m_MaterialInstToRD.emplace(key, hRD);
 		return hRD;
 	}
+
 
 	const MaterialRenderData* RenderResourceCache::TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept
 	{

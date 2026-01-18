@@ -5,10 +5,13 @@ cbuffer SHADOW_CONSTANTS
     ShadowConstants g_ShadowCB;
 };
 
-cbuffer OBJECT_CONSTANTS
+cbuffer OBJECT_INDEX
 {
-    ObjectConstants g_ObjectCB;
+    uint g_ObjectIndex;
+    uint3 _pad_ObjectIndex;
 };
+
+StructuredBuffer<ObjectConstants> g_ObjectTable;
 
 struct VSInput
 {
@@ -22,6 +25,7 @@ struct PSInput
 
 void main(in VSInput VSIn, out PSInput PSIn)
 {
-    float4 WPos = mul(float4(VSIn.Pos, 1.0), g_ObjectCB.World);
+    ObjectConstants oc = g_ObjectTable[g_ObjectIndex];
+    float4 WPos = mul(float4(VSIn.Pos, 1.0), oc.World);
     PSIn.Pos = mul(WPos, g_ShadowCB.LightViewProj);
 }

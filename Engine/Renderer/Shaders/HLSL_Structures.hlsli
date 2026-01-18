@@ -48,4 +48,14 @@ struct ObjectConstants
     float4x4 WorldInvTranspose; // Normal matrix
 };
 
+// Must exist for C++ side too (Renderer.cpp includes this file under namespace hlsl)
+struct ObjectIndexConstants
+{
+    uint ObjectIndex;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
+
 #endif // HLSL_STRUCTURES_HLSLI

@@ -38,13 +38,19 @@ namespace shz
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : scDesc.Height;
 
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::FrameConstants), "Frame constants", &m_pFrameCB);
-		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectConstants), "Object constants", &m_pObjectCB);
 		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ShadowConstants), "Shadow constants", &m_pShadowCB);
+
+		// Object index CB (uint + padding)
+		CreateUniformBuffer(m_CreateInfo.pDevice, sizeof(hlsl::ObjectIndexConstants), "Object index constants", &m_pObjectIndexCB);
+
+		// Object table (StructuredBuffer<ObjectConstants>)
+		m_ObjectTableCapacity = 0;
+		if (!ensureObjectTableCapacity(256))
+			return false;
 
 		m_ShadowDirty = true;
 		m_DeferredDirty = true;
 
-		// Post FB is per-frame (swapchain-backed). Keep it null here.
 		m_FrameBufferPostCurrent.Release();
 
 		if (!recreateShadowResources())
@@ -60,9 +66,9 @@ namespace shz
 		return true;
 	}
 
+
 	void Renderer::Cleanup()
 	{
-		// Swapchain-backed refs must be released first.
 		ReleaseSwapChainBuffers();
 
 		m_ShadowPSO.Release();
@@ -103,7 +109,10 @@ namespace shz
 
 		m_pShadowCB.Release();
 		m_pFrameCB.Release();
-		m_pObjectCB.Release();
+
+		m_pObjectIndexCB.Release();
+		m_pObjectTableSB.Release();
+		m_ObjectTableCapacity = 0;
 
 		if (m_pCache)
 		{
@@ -120,6 +129,7 @@ namespace shz
 		m_DeferredWidth = 0;
 		m_DeferredHeight = 0;
 	}
+
 
 	void Renderer::BeginFrame()
 	{
@@ -138,20 +148,26 @@ namespace shz
 		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
 		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
 
-		ASSERT(ctx, "Immediate context is null.");
-		ASSERT(sc, "Swap chain is null.");
-		ASSERT(dev, "Render device is null.");
-		ASSERT(m_pCache, "RenderResourceCache is null.");
+		if (!ctx || !sc || !dev || !m_pCache)
+			return;
 
-		ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
-		ASSERT(viewFamily.Views.size() <= 1, "Only single view is supported currently.");
+		if (viewFamily.Views.empty())
+			return;
 
-		ASSERT(m_FrameBufferPostCurrent, "Post framebuffer is null. Call BeginFrame().");
+		if (!createShadowTargets())        return;
+		if (!createShadowRenderPasses())   return;
+		if (!createDeferredTargets())      return;
+		if (!createDeferredRenderPasses()) return;
+
+		if (!createShadowPso())            return;
+		if (!createGBufferPso())           return;
+		if (!createLightingPso())          return;
+		if (!createPostPso())              return;
 
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------
-		// 0) Update Frame / Shadow constants (1 map each)
+		// Update frame/shadow constants (unchanged)
 		// ------------------------------------------------------------
 		Matrix4x4 lightViewProj = {};
 		{
@@ -225,6 +241,17 @@ namespace shz
 			cb->LightViewProj = lightViewProj;
 		}
 
+		// ------------------------------------------------------------
+		// Upload ObjectTable once per frame
+		// ------------------------------------------------------------
+		{
+			const uint32 objectCount = static_cast<uint32>(scene.GetObjects().size());
+			if (!ensureObjectTableCapacity(objectCount))
+				return;
+
+			uploadObjectTable(ctx, scene);
+		}
+
 		auto drawFullScreenTriangle = [&]()
 			{
 				DrawAttribs da = {};
@@ -234,7 +261,7 @@ namespace shz
 			};
 
 		// ------------------------------------------------------------
-		// 1) Pre-Transition: reuse vectors, avoid per-frame allocations
+		// Pre-Transition
 		// ------------------------------------------------------------
 		m_PreBarriers.clear();
 		m_FrameMat.clear();
@@ -252,11 +279,10 @@ namespace shz
 			};
 
 		pushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		pushBarrier(m_pObjectCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		pushBarrier(m_pObjectIndexCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		pushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
-		// Gather materials once per frame; Apply() only once per material
-		// Also collect barriers for mesh buffers (VB/IB) once per object.
 		for (const auto& obj : scene.GetObjects())
 		{
 			const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
@@ -284,7 +310,7 @@ namespace shz
 				auto it = m_FrameMat.find(key);
 				if (it == m_FrameMat.end())
 				{
-					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl, m_pObjectCB, m_pFrameCB);
+					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, m_GBufferPSO.RawPtr(), tmpl);
 					it = m_FrameMat.emplace(key, hRD).first;
 					m_FrameMatKeys.push_back(key);
 				}
@@ -293,20 +319,11 @@ namespace shz
 				if (!rd)
 					continue;
 
-				// Material constants buffer barrier (once is fine)
 				if (auto* matCB = rd->GetMaterialConstantsBuffer())
 					pushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-
-				// IMPORTANT: Apply only once per material per frame.
-				// This should set SRB vars (textures) and upload material params as needed.
-				// To guarantee "once", do it only when first inserted above.
-				// However we don't have a direct "first inserted" flag here anymore after find().
-				// Use the key list as "unique materials" and run Apply in a second pass below.
 			}
 		}
 
-		// Apply (unique materials only)
-		// This ensures rd->Apply doesn't run per section.
 		for (uint64 key : m_FrameMatKeys)
 		{
 			auto it = m_FrameMat.find(key);
@@ -317,7 +334,6 @@ namespace shz
 			if (!rd)
 				continue;
 
-			// We need the MaterialInstance to apply. Key is inst ptr.
 			const MaterialInstance* inst = reinterpret_cast<const MaterialInstance*>(key);
 			if (!inst)
 				continue;
@@ -369,20 +385,23 @@ namespace shz
 			ctx->SetPipelineState(m_ShadowPSO);
 			ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-			for (const auto& obj : scene.GetObjects())
+			const auto& objs = scene.GetObjects();
+			for (uint32 objIndex = 0; objIndex < static_cast<uint32>(objs.size()); ++objIndex)
 			{
+				const auto& obj = objs[objIndex];
+
 				const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 				if (!mesh || !mesh->IsValid())
 					continue;
 
+				// Update only index CB per object
 				{
-					MapHelper<hlsl::ObjectConstants> ocb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					ocb->World = obj.Transform;
-					ocb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
+					MapHelper<hlsl::ObjectIndexConstants> icb(ctx, m_pObjectIndexCB, MAP_WRITE, MAP_FLAG_DISCARD);
+					icb->ObjectIndex = objIndex;
 				}
 
 				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-				uint64   offs[] = { 0 };
+				uint64 offs[] = { 0 };
 				ctx->SetVertexBuffers(0, 1, vbs, offs,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
@@ -454,23 +473,25 @@ namespace shz
 
 			ctx->BeginRenderPass(rp);
 
-			// Cache currently bound material to avoid redundant SetPipelineState/CommitShaderResources.
 			const MaterialRenderData* currMat = nullptr;
 
-			for (const auto& obj : scene.GetObjects())
+			const auto& objs = scene.GetObjects();
+			for (uint32 objIndex = 0; objIndex < static_cast<uint32>(objs.size()); ++objIndex)
 			{
+				const auto& obj = objs[objIndex];
+
 				const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 				if (!mesh || !mesh->IsValid())
 					continue;
 
+				// Update only index CB per object
 				{
-					MapHelper<hlsl::ObjectConstants> ocb(ctx, m_pObjectCB, MAP_WRITE, MAP_FLAG_DISCARD);
-					ocb->World = obj.Transform;
-					ocb->WorldInvTranspose = obj.Transform.Inversed().Transposed();
+					MapHelper<hlsl::ObjectIndexConstants> icb(ctx, m_pObjectIndexCB, MAP_WRITE, MAP_FLAG_DISCARD);
+					icb->ObjectIndex = objIndex;
 				}
 
 				IBuffer* vbs[] = { mesh->GetVertexBuffer() };
-				uint64   offs[] = { 0 };
+				uint64 offs[] = { 0 };
 				ctx->SetVertexBuffers(0, 1, vbs, offs,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
@@ -496,7 +517,6 @@ namespace shz
 					MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
 					if (!rd || !rd->GetPSO() || !rd->GetSRB())
 						continue;
-
 
 					if (currMat != rd)
 					{
@@ -1077,15 +1097,15 @@ namespace shz
 	bool Renderer::createShadowPso()
 	{
 		IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
-		ASSERT(device, "createShadowPso(): device is null.");
+		ASSERT(device, "Device is null.");
 
-		if (m_ShadowPSO)
+		if (m_ShadowPSO && m_ShadowSRB)
 		{
 			return true;
 		}
 
 		GraphicsPipelineStateCreateInfo psoCi = {};
-		psoCi.PSODesc.Name = "Shadow Depth PSO";
+		psoCi.PSODesc.Name = "Shadow PSO";
 		psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
 		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
@@ -1093,9 +1113,7 @@ namespace shz
 		gp.pRenderPass = m_RenderPassShadow;
 		gp.SubpassIndex = 0;
 
-		// Render targets are defined by the render pass.
 		gp.NumRenderTargets = 0;
-		gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
 		gp.DSVFormat = TEX_FORMAT_UNKNOWN;
 
 		gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1111,7 +1129,6 @@ namespace shz
 			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position
 		};
 
-		// NOTE: Your vertex format is interleaved (pos/uv/normal/tangent...), so explicit stride is required.
 		layoutElems[0].Stride = sizeof(float) * 11;
 
 		gp.InputLayout.LayoutElements = layoutElems;
@@ -1160,13 +1177,9 @@ namespace shz
 
 		psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		ShaderResourceVariableDesc vars[] =
-		{
-			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
-			{ SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_STATIC  },
-		};
-		psoCi.PSODesc.ResourceLayout.Variables = vars;
-		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+		// Only dynamic/mutable need explicit descs; here none.
+		psoCi.PSODesc.ResourceLayout.Variables = nullptr;
+		psoCi.PSODesc.ResourceLayout.NumVariables = 0;
 
 		device->CreateGraphicsPipelineState(psoCi, &m_ShadowPSO);
 		if (!m_ShadowPSO)
@@ -1175,12 +1188,16 @@ namespace shz
 			return false;
 		}
 
-		// Bind SHADOW_CONSTANTS as static.
+		// Bind statics
 		{
 			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
-			{
 				var->Set(m_pShadowCB);
-			}
+
+			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "OBJECT_INDEX"))
+				var->Set(m_pObjectIndexCB);
+
+			if (auto* var = m_ShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 		}
 
 		m_ShadowPSO->CreateShaderResourceBinding(&m_ShadowSRB, true);
@@ -1190,16 +1207,9 @@ namespace shz
 			return false;
 		}
 
-		// OBJECT_CONSTANTS is dynamic, so it is bound on the SRB.
-		{
-			if (auto* var = m_ShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
-			{
-				var->Set(m_pObjectCB);
-			}
-		}
-
 		return true;
 	}
+
 
 	bool Renderer::createGBufferPso()
 	{
@@ -1220,7 +1230,6 @@ namespace shz
 		gp.pRenderPass = m_RenderPassGBuffer;
 		gp.SubpassIndex = 0;
 
-		// Render targets are defined by the render pass.
 		gp.NumRenderTargets = 0;
 		gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
 		gp.RTVFormats[1] = TEX_FORMAT_UNKNOWN;
@@ -1291,7 +1300,6 @@ namespace shz
 
 		ShaderResourceVariableDesc vars[] =
 		{
-			{ SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS",   SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
 			{ SHADER_TYPE_PIXEL,  "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
 
 			{ SHADER_TYPE_PIXEL,  "g_BaseColorTex",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -1323,16 +1331,18 @@ namespace shz
 			return false;
 		}
 
-		// Bind FRAME_CONSTANTS as static.
+		// Bind statics (once)
 		{
 			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
-			{
 				var->Set(m_pFrameCB);
-			}
 			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
-			{
 				var->Set(m_pFrameCB);
-			}
+
+			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "OBJECT_INDEX"))
+				var->Set(m_pObjectIndexCB);
+
+			if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 		}
 
 		return true;
@@ -1701,6 +1711,78 @@ namespace shz
 		vp.MaxDepth = 1.f;
 
 		m_CreateInfo.pImmediateContext->SetViewports(1, &vp, 0, 0);
+	}
+
+	bool Renderer::ensureObjectTableCapacity(uint32 objectCount)
+	{
+		IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(dev, "ensureObjectTableCapacity(): device is null.");
+
+		if (objectCount == 0)
+			objectCount = 1;
+
+		if (m_pObjectTableSB && m_ObjectTableCapacity >= objectCount)
+			return true;
+
+		// Grow policy: round up
+		uint32 newCap = (m_ObjectTableCapacity == 0) ? 256 : m_ObjectTableCapacity;
+		while (newCap < objectCount)
+			newCap *= 2;
+
+		BufferDesc desc = {};
+		desc.Name = "ObjectTableSB";
+		desc.Usage = USAGE_DYNAMIC;
+		desc.BindFlags = BIND_SHADER_RESOURCE;
+		desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+		desc.Mode = BUFFER_MODE_STRUCTURED;
+		desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+		desc.Size = static_cast<uint64>(desc.ElementByteStride) * static_cast<uint64>(newCap);
+
+		BufferData initData = {};
+		RefCntAutoPtr<IBuffer> newBuf;
+		dev->CreateBuffer(desc, &initData, &newBuf);
+
+		if (!newBuf)
+		{
+			ASSERT(false, "Failed to create ObjectTableSB.");
+			return false;
+		}
+
+		m_pObjectTableSB = newBuf;
+		m_ObjectTableCapacity = newCap;
+
+		BufferViewDesc viewDesc = {};
+		viewDesc.ViewType = BUFFER_VIEW_SHADER_RESOURCE;
+		viewDesc.ByteOffset = 0;
+		viewDesc.ByteWidth = 0; // 0 = whole buffer
+
+		return true;
+	}
+
+	void Renderer::uploadObjectTable(IDeviceContext* pCtx, const RenderScene& scene)
+	{
+		ASSERT(pCtx, "uploadObjectTable(): context is null.");
+		ASSERT(m_pObjectTableSB, "uploadObjectTable(): object table buffer is null.");
+
+		const auto& objs = scene.GetObjects();
+		const uint32 count = static_cast<uint32>(objs.size());
+		if (count == 0)
+			return;
+
+		MapHelper<hlsl::ObjectConstants> map(pCtx, m_pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+		hlsl::ObjectConstants* dst = map;
+
+		for (uint32 i = 0; i < count; ++i)
+		{
+			const auto& obj = objs[i];
+
+			hlsl::ObjectConstants oc = {};
+			oc.World = obj.Transform;
+			oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
+
+			dst[i] = oc;
+		}
 	}
 
 } // namespace shz
