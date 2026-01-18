@@ -153,7 +153,7 @@ namespace shz
 	};
 
 #ifdef SHZ_DEBUG
-#    define RESOURCE_VALIDATION_FAILURE UNEXPECTED
+#    define RESOURCE_VALIDATION_FAILURE ASSERTION_FAILED
 #else
 #    define RESOURCE_VALIDATION_FAILURE LOG_ERROR_MESSAGE
 #endif
@@ -277,7 +277,7 @@ namespace shz
 			}
 
 			const uint32 OffsetAlignment = pBufferImpl->GetDevice()->GetAdapterInfo().Buffer.ConstantBufferOffsetAlignment;
-			VERIFY_EXPR(OffsetAlignment != 0);
+			ASSERT_EXPR(OffsetAlignment != 0);
 			if ((BindInfo.BufferBaseOffset % OffsetAlignment) != 0)
 			{
 				RESOURCE_VALIDATION_FAILURE("Buffer base offset (", BindInfo.BufferBaseOffset, ") is not a multiple of required constant buffer offset alignment (",
@@ -336,7 +336,7 @@ namespace shz
 
 	inline RESOURCE_DIMENSION GetResourceViewDimension(const ITextureView* pTexView)
 	{
-		VERIFY_EXPR(pTexView != nullptr);
+		ASSERT_EXPR(pTexView != nullptr);
 		return pTexView->GetDesc().TextureDim;
 	}
 
@@ -347,7 +347,7 @@ namespace shz
 
 	inline uint32 GetResourceSampleCount(const ITextureView* pTexView)
 	{
-		VERIFY_EXPR(pTexView != nullptr);
+		ASSERT_EXPR(pTexView != nullptr);
 		return const_cast<ITextureView*>(pTexView)->GetTexture()->GetDesc().SampleCount;
 	}
 
@@ -566,8 +566,8 @@ namespace shz
 				pBuffer = pObject != nullptr ? pBuffView->template GetBuffer<const BufferImplType>() : nullptr;
 
 				const BufferViewDesc& ViewDesc = pBuffView->GetDesc();
-				VERIFY_EXPR(BufferBaseOffset == 0 || BufferBaseOffset == ViewDesc.ByteOffset);
-				VERIFY_EXPR(BufferRangeSize == 0 || BufferRangeSize == ViewDesc.ByteWidth);
+				ASSERT_EXPR(BufferBaseOffset == 0 || BufferBaseOffset == ViewDesc.ByteOffset);
+				ASSERT_EXPR(BufferRangeSize == 0 || BufferRangeSize == ViewDesc.ByteWidth);
 				BufferBaseOffset = ViewDesc.ByteOffset;
 				BufferRangeSize = ViewDesc.ByteWidth;
 			}
@@ -594,7 +594,7 @@ namespace shz
 			const uint32 OffsetAlignment = (ResDesc.ResourceType == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER) ?
 				BufferProps.ConstantBufferOffsetAlignment :
 				BufferProps.StructuredBufferOffsetAlignment;
-			VERIFY_EXPR(OffsetAlignment != 0);
+			ASSERT_EXPR(OffsetAlignment != 0);
 
 			if ((BufferDynamicOffset % OffsetAlignment) != 0)
 			{
@@ -686,7 +686,7 @@ namespace shz
 		{
 			const PipelineResourceDesc& Desc = GetDesc();
 
-			DEV_CHECK_ERR(FirstElement + NumElements <= Desc.ArraySize,
+			ASSERT(FirstElement + NumElements <= Desc.ArraySize,
 				"SetArray arguments are invalid for '", Desc.Name, "' variable: specified element range (", FirstElement, " .. ",
 				FirstElement + NumElements - 1, ") is out of array bounds 0 .. ", Desc.ArraySize - 1);
 
@@ -701,7 +701,7 @@ namespace shz
 			uint32                    ArrayIndex,
 			SET_SHADER_RESOURCE_FLAGS Flags) override
 		{
-			DEV_CHECK_ERR(GetDesc().ResourceType == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, "SetBufferRange() is only allowed for constant buffers.");
+			ASSERT(GetDesc().ResourceType == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, "SetBufferRange() is only allowed for constant buffers.");
 			static_cast<ThisImplType*>(this)->BindResource(BindResourceInfo{ ArrayIndex, pObject, Flags, Offset, Size });
 		}
 
@@ -710,9 +710,9 @@ namespace shz
 #ifdef SHZ_DEBUG
 			{
 				const PipelineResourceDesc& Desc = GetDesc();
-				DEV_CHECK_ERR((Desc.Flags & PIPELINE_RESOURCE_FLAG_NO_DYNAMIC_BUFFERS) == 0,
+				ASSERT((Desc.Flags & PIPELINE_RESOURCE_FLAG_NO_DYNAMIC_BUFFERS) == 0,
 					"SetBufferOffset() is not only allowed for variables created with PIPELINE_RESOURCE_FLAG_NO_DYNAMIC_BUFFERS flag.");
-				DEV_CHECK_ERR(Desc.VarType != SHADER_RESOURCE_VARIABLE_TYPE_STATIC,
+				ASSERT(Desc.VarType != SHADER_RESOURCE_VARIABLE_TYPE_STATIC,
 					"SetBufferOffset() is not allowed for static variables.");
 			}
 #endif
@@ -837,12 +837,12 @@ namespace shz
 
 		~ShaderVariableManagerBase()
 		{
-			VERIFY(m_pVariables == nullptr, "Destroy() has not been called. The shader variable memory will leak.");
+			ASSERT(m_pVariables == nullptr, "Destroy() has not been called. The shader variable memory will leak.");
 		}
 
 		void Initialize(const PipelineResourceSignatureType& Signature, IMemoryAllocator& Allocator, size_t Size)
 		{
-			VERIFY_EXPR(m_pSignature == nullptr);
+			ASSERT_EXPR(m_pSignature == nullptr);
 			m_pSignature = &Signature;
 
 			if (Size > 0)
@@ -860,7 +860,7 @@ namespace shz
 		{
 			if (m_pVariables != nullptr)
 			{
-				VERIFY(m_pDbgAllocator == &Allocator, "The allocator is not the same as the one that was used to allocate memory");
+				ASSERT(m_pDbgAllocator == &Allocator, "The allocator is not the same as the one that was used to allocate memory");
 				Allocator.Free(m_pVariables);
 				m_pVariables = nullptr;
 			}
@@ -871,7 +871,7 @@ namespace shz
 
 		void BindResources(IResourceMapping* pResourceMapping, BIND_SHADER_RESOURCES_FLAGS Flags)
 		{
-			DEV_CHECK_ERR(pResourceMapping != nullptr, "Failed to bind resources: resource mapping is null");
+			ASSERT(pResourceMapping != nullptr, "Failed to bind resources: resource mapping is null");
 
 			if ((Flags & BIND_SHADER_RESOURCES_UPDATE_ALL) == 0)
 				Flags |= BIND_SHADER_RESOURCES_UPDATE_ALL;
