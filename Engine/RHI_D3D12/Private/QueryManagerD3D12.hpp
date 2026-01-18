@@ -113,7 +113,7 @@ namespace shz
 			}
 			uint32 GetResolveBufferOffset(uint32 QueryIdx) const
 			{
-				VERIFY_EXPR(QueryIdx < m_QueryCount);
+				ASSERT_EXPR(QueryIdx < m_QueryCount);
 				return m_ResolveBufferBaseOffset + QueryIdx * m_AlignedQueryDataSize;
 			}
 			ID3D12QueryHeap* GetD3D12QueryHeap() const

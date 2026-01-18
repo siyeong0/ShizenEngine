@@ -31,7 +31,7 @@
 #include <array>
 
 #include "Tools/Image/Public/Image.h"
-#include "Primitives/Errors.hpp"
+#include "Tools/Image/Public/TextureUtilities.h"
 
 #include <tiffio.h>
 #include <png.h>
@@ -39,15 +39,17 @@
 #include "JPEGCodec.h"
 #include "SGILoader.h"
 
+#include "Primitives/Align.hpp"
+#include "Primitives/DebugUtilities.hpp"
+
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Memory/Public/DataBlobImpl.hpp"
 #include "Engine/Core/Common/Public/ProxyDataBlob.hpp"
-#include "Primitives/DebugUtilities.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-#include "Primitives/Align.hpp"
-#include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Core/Common/Public/BasicFileStream.hpp"
 #include "Engine/Core/Common/Public/StringTools.hpp"
-#include "Tools/Image/Public/TextureUtilities.h"
+
+#include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
@@ -76,7 +78,7 @@ namespace shz
 		static tmsize_t TIFFReadProc(thandle_t pClientData, void* pBuffer, tmsize_t Size)
 		{
 			TIFFClientOpenWrapper* pThis = static_cast<TIFFClientOpenWrapper*>(pClientData);
-			VERIFY(pThis->m_pData != nullptr, "TIFF file was not opened for reading");
+			ASSERT(pThis->m_pData != nullptr, "TIFF file was not opened for reading");
 			const void* pSrcPtr = static_cast<const uint8*>(pThis->m_pData) + pThis->m_Offset;
 			memcpy(pBuffer, pSrcPtr, Size);
 			pThis->m_Offset += Size;
@@ -86,7 +88,7 @@ namespace shz
 		static tmsize_t TIFFWriteProc(thandle_t pClientData, void* pBuffer, tmsize_t Size)
 		{
 			TIFFClientOpenWrapper* pThis = static_cast<TIFFClientOpenWrapper*>(pClientData);
-			VERIFY(pThis->m_pDstBlob != nullptr, "TIFF file was not opened for writing");
+			ASSERT(pThis->m_pDstBlob != nullptr, "TIFF file was not opened for writing");
 			if (pThis->m_Offset + Size > pThis->m_Size)
 			{
 				pThis->m_Size = pThis->m_Offset + Size;
@@ -106,7 +108,7 @@ namespace shz
 			case SEEK_SET: pThis->m_Offset = static_cast<size_t>(Offset); break;
 			case SEEK_CUR: pThis->m_Offset += static_cast<size_t>(Offset); break;
 			case SEEK_END: pThis->m_Offset = pThis->m_Size + static_cast<size_t>(Offset); break;
-			default: UNEXPECTED("Unexpected whence");
+			default: ASSERT(false, "Unexpected whence");
 			}
 
 			return pThis->m_Offset;
@@ -130,13 +132,13 @@ namespace shz
 
 		static int TIFFMapFileProc(thandle_t pClientData, void** base, toff_t* size)
 		{
-			UNEXPECTED("Client file mapping is not implemented. Use \'m\' when opening TIFF file to disable file mapping.");
+			ASSERT(false, "Client file mapping is not implemented. Use \'m\' when opening TIFF file to disable file mapping.");
 			return 0;
 		}
 
 		static void TIFFUnmapFileProc(thandle_t pClientData, void* base, toff_t size)
 		{
-			UNEXPECTED("Client file mapping is not implemented. Use \'m\' when opening TIFF file to disable file mapping.");
+			ASSERT(false, "Client file mapping is not implemented. Use \'m\' when opening TIFF file to disable file mapping.");
 		}
 
 	private:
@@ -234,7 +236,7 @@ namespace shz
 			TIFFGetField(TiffFile, TIFFTAG_PLANARCONFIG, &PlanarConfig);
 			if (PlanarConfig == PLANARCONFIG_CONTIG || Desc.NumComponents == 1)
 			{
-				VERIFY_EXPR(Desc.RowStride >= ScanlineSize);
+				ASSERT_EXPR(Desc.RowStride >= ScanlineSize);
 				uint8* pDataPtr = pDstPixels->GetDataPtr<uint8>();
 				for (uint32 row = 0; row < Desc.Height; row++, pDataPtr += Desc.RowStride)
 				{
@@ -274,14 +276,14 @@ namespace shz
 							break;
 
 						default:
-							UNEXPECTED("Unexpected component bit depth (", BitsPerSample, ").");
+							ASSERT(false, "Unexpected component bit depth (", BitsPerSample, ").");
 						}
 					}
 				}
 			}
 			else
 			{
-				UNEXPECTED("Unexpected planar configuration (", PlanarConfig, ").");
+				ASSERT(false, "Unexpected planar configuration (", PlanarConfig, ").");
 			}
 		}
 
@@ -319,7 +321,7 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("Unexpected component type");
+				ASSERT(false, "Unexpected component type");
 			}
 
 			if (pDecodedData == nullptr)
@@ -504,8 +506,8 @@ namespace shz
 	{
 		const TextureFormatAttribs& SrcFmtAttribs = GetTextureFormatAttribs(SrcFormat);
 		const TextureFormatAttribs& DstFmtAttribs = GetTextureFormatAttribs(DstFormat);
-		VERIFY(SrcFmtAttribs.ComponentSize == 1, "Only 8-bit formats are currently supported");
-		VERIFY(DstFmtAttribs.ComponentSize == 1, "Only 8-bit formats are currently supported");
+		ASSERT(SrcFmtAttribs.ComponentSize == 1, "Only 8-bit formats are currently supported");
+		ASSERT(DstFmtAttribs.ComponentSize == 1, "Only 8-bit formats are currently supported");
 
 		uint8 NumDstComponents = SrcFmtAttribs.NumComponents;
 		if (!KeepAlpha)
@@ -562,7 +564,7 @@ namespace shz
 		}
 		else
 		{
-			UNSUPPORTED("Unsupported image file format");
+			ASSERT(false, "Unsupported image file format");
 		}
 		pEncodedData->QueryInterface(IID_DataBlob, ppEncodedData);
 	}
@@ -707,7 +709,7 @@ namespace shz
 			return IsImageUniform<uint64>(m_pData->GetConstDataPtr(), m_Desc.Width, m_Desc.Height, m_Desc.NumComponents, m_Desc.RowStride);
 
 		default:
-			UNEXPECTED("Unexpected component size (", ComponentSize, ")");
+			ASSERT(false, "Unexpected component size (", ComponentSize, ")");
 			return false;
 		}
 	}
@@ -753,7 +755,7 @@ namespace shz
 	{
 		if (pImageData == nullptr)
 		{
-			UNEXPECTED("pImageData must not be null");
+			ASSERT(false, "pImageData must not be null");
 			return IMAGE_FILE_FORMAT_UNKNOWN;
 		}
 

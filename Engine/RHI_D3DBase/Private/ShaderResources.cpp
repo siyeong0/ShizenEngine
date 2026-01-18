@@ -45,7 +45,7 @@ SHADER_RESOURCE_TYPE D3DShaderResourceAttribs::GetShaderResourceType() const
             break;
 
         case D3D_SIT_TBUFFER:
-            UNSUPPORTED("TBuffers are not supported");
+            ASSERT(false, "TBuffers are not supported");
             return SHADER_RESOURCE_TYPE_UNKNOWN;
             break;
 
@@ -79,7 +79,7 @@ SHADER_RESOURCE_TYPE D3DShaderResourceAttribs::GetShaderResourceType() const
             break;
 
         default:
-            UNEXPECTED("Unknown input type");
+            ASSERT(false, "Unknown input type");
             return SHADER_RESOURCE_TYPE_UNKNOWN;
     }
 }
@@ -132,7 +132,7 @@ void ShaderResources::AllocateMemory(IMemoryAllocator&                Allocator,
     auto AdvanceOffset = [&CurrentOffset](uint32 NumResources) //
     {
         constexpr uint32 MaxOffset = std::numeric_limits<OffsetType>::max();
-        VERIFY(CurrentOffset <= MaxOffset, "Current offset (", CurrentOffset, ") exceeds max allowed value (", MaxOffset, ")");
+        ASSERT(CurrentOffset <= MaxOffset, "Current offset (", CurrentOffset, ") exceeds max allowed value (", MaxOffset, ")");
         OffsetType Offset = static_cast<OffsetType>(CurrentOffset);
         CurrentOffset += NumResources;
         return Offset;
@@ -151,13 +151,13 @@ void ShaderResources::AllocateMemory(IMemoryAllocator&                Allocator,
     size_t AlignedResourceNamesPoolSize = AlignUp(ResourceNamesPoolSize, sizeof(void*));
     size_t MemorySize = m_TotalResources * sizeof(D3DShaderResourceAttribs) + AlignedResourceNamesPoolSize * sizeof(char);
 
-    VERIFY_EXPR(GetNumCBs()         == ResCounters.NumCBs);
-    VERIFY_EXPR(GetNumTexSRV()      == ResCounters.NumTexSRVs);
-    VERIFY_EXPR(GetNumTexUAV()      == ResCounters.NumTexUAVs);
-    VERIFY_EXPR(GetNumBufSRV()      == ResCounters.NumBufSRVs);
-    VERIFY_EXPR(GetNumBufUAV()      == ResCounters.NumBufUAVs);
-    VERIFY_EXPR(GetNumSamplers()    == ResCounters.NumSamplers);
-    VERIFY_EXPR(GetNumAccelStructs()== ResCounters.NumAccelStructs);
+    ASSERT_EXPR(GetNumCBs()         == ResCounters.NumCBs);
+    ASSERT_EXPR(GetNumTexSRV()      == ResCounters.NumTexSRVs);
+    ASSERT_EXPR(GetNumTexUAV()      == ResCounters.NumTexUAVs);
+    ASSERT_EXPR(GetNumBufSRV()      == ResCounters.NumBufSRVs);
+    ASSERT_EXPR(GetNumBufUAV()      == ResCounters.NumBufUAVs);
+    ASSERT_EXPR(GetNumSamplers()    == ResCounters.NumSamplers);
+    ASSERT_EXPR(GetNumAccelStructs()== ResCounters.NumAccelStructs);
     
 
     if (MemorySize)
@@ -300,15 +300,15 @@ void ShaderResources::DvpVerifyResourceLayout(const PipelineResourceLayoutDesc& 
 
 uint32 ShaderResources::FindAssignedSamplerId(const D3DShaderResourceAttribs& TexSRV, const char* SamplerSuffix) const
 {
-    VERIFY_EXPR(SamplerSuffix != nullptr && *SamplerSuffix != 0);
-    VERIFY_EXPR(TexSRV.GetInputType() == D3D_SIT_TEXTURE && TexSRV.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
+    ASSERT_EXPR(SamplerSuffix != nullptr && *SamplerSuffix != 0);
+    ASSERT_EXPR(TexSRV.GetInputType() == D3D_SIT_TEXTURE && TexSRV.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
     uint32 NumSamplers = GetNumSamplers();
     for (uint32 s = 0; s < NumSamplers; ++s)
     {
         const D3DShaderResourceAttribs& Sampler = GetSampler(s);
         if (StreqSuff(Sampler.Name, TexSRV.Name, SamplerSuffix))
         {
-            DEV_CHECK_ERR(Sampler.BindCount == TexSRV.BindCount || Sampler.BindCount == 1, "Sampler '", Sampler.Name, "' assigned to texture '", TexSRV.Name, "' must be scalar or have the same array dimension (", TexSRV.BindCount, "). Actual sampler array dimension : ", Sampler.BindCount);
+            ASSERT(Sampler.BindCount == TexSRV.BindCount || Sampler.BindCount == 1, "Sampler '", Sampler.Name, "' assigned to texture '", TexSRV.Name, "' must be scalar or have the same array dimension (", TexSRV.BindCount, "). Actual sampler array dimension : ", Sampler.BindCount);
             return s;
         }
     }
@@ -380,7 +380,7 @@ bool D3DShaderResourceAttribs::IsMultisample() const
 
 HLSLShaderResourceDesc ShaderResources::GetHLSLShaderResourceDesc(uint32 Index) const
 {
-    DEV_CHECK_ERR(Index < m_TotalResources, "Resource index (", Index, ") is out of range");
+    ASSERT(Index < m_TotalResources, "Resource index (", Index, ") is out of range");
     HLSLShaderResourceDesc HLSLResourceDesc = {};
     if (Index < m_TotalResources)
     {

@@ -187,7 +187,7 @@ namespace shz
 			case GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM:   return TEX_FORMAT_BC7_UNORM_SRGB;
 				
 			default:
-				UNSUPPORTED("Unsupported internal format");
+				ASSERT(false, "Unsupported internal format");
 				return TEX_FORMAT_UNKNOWN;
 			}
 		}
@@ -284,7 +284,7 @@ namespace shz
 					pData += AlignUp(MipInfo.MipSize, 4u);
 				}
 			}
-			VERIFY(pData - pOrigDataPtr == static_cast<ptrdiff_t>(DataSize), "Unexpected data size");
+			ASSERT(pData - pOrigDataPtr == static_cast<ptrdiff_t>(DataSize), "Unexpected data size");
 		}
 		else
 		{

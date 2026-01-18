@@ -97,14 +97,14 @@ namespace shz
 
 		const Plane3D& GetPlane(PLANE_IDX Idx) const
 		{
-			VERIFY_EXPR(Idx < NUM_PLANES);
+			ASSERT_EXPR(Idx < NUM_PLANES);
 			const Plane3D* Planes = reinterpret_cast<const Plane3D*>(this);
 			return Planes[static_cast<size_t>(Idx)];
 		}
 
 		Plane3D& GetPlane(PLANE_IDX Idx)
 		{
-			VERIFY_EXPR(Idx < NUM_PLANES);
+			ASSERT_EXPR(Idx < NUM_PLANES);
 			Plane3D* Planes = reinterpret_cast<Plane3D*>(this);
 			return Planes[static_cast<size_t>(Idx)];
 		}
@@ -629,7 +629,7 @@ namespace shz
 
 	inline float GetPointToBoxDistanceSqr(const BoundBox& BB, const float3& Pos)
 	{
-		VERIFY_EXPR(BB.Max.x >= BB.Min.x &&
+		ASSERT_EXPR(BB.Max.x >= BB.Min.x &&
 			BB.Max.y >= BB.Min.y &&
 			BB.Max.z >= BB.Min.z);
 		const float3 OffsetVec{
@@ -721,7 +721,7 @@ namespace shz
 	)
 	{
 		// https://lxjk.github.io/2017/04/15/Calculate-Minimal-Bounding-Sphere-of-Frustum.html
-		VERIFY_EXPR(FarPlane >= NearPlane);
+		ASSERT_EXPR(FarPlane >= NearPlane);
 		float k2 = 1.f / (Proj_00 * Proj_00) + 1.f / (Proj_11 * Proj_11);
 		if (k2 > (FarPlane - NearPlane) / (FarPlane + NearPlane))
 		{
@@ -743,7 +743,7 @@ namespace shz
 		float& EnterDist,
 		float& ExitDist)
 	{
-		VERIFY_EXPR(RayDirection != float3(0, 0, 0));
+		ASSERT_EXPR(RayDirection != float3(0, 0, 0));
 
 		BoxMin -= RayOrigin;
 		BoxMax -= RayOrigin;
@@ -790,7 +790,7 @@ namespace shz
 		float& EnterDist,
 		float& ExitDist)
 	{
-		VERIFY_EXPR(RayDirection != float2(0, 0));
+		ASSERT_EXPR(RayDirection != float2(0, 0));
 
 		BoxMin -= RayOrigin;
 		BoxMax -= RayOrigin;
@@ -900,7 +900,7 @@ namespace shz
 		int2      i2GridSize,
 		TCallback Callback)
 	{
-		VERIFY_EXPR(i2GridSize.x > 0 && i2GridSize.y > 0);
+		ASSERT_EXPR(i2GridSize.x > 0 && i2GridSize.y > 0);
 		const float2 f2GridSize = {static_cast<float32>(i2GridSize.x), static_cast<float32>(i2GridSize.y)};
 
 		if (f2Start == f2End)
@@ -931,10 +931,10 @@ namespace shz
 			const float ty = p + f2Direction.x * static_cast<float>(dv);
 
 			const int2 i2End = { static_cast<int>(f2End.x), static_cast<int>(f2End.y) };
-			VERIFY_EXPR(i2End.x >= 0 && i2End.y >= 0 && i2End.x <= i2GridSize.x && i2End.y <= i2GridSize.y);
+			ASSERT_EXPR(i2End.x >= 0 && i2End.y >= 0 && i2End.x <= i2GridSize.x && i2End.y <= i2GridSize.y);
 
 			int2 i2Pos = { static_cast<int>(f2Start.x), static_cast<int>(f2Start.y) };
-			VERIFY_EXPR(i2Pos.x >= 0 && i2Pos.y >= 0 && i2Pos.x <= i2GridSize.x && i2Pos.y <= i2GridSize.y);
+			ASSERT_EXPR(i2Pos.x >= 0 && i2Pos.y >= 0 && i2Pos.x <= i2GridSize.x && i2Pos.y <= i2GridSize.y);
 
 			// Loop condition checks if we missed the end point of the line due to
 			// floating point precision issues.
@@ -1081,7 +1081,7 @@ namespace shz
 		if (V2.y < V1.y)
 			std::swap(V2, V1);
 
-		VERIFY_EXPR(V0.y <= V1.y && V1.y <= V2.y);
+		ASSERT_EXPR(V0.y <= V1.y && V1.y <= V2.y);
 
 		const int iStartRow = static_cast<int>(std::ceilf(V0.y));
 		const int iEndRow = static_cast<int>(std::floorf(V2.y));
@@ -1176,7 +1176,7 @@ namespace shz
 		const Vector2& Box1Min,
 		const Vector2& Box1Max)
 	{
-		VERIFY_EXPR(Box0Max.x >= Box0Min.x && Box0Max.y >= Box0Min.y &&
+		ASSERT_EXPR(Box0Max.x >= Box0Min.x && Box0Max.y >= Box0Min.y &&
 			Box1Max.x >= Box1Min.x && Box1Max.y >= Box1Min.y);
 		if (bAllowTouch)
 		{
@@ -1204,7 +1204,7 @@ namespace shz
 	template <bool AllowTouch, typename T>
 	bool CheckLineSectionOverlap(T Min0, T Max0, T Min1, T Max1)
 	{
-		VERIFY_EXPR(Min0 <= Max0 && Min1 <= Max1);
+		ASSERT_EXPR(Min0 <= Max0 && Min1 <= Max1);
 		//     [------]         [------]
 		//   Min0    Max0    Min1     Max1
 		//
@@ -1367,7 +1367,7 @@ namespace shz
 				const int Idx1 = m_RemainingVertIds[WrapIndex(vert_id + 0, RemainingVertCount)];
 				const int Idx2 = m_RemainingVertIds[WrapIndex(vert_id + 1, RemainingVertCount)];
 
-				VERIFY_EXPR(m_VertTypes[Idx1] == VertexType::Convexx);
+				ASSERT_EXPR(m_VertTypes[Idx1] == VertexType::Convexx);
 
 				const auto& V0 = Polygon[Idx0];
 				const auto& V1 = Polygon[Idx1];
@@ -1555,11 +1555,11 @@ namespace shz
 				Tangent = Vector3::Cross(Vector3{1.f, 0.f, 0.f }, Normal);
 			else
 				Tangent = Vector3::Cross(Vector3{ 0.f, 0.f, 1.f}, Normal);
-			VERIFY_EXPR(Vector3::Length(Tangent) > 0);
+			ASSERT_EXPR(Vector3::Length(Tangent) > 0);
 			Tangent = Vector3::Normalize(Tangent);
 
 			auto Bitangent = Vector3::Cross(Normal, Tangent);
-			VERIFY_EXPR(Vector3::Length(Bitangent) > 0);
+			ASSERT_EXPR(Vector3::Length(Bitangent) > 0);
 			Bitangent = Vector3::Normalize(Bitangent);
 
 			// Project the polygon

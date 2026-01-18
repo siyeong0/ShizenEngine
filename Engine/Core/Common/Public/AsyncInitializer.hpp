@@ -50,7 +50,7 @@ namespace shz
 		ASYNC_TASK_STATUS Update(bool WaitForCompletion)
 		{
 			ASYNC_TASK_STATUS CurrStatus = m_Status.load();
-			VERIFY_EXPR(CurrStatus != ASYNC_TASK_STATUS_UNKNOWN);
+			ASSERT_EXPR(CurrStatus != ASYNC_TASK_STATUS_UNKNOWN);
 			if (CurrStatus <= ASYNC_TASK_STATUS_RUNNING)
 			{
 				RefCntAutoPtr<IAsyncTask> pTask;
@@ -104,7 +104,7 @@ namespace shz
 			uint32        NumPrerequisites,
 			HanlderType&& Handler)
 		{
-			VERIFY_EXPR(pThreadPool != nullptr);
+			ASSERT_EXPR(pThreadPool != nullptr);
 			return std::unique_ptr<AsyncInitializer>{
 				new AsyncInitializer{
 					EnqueueAsyncWork(pThreadPool, ppPrerequisites, NumPrerequisites,

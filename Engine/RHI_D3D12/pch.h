@@ -48,11 +48,11 @@ constexpr D3D12_RESOURCE_STATES D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE = stati
 #endif
 
 #include "Primitives/BasicTypes.h"
+#include "Primitives/DebugUtilities.hpp"
 #include "Primitives/FlagEnum.h"
 #include "Platforms/Common/PlatformDefinitions.h"
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-#include "Primitives/DebugUtilities.hpp"
 #include "Engine/RHI_D3DBase/Public/D3DErrors.hpp"
 #include "Engine/Core/Common/Public/Cast.hpp"
 #include "Engine/Core/Memory/Public/STDAllocator.hpp"

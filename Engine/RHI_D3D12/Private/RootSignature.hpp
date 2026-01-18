@@ -80,25 +80,25 @@ namespace shz
 
 		PipelineResourceSignatureD3D12Impl* GetResourceSignature(uint32 index) const
 		{
-			VERIFY_EXPR(index < m_SignatureCount);
+			ASSERT_EXPR(index < m_SignatureCount);
 			return m_ResourceSignatures[index].pSignature;
 		}
 
 		ID3D12RootSignature* GetD3D12RootSignature() const
 		{
-			VERIFY_EXPR(m_pd3d12RootSignature);
+			ASSERT_EXPR(m_pd3d12RootSignature);
 			return m_pd3d12RootSignature;
 		}
 
 		uint32 GetBaseRootIndex(uint32 BindingIndex) const
 		{
-			VERIFY_EXPR(BindingIndex < m_SignatureCount);
+			ASSERT_EXPR(BindingIndex < m_SignatureCount);
 			return m_ResourceSignatures[BindingIndex].BaseRootIndex;
 		}
 
 		uint32 GetBaseRegisterSpace(uint32 BindingIndex) const
 		{
-			VERIFY_EXPR(BindingIndex <= m_SignatureCount);
+			ASSERT_EXPR(BindingIndex <= m_SignatureCount);
 			return m_ResourceSignatures[BindingIndex].BaseRegisterSpace;
 		}
 
@@ -152,7 +152,7 @@ namespace shz
 
 		uint32 GetRegisterSpace() const
 		{
-			VERIFY_EXPR(m_RegisterSpace != ~0U);
+			ASSERT_EXPR(m_RegisterSpace != ~0U);
 			return m_RegisterSpace;
 		}
 

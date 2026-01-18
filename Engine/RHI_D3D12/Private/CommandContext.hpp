@@ -185,8 +185,8 @@ namespace shz
 
 		DescriptorHeapAllocation AllocateDynamicGPUVisibleDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE Type, UINT Count = 1)
 		{
-			VERIFY(m_DynamicGPUDescriptorAllocators != nullptr, "Dynamic GPU descriptor allocators have not been initialized. Did you forget to call SetDynamicGPUDescriptorAllocators() after resetting the context?");
-			VERIFY(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type <= D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type");
+			ASSERT(m_DynamicGPUDescriptorAllocators != nullptr, "Dynamic GPU descriptor allocators have not been initialized. Did you forget to call SetDynamicGPUDescriptorAllocators() after resetting the context?");
+			ASSERT(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type <= D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type");
 			return m_DynamicGPUDescriptorAllocators[Type].Allocate(Count);
 		}
 
@@ -445,7 +445,7 @@ namespace shz
 			// pCombiners must be null or array of 2 elements
 			static_cast<ID3D12GraphicsCommandList5*>(m_pCommandList.p)->RSSetShadingRate(BaseRate, pCombiners);
 #else
-			UNSUPPORTED("RSSetShadingRate is not supported in current D3D12 header");
+			ASSERT(false, "RSSetShadingRate is not supported in current D3D12 header");
 #endif
 		}
 
@@ -454,7 +454,7 @@ namespace shz
 #ifdef NTDDI_WIN10_19H1
 			static_cast<ID3D12GraphicsCommandList5*>(m_pCommandList.p)->RSSetShadingRateImage(pTexture);
 #else
-			UNSUPPORTED("RSSetShadingRateImage is not supported in current D3D12 header");
+			ASSERT(false, "RSSetShadingRateImage is not supported in current D3D12 header");
 #endif
 		}
 	};
@@ -468,7 +468,7 @@ namespace shz
 			FlushResourceBarriers();
 			static_cast<ID3D12GraphicsCommandList6*>(m_pCommandList.p)->DispatchMesh(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
 #else
-			UNSUPPORTED("DrawMesh is not supported in current D3D12 header");
+			ASSERT(false, "DrawMesh is not supported in current D3D12 header");
 #endif
 		}
 	};
@@ -480,37 +480,37 @@ namespace shz
 
 	inline GraphicsContext1& CommandContext::AsGraphicsContext1()
 	{
-		VERIFY(m_MaxInterfaceVer >= 1, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 1, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext1&>(*this);
 	}
 
 	inline GraphicsContext2& CommandContext::AsGraphicsContext2()
 	{
-		VERIFY(m_MaxInterfaceVer >= 2, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 2, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext2&>(*this);
 	}
 
 	inline GraphicsContext3& CommandContext::AsGraphicsContext3()
 	{
-		VERIFY(m_MaxInterfaceVer >= 3, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 3, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext3&>(*this);
 	}
 
 	inline GraphicsContext4& CommandContext::AsGraphicsContext4()
 	{
-		VERIFY(m_MaxInterfaceVer >= 4, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 4, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext4&>(*this);
 	}
 
 	inline GraphicsContext5& CommandContext::AsGraphicsContext5()
 	{
-		VERIFY(m_MaxInterfaceVer >= 5, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 5, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext5&>(*this);
 	}
 
 	inline GraphicsContext6& CommandContext::AsGraphicsContext6()
 	{
-		VERIFY(m_MaxInterfaceVer >= 6, "Maximum supported interface version is ", m_MaxInterfaceVer);
+		ASSERT(m_MaxInterfaceVer >= 6, "Maximum supported interface version is ", m_MaxInterfaceVer);
 		return static_cast<GraphicsContext6&>(*this);
 	}
 
@@ -522,9 +522,9 @@ namespace shz
 	inline void CommandContext::SetDescriptorHeaps(ShaderDescriptorHeaps Heaps)
 	{
 #ifdef SHZ_DEBUG
-		VERIFY(Heaps.pSrvCbvUavHeap != nullptr || Heaps.pSamplerHeap != nullptr, "At least one heap is expected to be set");
-		VERIFY(Heaps.pSrvCbvUavHeap == nullptr || Heaps.pSrvCbvUavHeap->GetDesc().Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "Invalid heap type provided in pSrvCbvUavHeap");
-		VERIFY(Heaps.pSamplerHeap == nullptr || Heaps.pSamplerHeap->GetDesc().Type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type provided in pSamplerHeap");
+		ASSERT(Heaps.pSrvCbvUavHeap != nullptr || Heaps.pSamplerHeap != nullptr, "At least one heap is expected to be set");
+		ASSERT(Heaps.pSrvCbvUavHeap == nullptr || Heaps.pSrvCbvUavHeap->GetDesc().Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "Invalid heap type provided in pSrvCbvUavHeap");
+		ASSERT(Heaps.pSamplerHeap == nullptr || Heaps.pSamplerHeap->GetDesc().Type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type provided in pSamplerHeap");
 #endif
 
 		// NB: when multiple signatures/SRBs are used, SetDescriptorHeaps()

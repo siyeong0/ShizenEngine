@@ -99,7 +99,7 @@ namespace shz
 			ValidateBufferDesc(this->m_Desc, this->GetDevice()); // May throw
 
 			uint64 DeviceQueuesMask = this->GetDevice()->GetCommandQueueMask();
-			DEV_CHECK_ERR((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
+			ASSERT((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
 				"No bits in the immediate context mask (0x", std::hex, this->m_Desc.ImmediateContextMask,
 				") correspond to one of ", this->GetDevice()->GetCommandQueueCount(), " available software command queues");
 			this->m_Desc.ImmediateContextMask &= DeviceQueuesMask;
@@ -124,13 +124,13 @@ namespace shz
 		// that creates buffer view for the specific engine implementation.
 		virtual void SHZ_CALL_TYPE CreateView(const struct BufferViewDesc& ViewDesc, IBufferView** ppView) override
 		{
-			DEV_CHECK_ERR(ViewDesc.ViewType != BUFFER_VIEW_UNDEFINED, "Buffer view type is not specified");
+			ASSERT(ViewDesc.ViewType != BUFFER_VIEW_UNDEFINED, "Buffer view type is not specified");
 			if (ViewDesc.ViewType == BUFFER_VIEW_SHADER_RESOURCE)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_SHADER_RESOURCE, "Attempting to create SRV for buffer '", this->m_Desc.Name, "' that was not created with BIND_SHADER_RESOURCE flag");
+				ASSERT(this->m_Desc.BindFlags & BIND_SHADER_RESOURCE, "Attempting to create SRV for buffer '", this->m_Desc.Name, "' that was not created with BIND_SHADER_RESOURCE flag");
 			else if (ViewDesc.ViewType == BUFFER_VIEW_UNORDERED_ACCESS)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "Attempting to create UAV for buffer '", this->m_Desc.Name, "' that was not created with BIND_UNORDERED_ACCESS flag");
+				ASSERT(this->m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "Attempting to create UAV for buffer '", this->m_Desc.Name, "' that was not created with BIND_UNORDERED_ACCESS flag");
 			else
-				UNEXPECTED("Unexpected buffer view type");
+				ASSERT(false, "Unexpected buffer view type");
 
 			CreateViewInternal(ViewDesc, ppView, false);
 		}
@@ -143,7 +143,7 @@ namespace shz
 			{
 			case BUFFER_VIEW_SHADER_RESOURCE: return m_pDefaultSRV.get();
 			case BUFFER_VIEW_UNORDERED_ACCESS: return m_pDefaultUAV.get();
-			default: UNEXPECTED("Unknown view type"); return nullptr;
+			default: ASSERT(false, "Unknown view type"); return nullptr;
 			}
 		}
 
@@ -177,7 +177,7 @@ namespace shz
 						break;
 
 					default:
-						UNEXPECTED("Unexpected buffer view type");
+						ASSERT(false, "Unexpected buffer view type");
 					}
 
 					ViewName += this->m_Desc.Name;
@@ -186,8 +186,8 @@ namespace shz
 
 					IBufferView* pView = nullptr;
 					CreateViewInternal(ViewDesc, &pView, true);
-					VERIFY(pView != nullptr, "Failed to create default view for buffer '", this->m_Desc.Name, "'");
-					VERIFY(pView == nullptr || pView->GetDesc().ViewType == ViewType, "Unexpected view type");
+					ASSERT(pView != nullptr, "Failed to create default view for buffer '", this->m_Desc.Name, "'");
+					ASSERT(pView == nullptr || pView->GetDesc().ViewType == ViewType, "Unexpected view type");
 
 					return static_cast<BufferViewImplType*>(pView);
 				};
@@ -238,8 +238,8 @@ namespace shz
 
 		bool CheckState(RESOURCE_STATE State) const
 		{
-			DEV_CHECK_ERR((State & (State - 1)) == 0, "Single state is expected");
-			DEV_CHECK_ERR(IsInKnownState(), "Buffer state is unknown");
+			ASSERT((State & (State - 1)) == 0, "Single state is expected");
+			ASSERT(IsInKnownState(), "Buffer state is unknown");
 			return (this->m_State & State) == State;
 		}
 
@@ -256,9 +256,9 @@ namespace shz
 			uint64 Size) const
 		{
 #ifdef SHZ_DEBUG
-			DEV_CHECK_ERR((GetMemoryProperties() & MEMORY_PROPERTY_HOST_COHERENT) == 0, "Coherent memory does not need to be flushed.");
-			DEV_CHECK_ERR(this->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffer mapped memory must never be flushed.");
-			DEV_CHECK_ERR(StartOffset + Size <= this->GetDesc().Size, "Memory range is out of buffer bounds.");
+			ASSERT((GetMemoryProperties() & MEMORY_PROPERTY_HOST_COHERENT) == 0, "Coherent memory does not need to be flushed.");
+			ASSERT(this->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffer mapped memory must never be flushed.");
+			ASSERT(StartOffset + Size <= this->GetDesc().Size, "Memory range is out of buffer bounds.");
 #endif
 		}
 
@@ -266,9 +266,9 @@ namespace shz
 			uint64 Size) const
 		{
 #ifdef SHZ_DEBUG
-			DEV_CHECK_ERR((GetMemoryProperties() & MEMORY_PROPERTY_HOST_COHERENT) == 0, "Coherent memory does not need to be invalidated.");
-			DEV_CHECK_ERR(this->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffer mapped memory must never be invalidated.");
-			DEV_CHECK_ERR(StartOffset + Size <= this->GetDesc().Size, "Memory range is out of buffer bounds.");
+			ASSERT((GetMemoryProperties() & MEMORY_PROPERTY_HOST_COHERENT) == 0, "Coherent memory does not need to be invalidated.");
+			ASSERT(this->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffer mapped memory must never be invalidated.");
+			ASSERT(StartOffset + Size <= this->GetDesc().Size, "Memory range is out of buffer bounds.");
 #endif
 		}
 

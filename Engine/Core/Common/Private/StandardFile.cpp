@@ -58,7 +58,7 @@ namespace shz
 
 	bool StandardFile::Read(IDataBlob* pData)
 	{
-		VERIFY_EXPR(pData != nullptr);
+		ASSERT_EXPR(pData != nullptr);
 		size_t FileSize = GetSize();
 		pData->Resize(FileSize);
 		return Read(pData->GetDataPtr(), pData->GetSize());
@@ -66,7 +66,7 @@ namespace shz
 
 	bool StandardFile::Read(void* Data, size_t Size)
 	{
-		VERIFY(m_pFile, "File is not opened");
+		ASSERT(m_pFile, "File is not opened");
 		if (!m_pFile)
 			return false;
 		size_t BytesRead = fread(Data, 1, Size, m_pFile);
@@ -76,7 +76,7 @@ namespace shz
 
 	bool StandardFile::Write(const void* Data, size_t Size)
 	{
-		VERIFY(m_pFile, "File is not opened");
+		ASSERT(m_pFile, "File is not opened");
 		if (!m_pFile)
 			return false;
 		size_t BytesWritten = fwrite(Data, 1, Size, m_pFile);
@@ -86,7 +86,7 @@ namespace shz
 
 	size_t StandardFile::GetSize()
 	{
-		VERIFY(m_pFile, "File is not opened");
+		ASSERT(m_pFile, "File is not opened");
 		long OrigPos = ftell(m_pFile);
 		fseek(m_pFile, 0, SEEK_END);
 		long FileSize = ftell(m_pFile);
@@ -97,7 +97,7 @@ namespace shz
 
 	size_t StandardFile::GetPos()
 	{
-		VERIFY(m_pFile, "File is not opened");
+		ASSERT(m_pFile, "File is not opened");
 		if (!m_pFile)
 			return 0;
 
@@ -106,7 +106,7 @@ namespace shz
 
 	bool StandardFile::SetPos(size_t Offset, FilePosOrigin Origin)
 	{
-		VERIFY(m_pFile, "File is not opened");
+		ASSERT(m_pFile, "File is not opened");
 		if (!m_pFile)
 			return false;
 
@@ -118,7 +118,7 @@ namespace shz
 		case FilePosOrigin::Curr:  orig = SEEK_CUR; break;
 		case FilePosOrigin::End:   orig = SEEK_END; break;
 
-		default: UNEXPECTED("Unknown origin");
+		default: ASSERT(false, "Unknown origin");
 		}
 
 		return fseek(m_pFile, static_cast<long>(Offset), orig) == 0;

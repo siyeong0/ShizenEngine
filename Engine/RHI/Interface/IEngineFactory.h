@@ -31,10 +31,12 @@
  // Defines shz::IEngineFactory interface
 
 #include "Primitives/Object.h"
-#include "Primitives/DebugOutput.h"
 #include "Primitives/DataBlob.h"
 #include "Primitives/IMemoryAllocator.h"
-#include "GraphicsTypes.h"
+
+#include "Engine/Core/Common/Public/DebugOutput.h"
+
+#include "Engine/RHI/Interface/GraphicsTypes.h"
 
 
 #if PLATFORM_ANDROID
@@ -119,15 +121,6 @@ namespace shz
 		// MessageCallback is a global setting that applies to the entire execution unit
 		// (executable or shared library that contains the engine implementation).
 		virtual void SetMessageCallback(DebugMessageCallbackType MessageCallback) const = 0;
-
-
-		// Sets whether to break program execution on assertion failure.
-
-		// \param [in] BreakOnError - Whether to break on assertion failure.
-		//
-		// BreakOnError is a global setting that applies to the entire execution unit 
-		// (executable or shared library that contains the engine implementation).
-		virtual void SetBreakOnError(bool BreakOnError) const = 0;
 
 
 		// Sets the memory allocator to be used by the engine.

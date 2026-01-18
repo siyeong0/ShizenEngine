@@ -107,21 +107,21 @@ namespace shz
 
 	void* DataBlobAllocatorAdapter::Allocate(size_t Size, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY(!m_pDataBlob, "The data blob has already been created. The allocator does not support more than one blob.");
+		ASSERT(!m_pDataBlob, "The data blob has already been created. The allocator does not support more than one blob.");
 		m_pDataBlob = DataBlobImpl::Create(Size);
 		return m_pDataBlob->GetDataPtr();
 	}
 
 	void DataBlobAllocatorAdapter::Free(void* Ptr)
 	{
-		VERIFY(m_pDataBlob, "Memory has not been allocated");
-		VERIFY(m_pDataBlob->GetDataPtr() == Ptr, "Incorrect memory pointer");
+		ASSERT(m_pDataBlob, "Memory has not been allocated");
+		ASSERT(m_pDataBlob->GetDataPtr() == Ptr, "Incorrect memory pointer");
 		m_pDataBlob.Release();
 	}
 
 	void* DataBlobAllocatorAdapter::AllocateAligned(size_t Size, size_t Alignment, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY(Alignment <= sizeof(void*), "Alignment (", Alignment, ") exceeds the default alignment (", sizeof(void*), ")");
+		ASSERT(Alignment <= sizeof(void*), "Alignment (", Alignment, ") exceeds the default alignment (", sizeof(void*), ")");
 		return Allocate(Size, dbgDescription, dbgFileName, dbgLineNumber);
 	}
 

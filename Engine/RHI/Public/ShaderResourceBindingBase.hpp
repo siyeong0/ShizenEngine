@@ -100,7 +100,7 @@ namespace shz
 
 				// The memory is now owned by ShaderResourceBindingBase and will be freed by Destruct().
 				void* Ptr = MemPool.ReleaseOwnership();
-				VERIFY_EXPR(Ptr == m_pShaderVarMgrs);
+				ASSERT_EXPR(Ptr == m_pShaderVarMgrs);
 				(void)Ptr;
 
 				// It is important to construct all objects before initializing them because if an exception is thrown,
@@ -114,7 +114,7 @@ namespace shz
 					const SHADER_TYPE ShaderType = pPRS->GetActiveShaderStageType(s);
 					const int32       ShaderInd = GetShaderTypePipelineIndex(ShaderType, pPRS->GetPipelineType());
 					const int         MgrInd = m_ActiveShaderStageIndex[ShaderInd];
-					VERIFY_EXPR(MgrInd >= 0 && MgrInd < static_cast<int>(NumShaders));
+					ASSERT_EXPR(MgrInd >= 0 && MgrInd < static_cast<int>(NumShaders));
 
 					IMemoryAllocator& VarDataAllocator = SRBMemAllocator.GetShaderVariableDataAllocator(s);
 
@@ -172,7 +172,7 @@ namespace shz
 
 		void SetStaticResourcesInitialized()
 		{
-			VERIFY_EXPR(!m_bStaticResourcesInitialized);
+			ASSERT_EXPR(!m_bStaticResourcesInitialized);
 			m_bStaticResourcesInitialized = true;
 		}
 
@@ -192,7 +192,7 @@ namespace shz
 			if (MgrInd < 0)
 				return nullptr;
 
-			VERIFY_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
+			ASSERT_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
 			return m_pShaderVarMgrs[MgrInd].GetVariable(Name);
 		}
 
@@ -212,7 +212,7 @@ namespace shz
 			if (MgrInd < 0)
 				return 0;
 
-			VERIFY_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
+			ASSERT_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
 			return m_pShaderVarMgrs[MgrInd].GetVariableCount();
 		}
 
@@ -232,7 +232,7 @@ namespace shz
 			if (MgrInd < 0)
 				return nullptr;
 
-			VERIFY_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
+			ASSERT_EXPR(static_cast<uint32>(MgrInd) < GetNumShaders());
 			return m_pShaderVarMgrs[MgrInd].GetVariable(Index);
 		}
 

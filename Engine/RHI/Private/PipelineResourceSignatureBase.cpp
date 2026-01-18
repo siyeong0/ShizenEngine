@@ -91,7 +91,7 @@ namespace shz
 
 				if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
 				{
-					VERIFY_EXPR(res_it->second.ShaderStages != SHADER_TYPE_UNKNOWN);
+					ASSERT_EXPR(res_it->second.ShaderStages != SHADER_TYPE_UNKNOWN);
 					LOG_PRS_ERROR_AND_THROW("This device does not support separable programs, but there are separate resources with the name '",
 						Res.Name, "' in shader stages ",
 						GetShaderStagesString(Res.ShaderStages), " and ",
@@ -185,7 +185,7 @@ namespace shz
 				}
 				if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
 				{
-					VERIFY_EXPR(sam_it->second.ShaderStages != SHADER_TYPE_UNKNOWN);
+					ASSERT_EXPR(sam_it->second.ShaderStages != SHADER_TYPE_UNKNOWN);
 					LOG_PRS_ERROR_AND_THROW("This device does not support separable programs, but there are separate immutable samplers with the name '",
 						SamDesc.SamplerOrTextureName, "' in shader stages ",
 						GetShaderStagesString(SamDesc.ShaderStages), " and ",
@@ -200,7 +200,7 @@ namespace shz
 
 		if (Desc.UseCombinedTextureSamplers)
 		{
-			VERIFY_EXPR(Desc.CombinedSamplerSuffix != nullptr);
+			ASSERT_EXPR(Desc.CombinedSamplerSuffix != nullptr);
 
 			// List of samplers assigned to some texture
 			std::unordered_multimap<HashMapStringKey, SHADER_TYPE> AssignedSamplers;
@@ -222,7 +222,7 @@ namespace shz
 					for (auto sam_it = sam_range.first; sam_it != sam_range.second; ++sam_it)
 					{
 						const PipelineResourceDesc& Sam = sam_it->second;
-						VERIFY_EXPR(AssignedSamplerName == Sam.Name);
+						ASSERT_EXPR(AssignedSamplerName == Sam.Name);
 
 						if ((Sam.ShaderStages & Res.ShaderStages) != 0)
 						{
@@ -258,7 +258,7 @@ namespace shz
 					for (auto sam_it = imtbl_sam_range.first; sam_it != imtbl_sam_range.second; ++sam_it)
 					{
 						const ImmutableSamplerDesc& Sam = sam_it->second;
-						VERIFY_EXPR(strcmp(Sam.SamplerOrTextureName, Res.Name) == 0);
+						ASSERT_EXPR(strcmp(Sam.SamplerOrTextureName, Res.Name) == 0);
 
 						if ((Sam.ShaderStages & Res.ShaderStages) != 0)
 						{
@@ -330,13 +330,13 @@ namespace shz
 		const char* ResourceName,
 		const char* SamplerSuffix)
 	{
-		VERIFY_EXPR(ResourceName != nullptr && ResourceName[0] != '\0');
+		ASSERT_EXPR(ResourceName != nullptr && ResourceName[0] != '\0');
 		for (uint32 s = 0; s < NumImtblSamplers; ++s)
 		{
 			const ImmutableSamplerDesc& Sam = ImtblSamplers[s];
 			if (((Sam.ShaderStages & ShaderStages) != 0) && StreqSuff(ResourceName, Sam.SamplerOrTextureName, SamplerSuffix))
 			{
-				VERIFY((Sam.ShaderStages & ShaderStages) == ShaderStages,
+				ASSERT((Sam.ShaderStages & ShaderStages) == ShaderStages,
 					"Immutable sampler uses only some of the stages that resource '", ResourceName,
 					"' is defined for. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
 				return s;
@@ -352,7 +352,7 @@ namespace shz
 		SHADER_TYPE                ShaderStage,
 		const char* ResourceName)
 	{
-		VERIFY_EXPR(ResourceName != nullptr && ResourceName[0] != '\0');
+		ASSERT_EXPR(ResourceName != nullptr && ResourceName[0] != '\0');
 		for (uint32 r = 0; r < NumResources; ++r)
 		{
 			const PipelineResourceDesc& ResDesc{ Resources[r] };
@@ -438,10 +438,10 @@ namespace shz
 		{
 			const PipelineResourceDesc& Res = Desc.Resources[i];
 
-			VERIFY(Res.Name != nullptr, "Name can't be null. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
-			VERIFY(Res.Name[0] != '\0', "Name can't be empty. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
-			VERIFY(Res.ShaderStages != SHADER_TYPE_UNKNOWN, "ShaderStages can't be SHADER_TYPE_UNKNOWN. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
-			VERIFY(Res.ArraySize != 0, "ArraySize can't be 0. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(Res.Name != nullptr, "Name can't be null. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(Res.Name[0] != '\0', "Name can't be empty. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(Res.ShaderStages != SHADER_TYPE_UNKNOWN, "ShaderStages can't be SHADER_TYPE_UNKNOWN. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(Res.ArraySize != 0, "ArraySize can't be 0. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
 
 			Allocator.AddSpaceForString(Res.Name);
 		}
@@ -449,8 +449,8 @@ namespace shz
 		for (uint32 i = 0; i < Desc.NumImmutableSamplers; ++i)
 		{
 			const char* SamOrTexName = Desc.ImmutableSamplers[i].SamplerOrTextureName;
-			VERIFY(SamOrTexName != nullptr, "SamplerOrTextureName can't be null. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
-			VERIFY(SamOrTexName[0] != '\0', "SamplerOrTextureName can't be empty. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(SamOrTexName != nullptr, "SamplerOrTextureName can't be null. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
+			ASSERT(SamOrTexName[0] != '\0', "SamplerOrTextureName can't be empty. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
 			Allocator.AddSpaceForString(SamOrTexName);
 			Allocator.AddSpaceForString(Desc.ImmutableSamplers[i].Desc.Name);
 		}
@@ -474,7 +474,7 @@ namespace shz
 			PipelineResourceDesc& DstRes = pResources[i];
 
 			DstRes = SrcRes;
-			VERIFY_EXPR(SrcRes.Name != nullptr && SrcRes.Name[0] != '\0');
+			ASSERT_EXPR(SrcRes.Name != nullptr && SrcRes.Name[0] != '\0');
 			DstRes.Name = Allocator.CopyString(SrcRes.Name);
 
 			++ResourceOffsets[size_t{ DstRes.VarType } + 1];
@@ -501,7 +501,7 @@ namespace shz
 			ImmutableSamplerDesc& DstSam = pSamplers[i];
 
 			DstSam = SrcSam;
-			VERIFY_EXPR(SrcSam.SamplerOrTextureName != nullptr && SrcSam.SamplerOrTextureName[0] != '\0');
+			ASSERT_EXPR(SrcSam.SamplerOrTextureName != nullptr && SrcSam.SamplerOrTextureName[0] != '\0');
 			DstSam.SamplerOrTextureName = Allocator.CopyString(SrcSam.SamplerOrTextureName);
 			DstSam.Desc.Name = Allocator.CopyString(SrcSam.Desc.Name);
 			if (!DstSam.Desc.Name)

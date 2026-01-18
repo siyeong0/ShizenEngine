@@ -126,12 +126,12 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("Unknown texture type");
+					ASSERT(false, "Unknown texture type");
 				}
 			}
 
 			uint64 DeviceQueuesMask = this->GetDevice()->GetCommandQueueMask();
-			DEV_CHECK_ERR((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
+			ASSERT((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
 				"No bits in the immediate context mask (0x", std::hex, this->m_Desc.ImmediateContextMask,
 				") correspond to one of ", this->GetDevice()->GetCommandQueueCount(), " available software command queues");
 			this->m_Desc.ImmediateContextMask &= DeviceQueuesMask;
@@ -149,17 +149,17 @@ namespace shz
 		// creates texture view for the specific engine implementation.
 		virtual void SHZ_CALL_TYPE CreateView(const struct TextureViewDesc& ViewDesc, ITextureView** ppView) override
 		{
-			DEV_CHECK_ERR(ViewDesc.ViewType != TEXTURE_VIEW_UNDEFINED, "Texture view type is not specified");
+			ASSERT(ViewDesc.ViewType != TEXTURE_VIEW_UNDEFINED, "Texture view type is not specified");
 			if (ViewDesc.ViewType == TEXTURE_VIEW_SHADER_RESOURCE)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_SHADER_RESOURCE, "Attempting to create SRV for texture '", this->m_Desc.Name, "' that was not created with BIND_SHADER_RESOURCE flag.");
+				ASSERT(this->m_Desc.BindFlags & BIND_SHADER_RESOURCE, "Attempting to create SRV for texture '", this->m_Desc.Name, "' that was not created with BIND_SHADER_RESOURCE flag.");
 			else if (ViewDesc.ViewType == TEXTURE_VIEW_UNORDERED_ACCESS)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "Attempting to create UAV for texture '", this->m_Desc.Name, "' that was not created with BIND_UNORDERED_ACCESS flag.");
+				ASSERT(this->m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "Attempting to create UAV for texture '", this->m_Desc.Name, "' that was not created with BIND_UNORDERED_ACCESS flag.");
 			else if (ViewDesc.ViewType == TEXTURE_VIEW_RENDER_TARGET)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_RENDER_TARGET, "Attempting to create RTV for texture '", this->m_Desc.Name, "' that was not created with BIND_RENDER_TARGET flag.");
+				ASSERT(this->m_Desc.BindFlags & BIND_RENDER_TARGET, "Attempting to create RTV for texture '", this->m_Desc.Name, "' that was not created with BIND_RENDER_TARGET flag.");
 			else if (ViewDesc.ViewType == TEXTURE_VIEW_DEPTH_STENCIL || ViewDesc.ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL)
-				DEV_CHECK_ERR(this->m_Desc.BindFlags & BIND_DEPTH_STENCIL, "Attempting to create DSV for texture '", this->m_Desc.Name, "' that was not created with BIND_DEPTH_STENCIL flag.");
+				ASSERT(this->m_Desc.BindFlags & BIND_DEPTH_STENCIL, "Attempting to create DSV for texture '", this->m_Desc.Name, "' that was not created with BIND_DEPTH_STENCIL flag.");
 			else
-				UNEXPECTED("Unexpected texture view type.");
+				ASSERT(false, "Unexpected texture view type.");
 
 			CreateViewInternal(ViewDesc, ppView, false);
 		}
@@ -182,7 +182,7 @@ namespace shz
 		// The function calls CreateViewInternal().
 		void CreateDefaultViews()
 		{
-			VERIFY(m_pDefaultViews == nullptr, "Default views have already been initialized");
+			ASSERT(m_pDefaultViews == nullptr, "Default views have already been initialized");
 
 			if (this->m_Desc.Format == TEX_FORMAT_UNKNOWN)
 			{
@@ -249,17 +249,17 @@ namespace shz
 						break;
 
 					default:
-						UNEXPECTED("Unexpected texture type");
+						ASSERT(false, "Unexpected texture type");
 					}
 					ViewName += this->m_Desc.Name;
 					ViewName += '\'';
 					ViewDesc.Name = ViewName.c_str();
 
-					VERIFY_EXPR(ViewIdx < NumDefaultViews);
+					ASSERT_EXPR(ViewIdx < NumDefaultViews);
 					TextureViewImplType*& pView = ppDefaultViews[ViewIdx];
 					CreateViewInternal(ViewDesc, reinterpret_cast<ITextureView**>(&pView), true);
-					DEV_CHECK_ERR(pView != nullptr, "Failed to create default view for texture '", this->m_Desc.Name, "'.");
-					DEV_CHECK_ERR(pView->GetDesc().ViewType == ViewType, "Unexpected view type.");
+					ASSERT(pView != nullptr, "Failed to create default view for texture '", this->m_Desc.Name, "'.");
+					ASSERT(pView->GetDesc().ViewType == ViewType, "Unexpected view type.");
 
 					m_ViewIndices[ViewType] = ViewIdx++;
 				};
@@ -289,7 +289,7 @@ namespace shz
 				CreateDefaultView(TEXTURE_VIEW_SHADING_RATE);
 			}
 
-			VERIFY_EXPR(ViewIdx == NumDefaultViews);
+			ASSERT_EXPR(ViewIdx == NumDefaultViews);
 		}
 
 		virtual void SHZ_CALL_TYPE SetState(RESOURCE_STATE State) override final
@@ -309,14 +309,14 @@ namespace shz
 
 		bool CheckState(RESOURCE_STATE State) const
 		{
-			VERIFY((State & (State - 1)) == 0, "Single state is expected");
-			VERIFY(IsInKnownState(), "Texture state is unknown");
+			ASSERT((State & (State - 1)) == 0, "Single state is expected");
+			ASSERT(IsInKnownState(), "Texture state is unknown");
 			return (this->m_State & State) == State;
 		}
 
 		bool CheckAnyState(RESOURCE_STATE States) const
 		{
-			VERIFY(IsInKnownState(), "Texture state is unknown");
+			ASSERT(IsInKnownState(), "Texture state is unknown");
 			return (this->m_State & States) != 0;
 		}
 
@@ -327,7 +327,7 @@ namespace shz
 			if (ViewIdx == InvalidViewIndex)
 				return nullptr;
 
-			VERIFY_EXPR(ViewIdx < GetNumDefaultViews());
+			ASSERT_EXPR(ViewIdx < GetNumDefaultViews());
 			TextureViewImplType** ppDefaultViews = GetDefaultViewsArrayPtr();
 			return ppDefaultViews[ViewIdx];
 		}
@@ -335,9 +335,9 @@ namespace shz
 		// Implementation of ITexture::GetSparseProperties().
 		virtual const SparseTextureProperties& SHZ_CALL_TYPE GetSparseProperties() const override final
 		{
-			DEV_CHECK_ERR(this->m_Desc.Usage == USAGE_SPARSE,
+			ASSERT(this->m_Desc.Usage == USAGE_SPARSE,
 				"ITexture::GetSparseProperties() must be used for sparse texture");
-			VERIFY_EXPR(m_pSparseProps != nullptr);
+			ASSERT_EXPR(m_pSparseProps != nullptr);
 			return *m_pSparseProps;
 		}
 
@@ -351,7 +351,7 @@ namespace shz
 			TextureViewImplType** ppDefaultViews = GetDefaultViewsArrayPtr();
 
 			TexViewObjAllocatorType& TexViewAllocator = this->GetDevice()->GetTexViewObjAllocator();
-			VERIFY(&TexViewAllocator == &m_dbgTexViewObjAllocator, "Texture view allocator does not match allocator provided during texture initialization");
+			ASSERT(&TexViewAllocator == &m_dbgTexViewObjAllocator, "Texture view allocator does not match allocator provided during texture initialization");
 
 			for (uint32 i = 0; i < NumViews; ++i)
 			{

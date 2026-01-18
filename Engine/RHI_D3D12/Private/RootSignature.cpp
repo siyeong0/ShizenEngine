@@ -58,7 +58,7 @@ namespace shz
 			m_ResourceSignatures[i].pSignature = ppSignatures[i];
 			if (ppSignatures[i] != nullptr)
 			{
-				VERIFY(ppSignatures[i]->GetDesc().BindingIndex == i, "Signature placed to another binding index");
+				ASSERT(ppSignatures[i]->GetDesc().BindingIndex == i, "Signature placed to another binding index");
 			}
 		}
 
@@ -90,7 +90,7 @@ namespace shz
 			for (uint32 samp = 0, SampCount = pSignature->GetImmutableSamplerCount(); samp < SampCount; ++samp)
 			{
 				const ImmutableSamplerAttribsD3D12& ImtblSam = pSignature->GetImmutableSamplerAttribs(samp);
-				VERIFY_EXPR(ImtblSam.IsValid());
+				ASSERT_EXPR(ImtblSam.IsValid());
 
 				TotalImmutableSamplers += ImtblSam.ArraySize;
 			}
@@ -134,7 +134,7 @@ namespace shz
 				const D3D12_ROOT_DESCRIPTOR_TABLE& d3d12SrcTbl = d3d12SrcParam.DescriptorTable;
 				// Offset root parameter index by the base root index of the current resource signature
 				const uint32 RootIndex = SignInfo.BaseRootIndex + RootTable.RootIndex;
-				VERIFY(d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE && d3d12SrcParam.DescriptorTable.NumDescriptorRanges > 0, "Non-empty descriptor table is expected");
+				ASSERT(d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE && d3d12SrcParam.DescriptorTable.NumDescriptorRanges > 0, "Non-empty descriptor table is expected");
 				D3D12_ROOT_PARAMETER& d3d12DstParam = d3d12Parameters[RootIndex];
 				D3D12_ROOT_DESCRIPTOR_TABLE& d3d12DstTbl = d3d12DstParam.DescriptorTable;
 
@@ -155,7 +155,7 @@ namespace shz
 				const RootParameter& RootView = RootParams.GetRootView(rv);
 				const D3D12_ROOT_PARAMETER& d3d12SrcParam = RootView.d3d12RootParam;
 				const uint32                RootIndex = SignInfo.BaseRootIndex + RootView.RootIndex;
-				VERIFY((d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_CBV ||
+				ASSERT((d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_CBV ||
 					d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV ||
 					d3d12SrcParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV),
 					"Root CBV, SRV or UAV is expected");
@@ -205,11 +205,11 @@ namespace shz
 #ifdef SHZ_DEBUG
 		for (size_t i = 0; i < d3d12Parameters.size(); ++i)
 		{
-			VERIFY(d3d12Parameters[i].ParameterType != -1, "Root parameter at index ", i, " has not been initialized");
+			ASSERT(d3d12Parameters[i].ParameterType != -1, "Root parameter at index ", i, " has not been initialized");
 		}
 #endif
 
-		VERIFY_EXPR(descr_range_it == d3d12DescrRanges.end());
+		ASSERT_EXPR(descr_range_it == d3d12DescrRanges.end());
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
 		rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -221,7 +221,7 @@ namespace shz
 		if (!d3d12StaticSamplers.empty())
 		{
 			rootSignatureDesc.pStaticSamplers = d3d12StaticSamplers.data();
-			VERIFY_EXPR(d3d12StaticSamplers.size() == TotalImmutableSamplers);
+			ASSERT_EXPR(d3d12StaticSamplers.size() == TotalImmutableSamplers);
 		}
 
 		if (pDeviceD3D12Impl)
@@ -255,7 +255,7 @@ namespace shz
 		: m_Name{ pCBName != nullptr ? pCBName : "" }
 		, m_ShaderRecordSize{ ShaderRecordSize }
 	{
-		VERIFY_EXPR(!m_Name.empty() == (m_ShaderRecordSize > 0));
+		ASSERT_EXPR(!m_Name.empty() == (m_ShaderRecordSize > 0));
 	}
 
 	bool LocalRootSignatureD3D12::IsShaderRecord(const D3DShaderResourceAttribs& CB) const
@@ -270,7 +270,7 @@ namespace shz
 		if (m_ShaderRecordSize == 0)
 			return false;
 
-		VERIFY(m_RegisterSpace == ~0u || m_pd3d12RootSignature == nullptr, "This root signature has already been initialized.");
+		ASSERT(m_RegisterSpace == ~0u || m_pd3d12RootSignature == nullptr, "This root signature has already been initialized.");
 
 		m_RegisterSpace = RegisterSpace;
 
@@ -330,7 +330,7 @@ namespace shz
 	RootSignatureCacheD3D12::~RootSignatureCacheD3D12()
 	{
 		std::lock_guard<std::mutex> Lock{ m_RootSigCacheMtx };
-		VERIFY(m_RootSigCache.empty(), "All pipeline resource signatures must be released before the cache is destroyed.");
+		ASSERT(m_RootSigCache.empty(), "All pipeline resource signatures must be released before the cache is destroyed.");
 	}
 
 	RefCntAutoPtr<RootSignatureD3D12> RootSignatureCacheD3D12::GetRootSig(const RefCntAutoPtr<PipelineResourceSignatureD3D12Impl>* ppSignatures, uint32 SignatureCount)
@@ -343,7 +343,7 @@ namespace shz
 			{
 				if (ppSignatures[i] != nullptr)
 				{
-					VERIFY(ppSignatures[i]->GetDesc().BindingIndex == i, "Signature placed at another binding index");
+					ASSERT(ppSignatures[i]->GetDesc().BindingIndex == i, "Signature placed at another binding index");
 					HashCombine(Hash, ppSignatures[i]->GetHash());
 				}
 				else

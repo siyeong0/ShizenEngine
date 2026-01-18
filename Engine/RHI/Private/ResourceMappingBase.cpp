@@ -53,7 +53,7 @@ void ResourceMappingImpl::AddResourceArray(const Char* Name, uint32 StartIndex, 
         {
             if (bIsUnique)
             {
-                UNEXPECTED("Resource with the same name already exists");
+                ASSERT(false, "Resource with the same name already exists");
                 LOG_WARNING_MESSAGE(
                     "Resource with name ", Name,
                     " marked is unique, but already present in the hash.\n"
@@ -84,7 +84,7 @@ IDeviceObject* ResourceMappingImpl::GetResource(const Char* Name, uint32 ArrayIn
 {
     if (Name == nullptr || *Name == '\0')
     {
-        DEV_ERROR("Name must not be null or empty");
+        ASSERT(false, "Name must not be null or empty");
         return nullptr;
     }
 

@@ -50,10 +50,10 @@ namespace shz
 		if (!type.array.empty())
 		{
 			// https://github.com/KhronosGroup/SPIRV-Cross/wiki/Reflection-API-user-guide#querying-array-types
-			VERIFY(type.array.size() == 1, "Only one-dimensional arrays are currently supported");
+			ASSERT(type.array.size() == 1, "Only one-dimensional arrays are currently supported");
 			arrSize = type.array[0];
 		}
-		VERIFY(arrSize <= std::numeric_limits<Type>::max(), "Array size exceeds maximum representable value ", std::numeric_limits<Type>::max());
+		ASSERT(arrSize <= std::numeric_limits<Type>::max(), "Array size exceeds maximum representable value ", std::numeric_limits<Type>::max());
 		return static_cast<Type>(arrSize);
 	}
 
@@ -103,10 +103,10 @@ namespace shz
 		const shizen_spirv_cross::Resource& Res,
 		spv::Decoration                       Decoration)
 	{
-		VERIFY(Compiler.has_decoration(Res.id, Decoration), "Resource \'", Res.name, "\' has no requested decoration");
+		ASSERT(Compiler.has_decoration(Res.id, Decoration), "Resource \'", Res.name, "\' has no requested decoration");
 		uint32_t offset = 0;
 		bool     declared = Compiler.get_binary_offset_for_decoration(Res.id, Decoration, offset);
-		VERIFY(declared, "Requested decoration is not declared");
+		ASSERT(declared, "Requested decoration is not declared");
 		(void)declared;
 		return offset;
 	}
@@ -175,7 +175,7 @@ namespace shz
 			return SHADER_RESOURCE_TYPE_ACCEL_STRUCT;
 
 		default:
-			UNEXPECTED("Unknown SPIRV resource type");
+			ASSERT(false, "Unknown SPIRV resource type");
 			return SHADER_RESOURCE_TYPE_UNKNOWN;
 		}
 	}
@@ -219,10 +219,10 @@ namespace shz
 		case SHADER_TYPE_CALLABLE:         return spv::ExecutionModelCallableKHR;
 			
 		case SHADER_TYPE_TILE:
-			UNEXPECTED("Unsupported shader type");
+			ASSERT(false, "Unsupported shader type");
 			return spv::ExecutionModelMax;
 		default:
-			UNEXPECTED("Unexpected shader type");
+			ASSERT(false, "Unexpected shader type");
 			return spv::ExecutionModelMax;
 		}
 	}
@@ -293,7 +293,7 @@ namespace shz
 		case shizen_spirv_cross::SPIRType::RayQuery:              return SHADER_CODE_BASIC_TYPE_UNKNOWN;
 			
 		default:
-			UNEXPECTED("Unknown SPIRV base type");
+			ASSERT(false, "Unknown SPIRV base type");
 			return SHADER_CODE_BASIC_TYPE_UNKNOWN;
 		}
 	}
@@ -353,7 +353,7 @@ namespace shz
 			VarDesc.Offset = Compiler.type_struct_member_offset(SpvType, i);
 
 			size_t idx = TypeDesc.AddMember(VarDesc);
-			VERIFY_EXPR(idx == i);
+			ASSERT_EXPR(idx == i);
 			LoadShaderCodeVariableDesc(Compiler, SpvType.member_types[i], Compiler.get_member_decoration_bitset(TypeID, i), IsHLSLSource, TypeDesc.GetMember(i));
 		}
 	}
@@ -372,7 +372,7 @@ namespace shz
 			VarDesc.Offset = Compiler.type_struct_member_offset(SpvType, i);
 
 			size_t idx = UBDesc.AddVariable(VarDesc);
-			VERIFY_EXPR(idx == i);
+			ASSERT_EXPR(idx == i);
 			LoadShaderCodeVariableDesc(Compiler, SpvType.member_types[i], Compiler.get_member_decoration_bitset(SpvType.self, i), IsHLSLSource, UBDesc.GetVariable(idx));
 		}
 
@@ -449,7 +449,7 @@ namespace shz
 			ResourceNamesPoolSize += strlen(CombinedSamplerSuffix) + 1;
 		}
 
-		VERIFY_EXPR(shaderDesc.Name != nullptr);
+		ASSERT_EXPR(shaderDesc.Name != nullptr);
 		ResourceNamesPoolSize += strlen(shaderDesc.Name) + 1;
 
 		uint32 NumShaderStageInputs = 0;
@@ -537,7 +537,7 @@ namespace shz
 					UBReflections.emplace_back(LoadUBReflection(Compiler, UB, m_IsHLSLSource));
 				}
 			}
-			VERIFY_EXPR(CurrUB == GetNumUBs());
+			ASSERT_EXPR(CurrUB == GetNumUBs());
 		}
 
 		{
@@ -566,7 +566,7 @@ namespace shz
 					static_cast<uint32>(Stride) //
 				};
 			}
-			VERIFY_EXPR(CurrSB == GetNumSBs());
+			ASSERT_EXPR(CurrSB == GetNumSBs());
 		}
 
 		{
@@ -587,7 +587,7 @@ namespace shz
 					ResType //
 				};
 			}
-			VERIFY_EXPR(CurrSmplImg == GetNumSmpldImgs());
+			ASSERT_EXPR(CurrSmplImg == GetNumSmpldImgs());
 		}
 
 		{
@@ -608,7 +608,7 @@ namespace shz
 					ResType //
 				};
 			}
-			VERIFY_EXPR(CurrImg == GetNumImgs());
+			ASSERT_EXPR(CurrImg == GetNumImgs());
 		}
 
 		{
@@ -623,7 +623,7 @@ namespace shz
 					SPIRVShaderResourceAttribs::ResourceType::AtomicCounter //
 				};
 			}
-			VERIFY_EXPR(CurrAC == GetNumACs());
+			ASSERT_EXPR(CurrAC == GetNumACs());
 		}
 
 		{
@@ -638,7 +638,7 @@ namespace shz
 					SPIRVShaderResourceAttribs::ResourceType::SeparateSampler //
 				};
 			}
-			VERIFY_EXPR(CurrSepSmpl == GetNumSepSmplrs());
+			ASSERT_EXPR(CurrSepSmpl == GetNumSepSmplrs());
 		}
 
 		{
@@ -659,7 +659,7 @@ namespace shz
 					ResType //
 				};
 			}
-			VERIFY_EXPR(CurrSepImg == GetNumSepImgs());
+			ASSERT_EXPR(CurrSepImg == GetNumSepImgs());
 		}
 
 		{
@@ -674,7 +674,7 @@ namespace shz
 					SPIRVShaderResourceAttribs::ResourceType::InputAttachment //
 				};
 			}
-			VERIFY_EXPR(CurrSubpassInput == GetNumInptAtts());
+			ASSERT_EXPR(CurrSubpassInput == GetNumInptAtts());
 		}
 
 		{
@@ -689,7 +689,7 @@ namespace shz
 					SPIRVShaderResourceAttribs::ResourceType::AccelerationStructure //
 				};
 			}
-			VERIFY_EXPR(CurrAccelStruct == GetNumAccelStructs());
+			ASSERT_EXPR(CurrAccelStruct == GetNumAccelStructs());
 		}
 
 		static_assert(uint32{ SPIRVShaderResourceAttribs::ResourceType::NumResourceTypes } == 12, "Please initialize SPIRVShaderResourceAttribs for the new resource type here");
@@ -716,10 +716,10 @@ namespace shz
 					};
 				}
 			}
-			VERIFY_EXPR(CurrStageInput == GetNumShaderStageInputs());
+			ASSERT_EXPR(CurrStageInput == GetNumShaderStageInputs());
 		}
 
-		VERIFY(ResourceNamesPool.GetRemainingSize() == 0, "Names pool must be empty");
+		ASSERT(ResourceNamesPool.GetRemainingSize() == 0, "Names pool must be empty");
 
 		if (shaderDesc.ShaderType == SHADER_TYPE_COMPUTE)
 		{
@@ -729,8 +729,8 @@ namespace shz
 
 		if (!UBReflections.empty())
 		{
-			VERIFY_EXPR(LoadUniformBufferReflection);
-			VERIFY_EXPR(UBReflections.size() == GetNumUBs());
+			ASSERT_EXPR(LoadUniformBufferReflection);
+			ASSERT_EXPR(UBReflections.size() == GetNumUBs());
 			m_UBReflectionBuffer = ShaderCodeBufferDescX::PackArray(UBReflections.cbegin(), UBReflections.cend(), GetRawAllocator());
 		}
 		//LOG_INFO_MESSAGE(DumpResources());
@@ -746,7 +746,7 @@ namespace shz
 		uint32           CurrentOffset = 0;
 		constexpr uint32 MaxOffset = std::numeric_limits<OffsetType>::max();
 		auto             AdvanceOffset = [&CurrentOffset, MaxOffset](uint32 NumResources) {
-			VERIFY(CurrentOffset <= MaxOffset, "Current offset (", CurrentOffset, ") exceeds max allowed value (", MaxOffset, ")");
+			ASSERT(CurrentOffset <= MaxOffset, "Current offset (", CurrentOffset, ") exceeds max allowed value (", MaxOffset, ")");
 			(void)MaxOffset;
 			OffsetType Offset = static_cast<OffsetType>(CurrentOffset);
 			CurrentOffset += NumResources;
@@ -766,7 +766,7 @@ namespace shz
 		m_TotalResources = AdvanceOffset(0);
 		static_assert(uint32{ SPIRVShaderResourceAttribs::ResourceType::NumResourceTypes } == 12, "Please update the new resource type offset");
 
-		VERIFY(NumShaderStageInputs <= MaxOffset, "Max offset exceeded");
+		ASSERT(NumShaderStageInputs <= MaxOffset, "Max offset exceeded");
 		m_NumShaderStageInputs = static_cast<OffsetType>(NumShaderStageInputs);
 
 		size_t AlignedResourceNamesPoolSize = AlignUp(ResourceNamesPoolSize, sizeof(void*));
@@ -777,15 +777,15 @@ namespace shz
 			m_NumShaderStageInputs * sizeof(SPIRVShaderStageInputAttribs) +
 			AlignedResourceNamesPoolSize * sizeof(char);
 
-		VERIFY_EXPR(GetNumUBs() == Counters.NumUBs);
-		VERIFY_EXPR(GetNumSBs() == Counters.NumSBs);
-		VERIFY_EXPR(GetNumImgs() == Counters.NumImgs);
-		VERIFY_EXPR(GetNumSmpldImgs() == Counters.NumSmpldImgs);
-		VERIFY_EXPR(GetNumACs() == Counters.NumACs);
-		VERIFY_EXPR(GetNumSepSmplrs() == Counters.NumSepSmplrs);
-		VERIFY_EXPR(GetNumSepImgs() == Counters.NumSepImgs);
-		VERIFY_EXPR(GetNumInptAtts() == Counters.NumInptAtts);
-		VERIFY_EXPR(GetNumAccelStructs() == Counters.NumAccelStructs);
+		ASSERT_EXPR(GetNumUBs() == Counters.NumUBs);
+		ASSERT_EXPR(GetNumSBs() == Counters.NumSBs);
+		ASSERT_EXPR(GetNumImgs() == Counters.NumImgs);
+		ASSERT_EXPR(GetNumSmpldImgs() == Counters.NumSmpldImgs);
+		ASSERT_EXPR(GetNumACs() == Counters.NumACs);
+		ASSERT_EXPR(GetNumSepSmplrs() == Counters.NumSepSmplrs);
+		ASSERT_EXPR(GetNumSepImgs() == Counters.NumSepImgs);
+		ASSERT_EXPR(GetNumInptAtts() == Counters.NumInptAtts);
+		ASSERT_EXPR(GetNumAccelStructs() == Counters.NumAccelStructs);
 		static_assert(uint32{ SPIRVShaderResourceAttribs::ResourceType::NumResourceTypes } == 12, "Please update the new resource count verification");
 		
 
@@ -837,7 +837,7 @@ namespace shz
 
 	void SPIRVShaderResources::MapHLSLVertexShaderInputs(std::vector<uint32_t>& SPIRV) const
 	{
-		VERIFY(IsHLSLSource(), "This method is only relevant for HLSL source");
+		ASSERT(IsHLSLSource(), "This method is only relevant for HLSL source");
 
 		for (uint32 i = 0; i < GetNumShaderStageInputs(); ++i)
 		{
@@ -891,14 +891,14 @@ namespace shz
 		ProcessResources(
 			[&](const SPIRVShaderResourceAttribs& UB, uint32) //
 			{
-				VERIFY(UB.Type == SPIRVShaderResourceAttribs::ResourceType::UniformBuffer, "Unexpected resource type");
+				ASSERT(UB.Type == SPIRVShaderResourceAttribs::ResourceType::UniformBuffer, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Uniform Buffer     ";
 				DumpResource(UB);
 			},
 			[&](const SPIRVShaderResourceAttribs& SB, uint32) //
 			{
-				VERIFY(SB.Type == SPIRVShaderResourceAttribs::ResourceType::ROStorageBuffer ||
+				ASSERT(SB.Type == SPIRVShaderResourceAttribs::ResourceType::ROStorageBuffer ||
 					SB.Type == SPIRVShaderResourceAttribs::ResourceType::RWStorageBuffer,
 					"Unexpected resource type");
 				ss << std::endl
@@ -919,7 +919,7 @@ namespace shz
 						<< std::setw(3) << ResNum << " Storage Txl Buff ";
 				}
 				else
-					UNEXPECTED("Unexpected resource type");
+					ASSERT(false, "Unexpected resource type");
 				DumpResource(Img);
 			},
 				[&](const SPIRVShaderResourceAttribs& SmplImg, uint32) //
@@ -935,46 +935,46 @@ namespace shz
 						<< std::setw(3) << ResNum << " Uniform Txl Buff ";
 				}
 				else
-					UNEXPECTED("Unexpected resource type");
+					ASSERT(false, "Unexpected resource type");
 				DumpResource(SmplImg);
 			},
 				[&](const SPIRVShaderResourceAttribs& AC, uint32) //
 			{
-				VERIFY(AC.Type == SPIRVShaderResourceAttribs::ResourceType::AtomicCounter, "Unexpected resource type");
+				ASSERT(AC.Type == SPIRVShaderResourceAttribs::ResourceType::AtomicCounter, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Atomic Cntr      ";
 				DumpResource(AC);
 			},
 				[&](const SPIRVShaderResourceAttribs& SepSmpl, uint32) //
 			{
-				VERIFY(SepSmpl.Type == SPIRVShaderResourceAttribs::ResourceType::SeparateSampler, "Unexpected resource type");
+				ASSERT(SepSmpl.Type == SPIRVShaderResourceAttribs::ResourceType::SeparateSampler, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Separate Smpl    ";
 				DumpResource(SepSmpl);
 			},
 				[&](const SPIRVShaderResourceAttribs& SepImg, uint32) //
 			{
-				VERIFY(SepImg.Type == SPIRVShaderResourceAttribs::ResourceType::SeparateImage, "Unexpected resource type");
+				ASSERT(SepImg.Type == SPIRVShaderResourceAttribs::ResourceType::SeparateImage, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Separate Img     ";
 				DumpResource(SepImg);
 			},
 				[&](const SPIRVShaderResourceAttribs& InptAtt, uint32) //
 			{
-				VERIFY(InptAtt.Type == SPIRVShaderResourceAttribs::ResourceType::InputAttachment, "Unexpected resource type");
+				ASSERT(InptAtt.Type == SPIRVShaderResourceAttribs::ResourceType::InputAttachment, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Input Attachment ";
 				DumpResource(InptAtt);
 			},
 				[&](const SPIRVShaderResourceAttribs& AccelStruct, uint32) //
 			{
-				VERIFY(AccelStruct.Type == SPIRVShaderResourceAttribs::ResourceType::AccelerationStructure, "Unexpected resource type");
+				ASSERT(AccelStruct.Type == SPIRVShaderResourceAttribs::ResourceType::AccelerationStructure, "Unexpected resource type");
 				ss << std::endl
 					<< std::setw(3) << ResNum << " Accel Struct     ";
 				DumpResource(AccelStruct);
 			} //
 			);
-		VERIFY_EXPR(ResNum == GetTotalResources());
+		ASSERT_EXPR(ResNum == GetTotalResources());
 
 		return ss.str();
 	}

@@ -78,7 +78,7 @@ namespace shz
 				break;
 #endif
 			case ARCHIVE_DEVICE_DATA_FLAG_NONE:
-				UNEXPECTED("ARCHIVE_DEVICE_DATA_FLAG_NONE(0) should never occur");
+				ASSERT(false, "ARCHIVE_DEVICE_DATA_FLAG_NONE(0) should never occur");
 				break;
 
 			default:
@@ -103,7 +103,7 @@ namespace shz
 		if (m_pDesc != nullptr)
 			return *m_pDesc;
 
-		UNEXPECTED("No device signatures initialized!");
+		ASSERT(false, "No device signatures initialized!");
 		static constexpr PipelineResourceSignatureDesc NullDesc;
 		return NullDesc;
 	}
@@ -111,7 +111,7 @@ namespace shz
 
 	void SerializedResourceSignatureImpl::InitCommonData(const PipelineResourceSignatureDesc& Desc)
 	{
-		VERIFY(m_Name == Desc.Name, "Inconsistent signature name");
+		ASSERT(m_Name == Desc.Name, "Inconsistent signature name");
 
 		if (!m_CommonData)
 		{
@@ -125,9 +125,9 @@ namespace shz
 			m_CommonData = MeasureSer.AllocateData(GetRawAllocator());
 			Serializer<SerializerMode::Write> WSer{ m_CommonData };
 			PRSSerializer<SerializerMode::Write>::SerializeDesc(WSer, Desc, nullptr);
-			VERIFY_EXPR(WSer.IsEnded());
+			ASSERT_EXPR(WSer.IsEnded());
 
-			VERIFY_EXPR(GetDesc() == Desc);
+			ASSERT_EXPR(GetDesc() == Desc);
 		}
 	}
 

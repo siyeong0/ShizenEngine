@@ -135,7 +135,7 @@ namespace shz
 			IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
 			hr = pd3d12Device->CreateCommandSignature(&CmdSignatureDesc, nullptr, __uuidof(m_pDrawMeshIndirectSignature), reinterpret_cast<void**>(static_cast<ID3D12CommandSignature**>(&m_pDrawMeshIndirectSignature)));
 			CHECK_D3D_RESULT_THROW(hr, "Failed to create draw mesh indirect command signature");
-			VERIFY_EXPR(CmdSignatureDesc.ByteStride == DrawMeshIndirectCommandStride);
+			ASSERT_EXPR(CmdSignatureDesc.ByteStride == DrawMeshIndirectCommandStride);
 		}
 #endif
 		if (pDeviceD3D12Impl->GetFeatures().RayTracing == DEVICE_FEATURE_STATE_ENABLED &&
@@ -155,7 +155,7 @@ namespace shz
 			// (reading 0s, writes are discarded), but must have a valid pDesc in order to determine the descriptor type.
 			// https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createrendertargetview
 			pd3d12Device->CreateRenderTargetView(nullptr, &NullRTVDesc, m_NullRTV.GetCpuHandle());
-			VERIFY(!m_NullRTV.IsNull(), "Failed to create null RTV");
+			ASSERT(!m_NullRTV.IsNull(), "Failed to create null RTV");
 		}
 
 		m_MappedBuffers.reserve(32);
@@ -198,14 +198,14 @@ namespace shz
 
 		// Note: as dynamic pages are returned to the global dynamic memory manager hosted by the render device,
 		// the dynamic heap can be destroyed before all pages are actually returned to the global manager.
-		DEV_CHECK_ERR(m_DynamicHeap.GetAllocatedPagesCount() == 0, "All dynamic pages must have been released by now.");
+		ASSERT(m_DynamicHeap.GetAllocatedPagesCount() == 0, "All dynamic pages must have been released by now.");
 
 		for (size_t i = 0; i < _countof(m_DynamicGPUDescriptorAllocator); ++i)
 		{
 			// Note: as dynamic descriptor suballocations are returned to the global GPU descriptor heap that
 			// is hosted by the render device, the descriptor allocator can be destroyed before all suballocations
 			// are actually returned to the global heap.
-			DEV_CHECK_ERR(m_DynamicGPUDescriptorAllocator[i].GetSuballocationCount() == 0, "All dynamic suballocations must have been released");
+			ASSERT(m_DynamicGPUDescriptorAllocator[i].GetSuballocationCount() == 0, "All dynamic suballocations must have been released");
 		}
 	}
 
@@ -214,7 +214,7 @@ namespace shz
 		CComPtr<ID3D12CommandSignature>& Sig = m_pDrawIndirectSignatureMap[Stride];
 		if (Sig == nullptr)
 		{
-			VERIFY_EXPR(Stride >= sizeof(UINT) * 4);
+			ASSERT_EXPR(Stride >= sizeof(UINT) * 4);
 
 			D3D12_INDIRECT_ARGUMENT_DESC IndirectArg{};
 			IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
@@ -236,7 +236,7 @@ namespace shz
 		CComPtr<ID3D12CommandSignature>& Sig = m_pDrawIndexedIndirectSignatureMap[Stride];
 		if (Sig == nullptr)
 		{
-			VERIFY_EXPR(Stride >= sizeof(UINT) * 5);
+			ASSERT_EXPR(Stride >= sizeof(UINT) * 5);
 
 			D3D12_INDIRECT_ARGUMENT_DESC IndirectArg{};
 			IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
@@ -255,7 +255,7 @@ namespace shz
 
 	void DeviceContextD3D12Impl::Begin(uint32 ImmediateContextId)
 	{
-		DEV_CHECK_ERR(ImmediateContextId < m_pDevice->GetCommandQueueCount(), "ImmediateContextId is out of range");
+		ASSERT(ImmediateContextId < m_pDevice->GetCommandQueueCount(), "ImmediateContextId is out of range");
 		SoftwareQueueIndex            CommandQueueId{ ImmediateContextId };
 		const D3D12_COMMAND_LIST_TYPE d3d12CmdListType = m_pDevice->GetCommandQueueType(CommandQueueId);
 		const COMMAND_QUEUE_TYPE      QueueType = D3D12CommandListTypeToCmdQueueType(d3d12CmdListType);
@@ -362,10 +362,10 @@ namespace shz
 			break;
 		}
 		case PIPELINE_TYPE_TILE:
-			UNEXPECTED("Unsupported pipeline type");
+			ASSERT(false, "Unsupported pipeline type");
 			break;
 		default:
-			UNEXPECTED("Unknown pipeline type");
+			ASSERT(false, "Unknown pipeline type");
 		}
 	}
 
@@ -382,18 +382,18 @@ namespace shz
 			IsCompute,
 		};
 
-		VERIFY(CommitSRBMask != 0, "This method should not be called when there is nothing to commit");
+		ASSERT(CommitSRBMask != 0, "This method should not be called when there is nothing to commit");
 		while (CommitSRBMask != 0)
 		{
 			const uint32 SignBit = ExtractLSB(CommitSRBMask);
 			const uint32 sign = PlatformMisc::GetLSB(SignBit);
-			VERIFY_EXPR(sign < m_pPipelineState->GetResourceSignatureCount());
+			ASSERT_EXPR(sign < m_pPipelineState->GetResourceSignatureCount());
 
 			const PipelineResourceSignatureD3D12Impl* const pSignature = RootSig.GetResourceSignature(sign);
-			VERIFY_EXPR(pSignature != nullptr && pSignature->GetTotalResourceCount() > 0);
+			ASSERT_EXPR(pSignature != nullptr && pSignature->GetTotalResourceCount() > 0);
 
 			const ShaderResourceCacheD3D12* pResourceCache = RootInfo.ResourceCaches[sign];
-			DEV_CHECK_ERR(pResourceCache != nullptr, "Resource cache at index ", sign, " is null.");
+			ASSERT(pResourceCache != nullptr, "Resource cache at index ", sign, " is null.");
 
 			CommitAttribs.pResourceCache = pResourceCache;
 			CommitAttribs.BaseRootIndex = RootSig.GetBaseRootIndex(sign);
@@ -407,26 +407,26 @@ namespace shz
 			// the bit should not be set in CommitSRBMask.
 			if (uint64 DynamicRootBuffersMask = pResourceCache->GetDynamicRootBuffersMask())
 			{
-				DEV_CHECK_ERR((RootInfo.DynamicSRBMask & SignBit) != 0,
+				ASSERT((RootInfo.DynamicSRBMask & SignBit) != 0,
 					"There are dynamic root buffers in the cache, but the bit in DynamicSRBMask is not set. This may indicate that resources "
 					"in the cache have changed, but the SRB has not been committed before the draw/dispatch command.");
 				pSignature->CommitRootViews(CommitAttribs, DynamicRootBuffersMask);
 			}
 			else
 			{
-				DEV_CHECK_ERR((RootInfo.DynamicSRBMask & SignBit) == 0,
+				ASSERT((RootInfo.DynamicSRBMask & SignBit) == 0,
 					"There are no dynamic root buffers in the cache, but the bit in DynamicSRBMask is set. This may indicate that resources "
 					"in the cache have changed, but the SRB has not been committed before the draw/dispatch command.");
 			}
 		}
 
-		VERIFY_EXPR((CommitSRBMask & RootInfo.ActiveSRBMask) == 0);
+		ASSERT_EXPR((CommitSRBMask & RootInfo.ActiveSRBMask) == 0);
 		RootInfo.StaleSRBMask &= ~RootInfo.ActiveSRBMask;
 	}
 
 	void DeviceContextD3D12Impl::TransitionShaderResources(IShaderResourceBinding* pShaderResourceBinding)
 	{
-		DEV_CHECK_ERR(!m_pActiveRenderPass, "State transitions are not allowed inside a render pass.");
+		ASSERT(!m_pActiveRenderPass, "State transitions are not allowed inside a render pass.");
 
 		CommandContext& CmdCtx = GetCmdContext();
 		ShaderResourceBindingD3D12Impl* pResBindingD3D12Impl = ClassPtrCast<ShaderResourceBindingD3D12Impl>(pShaderResourceBinding);
@@ -507,7 +507,7 @@ namespace shz
 
 	void DeviceContextD3D12Impl::CommitD3D12IndexBuffer(GraphicsContext& GraphCtx, VALUE_TYPE IndexType)
 	{
-		DEV_CHECK_ERR(m_pIndexBuffer != nullptr, "Index buffer is not set up for indexed draw command");
+		ASSERT(m_pIndexBuffer != nullptr, "Index buffer is not set up for indexed draw command");
 
 		D3D12_INDEX_BUFFER_VIEW IBView;
 		IBView.BufferLocation = GetBufferGPUAddress(m_pIndexBuffer) + m_IndexDataStartOffset;
@@ -515,7 +515,7 @@ namespace shz
 			IBView.Format = DXGI_FORMAT_R32_UINT;
 		else
 		{
-			DEV_CHECK_ERR(IndexType == VT_UINT16, "Unsupported index format. Only R16_UINT and R32_UINT are allowed.");
+			ASSERT(IndexType == VT_UINT16, "Unsupported index format. Only R16_UINT and R32_UINT are allowed.");
 			IBView.Format = DXGI_FORMAT_R16_UINT;
 		}
 		// Note that for a dynamic buffer, what we use here is the size of the buffer itself, not the upload heap buffer!
@@ -559,8 +559,8 @@ namespace shz
 	{
 		// Do not initialize array with zeroes for performance reasons
 		D3D12_VERTEX_BUFFER_VIEW VBViews[MAX_BUFFER_SLOTS]; // = {}
-		VERIFY(m_NumVertexStreams <= MAX_BUFFER_SLOTS, "Too many buffers are being set");
-		DEV_CHECK_ERR(m_NumVertexStreams >= m_pPipelineState->GetNumBufferSlotsUsed(), "Currently bound pipeline state '", m_pPipelineState->GetDesc().Name, "' expects ", m_pPipelineState->GetNumBufferSlotsUsed(), " input buffer slots, but only ", m_NumVertexStreams, " is bound");
+		ASSERT(m_NumVertexStreams <= MAX_BUFFER_SLOTS, "Too many buffers are being set");
+		ASSERT(m_NumVertexStreams >= m_pPipelineState->GetNumBufferSlotsUsed(), "Currently bound pipeline state '", m_pPipelineState->GetDesc().Name, "' expects ", m_pPipelineState->GetNumBufferSlotsUsed(), " input buffer slots, but only ", m_NumVertexStreams, " is bound");
 		bool DynamicBufferPresent = false;
 		for (UINT Buff = 0; Buff < m_NumVertexStreams; ++Buff)
 		{
@@ -736,7 +736,7 @@ namespace shz
 		uint64& BuffDataStartByteOffset,
 		const char* OpName)
 	{
-		DEV_CHECK_ERR(pAttribsBuffer != nullptr, "Indirect draw attribs buffer must not be null");
+		ASSERT(pAttribsBuffer != nullptr, "Indirect draw attribs buffer must not be null");
 
 		BufferD3D12Impl* pIndirectDrawAttribsD3D12 = ClassPtrCast<BufferD3D12Impl>(pAttribsBuffer);
 #ifdef SHZ_DEBUG
@@ -764,7 +764,7 @@ namespace shz
 			"Indirect draw (DeviceContextD3D12Impl::DrawIndirect)");
 
 		ID3D12CommandSignature* pDrawIndirectSignature = GetDrawIndirectSignature(Attribs.DrawCount > 1 ? Attribs.DrawArgsStride : sizeof(UINT) * 4);
-		VERIFY_EXPR(pDrawIndirectSignature != nullptr);
+		ASSERT_EXPR(pDrawIndirectSignature != nullptr);
 
 		ID3D12Resource* pd3d12CountBuff = nullptr;
 		uint64          CountBuffDataStartByteOffset = 0;
@@ -800,7 +800,7 @@ namespace shz
 			"indexed Indirect draw (DeviceContextD3D12Impl::DrawIndexedIndirect)");
 
 		ID3D12CommandSignature* pDrawIndexedIndirectSignature = GetDrawIndexedIndirectSignature(Attribs.DrawCount > 1 ? Attribs.DrawArgsStride : sizeof(UINT) * 5);
-		VERIFY_EXPR(pDrawIndexedIndirectSignature != nullptr);
+		ASSERT_EXPR(pDrawIndexedIndirectSignature != nullptr);
 
 
 		ID3D12Resource* pd3d12CountBuff = nullptr;
@@ -930,7 +930,7 @@ namespace shz
 		uint8                          Stencil,
 		RESOURCE_STATE_TRANSITION_MODE StateTransitionMode)
 	{
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "Direct3D12 does not allow depth-stencil clears inside a render pass");
+		ASSERT(m_pActiveRenderPass == nullptr, "Direct3D12 does not allow depth-stencil clears inside a render pass");
 
 		TDeviceContextBase::ClearDepthStencil(pView);
 
@@ -951,7 +951,7 @@ namespace shz
 
 	void DeviceContextD3D12Impl::ClearRenderTarget(ITextureView* pView, const void* RGBA, RESOURCE_STATE_TRANSITION_MODE StateTransitionMode)
 	{
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "Direct3D12 does not allow render target clears inside a render pass");
+		ASSERT(m_pActiveRenderPass == nullptr, "Direct3D12 does not allow render target clears inside a render pass");
 
 		TDeviceContextBase::ClearRenderTarget(pView);
 
@@ -968,7 +968,7 @@ namespace shz
 			if (FmtAttribs.ComponentType == COMPONENT_TYPE_SINT ||
 				FmtAttribs.ComponentType == COMPONENT_TYPE_UINT)
 			{
-				DEV_CHECK_ERR(memcmp(RGBA, Zero, 4 * sizeof(float)) == 0, "Integer render targets can at the moment only be cleared to zero in Direct3D12");
+				ASSERT(memcmp(RGBA, Zero, 4 * sizeof(float)) == 0, "Integer render targets can at the moment only be cleared to zero in Direct3D12");
 			}
 		}
 #endif
@@ -993,9 +993,9 @@ namespace shz
 		uint32               NumCommandLists,
 		ICommandList* const* ppCommandLists)
 	{
-		VERIFY(!IsDeferred() || NumCommandLists == 0 && ppCommandLists == nullptr, "Only immediate context can execute command lists");
+		ASSERT(!IsDeferred() || NumCommandLists == 0 && ppCommandLists == nullptr, "Only immediate context can execute command lists");
 
-		DEV_CHECK_ERR(m_ActiveQueriesCounter == 0,
+		ASSERT(m_ActiveQueriesCounter == 0,
 			"Flushing device context that has ", m_ActiveQueriesCounter,
 			" active queries. Direct3D12 requires that queries are begun and ended in the same command list");
 
@@ -1006,7 +1006,7 @@ namespace shz
 		// First, execute current context
 		if (m_CurrCmdCtx)
 		{
-			VERIFY(!IsDeferred(), "Deferred contexts cannot execute command lists directly");
+			ASSERT(!IsDeferred(), "Deferred contexts cannot execute command lists directly");
 			if (m_State.NumCommands != 0)
 				Contexts.emplace_back(std::move(m_CurrCmdCtx));
 			else if (!RequestNewCmdCtx) // Reuse existing context instead of disposing and creating new one.
@@ -1020,7 +1020,7 @@ namespace shz
 
 			RefCntAutoPtr<DeviceContextD3D12Impl> pDeferredCtx;
 			Contexts.emplace_back(pCmdListD3D12->Close(pDeferredCtx));
-			VERIFY(Contexts.back() && pDeferredCtx, "Trying to execute empty command buffer");
+			ASSERT(Contexts.back() && pDeferredCtx, "Trying to execute empty command buffer");
 			// Set the bit in the deferred context cmd queue mask corresponding to the cmd queue of this context
 			pDeferredCtx->UpdateSubmittedBuffersCmdQueueMask(GetCommandQueueId());
 		}
@@ -1031,7 +1031,7 @@ namespace shz
 
 #ifdef SHZ_DEBUG
 			for (const RenderDeviceD3D12Impl::PooledCommandContext& Ctx : Contexts)
-				VERIFY(!Ctx, "All contexts must be disposed by CloseAndExecuteCommandContexts");
+				ASSERT(!Ctx, "All contexts must be disposed by CloseAndExecuteCommandContexts");
 #endif
 		}
 		else
@@ -1066,8 +1066,8 @@ namespace shz
 
 	void DeviceContextD3D12Impl::Flush()
 	{
-		DEV_CHECK_ERR(!IsDeferred(), "Flush() should only be called for immediate contexts");
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "Flushing device context inside an active render pass.");
+		ASSERT(!IsDeferred(), "Flush() should only be called for immediate contexts");
+		ASSERT(m_pActiveRenderPass == nullptr, "Flushing device context inside an active render pass.");
 
 		Flush(true);
 	}
@@ -1115,7 +1115,7 @@ namespace shz
 		}
 
 		const uint64 QueueMask = GetSubmittedBuffersCmdQueueMask();
-		VERIFY_EXPR(IsDeferred() || QueueMask == (uint64{ 1 } << GetCommandQueueId()));
+		ASSERT_EXPR(IsDeferred() || QueueMask == (uint64{ 1 } << GetCommandQueueId()));
 
 		// Released pages are returned to the global dynamic memory manager hosted by render device.
 		m_DynamicHeap.ReleaseAllocatedPages(QueueMask);
@@ -1193,7 +1193,7 @@ namespace shz
 	{
 		static_assert(MAX_VIEWPORTS >= D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE, "MaxViewports constant must be greater than D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE");
 		TDeviceContextBase::SetViewports(NumViewports, pViewports, RTWidth, RTHeight);
-		VERIFY(NumViewports == m_NumViewports, "Unexpected number of viewports");
+		ASSERT(NumViewports == m_NumViewports, "Unexpected number of viewports");
 
 		CommitViewports();
 	}
@@ -1252,7 +1252,7 @@ namespace shz
 	void DeviceContextD3D12Impl::SetScissorRects(uint32 NumRects, const Rect* pRects, uint32 RTWidth, uint32 RTHeight)
 	{
 		const uint32 MaxScissorRects = D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-		VERIFY(NumRects < MaxScissorRects, "Too many scissor rects are being set");
+		ASSERT(NumRects < MaxScissorRects, "Too many scissor rects are being set");
 		NumRects = std::min(NumRects, MaxScissorRects);
 
 		TDeviceContextBase::SetScissorRects(NumRects, pRects, RTWidth, RTHeight);
@@ -1265,7 +1265,7 @@ namespace shz
 			const PipelineStateDesc& PSODesc = m_pPipelineState->GetDesc();
 			if (PSODesc.IsAnyGraphicsPipeline() && m_pPipelineState->GetGraphicsPipelineDesc().RasterizerDesc.ScissorEnable)
 			{
-				VERIFY(NumRects == m_NumScissorRects, "Unexpected number of scissor rects");
+				ASSERT(NumRects == m_NumScissorRects, "Unexpected number of scissor rects");
 				GraphicsContext& Ctx = GetCmdContext().AsGraphicsContext();
 				CommitScissorRects(Ctx, true);
 			}
@@ -1274,11 +1274,11 @@ namespace shz
 
 	void DeviceContextD3D12Impl::CommitRenderTargets(RESOURCE_STATE_TRANSITION_MODE StateTransitionMode)
 	{
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "This method must not be called inside a render pass");
+		ASSERT(m_pActiveRenderPass == nullptr, "This method must not be called inside a render pass");
 
 		const uint32 MaxD3D12RTs = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
 		uint32       NumRenderTargets = m_NumBoundRenderTargets;
-		VERIFY(NumRenderTargets <= MaxD3D12RTs, "D3D12 only allows 8 simultaneous render targets");
+		ASSERT(NumRenderTargets <= MaxD3D12RTs, "D3D12 only allows 8 simultaneous render targets");
 		NumRenderTargets = std::min(MaxD3D12RTs, NumRenderTargets);
 
 		ITextureViewD3D12* ppRTVs[MaxD3D12RTs]; // Do not initialize with zeroes!
@@ -1299,7 +1299,7 @@ namespace shz
 				TextureD3D12Impl* pTexture = ClassPtrCast<TextureD3D12Impl>(pRTV->GetTexture());
 				TransitionOrVerifyTextureState(CmdCtx, *pTexture, StateTransitionMode, RESOURCE_STATE_RENDER_TARGET, "Setting render targets (DeviceContextD3D12Impl::CommitRenderTargets)");
 				RTVHandles[i] = pRTV->GetCPUDescriptorHandle();
-				VERIFY_EXPR(RTVHandles[i].ptr != 0);
+				ASSERT_EXPR(RTVHandles[i].ptr != 0);
 			}
 			else
 			{
@@ -1312,7 +1312,7 @@ namespace shz
 		if (pDSV)
 		{
 			const TEXTURE_VIEW_TYPE ViewType = m_pBoundDepthStencil->GetDesc().ViewType;
-			VERIFY_EXPR(ViewType == TEXTURE_VIEW_DEPTH_STENCIL || ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL);
+			ASSERT_EXPR(ViewType == TEXTURE_VIEW_DEPTH_STENCIL || ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL);
 			RESOURCE_STATE NewState = ViewType == TEXTURE_VIEW_DEPTH_STENCIL ?
 				RESOURCE_STATE_DEPTH_WRITE :
 				RESOURCE_STATE_DEPTH_READ;
@@ -1327,7 +1327,7 @@ namespace shz
 
 			TransitionOrVerifyTextureState(CmdCtx, *pTexture, StateTransitionMode, NewState, "Setting depth-stencil buffer (DeviceContextD3D12Impl::CommitRenderTargets)");
 			DSVHandle = pDSV->GetCPUDescriptorHandle();
-			VERIFY_EXPR(DSVHandle.ptr != 0);
+			ASSERT_EXPR(DSVHandle.ptr != 0);
 		}
 
 		if (NumRenderTargets > 0 || DSVHandle.ptr != 0)
@@ -1355,7 +1355,7 @@ namespace shz
 
 	void DeviceContextD3D12Impl::SetRenderTargetsExt(const SetRenderTargetsAttribs& Attribs)
 	{
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "Calling SetRenderTargets inside active render pass is invalid. End the render pass first");
+		ASSERT(m_pActiveRenderPass == nullptr, "Calling SetRenderTargets inside active render pass is invalid. End the render pass first");
 
 		if (TDeviceContextBase::SetRenderTargets(Attribs))
 		{
@@ -1368,11 +1368,11 @@ namespace shz
 
 	void DeviceContextD3D12Impl::TransitionSubpassAttachments(uint32 NextSubpass)
 	{
-		VERIFY_EXPR(m_pActiveRenderPass);
+		ASSERT_EXPR(m_pActiveRenderPass);
 		const RenderPassDesc& RPDesc = m_pActiveRenderPass->GetDesc();
-		VERIFY_EXPR(m_pBoundFramebuffer);
+		ASSERT_EXPR(m_pBoundFramebuffer);
 		const FramebufferDesc& FBDesc = m_pBoundFramebuffer->GetDesc();
-		VERIFY_EXPR(RPDesc.AttachmentCount == FBDesc.AttachmentCount);
+		ASSERT_EXPR(RPDesc.AttachmentCount == FBDesc.AttachmentCount);
 		for (uint32 att = 0; att < RPDesc.AttachmentCount; ++att)
 		{
 			const RenderPassAttachmentDesc& AttDesc = RPDesc.pAttachments[att];
@@ -1413,13 +1413,13 @@ namespace shz
 
 	void DeviceContextD3D12Impl::CommitSubpassRenderTargets()
 	{
-		VERIFY_EXPR(m_pActiveRenderPass);
+		ASSERT_EXPR(m_pActiveRenderPass);
 		const RenderPassDesc& RPDesc = m_pActiveRenderPass->GetDesc();
-		VERIFY_EXPR(m_pBoundFramebuffer);
+		ASSERT_EXPR(m_pBoundFramebuffer);
 		const FramebufferDesc& FBDesc = m_pBoundFramebuffer->GetDesc();
-		VERIFY_EXPR(m_SubpassIndex < RPDesc.SubpassCount);
+		ASSERT_EXPR(m_SubpassIndex < RPDesc.SubpassCount);
 		const SubpassDesc& Subpass = RPDesc.pSubpasses[m_SubpassIndex];
-		VERIFY(Subpass.RenderTargetAttachmentCount == m_NumBoundRenderTargets,
+		ASSERT(Subpass.RenderTargetAttachmentCount == m_NumBoundRenderTargets,
 			"The number of currently bound render targets (", m_NumBoundRenderTargets,
 			") is not consistent with the number of render target attachments (", Subpass.RenderTargetAttachmentCount,
 			") in current subpass");
@@ -1431,7 +1431,7 @@ namespace shz
 			if (RTRef.AttachmentIndex != ATTACHMENT_UNUSED)
 			{
 				TextureViewD3D12Impl* pRTV = m_pBoundRenderTargets[rt];
-				VERIFY(pRTV == FBDesc.ppAttachments[RTRef.AttachmentIndex],
+				ASSERT(pRTV == FBDesc.ppAttachments[RTRef.AttachmentIndex],
 					"Render target bound in the device context at slot ", rt, " is not consistent with the corresponding framebuffer attachment");
 				const auto                      FirstLastUse = m_pActiveRenderPass->GetAttachmentFirstLastUse(RTRef.AttachmentIndex);
 				const RenderPassAttachmentDesc& RTAttachmentDesc = RPDesc.pAttachments[RTRef.AttachmentIndex];
@@ -1465,7 +1465,7 @@ namespace shz
 					// This is the last use of this attachment - use StoreOp or resolve parameters
 					if (Subpass.pResolveAttachments != nullptr && Subpass.pResolveAttachments[rt].AttachmentIndex != ATTACHMENT_UNUSED)
 					{
-						VERIFY_EXPR(Subpass.pResolveAttachments[rt].AttachmentIndex < RPDesc.AttachmentCount);
+						ASSERT_EXPR(Subpass.pResolveAttachments[rt].AttachmentIndex < RPDesc.AttachmentCount);
 						ITextureView* pDstView = FBDesc.ppAttachments[Subpass.pResolveAttachments[rt].AttachmentIndex];
 						TextureD3D12Impl* pSrcTexD3D12 = pRTV->GetTexture<TextureD3D12Impl>();
 						TextureD3D12Impl* pDstTexD3D12 = ClassPtrCast<TextureViewD3D12Impl>(pDstView)->GetTexture<TextureD3D12Impl>();
@@ -1475,7 +1475,7 @@ namespace shz
 						const TextureDesc& SrcTexDesc = pSrcTexD3D12->GetDesc();
 						const TextureDesc& DstTexDesc = pDstTexD3D12->GetDesc();
 
-						VERIFY_EXPR(SrcRTVDesc.NumArraySlices == 1);
+						ASSERT_EXPR(SrcRTVDesc.NumArraySlices == 1);
 						uint32 SubresourceCount = SrcRTVDesc.NumArraySlices;
 						m_AttachmentResolveInfo.resize(SubresourceCount);
 						const MipLevelProperties MipProps = GetMipLevelProperties(SrcTexDesc, SrcRTVDesc.MostDetailedMip);
@@ -1534,10 +1534,10 @@ namespace shz
 			RenderPassDS = D3D12_RENDER_PASS_DEPTH_STENCIL_DESC{};
 
 			const AttachmentReference& DSAttachmentRef = *Subpass.pDepthStencilAttachment;
-			VERIFY_EXPR(Subpass.pDepthStencilAttachment != nullptr && DSAttachmentRef.AttachmentIndex != ATTACHMENT_UNUSED);
+			ASSERT_EXPR(Subpass.pDepthStencilAttachment != nullptr && DSAttachmentRef.AttachmentIndex != ATTACHMENT_UNUSED);
 			const auto                      FirstLastUse = m_pActiveRenderPass->GetAttachmentFirstLastUse(DSAttachmentRef.AttachmentIndex);
 			const RenderPassAttachmentDesc& DSAttachmentDesc = RPDesc.pAttachments[DSAttachmentRef.AttachmentIndex];
-			VERIFY(m_pBoundDepthStencil ==
+			ASSERT(m_pBoundDepthStencil ==
 				(DSAttachmentRef.State == RESOURCE_STATE_DEPTH_READ ?
 					m_pBoundFramebuffer->GetReadOnlyDSV(m_SubpassIndex) :
 					FBDesc.ppAttachments[DSAttachmentRef.AttachmentIndex]),
@@ -1644,7 +1644,7 @@ namespace shz
 		TransitionOrVerifyBufferState(CmdCtx, *pBuffD3D12, StateTransitionMode, RESOURCE_STATE_COPY_DEST, "Updating buffer (DeviceContextD3D12Impl::UpdateBufferRegion)");
 		uint64          DstBuffDataStartByteOffset = 0;
 		ID3D12Resource* pd3d12Buff = pBuffD3D12->GetD3D12Buffer(DstBuffDataStartByteOffset, this);
-		VERIFY(DstBuffDataStartByteOffset == 0, "Dst buffer must not be suballocated");
+		ASSERT(DstBuffDataStartByteOffset == 0, "Dst buffer must not be suballocated");
 		CmdCtx.FlushResourceBarriers();
 		CmdCtx.GetCommandList()->CopyBufferRegion(pd3d12Buff, DstOffset + DstBuffDataStartByteOffset, Allocation.pBuffer, Allocation.Offset, NumBytes);
 		++m_State.NumCommands;
@@ -1661,7 +1661,7 @@ namespace shz
 		// We must use cmd context from the device context provided, otherwise there will
 		// be resource barrier issues in the cmd list in the device context
 		BufferD3D12Impl* pBuffD3D12 = ClassPtrCast<BufferD3D12Impl>(pBuffer);
-		VERIFY(pBuffD3D12->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffers must be updated via Map()");
+		ASSERT(pBuffD3D12->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffers must be updated via Map()");
 		constexpr size_t       DefaultAlignment = 16;
 		D3D12DynamicAllocation TmpSpace = m_DynamicHeap.Allocate(Size, DefaultAlignment, GetFrameNumber());
 		memcpy(TmpSpace.CPUAddress, pData, StaticCast<size_t>(Size));
@@ -1681,7 +1681,7 @@ namespace shz
 		BufferD3D12Impl* pSrcBuffD3D12 = ClassPtrCast<BufferD3D12Impl>(pSrcBuffer);
 		BufferD3D12Impl* pDstBuffD3D12 = ClassPtrCast<BufferD3D12Impl>(pDstBuffer);
 
-		VERIFY(pDstBuffD3D12->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffers cannot be copy destinations");
+		ASSERT(pDstBuffD3D12->GetDesc().Usage != USAGE_DYNAMIC, "Dynamic buffers cannot be copy destinations");
 
 		CommandContext& CmdCtx = GetCmdContext();
 		TransitionOrVerifyBufferState(CmdCtx, *pSrcBuffD3D12, SrcBufferTransitionMode, RESOURCE_STATE_COPY_SOURCE, "Using resource as copy source (DeviceContextD3D12Impl::CopyBuffer)");
@@ -1689,7 +1689,7 @@ namespace shz
 
 		uint64          DstDataStartByteOffset = 0;
 		ID3D12Resource* pd3d12DstBuff = pDstBuffD3D12->GetD3D12Buffer(DstDataStartByteOffset, this);
-		VERIFY(DstDataStartByteOffset == 0, "Dst buffer must not be suballocated");
+		ASSERT(DstDataStartByteOffset == 0, "Dst buffer must not be suballocated");
 
 		uint64          SrcDataStartByteOffset = 0;
 		ID3D12Resource* pd3d12SrcBuff = pSrcBuffD3D12->GetD3D12Buffer(SrcDataStartByteOffset, this);
@@ -1707,8 +1707,8 @@ namespace shz
 
 		if (MapType == MAP_READ)
 		{
-			DEV_CHECK_ERR(BuffDesc.Usage == USAGE_STAGING, "Buffer must be created as USAGE_STAGING to be mapped for reading");
-			DEV_CHECK_ERR(pd3d12Resource != nullptr, "USAGE_STAGING buffer must initialize D3D12 resource");
+			ASSERT(BuffDesc.Usage == USAGE_STAGING, "Buffer must be created as USAGE_STAGING to be mapped for reading");
+			ASSERT(pd3d12Resource != nullptr, "USAGE_STAGING buffer must initialize D3D12 resource");
 
 			if ((MapFlags & MAP_FLAG_DO_NOT_WAIT) == 0)
 			{
@@ -1726,7 +1726,7 @@ namespace shz
 		{
 			if (BuffDesc.Usage == USAGE_STAGING)
 			{
-				DEV_CHECK_ERR(pd3d12Resource != nullptr, "USAGE_STAGING buffer mapped for writing must initialize D3D12 resource");
+				ASSERT(pd3d12Resource != nullptr, "USAGE_STAGING buffer mapped for writing must initialize D3D12 resource");
 				if (MapFlags & MAP_FLAG_DISCARD)
 				{
 					// Nothing to do
@@ -1735,10 +1735,10 @@ namespace shz
 			}
 			else if (BuffDesc.Usage == USAGE_DYNAMIC)
 			{
-				DEV_CHECK_ERR((MapFlags & (MAP_FLAG_DISCARD | MAP_FLAG_NO_OVERWRITE)) != 0, "D3D12 buffer must be mapped for writing with MAP_FLAG_DISCARD or MAP_FLAG_NO_OVERWRITE flag");
+				ASSERT((MapFlags & (MAP_FLAG_DISCARD | MAP_FLAG_NO_OVERWRITE)) != 0, "D3D12 buffer must be mapped for writing with MAP_FLAG_DISCARD or MAP_FLAG_NO_OVERWRITE flag");
 
 				const uint32 DynamicBufferId = pBufferD3D12->GetDynamicBufferId();
-				VERIFY(DynamicBufferId != ~0u, "Dynamic buffer '", BuffDesc.Name, "' does not have dynamic buffer ID");
+				ASSERT(DynamicBufferId != ~0u, "Dynamic buffer '", BuffDesc.Name, "' does not have dynamic buffer ID");
 				if (m_MappedBuffers.size() <= DynamicBufferId)
 					m_MappedBuffers.resize(DynamicBufferId + 1);
 				D3D12DynamicAllocation& DynamicData = m_MappedBuffers[DynamicBufferId].Allocation;
@@ -1752,7 +1752,7 @@ namespace shz
 				}
 				else
 				{
-					VERIFY_EXPR(MapFlags & MAP_FLAG_NO_OVERWRITE);
+					ASSERT_EXPR(MapFlags & MAP_FLAG_NO_OVERWRITE);
 
 					if (pd3d12Resource != nullptr)
 					{
@@ -1800,7 +1800,7 @@ namespace shz
 		{
 			if (BuffDesc.Usage == USAGE_STAGING)
 			{
-				VERIFY(pd3d12Resource != nullptr, "USAGE_STAGING buffer mapped for writing must initialize D3D12 resource");
+				ASSERT(pd3d12Resource != nullptr, "USAGE_STAGING buffer mapped for writing must initialize D3D12 resource");
 				pd3d12Resource->Unmap(0, nullptr);
 			}
 			else if (BuffDesc.Usage == USAGE_DYNAMIC)
@@ -1809,7 +1809,7 @@ namespace shz
 				if (pd3d12Resource)
 				{
 					const uint32 DynamicBufferId = pBufferD3D12->GetDynamicBufferId();
-					VERIFY(DynamicBufferId != ~0u, "Dynamic buffer '", BuffDesc.Name, "' does not have dynamic buffer ID");
+					ASSERT(DynamicBufferId != ~0u, "Dynamic buffer '", BuffDesc.Name, "' does not have dynamic buffer ID");
 					if (DynamicBufferId < m_MappedBuffers.size())
 					{
 						D3D12DynamicAllocation& DynAlloc = m_MappedBuffers[DynamicBufferId].Allocation;
@@ -1817,7 +1817,7 @@ namespace shz
 					}
 					else
 					{
-						DEV_ERROR("Unmapping buffer '", BuffDesc.Name, "' that was not previously mapped.");
+						ASSERT(false, "Unmapping buffer '", BuffDesc.Name, "' that was not previously mapped.");
 					}
 				}
 			}
@@ -1826,14 +1826,14 @@ namespace shz
 
 	ID3D12Resource* DeviceContextD3D12Impl::GetDynamicBufferD3D12ResourceAndOffset(const BufferD3D12Impl* pBuffer, uint64& DataStartByteOffset)
 	{
-		VERIFY_EXPR(pBuffer->GetDesc().Usage == USAGE_DYNAMIC);
+		ASSERT_EXPR(pBuffer->GetDesc().Usage == USAGE_DYNAMIC);
 
 #ifdef SHZ_DEBUG
 		DvpVerifyDynamicAllocation(pBuffer);
 #endif
 
 		const uint32 DynamicBufferId = pBuffer->GetDynamicBufferId();
-		VERIFY(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
+		ASSERT(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
 		if (DynamicBufferId < m_MappedBuffers.size())
 		{
 			const D3D12DynamicAllocation& Allocation{ m_MappedBuffers[DynamicBufferId].Allocation };
@@ -1850,31 +1850,31 @@ namespace shz
 #ifdef SHZ_DEBUG
 	void DeviceContextD3D12Impl::DvpVerifyDynamicAllocation(const BufferD3D12Impl* pBuffer) const
 	{
-		VERIFY_EXPR(pBuffer != nullptr);
+		ASSERT_EXPR(pBuffer != nullptr);
 
 		if (pBuffer->GetD3D12Resource() != nullptr)
 			return;
 
 		const BufferDesc& BuffDesc = pBuffer->GetDesc();
-		VERIFY_EXPR(BuffDesc.Usage == USAGE_DYNAMIC);
+		ASSERT_EXPR(BuffDesc.Usage == USAGE_DYNAMIC);
 
 		const uint32 DynamicBufferId = pBuffer->GetDynamicBufferId();
-		VERIFY(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
+		ASSERT(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
 
 		if (DynamicBufferId >= m_MappedBuffers.size())
 		{
-			DEV_ERROR("Dynamic buffer '", BuffDesc.Name, "' has not been mapped. Note: memory for dynamic buffers is allocated when a buffer is mapped.");
+			ASSERT(false, "Dynamic buffer '", BuffDesc.Name, "' has not been mapped. Note: memory for dynamic buffers is allocated when a buffer is mapped.");
 			return;
 		}
 
 		const MappedBuffer& MappedBuff = m_MappedBuffers[DynamicBufferId];
-		DEV_CHECK_ERR(MappedBuff.Allocation.GPUAddress != 0, "Dynamic buffer '", BuffDesc.Name, "' has not been mapped before its first use. Context Id: ", GetContextId(),
+		ASSERT(MappedBuff.Allocation.GPUAddress != 0, "Dynamic buffer '", BuffDesc.Name, "' has not been mapped before its first use. Context Id: ", GetContextId(),
 			". Note: memory for dynamic buffers is allocated when a buffer is mapped.");
 
-		DEV_CHECK_ERR(MappedBuff.Allocation.DvpCtxFrameNumber == GetFrameNumber(), "Dynamic allocation of dynamic buffer '", BuffDesc.Name, "' in frame ", GetFrameNumber(),
+		ASSERT(MappedBuff.Allocation.DvpCtxFrameNumber == GetFrameNumber(), "Dynamic allocation of dynamic buffer '", BuffDesc.Name, "' in frame ", GetFrameNumber(),
 			" is out-of-date. Note: contents of all dynamic resources is discarded at the end of every frame. A buffer must be mapped before its first use in any frame.");
 
-		DEV_CHECK_ERR(MappedBuff.DvpBufferUID == pBuffer->GetUniqueID(), "Dynamic buffer ID mismatch. Buffer '", BuffDesc.Name, "' has ID ", pBuffer->GetUniqueID(), " but the ID of the mapped buffer is ",
+		ASSERT(MappedBuff.DvpBufferUID == pBuffer->GetUniqueID(), "Dynamic buffer ID mismatch. Buffer '", BuffDesc.Name, "' has ID ", pBuffer->GetUniqueID(), " but the ID of the mapped buffer is ",
 			MappedBuff.DvpBufferUID, ". This indicates that dynamic space has been reassigned to a different buffer, which has not been mapped.");
 	}
 #endif
@@ -1893,7 +1893,7 @@ namespace shz
 		TextureD3D12Impl* pTexD3D12 = ClassPtrCast<TextureD3D12Impl>(pTexture);
 		const TextureDesc& Desc = pTexD3D12->GetDesc();
 		// OpenGL backend uses UpdateData() to initialize textures, so we can't check the usage in ValidateUpdateTextureParams()
-		DEV_CHECK_ERR(Desc.Usage == USAGE_DEFAULT || Desc.Usage == USAGE_SPARSE,
+		ASSERT(Desc.Usage == USAGE_DEFAULT || Desc.Usage == USAGE_SPARSE,
 			"Only USAGE_DEFAULT or USAGE_SPARSE textures should be updated with UpdateData()");
 
 		IBox                         BlockAlignedBox;
@@ -1903,14 +1903,14 @@ namespace shz
 		{
 			// Align update region by the compressed block size
 
-			VERIFY((DstBox.MinX % FmtAttribs.BlockWidth) == 0, "Update region min X coordinate (", DstBox.MinX, ") must be multiple of a compressed block width (", uint32{ FmtAttribs.BlockWidth }, ")");
+			ASSERT((DstBox.MinX % FmtAttribs.BlockWidth) == 0, "Update region min X coordinate (", DstBox.MinX, ") must be multiple of a compressed block width (", uint32{ FmtAttribs.BlockWidth }, ")");
 			BlockAlignedBox.MinX = DstBox.MinX;
-			VERIFY((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0, "Compressed block width (", uint32{ FmtAttribs.BlockWidth }, ") is expected to be power of 2");
+			ASSERT((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0, "Compressed block width (", uint32{ FmtAttribs.BlockWidth }, ") is expected to be power of 2");
 			BlockAlignedBox.MaxX = (DstBox.MaxX + FmtAttribs.BlockWidth - 1) & ~(FmtAttribs.BlockWidth - 1);
 
-			VERIFY((DstBox.MinY % FmtAttribs.BlockHeight) == 0, "Update region min Y coordinate (", DstBox.MinY, ") must be multiple of a compressed block height (", uint32{ FmtAttribs.BlockHeight }, ")");
+			ASSERT((DstBox.MinY % FmtAttribs.BlockHeight) == 0, "Update region min Y coordinate (", DstBox.MinY, ") must be multiple of a compressed block height (", uint32{ FmtAttribs.BlockHeight }, ")");
 			BlockAlignedBox.MinY = DstBox.MinY;
-			VERIFY((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0, "Compressed block height (", uint32{ FmtAttribs.BlockHeight }, ") is expected to be power of 2");
+			ASSERT((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0, "Compressed block height (", uint32{ FmtAttribs.BlockHeight }, ") is expected to be power of 2");
 			BlockAlignedBox.MaxY = (DstBox.MaxY + FmtAttribs.BlockHeight - 1) & ~(FmtAttribs.BlockHeight - 1);
 
 			BlockAlignedBox.MinZ = DstBox.MinZ;
@@ -1962,9 +1962,9 @@ namespace shz
 		std::array<SubresCopyMapping, MaxFormatPlaneCount> Planes;
 
 		uint32 NumPlanes = std::min(pSrcTexD3D12->GetFormatPlaneCount(), pDstTexD3D12->GetFormatPlaneCount());
-		VERIFY(NumPlanes > 0, "Number of planes must be greater than 0");
+		ASSERT(NumPlanes > 0, "Number of planes must be greater than 0");
 		NumPlanes = std::max(NumPlanes, 1u);
-		VERIFY(NumPlanes <= MaxFormatPlaneCount, "Number of planes (", NumPlanes, ") exceeds maximum expected plane count (", MaxFormatPlaneCount, ")");
+		ASSERT(NumPlanes <= MaxFormatPlaneCount, "Number of planes (", NumPlanes, ") exceeds maximum expected plane count (", MaxFormatPlaneCount, ")");
 		NumPlanes = std::min(NumPlanes, MaxFormatPlaneCount);
 		for (uint32 i = 0; i < NumPlanes; ++i)
 		{
@@ -1998,15 +1998,15 @@ namespace shz
 		CommandContext& CmdCtx = GetCmdContext();
 		if (pSrcTexture->GetDesc().Usage == USAGE_STAGING)
 		{
-			DEV_CHECK_ERR((pSrcTexture->GetDesc().CPUAccessFlags & CPU_ACCESS_WRITE) != 0, "Source staging texture must be created with CPU_ACCESS_WRITE flag");
-			DEV_CHECK_ERR(pSrcTexture->GetState() == RESOURCE_STATE_GENERIC_READ || !pSrcTexture->IsInKnownState(), "Staging texture must always be in RESOURCE_STATE_GENERIC_READ state");
+			ASSERT((pSrcTexture->GetDesc().CPUAccessFlags & CPU_ACCESS_WRITE) != 0, "Source staging texture must be created with CPU_ACCESS_WRITE flag");
+			ASSERT(pSrcTexture->GetState() == RESOURCE_STATE_GENERIC_READ || !pSrcTexture->IsInKnownState(), "Staging texture must always be in RESOURCE_STATE_GENERIC_READ state");
 		}
 		TransitionOrVerifyTextureState(CmdCtx, *pSrcTexture, SrcTextureTransitionMode, RESOURCE_STATE_COPY_SOURCE, "Using resource as copy source (DeviceContextD3D12Impl::CopyTextureRegion)");
 
 		if (pDstTexture->GetDesc().Usage == USAGE_STAGING)
 		{
-			DEV_CHECK_ERR((pDstTexture->GetDesc().CPUAccessFlags & CPU_ACCESS_READ) != 0, "Destination staging texture must be created with CPU_ACCESS_READ flag");
-			DEV_CHECK_ERR(pDstTexture->GetState() == RESOURCE_STATE_COPY_DEST || !pDstTexture->IsInKnownState(), "Staging texture must always be in RESOURCE_STATE_COPY_DEST state");
+			ASSERT((pDstTexture->GetDesc().CPUAccessFlags & CPU_ACCESS_READ) != 0, "Destination staging texture must be created with CPU_ACCESS_READ flag");
+			ASSERT(pDstTexture->GetState() == RESOURCE_STATE_COPY_DEST || !pDstTexture->IsInKnownState(), "Staging texture must always be in RESOURCE_STATE_COPY_DEST state");
 		}
 		TransitionOrVerifyTextureState(CmdCtx, *pDstTexture, DstTextureTransitionMode, RESOURCE_STATE_COPY_DEST, "Using resource as copy destination (DeviceContextD3D12Impl::CopyTextureRegion)");
 
@@ -2108,8 +2108,8 @@ namespace shz
 		{
 			const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(TexDesc.Format);
 			const uint32                RowCount = std::max((Footprint.Footprint.Height / FmtAttribs.BlockHeight), 1u);
-			VERIFY(BufferSize >= uint64{ Footprint.Footprint.RowPitch } *RowCount * Footprint.Footprint.Depth, "Buffer is not large enough");
-			VERIFY(Footprint.Footprint.Depth == 1 || StaticCast<UINT>(SrcDepthStride) == Footprint.Footprint.RowPitch * RowCount, "Depth stride must be equal to the size of 2D plane");
+			ASSERT(BufferSize >= uint64{ Footprint.Footprint.RowPitch } *RowCount * Footprint.Footprint.Depth, "Buffer is not large enough");
+			ASSERT(Footprint.Footprint.Depth == 1 || StaticCast<UINT>(SrcDepthStride) == Footprint.Footprint.RowPitch * RowCount, "Depth stride must be equal to the size of 2D plane");
 		}
 #endif
 
@@ -2148,7 +2148,7 @@ namespace shz
 	{
 		BufferD3D12Impl* pBufferD3D12 = ClassPtrCast<BufferD3D12Impl>(pSrcBuffer);
 		if (pBufferD3D12->GetDesc().Usage == USAGE_DYNAMIC)
-			DEV_CHECK_ERR(pBufferD3D12->GetState() == RESOURCE_STATE_GENERIC_READ, "Dynamic buffer is expected to always be in RESOURCE_STATE_GENERIC_READ state");
+			ASSERT(pBufferD3D12->GetState() == RESOURCE_STATE_GENERIC_READ, "Dynamic buffer is expected to always be in RESOURCE_STATE_GENERIC_READ state");
 		else
 		{
 			if (BufferTransitionMode == RESOURCE_STATE_TRANSITION_MODE_TRANSITION)
@@ -2174,7 +2174,7 @@ namespace shz
 		const IBox& Region)
 	{
 		TextureUploadSpace UploadSpace;
-		VERIFY_EXPR(Region.IsValid());
+		ASSERT_EXPR(Region.IsValid());
 		uint32 UpdateRegionWidth = Region.Width();
 		uint32 UpdateRegionHeight = Region.Height();
 		uint32 UpdateRegionDepth = Region.Depth();
@@ -2183,8 +2183,8 @@ namespace shz
 		if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
 		{
 			// Box must be aligned by the calling function
-			VERIFY_EXPR((UpdateRegionWidth % FmtAttribs.BlockWidth) == 0);
-			VERIFY_EXPR((UpdateRegionHeight % FmtAttribs.BlockHeight) == 0);
+			ASSERT_EXPR((UpdateRegionWidth % FmtAttribs.BlockWidth) == 0);
+			ASSERT_EXPR((UpdateRegionHeight % FmtAttribs.BlockHeight) == 0);
 			UploadSpace.RowSize = uint64{ UpdateRegionWidth } / uint64{ FmtAttribs.BlockWidth } *uint64{ FmtAttribs.ComponentSize };
 			UploadSpace.RowCount = UpdateRegionHeight / FmtAttribs.BlockHeight;
 		}
@@ -2217,9 +2217,9 @@ namespace shz
 		uint32             UpdateRegionDepth = DstBox.Depth();
 #ifdef SHZ_DEBUG
 		{
-			VERIFY(SrcStride >= UploadSpace.RowSize, "Source data stride (", SrcStride, ") is below the image row size (", UploadSpace.RowSize, ")");
+			ASSERT(SrcStride >= UploadSpace.RowSize, "Source data stride (", SrcStride, ") is below the image row size (", UploadSpace.RowSize, ")");
 			const uint64 PlaneSize = SrcStride * UploadSpace.RowCount;
-			VERIFY(UpdateRegionDepth == 1 || SrcDepthStride >= PlaneSize, "Source data depth stride (", SrcDepthStride, ") is below the image plane size (", PlaneSize, ")");
+			ASSERT(UpdateRegionDepth == 1 || SrcDepthStride >= PlaneSize, "Source data depth stride (", SrcDepthStride, ") is below the image plane size (", PlaneSize, ")");
 		}
 #endif
 		const uint32 AlignedOffset = UploadSpace.AlignedOffset;
@@ -2307,7 +2307,7 @@ namespace shz
 						"access and use MAP_FLAG_DO_NOT_WAIT flag.");
 				}
 
-				DEV_CHECK_ERR((TexDesc.CPUAccessFlags & CPU_ACCESS_READ), "Texture '", TexDesc.Name, "' was not created with CPU_ACCESS_READ flag and can't be mapped for reading");
+				ASSERT((TexDesc.CPUAccessFlags & CPU_ACCESS_READ), "Texture '", TexDesc.Name, "' was not created with CPU_ACCESS_READ flag and can't be mapped for reading");
 				// Resources on D3D12_HEAP_TYPE_READBACK heaps do not support persistent map.
 				InvalidateRange.Begin = StaticCast<SIZE_T>(Footprint.Offset);
 				const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& NextFootprint = TextureD3D12.GetStagingFootprint(Subres + 1);
@@ -2315,7 +2315,7 @@ namespace shz
 			}
 			else if (MapType == MAP_WRITE)
 			{
-				DEV_CHECK_ERR((TexDesc.CPUAccessFlags & CPU_ACCESS_WRITE), "Texture '", TexDesc.Name, "' was not created with CPU_ACCESS_WRITE flag and can't be mapped for writing");
+				ASSERT((TexDesc.CPUAccessFlags & CPU_ACCESS_WRITE), "Texture '", TexDesc.Name, "' was not created with CPU_ACCESS_WRITE flag and can't be mapped for writing");
 			}
 
 			// Nested Map() calls are supported and are ref-counted. The first call to Map() allocates
@@ -2333,7 +2333,7 @@ namespace shz
 		}
 		else
 		{
-			UNSUPPORTED(GetUsageString(TexDesc.Usage), " textures cannot currently be mapped in D3D12 back-end");
+			ASSERT(false, GetUsageString(TexDesc.Usage), " textures cannot currently be mapped in D3D12 back-end");
 		}
 	}
 
@@ -2391,7 +2391,7 @@ namespace shz
 		}
 		else
 		{
-			UNSUPPORTED(GetUsageString(TexDesc.Usage), " textures cannot currently be mapped in D3D12 back-end");
+			ASSERT(false, GetUsageString(TexDesc.Usage), " textures cannot currently be mapped in D3D12 back-end");
 		}
 	}
 
@@ -2440,18 +2440,18 @@ namespace shz
 			break;
 
 			case PIPELINE_TYPE_TILE:
-				UNEXPECTED("Unsupported pipeline type");
+				ASSERT(false, "Unsupported pipeline type");
 				break;
 			default:
-				UNEXPECTED("Unknown pipeline type");
+				ASSERT(false, "Unknown pipeline type");
 			}
 		}
 	}
 
 	void DeviceContextD3D12Impl::FinishCommandList(ICommandList** ppCommandList)
 	{
-		DEV_CHECK_ERR(IsDeferred(), "Only deferred context can record command list");
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "Finishing command list inside an active render pass.");
+		ASSERT(IsDeferred(), "Only deferred context can record command list");
+		ASSERT(m_pActiveRenderPass == nullptr, "Finishing command list inside an active render pass.");
 
 		CommandListD3D12Impl* pCmdListD3D12(NEW_RC_OBJ(m_CmdListAllocator, "CommandListD3D12Impl instance", CommandListD3D12Impl)(m_pDevice, this, std::move(m_CurrCmdCtx)));
 		pCmdListD3D12->QueryInterface(IID_CommandList, ppCommandList);
@@ -2469,11 +2469,11 @@ namespace shz
 	void DeviceContextD3D12Impl::ExecuteCommandLists(uint32               NumCommandLists,
 		ICommandList* const* ppCommandLists)
 	{
-		DEV_CHECK_ERR(!IsDeferred(), "Only immediate context can execute command list");
+		ASSERT(!IsDeferred(), "Only immediate context can execute command list");
 
 		if (NumCommandLists == 0)
 			return;
-		DEV_CHECK_ERR(ppCommandLists != nullptr, "ppCommandLists must not be null when NumCommandLists is not zero");
+		ASSERT(ppCommandLists != nullptr, "ppCommandLists must not be null when NumCommandLists is not zero");
 
 		Flush(true, NumCommandLists, ppCommandLists);
 
@@ -2494,7 +2494,7 @@ namespace shz
 
 	void DeviceContextD3D12Impl::WaitForIdle()
 	{
-		DEV_CHECK_ERR(!IsDeferred(), "Only immediate contexts can be idled");
+		ASSERT(!IsDeferred(), "Only immediate contexts can be idled");
 		Flush();
 		m_pDevice->IdleCommandQueue(GetCommandQueueId(), true);
 	}
@@ -2525,7 +2525,7 @@ namespace shz
 		const QUERY_TYPE QueryType = pQueryD3D12Impl->GetDesc().Type;
 		if (QueryType != QUERY_TYPE_TIMESTAMP)
 		{
-			VERIFY(m_ActiveQueriesCounter > 0, "Active query counter is 0 which means there was a mismatch between BeginQuery() / EndQuery() calls");
+			ASSERT(m_ActiveQueriesCounter > 0, "Active query counter is 0 which means there was a mismatch between BeginQuery() / EndQuery() calls");
 			--m_ActiveQueriesCounter;
 		}
 
@@ -2571,14 +2571,14 @@ namespace shz
 		else
 #endif
 		{
-			VERIFY_EXPR(!UseNVApi);
+			ASSERT_EXPR(!UseNVApi);
 			CmdCtx.ResourceBarrier(Barrier);
 		}
 	}
 
 	void DeviceContextD3D12Impl::TransitionResourceStates(uint32 BarrierCount, const StateTransitionDesc* pResourceBarriers)
 	{
-		DEV_CHECK_ERR(m_pActiveRenderPass == nullptr, "State transitions are not allowed inside a render pass");
+		ASSERT(m_pActiveRenderPass == nullptr, "State transitions are not allowed inside a render pass");
 
 		CommandContext& CmdCtx = GetCmdContext();
 		for (uint32 i = 0; i < BarrierCount; ++i)
@@ -2602,7 +2602,7 @@ namespace shz
 				else if (RefCntAutoPtr<TopLevelASD3D12Impl> pTLASD3D12Impl{ Barrier.pResource, IID_TopLevelASD3D12 })
 					CmdCtx.TransitionResource(*pTLASD3D12Impl, Barrier);
 				else
-					UNEXPECTED("Unknown resource type");
+					ASSERT(false, "Unknown resource type");
 			}
 		}
 	}
@@ -2685,16 +2685,16 @@ namespace shz
 
 	void DeviceContextD3D12Impl::TransitionTextureState(ITexture* pTexture, D3D12_RESOURCE_STATES State)
 	{
-		DEV_CHECK_ERR(pTexture != nullptr, "pTexture must not be null");
-		DEV_CHECK_ERR(pTexture->GetState() != RESOURCE_STATE_UNKNOWN, "Texture state is unknown");
+		ASSERT(pTexture != nullptr, "pTexture must not be null");
+		ASSERT(pTexture->GetState() != RESOURCE_STATE_UNKNOWN, "Texture state is unknown");
 		CommandContext& CmdCtx = GetCmdContext();
 		CmdCtx.TransitionResource(*ClassPtrCast<TextureD3D12Impl>(pTexture), D3D12ResourceStatesToResourceStateFlags(State));
 	}
 
 	void DeviceContextD3D12Impl::TransitionBufferState(IBuffer* pBuffer, D3D12_RESOURCE_STATES State)
 	{
-		DEV_CHECK_ERR(pBuffer != nullptr, "pBuffer must not be null");
-		DEV_CHECK_ERR(pBuffer->GetState() != RESOURCE_STATE_UNKNOWN, "Buffer state is unknown");
+		ASSERT(pBuffer != nullptr, "pBuffer must not be null");
+		ASSERT(pBuffer->GetState() != RESOURCE_STATE_UNKNOWN, "Buffer state is unknown");
 		CommandContext& CmdCtx = GetCmdContext();
 		CmdCtx.TransitionResource(*ClassPtrCast<BufferD3D12Impl>(pBuffer), D3D12ResourceStatesToResourceStateFlags(State));
 	}
@@ -2732,7 +2732,7 @@ namespace shz
 			else
 			{
 				const TextureFormatAttribs& DstFmtAttribs = GetTextureFormatAttribs(DstTexDesc.Format);
-				DEV_CHECK_ERR(!DstFmtAttribs.IsTypeless, "Resolve operation format can't be typeless when both source and destination textures are typeless");
+				ASSERT(!DstFmtAttribs.IsTypeless, "Resolve operation format can't be typeless when both source and destination textures are typeless");
 				Format = DstFmtAttribs.Format;
 			}
 		}
@@ -2774,7 +2774,7 @@ namespace shz
 
 				if (GeoIdx == INVALID_INDEX || Idx == INVALID_INDEX)
 				{
-					UNEXPECTED("Failed to find geometry '", SrcTris.GeometryName, '\'');
+					ASSERT(false, "Failed to find geometry '", SrcTris.GeometryName, '\'');
 					continue;
 				}
 
@@ -2792,10 +2792,10 @@ namespace shz
 				d3d12Tris.VertexBuffer.StrideInBytes = SrcTris.VertexStride;
 				d3d12Tris.VertexCount = SrcTris.VertexCount;
 				d3d12Tris.VertexFormat = TypeToRayTracingVertexFormat(TriDesc.VertexValueType, TriDesc.VertexComponentCount);
-				VERIFY(d3d12Tris.VertexFormat != DXGI_FORMAT_UNKNOWN, "Unsupported combination of vertex value type and component count");
+				ASSERT(d3d12Tris.VertexFormat != DXGI_FORMAT_UNKNOWN, "Unsupported combination of vertex value type and component count");
 
-				VERIFY(d3d12Tris.VertexBuffer.StartAddress % GetValueSize(TriDesc.VertexValueType) == 0, "Vertex start address is not properly aligned");
-				VERIFY(d3d12Tris.VertexBuffer.StrideInBytes % GetValueSize(TriDesc.VertexValueType) == 0, "Vertex stride is not properly aligned");
+				ASSERT(d3d12Tris.VertexBuffer.StartAddress % GetValueSize(TriDesc.VertexValueType) == 0, "Vertex start address is not properly aligned");
+				ASSERT(d3d12Tris.VertexBuffer.StrideInBytes % GetValueSize(TriDesc.VertexValueType) == 0, "Vertex stride is not properly aligned");
 
 				TransitionOrVerifyBufferState(CmdCtx, *pVB, Attribs.GeometryTransitionMode, RESOURCE_STATE_BUILD_AS_READ, OpName);
 
@@ -2808,7 +2808,7 @@ namespace shz
 					d3d12Tris.IndexBuffer = pIB->GetGPUAddress() + SrcTris.IndexOffset;
 					d3d12Tris.IndexCount = SrcTris.PrimitiveCount * 3;
 
-					VERIFY(d3d12Tris.IndexBuffer % GetValueSize(TriDesc.IndexType) == 0, "Index start address is not properly aligned");
+					ASSERT(d3d12Tris.IndexBuffer % GetValueSize(TriDesc.IndexType) == 0, "Index start address is not properly aligned");
 
 					TransitionOrVerifyBufferState(CmdCtx, *pIB, Attribs.GeometryTransitionMode, RESOURCE_STATE_BUILD_AS_READ, OpName);
 				}
@@ -2823,7 +2823,7 @@ namespace shz
 					BufferD3D12Impl* const pTB = ClassPtrCast<BufferD3D12Impl>(SrcTris.pTransformBuffer);
 					d3d12Tris.Transform3x4 = pTB->GetGPUAddress() + SrcTris.TransformBufferOffset;
 
-					VERIFY(d3d12Tris.Transform3x4 % D3D12_RAYTRACING_TRANSFORM3X4_BYTE_ALIGNMENT == 0, "Transform start address is not properly aligned");
+					ASSERT(d3d12Tris.Transform3x4 % D3D12_RAYTRACING_TRANSFORM3X4_BYTE_ALIGNMENT == 0, "Transform start address is not properly aligned");
 
 					TransitionOrVerifyBufferState(CmdCtx, *pTB, Attribs.GeometryTransitionMode, RESOURCE_STATE_BUILD_AS_READ, OpName);
 				}
@@ -2846,7 +2846,7 @@ namespace shz
 
 				if (GeoIdx == INVALID_INDEX || Idx == INVALID_INDEX)
 				{
-					UNEXPECTED("Failed to find geometry '", SrcBoxes.GeometryName, '\'');
+					ASSERT(false, "Failed to find geometry '", SrcBoxes.GeometryName, '\'');
 					continue;
 				}
 
@@ -2861,8 +2861,8 @@ namespace shz
 				d3d12AABs.AABBs.StartAddress = pBB->GetGPUAddress() + SrcBoxes.BoxOffset;
 				d3d12AABs.AABBs.StrideInBytes = SrcBoxes.BoxStride;
 
-				DEV_CHECK_ERR(d3d12AABs.AABBs.StartAddress % D3D12_RAYTRACING_AABB_BYTE_ALIGNMENT == 0, "AABB start address is not properly aligned");
-				DEV_CHECK_ERR(d3d12AABs.AABBs.StrideInBytes % D3D12_RAYTRACING_AABB_BYTE_ALIGNMENT == 0, "AABB stride is not properly aligned");
+				ASSERT(d3d12AABs.AABBs.StartAddress % D3D12_RAYTRACING_AABB_BYTE_ALIGNMENT == 0, "AABB start address is not properly aligned");
+				ASSERT(d3d12AABs.AABBs.StrideInBytes % D3D12_RAYTRACING_AABB_BYTE_ALIGNMENT == 0, "AABB stride is not properly aligned");
 
 				TransitionOrVerifyBufferState(CmdCtx, *pBB, Attribs.GeometryTransitionMode, RESOURCE_STATE_BUILD_AS_READ, OpName);
 			}
@@ -2884,7 +2884,7 @@ namespace shz
 			d3d12BuildASDesc.SourceAccelerationStructureData = d3d12BuildASDesc.DestAccelerationStructureData;
 		}
 
-		DEV_CHECK_ERR(d3d12BuildASDesc.ScratchAccelerationStructureData % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0,
+		ASSERT(d3d12BuildASDesc.ScratchAccelerationStructureData % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0,
 			"Scratch data address is not properly aligned");
 
 		CmdCtx.AsGraphicsContext4().BuildRaytracingAccelerationStructure(d3d12BuildASDesc, 0, nullptr);
@@ -2933,7 +2933,7 @@ namespace shz
 
 				if (InstDesc.InstanceIndex >= Attribs.InstanceCount)
 				{
-					UNEXPECTED("Failed to find instance by name");
+					ASSERT(false, "Failed to find instance by name");
 					return;
 				}
 
@@ -2974,9 +2974,9 @@ namespace shz
 			d3d12BuildASDesc.SourceAccelerationStructureData = d3d12BuildASDesc.DestAccelerationStructureData;
 		}
 
-		DEV_CHECK_ERR(d3d12BuildASInputs.InstanceDescs % D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT == 0,
+		ASSERT(d3d12BuildASInputs.InstanceDescs % D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT == 0,
 			"Instance data address is not properly aligned");
-		DEV_CHECK_ERR(d3d12BuildASDesc.ScratchAccelerationStructureData % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0,
+		ASSERT(d3d12BuildASDesc.ScratchAccelerationStructureData % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0,
 			"Scratch data address is not properly aligned");
 
 		CmdCtx.AsGraphicsContext4().BuildRaytracingAccelerationStructure(d3d12BuildASDesc, 0, nullptr);
@@ -3150,7 +3150,7 @@ namespace shz
 		else
 		{
 			// Ray tracing command can be used in parallel with the same SBT, so internal buffer state must be RESOURCE_STATE_RAY_TRACING to allow it.
-			VERIFY(pSBTBufferD3D12->CheckState(RESOURCE_STATE_RAY_TRACING), "SBT buffer must always be in RESOURCE_STATE_RAY_TRACING state");
+			ASSERT(pSBTBufferD3D12->CheckState(RESOURCE_STATE_RAY_TRACING), "SBT buffer must always be in RESOURCE_STATE_RAY_TRACING state");
 		}
 
 		if (pUpdateIndirectBufferAttribs != nullptr)
@@ -3227,7 +3227,7 @@ namespace shz
 	{
 		TDeviceContextBase::BindSparseResourceMemory(Attribs, 0);
 
-		VERIFY_EXPR(Attribs.NumBufferBinds != 0 || Attribs.NumTextureBinds != 0);
+		ASSERT_EXPR(Attribs.NumBufferBinds != 0 || Attribs.NumTextureBinds != 0);
 
 		Flush();
 
@@ -3242,11 +3242,11 @@ namespace shz
 			{
 				const SparseBufferMemoryBindRange& BindRange = BuffBind.pRanges[r];
 				const RefCntAutoPtr<IDeviceMemoryD3D12> pMemD3D12{ BindRange.pMemory, IID_DeviceMemoryD3D12 };
-				DEV_CHECK_ERR((BindRange.pMemory != nullptr) == (pMemD3D12 != nullptr),
+				ASSERT((BindRange.pMemory != nullptr) == (pMemD3D12 != nullptr),
 					"Failed to query IDeviceMemoryD3D12 interface from non-null memory object");
 
 				const DeviceMemoryRangeD3D12 MemRange = pMemD3D12 ? pMemD3D12->GetRange(BindRange.MemoryOffset, BindRange.MemorySize) : DeviceMemoryRangeD3D12{};
-				DEV_CHECK_ERR((MemRange.Offset % D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES) == 0,
+				ASSERT((MemRange.Offset % D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES) == 0,
 					"MemoryOffset must be a multiple of sparse block size");
 
 				D3D12TileMappingHelper& DstMapping = TileMappingMap[TileMappingKey{ pd3d12Buff, MemRange.pHandle }];
@@ -3266,13 +3266,13 @@ namespace shz
 			{
 				const SparseTextureMemoryBindRange& BindRange = TexBind.pRanges[r];
 				RefCntAutoPtr<IDeviceMemoryD3D12>   pMemD3D12{ BindRange.pMemory, IID_DeviceMemoryD3D12 };
-				DEV_CHECK_ERR((BindRange.pMemory != nullptr) == (pMemD3D12 != nullptr),
+				ASSERT((BindRange.pMemory != nullptr) == (pMemD3D12 != nullptr),
 					"Failed to query IDeviceMemoryD3D12 interface from non-null memory object");
 
 				const DeviceMemoryRangeD3D12 MemRange = pMemD3D12 ? pMemD3D12->GetRange(BindRange.MemoryOffset, BindRange.MemorySize) : DeviceMemoryRangeD3D12{};
-				DEV_CHECK_ERR((MemRange.Offset % D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES) == 0,
+				ASSERT((MemRange.Offset % D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES) == 0,
 					"MemoryOffset must be a multiple of sparse block size");
-				VERIFY_EXPR(pMemD3D12 == nullptr || pMemD3D12->IsUsingNVApi() == UseNVApi);
+				ASSERT_EXPR(pMemD3D12 == nullptr || pMemD3D12->IsUsingNVApi() == UseNVApi);
 
 				D3D12TileMappingHelper& DstMapping = TileMappingMap[TileMappingKey{ pTexD3D12->GetD3D12Resource(), MemRange.pHandle }];
 				DstMapping.AddTextureBindRange(BindRange, TexSparseProps, TexDesc, UseNVApi, MemRange.Offset);
@@ -3284,7 +3284,7 @@ namespace shz
 		for (uint32 i = 0; i < Attribs.NumWaitFences; ++i)
 		{
 			FenceD3D12Impl* pFenceD3D12 = ClassPtrCast<FenceD3D12Impl>(Attribs.ppWaitFences[i]);
-			DEV_CHECK_ERR(pFenceD3D12 != nullptr, "Wait fence must not be null");
+			ASSERT(pFenceD3D12 != nullptr, "Wait fence must not be null");
 			uint64 Value = Attribs.pWaitFenceValues[i];
 			pQueueD3D12->WaitFence(pFenceD3D12->GetD3D12Fence(), Value);
 			pFenceD3D12->DvpDeviceWait(Value);
@@ -3301,7 +3301,7 @@ namespace shz
 		for (uint32 i = 0; i < Attribs.NumSignalFences; ++i)
 		{
 			FenceD3D12Impl* pFenceD3D12 = ClassPtrCast<FenceD3D12Impl>(Attribs.ppSignalFences[i]);
-			DEV_CHECK_ERR(pFenceD3D12 != nullptr, "Signal fence must not be null");
+			ASSERT(pFenceD3D12 != nullptr, "Signal fence must not be null");
 			uint64 Value = Attribs.pSignalFenceValues[i];
 			pQueueD3D12->EnqueueSignal(pFenceD3D12->GetD3D12Fence(), Value);
 			pFenceD3D12->DvpSignal(Value);

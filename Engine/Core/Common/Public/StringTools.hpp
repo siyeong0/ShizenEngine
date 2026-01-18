@@ -46,7 +46,7 @@ inline std::string NarrowString(const wchar_t* WideStr, size_t Len = 0)
     if (Len == 0)
         Len = wcslen(WideStr);
     else
-        VERIFY_EXPR(Len <= wcslen(WideStr));
+        ASSERT_EXPR(Len <= wcslen(WideStr));
 
     std::string NarrowStr(Len, '\0');
 
@@ -67,7 +67,7 @@ inline std::wstring WidenString(const char* Str, size_t Len = 0)
     if (Len == 0)
         Len = strlen(Str);
     else
-        VERIFY_EXPR(Len <= strlen(Str));
+        ASSERT_EXPR(Len <= strlen(Str));
 
     std::wstring WideStr(Len, L'\0');
 
@@ -115,7 +115,7 @@ inline int StrCmpNoCase(const char* Str1, const char* Str2)
 // If Suff == nullptr or NoSuffixAllowed == true, also returns true if RefStr == Str
 inline bool StreqSuff(const char* RefStr, const char* Str, const char* Suff, bool NoSuffixAllowed = false)
 {
-    VERIFY_EXPR(RefStr != nullptr && Str != nullptr);
+    ASSERT_EXPR(RefStr != nullptr && Str != nullptr);
     if (RefStr == nullptr)
         return false;
 
@@ -140,7 +140,7 @@ inline bool StreqSuff(const char* RefStr, const char* Str, const char* Suff, boo
         // ab         abc
         //   ^          ^
         //   r          s
-        VERIFY_EXPR(*r == 0);
+        ASSERT_EXPR(*r == 0);
         return false;
     }
     else
@@ -324,7 +324,7 @@ inline std::make_unsigned_t<Type> GetAbsUnsigned(Type Num, bool& IsNegative, std
 template <typename Type, typename = std::enable_if_t<std::is_integral<Type>::value>>
 std::string& AppendInt(std::string& Str, Type Num, Type Base = 10)
 {
-    VERIFY(Base >= 2 && Base <= 36, "Base must be in the range [2, 36]");
+    ASSERT(Base >= 2 && Base <= 36, "Base must be in the range [2, 36]");
 
     const size_t PrintWidth = GetPrintWidth(Num, Base);
     const size_t StartPos   = Str.length();

@@ -61,8 +61,8 @@ namespace shz
 			, m_Offset(Offset)
 			, m_Size(Size)
 		{
-			VERIFY_EXPR(m_pParentAllocator);
-			VERIFY_EXPR(m_Subregion.IsValid());
+			ASSERT_EXPR(m_pParentAllocator);
+			ASSERT_EXPR(m_Subregion.IsValid());
 		}
 
 		~BufferSuballocationImpl();
@@ -167,14 +167,14 @@ namespace shz
 
 		~BufferSuballocatorImpl()
 		{
-			VERIFY_EXPR(m_AllocationCount.load() == 0);
+			ASSERT_EXPR(m_AllocationCount.load() == 0);
 		}
 
 		virtual IBuffer* Update(IRenderDevice* pDevice, IDeviceContext* pContext) override final
 		{
 			// NB: mutex must not be locked here to avoid stalling render thread
 			const OffsetType MgrSize = m_MgrSize.load();
-			VERIFY_EXPR(m_BufferSize.load() == m_Buffer.GetDesc().Size);
+			ASSERT_EXPR(m_BufferSize.load() == m_Buffer.GetDesc().Size);
 			if (MgrSize > m_Buffer.GetDesc().Size)
 			{
 				m_Buffer.Resize(pDevice, pContext, MgrSize);
@@ -194,23 +194,23 @@ namespace shz
 		{
 			if (Size == 0)
 			{
-				UNEXPECTED("Size must not be zero");
+				ASSERT(false, "Size must not be zero");
 				return;
 			}
 
 			if (!IsPowerOfTwo(Alignment))
 			{
-				UNEXPECTED("Alignment (", Alignment, ") is not a power of two");
+				ASSERT(false, "Alignment (", Alignment, ") is not a power of two");
 				return;
 			}
 
 			if (ppSuballocation == nullptr)
 			{
-				UNEXPECTED("ppSuballocation must not be null");
+				ASSERT(false, "ppSuballocation must not be null");
 				return;
 			}
 
-			DEV_CHECK_ERR(*ppSuballocation == nullptr, "Overwriting reference to existing object may cause memory leaks");
+			ASSERT(*ppSuballocation == nullptr, "Overwriting reference to existing object may cause memory leaks");
 
 			VariableSizeAllocationsManager::Allocation Subregion;
 			{
@@ -224,7 +224,7 @@ namespace shz
 					if (BufferSize > MgrSize)
 					{
 						m_Mgr.Extend(StaticCast<size_t>(BufferSize - MgrSize));
-						VERIFY_EXPR(m_Mgr.GetMaxSize() == BufferSize);
+						ASSERT_EXPR(m_Mgr.GetMaxSize() == BufferSize);
 						m_MgrSize.store(m_Mgr.GetMaxSize());
 					}
 				}

@@ -35,7 +35,7 @@ namespace shz
 
 #ifdef SHZ_DEBUG
 
-#    define CHECK_PARAMETER DEV_CHECK_ERR
+#    define CHECK_PARAMETER ASSERT
 
 #else
 
@@ -218,7 +218,7 @@ bool VerifyDrawMeshIndirectAttribs(const DrawMeshIndirectAttribs& Attribs, uint3
 
 bool VerifyMultiDrawAttribs(const MultiDrawAttribs& Attribs)
 {
-    DEV_CHECK_ERR(Attribs.DrawCount == 0 || Attribs.pDrawItems != nullptr, "DrawCount is ", Attribs.DrawCount, ", but pDrawItems is null.");
+    ASSERT(Attribs.DrawCount == 0 || Attribs.pDrawItems != nullptr, "DrawCount is ", Attribs.DrawCount, ", but pDrawItems is null.");
 
     if (Attribs.NumInstances == 0)
         LOG_INFO_MESSAGE("MultiDrawAttribs.NumInstances is 0. This is OK as the draw command will be ignored, but may be unintentional.");
@@ -228,7 +228,7 @@ bool VerifyMultiDrawAttribs(const MultiDrawAttribs& Attribs)
 
 bool VerifyMultiDrawIndexedAttribs(const MultiDrawIndexedAttribs& Attribs)
 {
-    DEV_CHECK_ERR(Attribs.DrawCount == 0 || Attribs.pDrawItems != nullptr, "DrawCount is ", Attribs.DrawCount, ", but pDrawItems is null.");
+    ASSERT(Attribs.DrawCount == 0 || Attribs.pDrawItems != nullptr, "DrawCount is ", Attribs.DrawCount, ", but pDrawItems is null.");
 
 #define CHECK_MULTI_DRAW_INDEXED_ATTRIBS(Expr, ...) CHECK_PARAMETER(Expr, "Draw indexed attribs are invalid: ", __VA_ARGS__)
 
@@ -410,7 +410,7 @@ bool VerifyResourceState(RESOURCE_STATE States, COMMAND_QUEUE_TYPE QueueType, co
                 break;
 
             default:
-                UNEXPECTED("Unexpected resource state");
+                ASSERT(false, "Unexpected resource state");
                 break;
         }
     }
@@ -420,7 +420,7 @@ bool VerifyResourceState(RESOURCE_STATE States, COMMAND_QUEUE_TYPE QueueType, co
 #define CHECK_STATE_TRANSITION_DESC(Expr, ...) CHECK_PARAMETER(Expr, "State transition parameters are invalid: ", __VA_ARGS__)
 static bool VerifyAliasingBarrierDesc(const StateTransitionDesc& Barrier)
 {
-    VERIFY_EXPR(Barrier.Flags & STATE_TRANSITION_FLAG_ALIASING);
+    ASSERT_EXPR(Barrier.Flags & STATE_TRANSITION_FLAG_ALIASING);
 
     auto VerifySparseAliasedResource = [](IDeviceObject* pResource) //
     {
@@ -430,9 +430,9 @@ static bool VerifyAliasingBarrierDesc(const StateTransitionDesc& Barrier)
         if (RefCntAutoPtr<ITexture> pTexture{pResource, IID_Texture})
         {
             const TextureDesc& TexDesc = pTexture->GetDesc();
-            DEV_CHECK_ERR(TexDesc.Usage == USAGE_SPARSE,
+            ASSERT(TexDesc.Usage == USAGE_SPARSE,
                           "Texture '", TexDesc.Name, "' used in an aliasing barrier is not a sparse resource");
-            DEV_CHECK_ERR((TexDesc.MiscFlags & MISC_TEXTURE_FLAG_SPARSE_ALIASING) != 0,
+            ASSERT((TexDesc.MiscFlags & MISC_TEXTURE_FLAG_SPARSE_ALIASING) != 0,
                           "Texture '", TexDesc.Name, "' used in an aliasing barrier was not created with MISC_TEXTURE_FLAG_SPARSE_ALIASING flag");
 
             return TexDesc.Type;
@@ -441,16 +441,16 @@ static bool VerifyAliasingBarrierDesc(const StateTransitionDesc& Barrier)
         {
             const BufferDesc& BuffDesc = pBuffer->GetDesc();
 
-            DEV_CHECK_ERR(BuffDesc.Usage == USAGE_SPARSE,
+            ASSERT(BuffDesc.Usage == USAGE_SPARSE,
                           "Buffer '", BuffDesc.Name, "' used in an aliasing barrier is not a sparse resource");
-            DEV_CHECK_ERR((BuffDesc.MiscFlags & MISC_BUFFER_FLAG_SPARSE_ALIASING) != 0,
+            ASSERT((BuffDesc.MiscFlags & MISC_BUFFER_FLAG_SPARSE_ALIASING) != 0,
                           "Buffer '", BuffDesc.Name, "' used in an aliasing barrier was not created with MISC_BUFFER_FLAG_SPARSE_ALIASING flag");
 
             return RESOURCE_DIM_BUFFER;
         }
         else
         {
-            DEV_ERROR("Only textures and buffers are allowed in aliasing barriers");
+            ASSERT(false, "Only textures and buffers are allowed in aliasing barriers");
             return RESOURCE_DIM_UNDEFINED;
         }
     };
@@ -564,7 +564,7 @@ bool VerifyStateTransitionDesc(const IRenderDevice*       pDevice,
     }
     else
     {
-        UNEXPECTED("unsupported resource type");
+        ASSERT(false, "unsupported resource type");
     }
 
     CHECK_STATE_TRANSITION_DESC((ImmediateContextMask & (uint64{1} << uint64{ExecutionCtxId})) != 0,
@@ -589,7 +589,7 @@ bool VerifyStateTransitionDesc(const IRenderDevice*       pDevice,
             break;
 
         default:
-            UNEXPECTED("Unexpected transition type");
+            ASSERT(false, "Unexpected transition type");
     }
 
     VerifyResourceState(Barrier.OldState, CtxDesc.QueueType, "OldState");
@@ -843,9 +843,9 @@ bool VerifyBuildTLASAttribs(const BuildTLASAttribs& Attribs, const RayTracingPro
         constexpr uint32             BitMask = (1u << 24) - 1;
         const TLASBuildInstanceData& Inst    = Attribs.pInstances[i];
 
-        VERIFY((Inst.CustomId & ~BitMask) == 0, "Only the lower 24 bits are used.");
+        ASSERT((Inst.CustomId & ~BitMask) == 0, "Only the lower 24 bits are used.");
 
-        VERIFY(Inst.ContributionToHitGroupIndex == TLAS_INSTANCE_OFFSET_AUTO ||
+        ASSERT(Inst.ContributionToHitGroupIndex == TLAS_INSTANCE_OFFSET_AUTO ||
                    (Inst.ContributionToHitGroupIndex & ~BitMask) == 0,
                "Only the lower 24 bits are used.");
 

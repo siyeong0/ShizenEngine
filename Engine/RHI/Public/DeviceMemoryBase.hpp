@@ -71,7 +71,7 @@ namespace shz
 			ValidateDeviceMemoryDesc(this->m_Desc, this->GetDevice());
 
 			uint64 DeviceQueuesMask = this->GetDevice()->GetCommandQueueMask();
-			DEV_CHECK_ERR((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
+			ASSERT((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
 				"No bits in the immediate context mask (0x", std::hex, this->m_Desc.ImmediateContextMask,
 				") correspond to one of ", this->GetDevice()->GetCommandQueueCount(), " available software command queues");
 			this->m_Desc.ImmediateContextMask &= DeviceQueuesMask;
@@ -81,7 +81,7 @@ namespace shz
 
 		void DvpVerifyResize(uint64 NewSize) const
 		{
-			DEV_CHECK_ERR((NewSize % this->m_Desc.PageSize) == 0,
+			ASSERT((NewSize % this->m_Desc.PageSize) == 0,
 				"NewSize (", NewSize, ") must be  a multiple of the page size (", this->m_Desc.PageSize, ")");
 		}
 	};

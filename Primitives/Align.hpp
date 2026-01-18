@@ -49,7 +49,7 @@ inline typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type AlignUp
 {
     static_assert(std::is_unsigned<T1>::value == std::is_unsigned<T2>::value, "both types must be signed or unsigned");
     static_assert(!std::is_pointer<T1>::value && !std::is_pointer<T2>::value, "types must not be pointers");
-    VERIFY(IsPowerOfTwo(alignment), "Alignment (", alignment, ") must be a power of 2");
+    ASSERT(IsPowerOfTwo(alignment), "Alignment (", alignment, ") must be a power of 2");
 
     using T = typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type;
     return (static_cast<T>(val) + static_cast<T>(alignment - 1)) & ~static_cast<T>(alignment - 1);
@@ -66,7 +66,7 @@ inline typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type AlignDo
 {
     static_assert(std::is_unsigned<T1>::value == std::is_unsigned<T2>::value, "both types must be signed or unsigned");
     static_assert(!std::is_pointer<T1>::value && !std::is_pointer<T2>::value, "types must not be pointers");
-    VERIFY(IsPowerOfTwo(alignment), "Alignment (", alignment, ") must be a power of 2");
+    ASSERT(IsPowerOfTwo(alignment), "Alignment (", alignment, ") must be a power of 2");
 
     using T = typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type;
     return static_cast<T>(val) & ~static_cast<T>(alignment - 1);
@@ -81,7 +81,7 @@ inline PtrType* AlignDown(PtrType* val, AlignType alignment)
 template <typename T1, typename T2>
 inline typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type AlignDownNonPw2(T1 val, T2 alignment)
 {
-    VERIFY_EXPR(alignment > 0);
+    ASSERT_EXPR(alignment > 0);
     static_assert(std::is_unsigned<T1>::value == std::is_unsigned<T2>::value, "both types must be signed or unsigned");
     static_assert(!std::is_pointer<T1>::value && !std::is_pointer<T2>::value, "types must not be pointers");
 
@@ -92,7 +92,7 @@ inline typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type AlignDo
 template <typename T1, typename T2>
 inline typename std::conditional<sizeof(T1) >= sizeof(T2), T1, T2>::type AlignUpNonPw2(T1 val, T2 alignment)
 {
-    VERIFY_EXPR(alignment > 0);
+    ASSERT_EXPR(alignment > 0);
     static_assert(std::is_unsigned<T1>::value == std::is_unsigned<T2>::value, "both types must be signed or unsigned");
     static_assert(!std::is_pointer<T1>::value && !std::is_pointer<T2>::value, "types must not be pointers");
 

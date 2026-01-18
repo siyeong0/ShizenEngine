@@ -62,8 +62,8 @@ namespace shz
 			, m_VertexCount{ VertexCount }
 
 		{
-			VERIFY_EXPR(m_pParentPool);
-			VERIFY_EXPR(m_Region.IsValid());
+			ASSERT_EXPR(m_pParentPool);
+			ASSERT_EXPR(m_Region.IsValid());
 		}
 
 		~VertexPoolAllocationImpl();
@@ -202,14 +202,14 @@ namespace shz
 
 		~VertexPoolImpl()
 		{
-			VERIFY_EXPR(m_AllocationCount.load() == 0);
+			ASSERT_EXPR(m_AllocationCount.load() == 0);
 		}
 
 		virtual IBuffer* Update(uint32 Index, IRenderDevice* pDevice, IDeviceContext* pContext) override final
 		{
 			if (Index >= m_Buffers.size())
 			{
-				UNEXPECTED("Index (", Index, ") is out of range: there are only ", m_Buffers.size(), " buffers.");
+				ASSERT(false, "Index (", Index, ") is out of range: there are only ", m_Buffers.size(), " buffers.");
 				return nullptr;
 			}
 			std::atomic<uint64>& BufferSize = m_BufferSizes[Index];
@@ -217,7 +217,7 @@ namespace shz
 
 			// NB: mutex must not be locked here to avoid stalling render thread
 			const VariableSizeAllocationsManager::OffsetType MgrSize = m_MgrSize.load() * m_Elements[Index].Size;
-			VERIFY_EXPR(BufferSize.load() == Buffer.GetDesc().Size);
+			ASSERT_EXPR(BufferSize.load() == Buffer.GetDesc().Size);
 			if (MgrSize > Buffer.GetDesc().Size)
 			{
 				Buffer.Resize(pDevice, pContext, MgrSize);
@@ -240,7 +240,7 @@ namespace shz
 		{
 			if (Index >= m_Buffers.size())
 			{
-				UNEXPECTED("Index (", Index, ") is out of range: there are only ", m_Buffers.size(), " buffers.");
+				ASSERT(false, "Index (", Index, ") is out of range: there are only ", m_Buffers.size(), " buffers.");
 				return nullptr;
 			}
 
@@ -251,17 +251,17 @@ namespace shz
 		{
 			if (NumVertices == 0)
 			{
-				UNEXPECTED("Vertex count must not be zero");
+				ASSERT(false, "Vertex count must not be zero");
 				return;
 			}
 
 			if (ppAllocation == nullptr)
 			{
-				UNEXPECTED("ppAllocation must not be null");
+				ASSERT(false, "ppAllocation must not be null");
 				return;
 			}
 
-			DEV_CHECK_ERR(*ppAllocation == nullptr, "Overwriting reference to existing object may cause memory leaks");
+			ASSERT(*ppAllocation == nullptr, "Overwriting reference to existing object may cause memory leaks");
 
 			VariableSizeAllocationsManager::Allocation Region;
 			{
@@ -281,7 +281,7 @@ namespace shz
 					if (ActualCapacity > MgrSize)
 					{
 						m_Mgr.Extend(StaticCast<size_t>(ActualCapacity - MgrSize));
-						VERIFY_EXPR(m_Mgr.GetMaxSize() == ActualCapacity);
+						ASSERT_EXPR(m_Mgr.GetMaxSize() == ActualCapacity);
 						m_MgrSize.store(m_Mgr.GetMaxSize());
 						m_Desc.VertexCount = static_cast<uint32>(ActualCapacity);
 					}

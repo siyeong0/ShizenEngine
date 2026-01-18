@@ -60,7 +60,7 @@ NODISCARD DstType StaticCast(const SrcType& Src)
 {
 #ifdef SHZ_DEBUG
     using MaxType = decltype(DstType{1} + SrcType{1});
-    VERIFY(static_cast<MaxType>(Src) == static_cast<MaxType>(static_cast<DstType>(Src)), "Cast will lose data");
+    ASSERT(static_cast<MaxType>(Src) == static_cast<MaxType>(static_cast<DstType>(Src)), "Cast will lose data");
 #endif
     return static_cast<DstType>(Src);
 }

@@ -73,7 +73,7 @@ namespace shz
 				VERIFY_PSO(PSOCreateInfo.ppResourceSignatures[i] != nullptr, "ppResourceSignatures[", i, "] must not be null");
 
 				const PipelineResourceSignatureDesc& Desc = PSOCreateInfo.ppResourceSignatures[i]->GetDesc();
-				VERIFY_EXPR(Desc.BindingIndex < PRSExists.size());
+				ASSERT_EXPR(Desc.BindingIndex < PRSExists.size());
 
 				VERIFY_PSO(!PRSExists[Desc.BindingIndex], "PRS binding index must be unique");
 				PRSExists[Desc.BindingIndex] = true;
@@ -122,14 +122,14 @@ namespace shz
 			RayTracingShaderMapType ShaderMapD3D12;
 #if VULKAN_SUPPORTED
 			SerializedPipelineStateImpl::ExtractShadersVk(PSOCreateInfo, ShaderMapVk);
-			VERIFY_EXPR(!ShaderMapVk.empty());
+			ASSERT_EXPR(!ShaderMapVk.empty());
 #endif
 #if D3D12_SUPPORTED
 			SerializedPipelineStateImpl::ExtractShadersD3D12(PSOCreateInfo, ShaderMapD3D12);
-			VERIFY_EXPR(!ShaderMapD3D12.empty());
+			ASSERT_EXPR(!ShaderMapD3D12.empty());
 #endif
 
-			VERIFY(ShaderMapVk.empty() || ShaderMapD3D12.empty() || ShaderMapVk == ShaderMapD3D12,
+			ASSERT(ShaderMapVk.empty() || ShaderMapD3D12.empty() || ShaderMapVk == ShaderMapD3D12,
 				"Ray tracing shader map must be same for Vulkan and Direct3D12 backends");
 
 			RayTracingShaderMapType ShaderMap;
@@ -212,7 +212,7 @@ namespace shz
 				break;
 #endif
 			case ARCHIVE_DEVICE_DATA_FLAG_NONE:
-				UNEXPECTED("ARCHIVE_DEVICE_DATA_FLAG_NONE (0) should never occur");
+				ASSERT(false, "ARCHIVE_DEVICE_DATA_FLAG_NONE (0) should never occur");
 				break;
 
 			default:
@@ -255,7 +255,7 @@ namespace shz
 			for (uint32 i = 0; i < SignaturesCount; ++i)
 			{
 				IPipelineResourceSignature* pSignature = ppSignatures[i];
-				VERIFY(pSignature != nullptr, "This error should've been caught by ValidatePipelineResourceSignatures");
+				ASSERT(pSignature != nullptr, "This error should've been caught by ValidatePipelineResourceSignatures");
 				m_Signatures[i] = pSignature;
 				PRSNames[i] = pSignature->GetDesc().Name;
 			}
@@ -276,7 +276,7 @@ namespace shz
 			{
 				Serializer<SerializerMode::Write> Ser{ m_Data.Common };
 				SerializePsoCI(Ser);
-				VERIFY_EXPR(Ser.IsEnded());
+				ASSERT_EXPR(Ser.IsEnded());
 			}
 		}
 
@@ -295,19 +295,19 @@ namespace shz
 
 		void Append(const SerializedShaderImpl* pShader)
 		{
-			VERIFY_EXPR(pShader != nullptr);
-			VERIFY(std::find(Shaders.begin(), Shaders.end(), pShader) == Shaders.end(),
+			ASSERT_EXPR(pShader != nullptr);
+			ASSERT(std::find(Shaders.begin(), Shaders.end(), pShader) == Shaders.end(),
 				"Shader '", pShader->GetDesc().Name, "' already exists in the stage. Shaders must be deduplicated.");
 
 			const SHADER_TYPE NewShaderType = pShader->GetDesc().ShaderType;
 			if (Type == SHADER_TYPE_UNKNOWN)
 			{
-				VERIFY_EXPR(Shaders.empty());
+				ASSERT_EXPR(Shaders.empty());
 				Type = NewShaderType;
 			}
 			else
 			{
-				VERIFY(Type == NewShaderType, "The type (", GetShaderTypeLiteralName(NewShaderType),
+				ASSERT(Type == NewShaderType, "The type (", GetShaderTypeLiteralName(NewShaderType),
 					") of shader '", pShader->GetDesc().Name, "' being added to the stage is inconsistent with the stage type (",
 					GetShaderTypeLiteralName(Type), ").");
 			}
@@ -390,7 +390,7 @@ namespace shz
 #ifdef SHZ_DEBUG
 					for (const SerializedShaderImpl* pShader : Shaders)
 					{
-						VERIFY(!pShader->IsCompiling(), "All shader compile tasks must have been completed since we used them as "
+						ASSERT(!pShader->IsCompiling(), "All shader compile tasks must have been completed since we used them as "
 							"prerequisites for the pipeline initialization task. This appears to be a bug.");
 					}
 #endif
@@ -432,15 +432,15 @@ namespace shz
 		ShaderData.Hash = ShaderData.Data.GetHash();
 #ifdef SHZ_DEBUG
 		for (const SerializedPipelineStateImpl::Data::ShaderInfo& Data : m_Data.Shaders[static_cast<size_t>(Type)])
-			VERIFY(Data.Hash != ShaderData.Hash, "Shader with the same hash is already in the list.");
+			ASSERT(Data.Hash != ShaderData.Hash, "Shader with the same hash is already in the list.");
 #endif
 		m_Data.Shaders[static_cast<size_t>(Type)].emplace_back(std::move(ShaderData));
 	}
 
 	uint32 SHZ_CALL_TYPE SerializedPipelineStateImpl::GetPatchedShaderCount(ARCHIVE_DEVICE_DATA_FLAGS DeviceType) const
 	{
-		DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
-		DEV_CHECK_ERR(IsPowerOfTwo(DeviceType), "Only single device data flag is expected");
+		ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
+		ASSERT(IsPowerOfTwo(DeviceType), "Only single device data flag is expected");
 		const DeviceObjectArchive::DeviceType Type = ArchiveDeviceDataFlagToArchiveDeviceType(DeviceType);
 		const auto& Shaders = m_Data.Shaders[static_cast<size_t>(Type)];
 		return StaticCast<uint32>(Shaders.size());
@@ -449,8 +449,8 @@ namespace shz
 	ShaderCreateInfo SHZ_CALL_TYPE SerializedPipelineStateImpl::GetPatchedShaderCreateInfo(
 		ARCHIVE_DEVICE_DATA_FLAGS DeviceType, uint32 ShaderIndex) const
 	{
-		DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
-		DEV_CHECK_ERR(IsPowerOfTwo(DeviceType), "Only single device data flag is expected");
+		ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
+		ASSERT(IsPowerOfTwo(DeviceType), "Only single device data flag is expected");
 
 		ShaderCreateInfo ShaderCI;
 
@@ -471,7 +471,7 @@ namespace shz
 		}
 		else
 		{
-			DEV_ERROR("Shader index (", ShaderIndex, ") is out of range. Call GetPatchedShaderCount() to get the shader count.");
+			ASSERT(false, "Shader index (", ShaderIndex, ") is out of range. Call GetPatchedShaderCount() to get the shader count.");
 		}
 
 		return ShaderCI;
@@ -479,11 +479,11 @@ namespace shz
 
 	PIPELINE_STATE_STATUS SerializedPipelineStateImpl::GetStatus(bool WaitForCompletion)
 	{
-		VERIFY_EXPR(m_Status.load() != PIPELINE_STATE_STATUS_UNINITIALIZED);
+		ASSERT_EXPR(m_Status.load() != PIPELINE_STATE_STATUS_UNINITIALIZED);
 		ASYNC_TASK_STATUS InitTaskStatus = AsyncInitializer::Update(m_AsyncInitializer, WaitForCompletion);
 		if (InitTaskStatus == ASYNC_TASK_STATUS_COMPLETE)
 		{
-			VERIFY(m_Status.load() > PIPELINE_STATE_STATUS_COMPILING, "Pipeline state status must be atomically set by the initialization task before it finishes");
+			ASSERT(m_Status.load() > PIPELINE_STATE_STATUS_COMPILING, "Pipeline state status must be atomically set by the initialization task before it finishes");
 		}
 		return m_Status.load();
 	}

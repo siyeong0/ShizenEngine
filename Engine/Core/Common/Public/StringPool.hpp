@@ -71,7 +71,7 @@ namespace shz
 		{
 			Clear();
 
-			VERIFY(m_ReservedSize == 0, "Pool is already initialized");
+			ASSERT(m_ReservedSize == 0, "Pool is already initialized");
 			m_pAllocator = &Allocator;
 			m_ReservedSize = Size;
 			if (m_ReservedSize != 0)
@@ -106,7 +106,7 @@ namespace shz
 
 		void AssignMemory(Char* pBuffer, size_t Size)
 		{
-			VERIFY(m_ReservedSize == 0, "Pool is already initialized");
+			ASSERT(m_ReservedSize == 0, "Pool is already initialized");
 			m_ReservedSize = Size;
 			m_pBuffer = pBuffer;
 			m_pCurrPtr = m_pBuffer;
@@ -114,7 +114,7 @@ namespace shz
 
 		Char* Allocate(size_t Length)
 		{
-			VERIFY(m_pCurrPtr + Length <= m_pBuffer + m_ReservedSize, "Not enough space in the buffer");
+			ASSERT(m_pCurrPtr + Length <= m_pBuffer + m_ReservedSize, "Not enough space in the buffer");
 			Char* Ptr = m_pCurrPtr;
 			m_pCurrPtr += Length;
 			return Ptr;
@@ -145,19 +145,19 @@ namespace shz
 			if (m_pCurrPtr < m_pBuffer + m_ReservedSize)
 				*(m_pCurrPtr++) = 0;
 			else
-				UNEXPECTED("Not enough space reserved in the string pool");
+				ASSERT(false, "Not enough space reserved in the string pool");
 			return Ptr;
 		}
 
 
 		size_t GetRemainingSize() const
 		{
-			VERIFY(m_pCurrPtr <= m_pBuffer + m_ReservedSize, "Buffer overflow");
+			ASSERT(m_pCurrPtr <= m_pBuffer + m_ReservedSize, "Buffer overflow");
 			return m_ReservedSize - (m_pCurrPtr - m_pBuffer);
 		}
 		size_t GetUsedSize() const
 		{
-			VERIFY(m_pCurrPtr <= m_pBuffer + m_ReservedSize, "Buffer overflow");
+			ASSERT(m_pCurrPtr <= m_pBuffer + m_ReservedSize, "Buffer overflow");
 			return m_pCurrPtr - m_pBuffer;
 		}
 		size_t GetReservedSize() const

@@ -58,7 +58,7 @@ namespace shz
 					{
 						for (uint32 Mip = 0; Mip < m_Desc.MipLevels; ++Mip)
 						{
-							DEV_CHECK_ERR(!IsMapped(Mip, Slice), "Releasing mapped staging texture");
+							ASSERT(!IsMapped(Mip, Slice), "Releasing mapped staging texture");
 						}
 					}
 				}
@@ -85,14 +85,14 @@ namespace shz
 
 			void Unmap(IDeviceContext* pDeviceContext, uint32 Mip, uint32 Slice)
 			{
-				VERIFY(IsMapped(Mip, Slice), "This subresource is not mapped");
+				ASSERT(IsMapped(Mip, Slice), "This subresource is not mapped");
 				pDeviceContext->UnmapTextureSubresource(m_pStagingTexture, Mip, Slice);
 				SetMappedData(Mip, Slice, MappedTextureSubresource{});
 			}
 
 			void Map(IDeviceContext* pDeviceContext, uint32 Mip, uint32 Slice)
 			{
-				VERIFY(!IsMapped(Mip, Slice), "This subresource is already mapped");
+				ASSERT(!IsMapped(Mip, Slice), "This subresource is already mapped");
 				MappedTextureSubresource MappedData;
 				pDeviceContext->MapTextureSubresource(m_pStagingTexture, Mip, Slice, MAP_WRITE, MAP_FLAG_NO_OVERWRITE, nullptr, MappedData);
 				SetMappedData(Mip, Slice, MappedData);
@@ -125,7 +125,7 @@ namespace shz
 
 			uint64 GetCopyScheduledFenceValue() const
 			{
-				VERIFY(m_CopyScheduledFenceValue != 0, "Fence value has not been initialized");
+				ASSERT(m_CopyScheduledFenceValue != 0, "Fence value has not been initialized");
 				return m_CopyScheduledFenceValue;
 			}
 
@@ -226,12 +226,12 @@ namespace shz
 
 		void RecycleUploadTexture(UploadTexture* pUploadTexture)
 		{
-			VERIFY(pUploadTexture->DbgIsCopyScheduled(), "Upload buffer must be recycled only after copy operation has been scheduled on the GPU");
+			ASSERT(pUploadTexture->DbgIsCopyScheduled(), "Upload buffer must be recycled only after copy operation has been scheduled on the GPU");
 
 			std::lock_guard<std::mutex> CacheLock(m_UploadTexturesCacheMtx);
 			auto& Deque = m_UploadTexturesCache[pUploadTexture->GetDesc()];
 #ifdef SHZ_DEBUG
-			VERIFY(std::find(Deque.begin(), Deque.end(), pUploadTexture) == Deque.end(),
+			ASSERT(std::find(Deque.begin(), Deque.end(), pUploadTexture) == Deque.end(),
 				"Upload texture is already in the cache");
 #endif
 			Deque.emplace_back(pUploadTexture);
@@ -342,7 +342,7 @@ namespace shz
 			ITexture* pStagingTex = pUploadTex->GetStagingTexture();
 			const TextureDesc& TexDesc = Operation.pDstTexture->GetDesc();
 
-			VERIFY(pUploadTex->DbgIsMapped(), "Upload texture must be copied only after it has been mapped");
+			ASSERT(pUploadTex->DbgIsMapped(), "Upload texture must be copied only after it has been mapped");
 			for (uint32 Slice = 0; Slice < StagingTexDesc.ArraySize; ++Slice)
 			{
 				for (uint32 Mip = 0; Mip < StagingTexDesc.MipLevels; ++Mip)

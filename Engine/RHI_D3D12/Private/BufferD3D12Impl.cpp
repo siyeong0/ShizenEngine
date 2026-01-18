@@ -82,7 +82,7 @@ namespace shz
 		}
 		else
 		{
-			VERIFY(m_Desc.Usage != USAGE_DYNAMIC || PlatformMisc::CountOneBits(m_Desc.ImmediateContextMask) <= 1,
+			ASSERT(m_Desc.Usage != USAGE_DYNAMIC || PlatformMisc::CountOneBits(m_Desc.ImmediateContextMask) <= 1,
 				"ImmediateContextMask must contain single set bit, this error should've been handled in ValidateBufferDesc()");
 
 			D3D12_RESOURCE_DESC d3d12BuffDesc{};
@@ -204,7 +204,7 @@ namespace shz
 
 					RenderDeviceD3D12Impl::PooledCommandContext InitContext = pRenderDeviceD3D12->AllocateCommandContext(CmdQueueInd);
 					// copy data to the intermediate upload heap and then schedule a copy from the upload heap to the default buffer
-					VERIFY_EXPR(CheckState(RESOURCE_STATE_COPY_DEST));
+					ASSERT_EXPR(CheckState(RESOURCE_STATE_COPY_DEST));
 					// We MUST NOT call TransitionResource() from here, because
 					// it will call AddRef() and potentially Release(), while
 					// the object is not constructed yet
@@ -249,22 +249,22 @@ namespace shz
 
 	static BufferDesc BufferDescFromD3D12Resource(BufferDesc BuffDesc, ID3D12Resource* pd3d12Buffer)
 	{
-		DEV_CHECK_ERR(BuffDesc.Usage != USAGE_DYNAMIC, "Dynamic buffers cannot be attached to native d3d12 resource");
+		ASSERT(BuffDesc.Usage != USAGE_DYNAMIC, "Dynamic buffers cannot be attached to native d3d12 resource");
 
 		D3D12_RESOURCE_DESC d3d12BuffDesc = pd3d12Buffer->GetDesc();
-		DEV_CHECK_ERR(d3d12BuffDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER, "D3D12 resource is not a buffer");
+		ASSERT(d3d12BuffDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER, "D3D12 resource is not a buffer");
 
-		DEV_CHECK_ERR(BuffDesc.Size == 0 || BuffDesc.Size == d3d12BuffDesc.Width, "Buffer size specified by the BufferDesc (", BuffDesc.Size, ") does not match d3d12 resource size (", d3d12BuffDesc.Width, ")");
+		ASSERT(BuffDesc.Size == 0 || BuffDesc.Size == d3d12BuffDesc.Width, "Buffer size specified by the BufferDesc (", BuffDesc.Size, ") does not match d3d12 resource size (", d3d12BuffDesc.Width, ")");
 		BuffDesc.Size = StaticCast<uint32>(d3d12BuffDesc.Width);
 
 		if (d3d12BuffDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)
 		{
-			DEV_CHECK_ERR(BuffDesc.BindFlags == 0 || (BuffDesc.BindFlags & BIND_UNORDERED_ACCESS), "BIND_UNORDERED_ACCESS flag is not specified by the BufferDesc, while d3d12 resource was created with D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS flag");
+			ASSERT(BuffDesc.BindFlags == 0 || (BuffDesc.BindFlags & BIND_UNORDERED_ACCESS), "BIND_UNORDERED_ACCESS flag is not specified by the BufferDesc, while d3d12 resource was created with D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS flag");
 			BuffDesc.BindFlags |= BIND_UNORDERED_ACCESS;
 		}
 		if (d3d12BuffDesc.Flags & D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE)
 		{
-			DEV_CHECK_ERR(!(BuffDesc.BindFlags & BIND_SHADER_RESOURCE), "BIND_SHADER_RESOURCE flag is specified by the BufferDesc, while d3d12 resource was created with D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE flag");
+			ASSERT(!(BuffDesc.BindFlags & BIND_SHADER_RESOURCE), "BIND_SHADER_RESOURCE flag is specified by the BufferDesc, while d3d12 resource was created with D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE flag");
 			BuffDesc.BindFlags &= ~BIND_SHADER_RESOURCE;
 		}
 		else
@@ -274,14 +274,14 @@ namespace shz
 		{
 			if (BuffDesc.Mode == BUFFER_MODE_STRUCTURED || BuffDesc.Mode == BUFFER_MODE_FORMATTED)
 			{
-				DEV_CHECK_ERR(BuffDesc.ElementByteStride != 0, "Element byte stride cannot be 0 for a structured or a formatted buffer");
+				ASSERT(BuffDesc.ElementByteStride != 0, "Element byte stride cannot be 0 for a structured or a formatted buffer");
 			}
 			else if (BuffDesc.Mode == BUFFER_MODE_RAW)
 			{
 			}
 			else
 			{
-				UNEXPECTED("Buffer mode must be structured or formatted");
+				ASSERT(false, "Buffer mode must be structured or formatted");
 			}
 		}
 
@@ -324,9 +324,9 @@ namespace shz
 
 	void BufferD3D12Impl::CreateViewInternal(const BufferViewDesc& OrigViewDesc, IBufferView** ppView, bool bIsDefaultView)
 	{
-		VERIFY(ppView != nullptr, "Null pointer provided");
+		ASSERT(ppView != nullptr, "Null pointer provided");
 		if (!ppView) return;
-		VERIFY(*ppView == nullptr, "Overwriting reference to existing object may cause memory leaks");
+		ASSERT(*ppView == nullptr, "Overwriting reference to existing object may cause memory leaks");
 
 		*ppView = nullptr;
 
@@ -334,7 +334,7 @@ namespace shz
 		{
 			RenderDeviceD3D12Impl* pDeviceD3D12Impl = GetDevice();
 			FixedBlockMemoryAllocator& BuffViewAllocator = pDeviceD3D12Impl->GetBuffViewObjAllocator();
-			VERIFY(&BuffViewAllocator == &m_dbgBuffViewAllocator, "Buff view allocator does not match allocator provided at buffer initialization");
+			ASSERT(&BuffViewAllocator == &m_dbgBuffViewAllocator, "Buff view allocator does not match allocator provided at buffer initialization");
 
 			BufferViewDesc ViewDesc = OrigViewDesc;
 			if (ViewDesc.ViewType == BUFFER_VIEW_UNORDERED_ACCESS)
@@ -384,8 +384,8 @@ namespace shz
 
 	void BufferD3D12Impl::CreateCBV(D3D12_CPU_DESCRIPTOR_HANDLE CBVDescriptor, uint64 Offset, uint64 Size) const
 	{
-		VERIFY((Offset % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) == 0, "Offset (", Offset, ") must be ", D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, "-aligned");
-		VERIFY(Offset + Size <= m_Desc.Size, "Range is out of bounds");
+		ASSERT((Offset % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) == 0, "Offset (", Offset, ") must be ", D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, "-aligned");
+		ASSERT(Offset + Size <= m_Desc.Size, "Range is out of bounds");
 		if (Size == 0)
 		{
 			// CBV can be at most 65536 bytes (D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16 bytes)
@@ -405,13 +405,13 @@ namespace shz
 		ID3D12Resource* pd3d12Resource = GetD3D12Resource();
 		if (pd3d12Resource != nullptr)
 		{
-			VERIFY(m_Desc.Usage != USAGE_DYNAMIC || (m_Desc.BindFlags & (BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS)) != 0, "Expected non-dynamic buffer or a buffer with SRV or UAV bind flags");
+			ASSERT(m_Desc.Usage != USAGE_DYNAMIC || (m_Desc.BindFlags & (BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS)) != 0, "Expected non-dynamic buffer or a buffer with SRV or UAV bind flags");
 			DataStartByteOffset = 0;
 			return pd3d12Resource;
 		}
 		else
 		{
-			VERIFY(m_Desc.Usage == USAGE_DYNAMIC, "Dynamic buffer is expected");
+			ASSERT(m_Desc.Usage == USAGE_DYNAMIC, "Dynamic buffer is expected");
 			DeviceContextD3D12Impl* pCtxD3D12 = ClassPtrCast<DeviceContextD3D12Impl>(pContext);
 			return pCtxD3D12->GetDynamicBufferD3D12ResourceAndOffset(this, DataStartByteOffset);
 		}
@@ -429,7 +429,7 @@ namespace shz
 
 	SparseBufferProperties BufferD3D12Impl::GetSparseProperties() const
 	{
-		DEV_CHECK_ERR(m_Desc.Usage == USAGE_SPARSE,
+		ASSERT(m_Desc.Usage == USAGE_SPARSE,
 			"IBuffer::GetSparseProperties() must only be used for sparse buffer");
 
 		ID3D12Device* pd3d12Device = m_pDevice->GetD3D12Device();
@@ -444,7 +444,7 @@ namespace shz
 			0,
 			nullptr);
 
-		VERIFY(StandardTileShapeForNonPackedMips.WidthInTexels == D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES,
+		ASSERT(StandardTileShapeForNonPackedMips.WidthInTexels == D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES,
 			"Expected to be a standard block size");
 
 		SparseBufferProperties Props;

@@ -90,7 +90,7 @@ namespace shz
 				&d3d12TexDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
 				__uuidof(pd3d12Texture),
 				reinterpret_cast<void**>(static_cast<ID3D12Resource**>(&pd3d12Texture)));
-			VERIFY_EXPR(SUCCEEDED(hr));
+			ASSERT_EXPR(SUCCEEDED(hr));
 			(void)hr;
 
 			return pd3d12Texture;
@@ -101,7 +101,7 @@ namespace shz
 			CComPtr<ID3D12DescriptorHeap> pd3d12InvalidDescriptorHeap;
 
 			pd3d12Device->CreateDescriptorHeap(&InvalidHeapDesc, __uuidof(pd3d12InvalidDescriptorHeap), reinterpret_cast<void**>(static_cast<ID3D12DescriptorHeap**>(&pd3d12InvalidDescriptorHeap)));
-			DEV_CHECK_ERR(pd3d12InvalidDescriptorHeap, "Failed to create Null descriptor heap");
+			ASSERT(pd3d12InvalidDescriptorHeap, "Failed to create Null descriptor heap");
 			const UINT DescriptorSize = pd3d12Device->GetDescriptorHandleIncrementSize(InvalidHeapDesc.Type);
 			// Initialize descriptors with invalid handle - create a view and then delete the resource.
 			D3D12_CPU_DESCRIPTOR_HANDLE CPUHandle = pd3d12InvalidDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -133,7 +133,7 @@ namespace shz
 			}
 			else
 			{
-				UNEXPECTED("Unexpected heap type");
+				ASSERT(false, "Unexpected heap type");
 			}
 
 			return pd3d12InvalidDescriptorHeap;
@@ -183,13 +183,13 @@ namespace shz
 
 	DescriptorHeapAllocationManager::~DescriptorHeapAllocationManager()
 	{
-		DEV_CHECK_ERR(m_AllocationsCounter == 0, m_AllocationsCounter, " allocations have not been released. If these allocations are referenced by release queue, the app will crash when DescriptorHeapAllocationManager::FreeAllocation() is called.");
-		DEV_CHECK_ERR(m_FreeBlockManager.GetFreeSize() == m_NumDescriptorsInAllocation, "Not all descriptors were released");
+		ASSERT(m_AllocationsCounter == 0, m_AllocationsCounter, " allocations have not been released. If these allocations are referenced by release queue, the app will crash when DescriptorHeapAllocationManager::FreeAllocation() is called.");
+		ASSERT(m_FreeBlockManager.GetFreeSize() == m_NumDescriptorsInAllocation, "Not all descriptors were released");
 	}
 
 	DescriptorHeapAllocation DescriptorHeapAllocationManager::Allocate(uint32_t Count)
 	{
-		VERIFY_EXPR(Count > 0);
+		ASSERT_EXPR(Count > 0);
 
 		std::lock_guard<std::mutex> LockGuard(m_FreeBlockManagerMutex);
 		// Methods of VariableSizeAllocationsManager class are not thread safe!
@@ -199,7 +199,7 @@ namespace shz
 		if (!Allocation.IsValid())
 			return DescriptorHeapAllocation{};
 
-		VERIFY_EXPR(Allocation.Size == Count);
+		ASSERT_EXPR(Allocation.Size == Count);
 
 		// Compute the first CPU and GPU descriptor handles in the allocation by
 		// offsetting the first CPU and GPU descriptor handle in the range
@@ -228,13 +228,13 @@ namespace shz
 		}
 #endif
 
-		VERIFY(m_ThisManagerId < std::numeric_limits<uint16>::max(), "ManagerID exceeds 16-bit range");
+		ASSERT(m_ThisManagerId < std::numeric_limits<uint16>::max(), "ManagerID exceeds 16-bit range");
 		return DescriptorHeapAllocation{ m_ParentAllocator, m_pd3d12DescriptorHeap, CPUHandle, GPUHandle, Count, static_cast<uint16>(m_ThisManagerId) };
 	}
 
 	void DescriptorHeapAllocationManager::FreeAllocation(DescriptorHeapAllocation&& Allocation)
 	{
-		VERIFY(Allocation.GetAllocationManagerId() == m_ThisManagerId, "Invalid descriptor heap manager Id");
+		ASSERT(Allocation.GetAllocationManagerId() == m_ThisManagerId, "Invalid descriptor heap manager Id");
 
 		if (Allocation.IsNull())
 			return;
@@ -283,13 +283,13 @@ namespace shz
 
 	CPUDescriptorHeap::~CPUDescriptorHeap()
 	{
-		DEV_CHECK_ERR(m_CurrentSize == 0, "Not all allocations released");
+		ASSERT(m_CurrentSize == 0, "Not all allocations released");
 
-		DEV_CHECK_ERR(m_AvailableHeaps.size() == m_HeapPool.size(), "Not all descriptor heap pools are released");
+		ASSERT(m_AvailableHeaps.size() == m_HeapPool.size(), "Not all descriptor heap pools are released");
 		uint32 TotalDescriptors = 0;
 		for (DescriptorHeapAllocationManager& Heap : m_HeapPool)
 		{
-			DEV_CHECK_ERR(Heap.GetNumAvailableDescriptors() == Heap.GetMaxDescriptors(), "Not all descriptors in the descriptor pool are released");
+			ASSERT(Heap.GetNumAvailableDescriptors() == Heap.GetMaxDescriptors(), "Not all descriptors in the descriptor pool are released");
 			TotalDescriptors += Heap.GetMaxDescriptors();
 		}
 
@@ -350,7 +350,7 @@ namespace shz
 			// heap and references the entire heap. Pool index is used as manager ID
 			m_HeapPool.emplace_back(m_MemAllocator, m_DeviceD3D12Impl, *this, m_HeapPool.size(), m_HeapDesc);
 			auto NewHeapIt = m_AvailableHeaps.insert(m_HeapPool.size() - 1);
-			VERIFY_EXPR(NewHeapIt.second);
+			ASSERT_EXPR(NewHeapIt.second);
 
 			// Use the new manager to allocate descriptor handles
 			Allocation = m_HeapPool[*NewHeapIt.first].Allocate(Count);
@@ -405,7 +405,7 @@ namespace shz
 		m_CurrentSize -= static_cast<uint32>(Allocation.GetNumHandles());
 		m_HeapPool[ManagerId].FreeAllocation(std::move(Allocation));
 		// Return the manager to the pool of available managers
-		VERIFY_EXPR(m_HeapPool[ManagerId].GetNumAvailableDescriptors() > 0);
+		ASSERT_EXPR(m_HeapPool[ManagerId].GetNumAvailableDescriptors() > 0);
 		m_AvailableHeaps.insert(ManagerId);
 	}
 
@@ -482,7 +482,7 @@ namespace shz
 				if (Heap != nullptr)
 				{
 					size_t MgrId = Allocation.GetAllocationManagerId();
-					VERIFY(MgrId == 0 || MgrId == 1, "Unexpected allocation manager ID");
+					ASSERT(MgrId == 0 || MgrId == 1, "Unexpected allocation manager ID");
 
 					if (MgrId == 0)
 					{
@@ -513,7 +513,7 @@ namespace shz
 
 	DynamicSuballocationsManager::~DynamicSuballocationsManager()
 	{
-		DEV_CHECK_ERR(m_Suballocations.empty() && m_CurrDescriptorCount == 0 && m_CurrSuballocationsTotalSize == 0, "All dynamic suballocations must be released!");
+		ASSERT(m_Suballocations.empty() && m_CurrDescriptorCount == 0 && m_CurrSuballocationsTotalSize == 0, "All dynamic suballocations must be released!");
 		LOG_INFO_MESSAGE(m_ManagerName, " usage stats: peak descriptor count: ", m_PeakDescriptorCount, '/', m_PeakSuballocationsTotalSize);
 	}
 
@@ -559,7 +559,7 @@ namespace shz
 		DescriptorHeapAllocation& CurrentSuballocation = m_Suballocations.back();
 
 		size_t ManagerId = CurrentSuballocation.GetAllocationManagerId();
-		VERIFY(ManagerId < std::numeric_limits<uint16>::max(), "ManagerID exceed allowed limit");
+		ASSERT(ManagerId < std::numeric_limits<uint16>::max(), "ManagerID exceed allowed limit");
 		DescriptorHeapAllocation Allocation(*this,
 			CurrentSuballocation.GetDescriptorHeap(),
 			CurrentSuballocation.GetCpuHandle(m_CurrentSuballocationOffset),

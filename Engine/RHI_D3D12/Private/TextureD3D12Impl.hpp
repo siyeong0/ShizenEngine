@@ -82,8 +82,8 @@ namespace shz
 
 		const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& GetStagingFootprint(uint32 Subresource)
 		{
-			VERIFY_EXPR(m_StagingFootprints != nullptr);
-			VERIFY_EXPR(Subresource <= (m_Desc.MipLevels * m_Desc.GetArraySize()));
+			ASSERT_EXPR(m_StagingFootprints != nullptr);
+			ASSERT_EXPR(Subresource <= (m_Desc.MipLevels * m_Desc.GetArraySize()));
 			return m_StagingFootprints[Subresource];
 		}
 

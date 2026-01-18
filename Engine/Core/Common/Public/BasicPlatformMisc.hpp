@@ -27,114 +27,116 @@
 
 #pragma once
 
+#include "Primitives/BasicTypes.h"
+
 namespace shz
 {
 
-enum class ThreadPriority
-{
-    Unknown,
-    Lowest,
-    BelowNormal,
-    Normal,
-    AboveNormal,
-    Highest
-};
+	enum class ThreadPriority
+	{
+		Unknown,
+		Lowest,
+		BelowNormal,
+		Normal,
+		AboveNormal,
+		Highest
+	};
 
-// Basic platform-specific miscellaneous functions
-struct BasicPlatformMisc
-{
-    template <typename Type>
-    static uint32 GetMSB(Type Val)
-    {
-        if (Val == 0) return sizeof(Type) * 8;
+	// Basic platform-specific miscellaneous functions
+	struct BasicPlatformMisc
+	{
+		template <typename Type>
+		static uint32 GetMSB(Type Val)
+		{
+			if (Val == 0) return sizeof(Type) * 8;
 
-        uint32 MSB = sizeof(Type) * 8 - 1;
-        while (!(Val & (Type{1} << MSB)))
-            --MSB;
+			uint32 MSB = sizeof(Type) * 8 - 1;
+			while (!(Val & (Type{ 1 } << MSB)))
+				--MSB;
 
-        return MSB;
-    }
+			return MSB;
+		}
 
-    template <typename Type>
-    static uint32 GetLSB(Type Val)
-    {
-        if (Val == 0) return sizeof(Type) * 8;
+		template <typename Type>
+		static uint32 GetLSB(Type Val)
+		{
+			if (Val == 0) return sizeof(Type) * 8;
 
-        uint32 LSB = 0;
-        while (!(Val & (Type{1} << LSB)))
-            ++LSB;
+			uint32 LSB = 0;
+			while (!(Val & (Type{ 1 } << LSB)))
+				++LSB;
 
-        return LSB;
-    }
+			return LSB;
+		}
 
-    template <typename Type>
-    static uint32 CountOneBits(Type Val)
-    {
-        uint32 bits = 0;
-        while (Val != 0)
-        {
-            Val &= (Val - 1);
-            ++bits;
-        }
-        return bits;
-    }
+		template <typename Type>
+		static uint32 CountOneBits(Type Val)
+		{
+			uint32 bits = 0;
+			while (Val != 0)
+			{
+				Val &= (Val - 1);
+				++bits;
+			}
+			return bits;
+		}
 
-    template <typename Type>
-    static typename std::enable_if<sizeof(Type) == 2, Type>::type SwapBytes(Type Val)
-    {
-        SwapBytes16(reinterpret_cast<uint16&>(Val));
-        return Val;
-    }
+		template <typename Type>
+		static typename std::enable_if<sizeof(Type) == 2, Type>::type SwapBytes(Type Val)
+		{
+			SwapBytes16(reinterpret_cast<uint16&>(Val));
+			return Val;
+		}
 
-    template <typename Type>
-    static typename std::enable_if<sizeof(Type) == 4, Type>::type SwapBytes(Type Val)
-    {
-        SwapBytes32(reinterpret_cast<uint32&>(Val));
-        return Val;
-    }
+		template <typename Type>
+		static typename std::enable_if<sizeof(Type) == 4, Type>::type SwapBytes(Type Val)
+		{
+			SwapBytes32(reinterpret_cast<uint32&>(Val));
+			return Val;
+		}
 
-    template <typename Type>
-    static typename std::enable_if<sizeof(Type) == 8, Type>::type SwapBytes(Type Val)
-    {
-        SwapBytes64(reinterpret_cast<uint64&>(Val));
-        return Val;
-    }
+		template <typename Type>
+		static typename std::enable_if<sizeof(Type) == 8, Type>::type SwapBytes(Type Val)
+		{
+			SwapBytes64(reinterpret_cast<uint64&>(Val));
+			return Val;
+		}
 
-    static ThreadPriority GetCurrentThreadPriority();
+		static ThreadPriority GetCurrentThreadPriority();
 
-    // Sets the current thread priority and on success returns the previous priority.
-    // On failure, returns ThreadPriority::Unknown.
-    static ThreadPriority SetCurrentThreadPriority(ThreadPriority Priority);
+		// Sets the current thread priority and on success returns the previous priority.
+		// On failure, returns ThreadPriority::Unknown.
+		static ThreadPriority SetCurrentThreadPriority(ThreadPriority Priority);
 
-    // Sets the current thread affinity mask and on success returns the previous mask.
-    static uint64 SetCurrentThreadAffinity(uint64 Mask);
+		// Sets the current thread affinity mask and on success returns the previous mask.
+		static uint64 SetCurrentThreadAffinity(uint64 Mask);
 
-    // Sets the name of the current thread.
-    static void SetCurrentThreadName(const char* Name);
+		// Sets the name of the current thread.
+		static void SetCurrentThreadName(const char* Name);
 
-private:
-    static void SwapBytes16(uint16& Val)
-    {
-        Val = (Val << 8u) | (Val >> 8u);
-    }
+	private:
+		static void SwapBytes16(uint16& Val)
+		{
+			Val = (Val << 8u) | (Val >> 8u);
+		}
 
-    static void SwapBytes32(uint32& Val)
-    {
-        Val = (Val << 24u) | ((Val & 0xFF00u) << 8u) | ((Val & 0xFF0000u) >> 8u) | (Val >> 24u);
-    }
+		static void SwapBytes32(uint32& Val)
+		{
+			Val = (Val << 24u) | ((Val & 0xFF00u) << 8u) | ((Val & 0xFF0000u) >> 8u) | (Val >> 24u);
+		}
 
-    static void SwapBytes64(uint64& Val)
-    {
-        Val = //             -7-6-5-4-3-2-1-0
-            ((Val & uint64{0x00000000000000FF}) << uint64{7 * 8}) |
-            ((Val & uint64{0x000000000000FF00}) << uint64{5 * 8}) |
-            ((Val & uint64{0x0000000000FF0000}) << uint64{3 * 8}) |
-            ((Val & uint64{0x00000000FF000000}) << uint64{1 * 8}) |
-            ((Val & uint64{0x000000FF00000000}) >> uint64{1 * 8}) |
-            ((Val & uint64{0x0000FF0000000000}) >> uint64{3 * 8}) |
-            ((Val & uint64{0x00FF000000000000}) >> uint64{5 * 8}) |
-            ((Val & uint64{0xFF00000000000000}) >> uint64{7 * 8});
-    }
-};
+		static void SwapBytes64(uint64& Val)
+		{
+			Val = //             -7-6-5-4-3-2-1-0
+				((Val & uint64{ 0x00000000000000FF }) << uint64{ 7 * 8 }) |
+				((Val & uint64{ 0x000000000000FF00 }) << uint64{ 5 * 8 }) |
+				((Val & uint64{ 0x0000000000FF0000 }) << uint64{ 3 * 8 }) |
+				((Val & uint64{ 0x00000000FF000000 }) << uint64{ 1 * 8 }) |
+				((Val & uint64{ 0x000000FF00000000 }) >> uint64{ 1 * 8 }) |
+				((Val & uint64{ 0x0000FF0000000000 }) >> uint64{ 3 * 8 }) |
+				((Val & uint64{ 0x00FF000000000000 }) >> uint64{ 5 * 8 }) |
+				((Val & uint64{ 0xFF00000000000000 }) >> uint64{ 7 * 8 });
+		}
+	};
 
 } // namespace shz

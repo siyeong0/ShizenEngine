@@ -32,15 +32,18 @@
 #include <cmath>
 
 #include "Platforms/Common/PlatformDefinitions.h"
+
 #include "Engine/Core/Runtime/Public/SampleApp.h"
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Common/Public/StringTools.hpp"
+
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
-#include "Tools/Image/Public/Image.h"
 #include "Engine/Core/Common/Public/FileWrapper.hpp"
 #include "Engine/Core/Runtime/Public/CommandLineParser.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Core/Common/Public/ImageTools.h"
+
+#include "Tools/Image/Public/Image.h"
 
 #if D3D11_SUPPORTED
 #    include "Engine/RHI_D3D11/Public/EngineFactoryD3D11.h"
@@ -326,7 +329,7 @@ namespace shz
 		case RENDER_DEVICE_TYPE_GLES:
 		{
 #    if !PLATFORM_MACOS
-			VERIFY_EXPR(pWindow != nullptr);
+			ASSERT_EXPR(pWindow != nullptr);
 #    endif
 			// Load the dll and get the factory
 			IEngineFactoryOpenGL* pFactoryOpenGL = LoadAndGetEngineFactoryOpenGL();
@@ -437,7 +440,6 @@ namespace shz
 			LOG_ERROR_AND_THROW("Unknown device type");
 			break;
 		}
-		m_pEngineFactory->SetBreakOnError(m_bBreakOnError);
 
 		m_AppTitle.append(" (");
 		m_AppTitle.append(GetRenderDeviceTypeString(m_DeviceType));
@@ -497,7 +499,7 @@ namespace shz
 		InitInfo.pDevice = m_pDevice;
 		InitInfo.ppContexts = ppContexts.data();
 		InitInfo.NumImmediateCtx = m_NumImmediateContexts;
-		VERIFY_EXPR(m_pDeviceContexts.size() >= m_NumImmediateContexts);
+		ASSERT_EXPR(m_pDeviceContexts.size() >= m_NumImmediateContexts);
 		InitInfo.NumDeferredCtx = static_cast<uint32>(m_pDeviceContexts.size()) - m_NumImmediateContexts;
 		InitInfo.pSwapChain = m_pSwapChain;
 		InitInfo.pImGui = m_pImGui.get();
@@ -621,7 +623,7 @@ namespace shz
 
 		if (argv == nullptr)
 		{
-			UNEXPECTED("argv is null when argc (", argc, ") is not zero");
+			ASSERT(false, "argv is null when argc (", argc, ") is not zero");
 			return CommandLineStatus::Error;
 		}
 
@@ -738,7 +740,7 @@ namespace shz
 				else
 				{
 					int AdapterId = atoi(ArgVal);
-					VERIFY_EXPR(AdapterId >= 0);
+					ASSERT_EXPR(AdapterId >= 0);
 					m_AdapterId = static_cast<uint32>(AdapterId >= 0 ? AdapterId : 0);
 				}
 				return true;
@@ -997,7 +999,7 @@ namespace shz
 
 				if (m_GoldenImgMode != GoldenImageMode::None)
 				{
-					VERIFY(m_ScreenCaptureInfo.FramesToCapture == 0, "Only single frame is expected to be captured in golden image capture/comparison modes");
+					ASSERT(m_ScreenCaptureInfo.FramesToCapture == 0, "Only single frame is expected to be captured in golden image capture/comparison modes");
 					// Idle the context to make the capture available
 					pCtx->WaitForIdle();
 					if (!m_pScreenCapture->HasCapture())

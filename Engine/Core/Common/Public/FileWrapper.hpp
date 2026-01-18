@@ -29,10 +29,11 @@
 
 #include <vector>
 
-#include "Primitives/Errors.hpp"
 #include "Primitives/DataBlob.h"
 #include "Primitives/DebugUtilities.hpp"
 #include "Platforms/Common/FileSystem.hpp"
+
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {
@@ -59,7 +60,7 @@ namespace shz
 
 		void Open(const FileOpenAttribs& OpenAttribs)
 		{
-			VERIFY(!m_pFile, "Another file already attached");
+			ASSERT(!m_pFile, "Another file already attached");
 			Close();
 			m_pFile = FileSystem::OpenFile(OpenAttribs);
 		}
@@ -73,7 +74,7 @@ namespace shz
 
 		void Attach(CFile* pFile)
 		{
-			VERIFY(!m_pFile, "Another file already attached");
+			ASSERT(!m_pFile, "Another file already attached");
 			Close();
 			m_pFile = pFile;
 		}

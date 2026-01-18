@@ -48,7 +48,7 @@ namespace shz
 		, m_d3d12Fence(pd3d12Fence)
 		, m_WaitForGPUEventHandle(CreateEvent(nullptr, false, false, nullptr))
 	{
-		VERIFY_EXPR(m_WaitForGPUEventHandle != INVALID_HANDLE_VALUE);
+		ASSERT_EXPR(m_WaitForGPUEventHandle != INVALID_HANDLE_VALUE);
 		m_d3d12Fence->Signal(0);
 	}
 
@@ -71,7 +71,7 @@ namespace shz
 #ifdef SHZ_DEBUG
 			for (uint32 i = 0; i < NumCommandLists; ++i)
 			{
-				VERIFY(ppCommandLists[i] != nullptr, "Command list must not be null");
+				ASSERT(ppCommandLists[i] != nullptr, "Command list must not be null");
 			}
 #endif
 			m_pd3d12CmdQueue->ExecuteCommandLists(NumCommandLists, ppCommandLists);
@@ -95,7 +95,7 @@ namespace shz
 		{
 			m_d3d12Fence->SetEventOnCompletion(LastSignaledFenceValue, m_WaitForGPUEventHandle);
 			WaitForSingleObject(m_WaitForGPUEventHandle, INFINITE);
-			VERIFY(GetCompletedFenceValue() == LastSignaledFenceValue, "Unexpected signaled fence value");
+			ASSERT(GetCompletedFenceValue() == LastSignaledFenceValue, "Unexpected signaled fence value");
 		}
 		return LastSignaledFenceValue;
 	}
@@ -103,7 +103,7 @@ namespace shz
 	uint64 CommandQueueD3D12Impl::GetCompletedFenceValue()
 	{
 		uint64 CompletedFenceValue = m_d3d12Fence->GetCompletedValue();
-		VERIFY(CompletedFenceValue != UINT64_MAX, "If the device has been removed, the return value will be UINT64_MAX");
+		ASSERT(CompletedFenceValue != UINT64_MAX, "If the device has been removed, the return value will be UINT64_MAX");
 
 		uint64 CurrValue = m_LastCompletedFenceValue.load();
 		while (!m_LastCompletedFenceValue.compare_exchange_weak(CurrValue, std::max(CurrValue, CompletedFenceValue)))
@@ -116,7 +116,7 @@ namespace shz
 
 	void CommandQueueD3D12Impl::EnqueueSignal(ID3D12Fence* pFence, uint64 Value)
 	{
-		DEV_CHECK_ERR(pFence, "Fence must not be null");
+		ASSERT(pFence, "Fence must not be null");
 
 		std::lock_guard<std::mutex> Lock{ m_QueueMtx };
 		m_pd3d12CmdQueue->Signal(pFence, Value);
@@ -124,7 +124,7 @@ namespace shz
 
 	void CommandQueueD3D12Impl::WaitFence(ID3D12Fence* pFence, uint64 Value)
 	{
-		DEV_CHECK_ERR(pFence, "Fence must not be null");
+		ASSERT(pFence, "Fence must not be null");
 
 		std::lock_guard<std::mutex> Lock{ m_QueueMtx };
 		m_pd3d12CmdQueue->Wait(pFence, Value);
@@ -132,7 +132,7 @@ namespace shz
 
 	void CommandQueueD3D12Impl::UpdateTileMappings(ResourceTileMappingsD3D12* pMappings, uint32 Count)
 	{
-		DEV_CHECK_ERR(pMappings != nullptr, "Tile mappings must not be null");
+		ASSERT(pMappings != nullptr, "Tile mappings must not be null");
 
 		std::lock_guard<std::mutex> Lock{ m_QueueMtx };
 

@@ -101,11 +101,11 @@ namespace shz
 			// Android build requires this operator to be defined - I have no idea why.
 			// There is no default constructor to create null allocator, so all fields must be
 			// initialized.
-			DEV_CHECK_ERR(&m_Allocator == &other.m_Allocator, "Inconsistent allocators");
+			ASSERT(&m_Allocator == &other.m_Allocator, "Inconsistent allocators");
 #ifdef SHZ_DEBUG
-			DEV_CHECK_ERR(m_dvpDescription == other.m_dvpDescription, "Inconsistent allocator descriptions");
-			DEV_CHECK_ERR(m_dvpFileName == other.m_dvpFileName, "Inconsistent allocator file names");
-			DEV_CHECK_ERR(m_dvpLineNumber == other.m_dvpLineNumber, "Inconsistent allocator line numbers");
+			ASSERT(m_dvpDescription == other.m_dvpDescription, "Inconsistent allocator descriptions");
+			ASSERT(m_dvpFileName == other.m_dvpFileName, "Inconsistent allocator file names");
+			ASSERT(m_dvpLineNumber == other.m_dvpLineNumber, "Inconsistent allocator line numbers");
 #endif
 			return *this;
 		}
@@ -203,7 +203,7 @@ namespace shz
 
 		void operator()(T* ptr) noexcept
 		{
-			VERIFY(m_Allocator != nullptr, "The deleter has been moved away or never initialized, and can't be used");
+			ASSERT(m_Allocator != nullptr, "The deleter has been moved away or never initialized, and can't be used");
 			Destruct(ptr);
 			m_Allocator->Free(ptr);
 		}

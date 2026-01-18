@@ -120,13 +120,13 @@ namespace shz
 
 		const Data& GetData() const
 		{
-			DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
+			ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
 			return m_Data;
 		}
 
 		const SerializedData& GetCommonData() const
 		{
-			DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
+			ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
 			return m_Data.Common;
 		}
 
@@ -157,7 +157,7 @@ namespace shz
 		using SignaturesVector = std::vector<RefCntAutoPtr<IPipelineResourceSignature>>;
 		const SignaturesVector& GetSignatures()
 		{
-			DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
+			ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", m_Desc.Name, "' is not ready. Use GetStatus() to check the pipeline state status.");
 			return m_Signatures;
 		}
 

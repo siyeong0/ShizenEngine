@@ -62,7 +62,7 @@ namespace shz
 
 		void Insert(ResourceIdType Id, IDeviceObject* pObject)
 		{
-			DEV_CHECK_ERR(Id < m_Resources.size(), "Resource index is out of range");
+			ASSERT(Id < m_Resources.size(), "Resource index is out of range");
 			m_Resources[Id] = pObject;
 		}
 
@@ -76,15 +76,15 @@ namespace shz
 
 			ITexture* AsTexture() const
 			{
-				DEV_CHECK_ERR(Object != nullptr, "Resource is null");
-				DEV_CHECK_ERR(RefCntAutoPtr<ITexture>(Object, IID_Texture), "Resource is not a texture");
+				ASSERT(Object != nullptr, "Resource is null");
+				ASSERT(RefCntAutoPtr<ITexture>(Object, IID_Texture), "Resource is not a texture");
 				return StaticCast<ITexture*>(Object);
 			}
 
 			IBuffer* AsBuffer() const
 			{
-				DEV_CHECK_ERR(Object != nullptr, "Resource is null");
-				DEV_CHECK_ERR(RefCntAutoPtr<IBuffer>(Object, IID_Buffer), "Resource is not a buffer");
+				ASSERT(Object != nullptr, "Resource is null");
+				ASSERT(RefCntAutoPtr<IBuffer>(Object, IID_Buffer), "Resource is not a buffer");
 				return StaticCast<IBuffer*>(Object);
 			}
 
@@ -155,13 +155,13 @@ namespace shz
 
 		ResourceAccessor<const RefCntAutoPtr<IDeviceObject>> operator[](ResourceIdType Id) const
 		{
-			DEV_CHECK_ERR(Id < m_Resources.size(), "Resource index is out of range");
+			ASSERT(Id < m_Resources.size(), "Resource index is out of range");
 			return { m_Resources[Id] };
 		}
 
 		ResourceAccessor<RefCntAutoPtr<IDeviceObject>> operator[](ResourceIdType Id)
 		{
-			DEV_CHECK_ERR(Id < m_Resources.size(), "Resource index is out of range");
+			ASSERT(Id < m_Resources.size(), "Resource index is out of range");
 			return { m_Resources[Id] };
 		}
 

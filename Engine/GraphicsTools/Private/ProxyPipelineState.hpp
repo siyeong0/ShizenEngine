@@ -57,13 +57,13 @@ namespace shz
 
 		virtual int32 SHZ_CALL_TYPE GetUniqueID() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetUniqueID() : -1;
 		}
 
 		virtual void SHZ_CALL_TYPE SetUserData(IObject* pUserData) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			if (m_pPipeline)
 			{
 				m_pPipeline->SetUserData(pUserData);
@@ -72,34 +72,34 @@ namespace shz
 
 		virtual IObject* SHZ_CALL_TYPE GetUserData() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetUserData() : nullptr;
 		}
 
 		virtual const GraphicsPipelineDesc& SHZ_CALL_TYPE GetGraphicsPipelineDesc() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			static constexpr GraphicsPipelineDesc NullDesc;
 			return m_pPipeline ? m_pPipeline->GetGraphicsPipelineDesc() : NullDesc;
 		}
 
 		virtual const RayTracingPipelineDesc& SHZ_CALL_TYPE GetRayTracingPipelineDesc() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			static constexpr RayTracingPipelineDesc NullDesc;
 			return m_pPipeline ? m_pPipeline->GetRayTracingPipelineDesc() : NullDesc;
 		}
 
 		virtual const TilePipelineDesc& SHZ_CALL_TYPE GetTilePipelineDesc() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			static constexpr TilePipelineDesc NullDesc;
 			return m_pPipeline ? m_pPipeline->GetTilePipelineDesc() : NullDesc;
 		}
 
 		virtual void SHZ_CALL_TYPE BindStaticResources(SHADER_TYPE ShaderStages, IResourceMapping* pResourceMapping, BIND_SHADER_RESOURCES_FLAGS Flags) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			if (m_pPipeline)
 			{
 				m_pPipeline->BindStaticResources(ShaderStages, pResourceMapping, Flags);
@@ -108,25 +108,25 @@ namespace shz
 
 		virtual uint32 SHZ_CALL_TYPE GetStaticVariableCount(SHADER_TYPE ShaderType) const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetStaticVariableCount(ShaderType) : 0;
 		}
 
 		virtual IShaderResourceVariable* SHZ_CALL_TYPE GetStaticVariableByName(SHADER_TYPE ShaderType, const Char* Name) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetStaticVariableByName(ShaderType, Name) : nullptr;
 		}
 
 		virtual IShaderResourceVariable* SHZ_CALL_TYPE GetStaticVariableByIndex(SHADER_TYPE ShaderType, uint32 Index) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetStaticVariableByIndex(ShaderType, Index) : nullptr;
 		}
 
 		virtual void SHZ_CALL_TYPE CreateShaderResourceBinding(IShaderResourceBinding** ppShaderResourceBinding, bool InitStaticResources) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			if (m_pPipeline)
 			{
 				m_pPipeline->CreateShaderResourceBinding(ppShaderResourceBinding, InitStaticResources);
@@ -135,7 +135,7 @@ namespace shz
 
 		virtual void SHZ_CALL_TYPE InitializeStaticSRBResources(IShaderResourceBinding* pShaderResourceBinding) const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			if (m_pPipeline)
 			{
 				m_pPipeline->InitializeStaticSRBResources(pShaderResourceBinding);
@@ -144,7 +144,7 @@ namespace shz
 
 		virtual void SHZ_CALL_TYPE CopyStaticResources(IPipelineState* pPSO) const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			if (m_pPipeline)
 			{
 				m_pPipeline->CopyStaticResources(pPSO);
@@ -153,25 +153,25 @@ namespace shz
 
 		virtual bool SHZ_CALL_TYPE IsCompatibleWith(const IPipelineState* pPSO) const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->IsCompatibleWith(pPSO) : false;
 		}
 
 		virtual uint32 SHZ_CALL_TYPE GetResourceSignatureCount() const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetResourceSignatureCount() : 0;
 		}
 
 		virtual IPipelineResourceSignature* SHZ_CALL_TYPE GetResourceSignature(uint32 Index) const override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetResourceSignature(Index) : nullptr;
 		}
 
 		virtual PIPELINE_STATE_STATUS SHZ_CALL_TYPE GetStatus(bool WaitForCompletion) override
 		{
-			DEV_CHECK_ERR(m_pPipeline, "Internal pipeline is null");
+			ASSERT(m_pPipeline, "Internal pipeline is null");
 			return m_pPipeline ? m_pPipeline->GetStatus(WaitForCompletion) : PIPELINE_STATE_STATUS_UNINITIALIZED;
 		}
 

@@ -50,7 +50,7 @@ namespace shz
 			Desc.Type = FENCE_TYPE_CPU_WAIT_ONLY;
 			pDevice->CreateFence(Desc, &m_pFence);
 
-			DEV_CHECK_ERR(m_pFence, "Failed to create fence");
+			ASSERT(m_pFence, "Failed to create fence");
 		}
 
 

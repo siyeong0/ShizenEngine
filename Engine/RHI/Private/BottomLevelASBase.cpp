@@ -133,7 +133,7 @@ void CopyBLASGeometryDesc(const BottomLevelASDesc& SrcDesc,
             if (pSrcNameToIndex)
             {
                 auto iter = pSrcNameToIndex->find(GeoName);
-                VERIFY_EXPR(iter != pSrcNameToIndex->end());
+                ASSERT_EXPR(iter != pSrcNameToIndex->end());
                 ActualIndex = iter->second.ActualIndex;
             }
 
@@ -168,7 +168,7 @@ void CopyBLASGeometryDesc(const BottomLevelASDesc& SrcDesc,
             if (pSrcNameToIndex)
             {
                 auto iter = pSrcNameToIndex->find(GeoName);
-                VERIFY_EXPR(iter != pSrcNameToIndex->end());
+                ASSERT_EXPR(iter != pSrcNameToIndex->end());
                 ActualIndex = iter->second.ActualIndex;
             }
 

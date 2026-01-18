@@ -108,7 +108,7 @@ namespace ImGui
 			++item_idx;
 		if (item_idx >= items_count)
 		{
-			UNEXPECTED("Current item was not found in the items list");
+			ASSERT(false, "Current item was not found in the items list");
 			return false;
 		}
 		auto names = std::make_unique<const char* []>(items_count);

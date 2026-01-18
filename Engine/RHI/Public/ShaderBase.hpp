@@ -34,15 +34,18 @@
 #include <memory>
 #include <atomic>
 
-#include "Engine/RHI/Interface/IShader.h"
-#include "DeviceObjectBase.hpp"
-#include "Engine/Core/Memory/Public/STDAllocator.hpp"
-#include "Platforms/Common/PlatformMisc.hpp"
-#include "Engine/Core/Memory/Public/EngineMemory.h"
 #include "Primitives/Align.hpp"
+
+#include "Engine/Core/Memory/Public/EngineMemory.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Memory/Public/STDAllocator.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 #include "Engine/Core/Common/Public/AsyncInitializer.hpp"
-#include "Primitives/Errors.hpp"
+
+#include "Engine/RHI/Interface/IShader.h"
+#include "Engine/RHI/Public/DeviceObjectBase.hpp"
+
+#include "Platforms/Common/PlatformMisc.hpp"
 
 namespace shz
 {
@@ -152,18 +155,18 @@ namespace shz
 
 		~ShaderBase()
 		{
-			VERIFY(!GetCompileTask(), "Compile task is still running. This may result in a crash if the task accesses resources owned by the shader object.");
+			ASSERT(!GetCompileTask(), "Compile task is still running. This may result in a crash if the task accesses resources owned by the shader object.");
 		}
 
 		IMPLEMENT_QUERY_INTERFACE_IN_PLACE(IID_Shader, TDeviceObjectBase);
 
 		virtual SHADER_STATUS SHZ_CALL_TYPE GetStatus(bool WaitForCompletion) override
 		{
-			VERIFY_EXPR(m_Status.load() != SHADER_STATUS_UNINITIALIZED);
+			ASSERT_EXPR(m_Status.load() != SHADER_STATUS_UNINITIALIZED);
 			ASYNC_TASK_STATUS InitTaskStatus = AsyncInitializer::Update(m_AsyncInitializer, WaitForCompletion);
 			if (InitTaskStatus == ASYNC_TASK_STATUS_COMPLETE)
 			{
-				VERIFY(m_Status.load() > SHADER_STATUS_COMPILING, "Shader status must be atomically set by the compiling task before it finishes");
+				ASSERT(m_Status.load() > SHADER_STATUS_COMPILING, "Shader status must be atomically set by the compiling task before it finishes");
 			}
 			return m_Status.load();
 		}

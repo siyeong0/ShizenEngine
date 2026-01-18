@@ -59,7 +59,7 @@ namespace shz
 	{
 		if (Name == nullptr)
 		{
-			DEV_ERROR("Pipeline name must not be null");
+			ASSERT(false, "Pipeline name must not be null");
 			return {};
 		}
 
@@ -77,7 +77,7 @@ namespace shz
 	{
 		if (Name == nullptr)
 		{
-			DEV_ERROR("Pipeline name must not be null");
+			ASSERT(false, "Pipeline name must not be null");
 			return {};
 		}
 
@@ -93,7 +93,7 @@ namespace shz
 
 	bool PipelineStateCacheD3D12Impl::StorePipeline(const wchar_t* Name, ID3D12DeviceChild* pPSO)
 	{
-		VERIFY_EXPR(Name != nullptr);
+		ASSERT_EXPR(Name != nullptr);
 		if ((m_Desc.Mode & PSO_CACHE_MODE_STORE) == 0)
 			return false;
 
@@ -106,7 +106,7 @@ namespace shz
 
 	void PipelineStateCacheD3D12Impl::GetData(IDataBlob** ppBlob)
 	{
-		DEV_CHECK_ERR(ppBlob != nullptr, "ppBlob must not be null");
+		ASSERT(ppBlob != nullptr, "ppBlob must not be null");
 		*ppBlob = nullptr;
 
 		RefCntAutoPtr<DataBlobImpl> pDataBlob = DataBlobImpl::Create(m_pLibrary->GetSerializedSize());

@@ -60,7 +60,7 @@ namespace shz
 
 	void ImGuiImplWin64::NewFrame(uint32 RenderSurfaceWidth, uint32 RenderSurfaceHeight, SURFACE_TRANSFORM SurfacePreTransform)
 	{
-		VERIFY(SurfacePreTransform == SURFACE_TRANSFORM_IDENTITY, "Unexpected surface pre-transform");
+		ASSERT(SurfacePreTransform == SURFACE_TRANSFORM_IDENTITY, "Unexpected surface pre-transform");
 
 		ImGui_ImplWin32_NewFrame();
 		ImGuiImplShizen::NewFrame(RenderSurfaceWidth, RenderSurfaceHeight, SurfacePreTransform);
@@ -68,9 +68,9 @@ namespace shz
 #ifdef SHZ_DEBUG
 		{
 			ImGuiIO& io = ImGui::GetIO();
-			VERIFY(io.DisplaySize.x == 0 || io.DisplaySize.x == static_cast<float>(RenderSurfaceWidth),
+			ASSERT(io.DisplaySize.x == 0 || io.DisplaySize.x == static_cast<float>(RenderSurfaceWidth),
 				"Render surface width (", RenderSurfaceWidth, ") does not match io.DisplaySize.x (", io.DisplaySize.x, ")");
-			VERIFY(io.DisplaySize.y == 0 || io.DisplaySize.y == static_cast<float>(RenderSurfaceHeight),
+			ASSERT(io.DisplaySize.y == 0 || io.DisplaySize.y == static_cast<float>(RenderSurfaceHeight),
 				"Render surface height (", RenderSurfaceHeight, ") does not match io.DisplaySize.y (", io.DisplaySize.y, ")");
 		}
 #endif

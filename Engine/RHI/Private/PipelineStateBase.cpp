@@ -209,7 +209,7 @@ void CorrectRasterizerStateDesc(GraphicsPipelineDesc& GraphicsPipeline, const De
 void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInfo,
                                         const IRenderDevice*           pDevice) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     const RenderDeviceInfo& DeviceInfo = pDevice->GetDeviceInfo();
     const DeviceFeatures&   Features   = DeviceInfo.Features;
 
@@ -274,7 +274,7 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
             LOG_PSO_ERROR_AND_THROW("Pipeline resource signature at index ", i, " is null");
 
         const PipelineResourceSignatureDesc& SignDesc = pSignature->GetDesc();
-        VERIFY(SignDesc.BindingIndex < MAX_RESOURCE_SIGNATURES,
+        ASSERT(SignDesc.BindingIndex < MAX_RESOURCE_SIGNATURES,
                "Resource signature binding index exceeds the limit. This error should've been caught by ValidatePipelineResourceSignatureDesc.");
 
         if (ppSignatures[SignDesc.BindingIndex] != nullptr)
@@ -288,8 +288,8 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
         for (uint32 res = 0; res < SignDesc.NumResources; ++res)
         {
             const PipelineResourceDesc& ResDesc = SignDesc.Resources[res];
-            VERIFY(ResDesc.Name != nullptr && ResDesc.Name[0] != '\0', "Resource name can't be null or empty. This should've been caught by ValidatePipelineResourceSignatureDesc()");
-            VERIFY(ResDesc.ShaderStages != SHADER_TYPE_UNKNOWN, "Shader stages can't be UNKNOWN. This should've been caught by ValidatePipelineResourceSignatureDesc()");
+            ASSERT(ResDesc.Name != nullptr && ResDesc.Name[0] != '\0', "Resource name can't be null or empty. This should've been caught by ValidatePipelineResourceSignatureDesc()");
+            ASSERT(ResDesc.ShaderStages != SHADER_TYPE_UNKNOWN, "Shader stages can't be UNKNOWN. This should've been caught by ValidatePipelineResourceSignatureDesc()");
 
             auto range = AllResources.equal_range(ResDesc.Name);
             for (auto it = range.first; it != range.second; ++it)
@@ -297,7 +297,7 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
                 const ResourceInfo& OtherRes = it->second;
                 if ((OtherRes.Stages & ResDesc.ShaderStages) != 0)
                 {
-                    VERIFY(OtherRes.pSign != pSignature, "Overlapping resources in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
+                    ASSERT(OtherRes.pSign != pSignature, "Overlapping resources in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
 
                     LOG_PSO_ERROR_AND_THROW("Shader resource '", ResDesc.Name, "' is found in more than one resource signature ('", SignDesc.Name,
                                             "' and '", OtherRes.pSign->GetDesc().Name,
@@ -306,8 +306,8 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
 
                 if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
                 {
-                    VERIFY_EXPR(OtherRes.Stages != SHADER_TYPE_UNKNOWN);
-                    VERIFY(OtherRes.pSign != pSignature, "Resources with the same name in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
+                    ASSERT_EXPR(OtherRes.Stages != SHADER_TYPE_UNKNOWN);
+                    ASSERT(OtherRes.pSign != pSignature, "Resources with the same name in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
 
                     LOG_PSO_ERROR_AND_THROW("This device does not support separable programs, but shader resource '", ResDesc.Name, "' is found in more than one resource signature ('",
                                             SignDesc.Name, "' and '", OtherRes.pSign->GetDesc().Name,
@@ -321,8 +321,8 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
         for (uint32 res = 0; res < SignDesc.NumImmutableSamplers; ++res)
         {
             const ImmutableSamplerDesc& SamDesc = SignDesc.ImmutableSamplers[res];
-            VERIFY(SamDesc.SamplerOrTextureName != nullptr && SamDesc.SamplerOrTextureName[0] != '\0', "Sampler name can't be null or empty. This should've been caught by ValidatePipelineResourceSignatureDesc()");
-            VERIFY(SamDesc.ShaderStages != SHADER_TYPE_UNKNOWN, "Shader stage can't be UNKNOWN. This should've been caught by ValidatePipelineResourceSignatureDesc()");
+            ASSERT(SamDesc.SamplerOrTextureName != nullptr && SamDesc.SamplerOrTextureName[0] != '\0', "Sampler name can't be null or empty. This should've been caught by ValidatePipelineResourceSignatureDesc()");
+            ASSERT(SamDesc.ShaderStages != SHADER_TYPE_UNKNOWN, "Shader stage can't be UNKNOWN. This should've been caught by ValidatePipelineResourceSignatureDesc()");
 
             auto range = AllImtblSamplers.equal_range(SamDesc.SamplerOrTextureName);
             for (auto it = range.first; it != range.second; ++it)
@@ -330,7 +330,7 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
                 const ImtblSamInfo& OtherSam = it->second;
                 if ((OtherSam.Stages & SamDesc.ShaderStages) != 0)
                 {
-                    VERIFY(OtherSam.pSign != pSignature, "Overlapping immutable samplers in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
+                    ASSERT(OtherSam.pSign != pSignature, "Overlapping immutable samplers in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
 
                     LOG_PSO_ERROR_AND_THROW("Immutable sampler '", SamDesc.SamplerOrTextureName, "' is found in more than one resource signature ('", SignDesc.Name,
                                             "' and '", OtherSam.pSign->GetDesc().Name,
@@ -339,8 +339,8 @@ void ValidatePipelineResourceSignatures(const PipelineStateCreateInfo& CreateInf
 
                 if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
                 {
-                    VERIFY_EXPR(OtherSam.Stages != SHADER_TYPE_UNKNOWN);
-                    VERIFY(OtherSam.pSign != pSignature, "Immutable samplers with the same name in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
+                    ASSERT_EXPR(OtherSam.Stages != SHADER_TYPE_UNKNOWN);
+                    ASSERT(OtherSam.pSign != pSignature, "Immutable samplers with the same name in one signature should've been caught by ValidatePipelineResourceSignatureDesc()");
 
                     LOG_PSO_ERROR_AND_THROW("This device does not support separable programs, but immutable sampler '", SamDesc.SamplerOrTextureName, "' is found in more than one resource signature ('",
                                             SignDesc.Name, "' and '", OtherSam.pSign->GetDesc().Name,
@@ -490,7 +490,7 @@ void ValidatePipelineResourceLayoutDesc(const PipelineStateDesc& PSODesc, const 
                 }
                 if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
                 {
-                    VERIFY_EXPR(it->second != SHADER_TYPE_UNKNOWN);
+                    ASSERT_EXPR(it->second != SHADER_TYPE_UNKNOWN);
                     LOG_PSO_ERROR_AND_THROW("This device does not support separable programs, but there are separate resources with the name '",
                                             Var.Name, "' in shader stages ",
                                             GetShaderStagesString(Var.ShaderStages), " and ",
@@ -528,7 +528,7 @@ void ValidatePipelineResourceLayoutDesc(const PipelineStateDesc& PSODesc, const 
                 }
                 if (Features.SeparablePrograms == DEVICE_FEATURE_STATE_DISABLED)
                 {
-                    VERIFY_EXPR(it->second != SHADER_TYPE_UNKNOWN);
+                    ASSERT_EXPR(it->second != SHADER_TYPE_UNKNOWN);
                     LOG_PSO_ERROR_AND_THROW("This device does not support separable programs, but there are separate immutable samplers with the name '",
                                             Sam.SamplerOrTextureName, "' in shader stages ",
                                             GetShaderStagesString(Sam.ShaderStages), " and ",
@@ -552,7 +552,7 @@ void ValidatePipelineResourceLayoutDesc(const PipelineStateDesc& PSODesc, const 
 void ValidateGraphicsPipelineCreateInfo(const GraphicsPipelineStateCreateInfo& CreateInfo,
                                         const IRenderDevice*                   pDevice) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     const DeviceFeatures&      Features    = pDevice->GetDeviceInfo().Features;
     const GraphicsAdapterInfo& AdapterInfo = pDevice->GetAdapterInfo();
 
@@ -576,17 +576,17 @@ void ValidateGraphicsPipelineCreateInfo(const GraphicsPipelineStateCreateInfo& C
         if (CreateInfo.pVS == nullptr)
             LOG_PSO_ERROR_AND_THROW("Vertex shader must not be null.");
 
-        DEV_CHECK_ERR(CreateInfo.pAS == nullptr && CreateInfo.pMS == nullptr, "Mesh shaders are not supported in graphics pipeline.");
+        ASSERT(CreateInfo.pAS == nullptr && CreateInfo.pMS == nullptr, "Mesh shaders are not supported in graphics pipeline.");
     }
     else if (PSODesc.PipelineType == PIPELINE_TYPE_MESH)
     {
         if (CreateInfo.pMS == nullptr)
             LOG_PSO_ERROR_AND_THROW("Mesh shader must not be null.");
 
-        DEV_CHECK_ERR(CreateInfo.pVS == nullptr && CreateInfo.pGS == nullptr && CreateInfo.pDS == nullptr && CreateInfo.pHS == nullptr,
+        ASSERT(CreateInfo.pVS == nullptr && CreateInfo.pGS == nullptr && CreateInfo.pDS == nullptr && CreateInfo.pHS == nullptr,
                       "Vertex, geometry and tessellation shaders are not supported in a mesh pipeline.");
-        DEV_CHECK_ERR(GraphicsPipeline.InputLayout.NumElements == 0, "Input layout is ignored in a mesh pipeline.");
-        DEV_CHECK_ERR(GraphicsPipeline.PrimitiveTopology == PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ||
+        ASSERT(GraphicsPipeline.InputLayout.NumElements == 0, "Input layout is ignored in a mesh pipeline.");
+        ASSERT(GraphicsPipeline.PrimitiveTopology == PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ||
                           GraphicsPipeline.PrimitiveTopology == PRIMITIVE_TOPOLOGY_UNDEFINED,
                       "Primitive topology is ignored in a mesh pipeline, set it to undefined or keep default value (triangle list).");
     }
@@ -675,7 +675,7 @@ void ValidateGraphicsPipelineCreateInfo(const GraphicsPipelineStateCreateInfo& C
 void ValidateComputePipelineCreateInfo(const ComputePipelineStateCreateInfo& CreateInfo,
                                        const IRenderDevice*                  pDevice) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     const DeviceFeatures& Features = pDevice->GetDeviceInfo().Features;
 
     const PipelineStateDesc& PSODesc = CreateInfo.PSODesc;
@@ -784,7 +784,7 @@ void ValidateRayTracingPipelineCreateInfo(const IRenderDevice*                  
 void ValidateTilePipelineCreateInfo(const TilePipelineStateCreateInfo& CreateInfo,
                                     const IRenderDevice*               pDevice) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     const DeviceFeatures& Features = pDevice->GetDeviceInfo().Features;
 
     const PipelineStateDesc& PSODesc = CreateInfo.PSODesc;
@@ -812,22 +812,22 @@ void CopyRTShaderGroupNames(std::unordered_map<HashMapStringKey, uint32>& NameTo
     {
         const char* Name      = CreateInfo.pGeneralShaders[i].Name;
         const bool  IsNewName = NameToGroupIndex.emplace(HashMapStringKey{MemPool.CopyString(Name)}, GroupIndex++).second;
-        VERIFY(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
+        ASSERT(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
     }
     for (uint32 i = 0; i < CreateInfo.TriangleHitShaderCount; ++i)
     {
         const char* Name      = CreateInfo.pTriangleHitShaders[i].Name;
         const bool  IsNewName = NameToGroupIndex.emplace(HashMapStringKey{MemPool.CopyString(Name)}, GroupIndex++).second;
-        VERIFY(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
+        ASSERT(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
     }
     for (uint32 i = 0; i < CreateInfo.ProceduralHitShaderCount; ++i)
     {
         const char* Name      = CreateInfo.pProceduralHitShaders[i].Name;
         const bool  IsNewName = NameToGroupIndex.emplace(HashMapStringKey{MemPool.CopyString(Name)}, GroupIndex++).second;
-        VERIFY(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
+        ASSERT(IsNewName, "All group names must be unique. ValidateRayTracingPipelineCreateInfo() should've caught this error.");
     }
 
-    VERIFY_EXPR(CreateInfo.GeneralShaderCount + CreateInfo.TriangleHitShaderCount + CreateInfo.ProceduralHitShaderCount == GroupIndex);
+    ASSERT_EXPR(CreateInfo.GeneralShaderCount + CreateInfo.TriangleHitShaderCount + CreateInfo.ProceduralHitShaderCount == GroupIndex);
 }
 
 #undef VALIDATE_SHADER_TYPE
@@ -864,7 +864,7 @@ void ValidatePipelineResourceCompatibility(const PipelineResourceDesc& ResDesc,
                             SignatureName, "' as ", ((ResDesc.Flags & PIPELINE_RESOURCE_FLAG_COMBINED_SAMPLER) ? "combined image sampler." : "separate image."));
     }
 
-    VERIFY(ResDesc.ArraySize > 0, "ResDesc.ArraySize can't be zero. This error should've be caught by ValidatePipelineResourceSignatureDesc().");
+    ASSERT(ResDesc.ArraySize > 0, "ResDesc.ArraySize can't be zero. This error should've be caught by ValidatePipelineResourceSignatureDesc().");
 
     if (ArraySize == 0)
     {
@@ -920,7 +920,7 @@ ShaderResourceVariableDesc FindPipelineResourceLayoutVariable(
             for (uint32 j = i + 1; j < LayoutDesc.NumVariables; ++j)
             {
                 const ShaderResourceVariableDesc& Var2 = LayoutDesc.Variables[j];
-                VERIFY(!((Var2.ShaderStages & ShaderStage) != 0 && StreqSuff(Name, Var2.Name, CombinedSamplerSuffix)),
+                ASSERT(!((Var2.ShaderStages & ShaderStage) != 0 && StreqSuff(Name, Var2.Name, CombinedSamplerSuffix)),
                        "There must be no variables with overlapping stages in Desc.ResourceLayout. "
                        "This error should've been caught by ValidatePipelineResourceLayoutDesc().");
             }
@@ -940,7 +940,7 @@ template <>
 void ValidatePSOCreateInfo<GraphicsPipelineStateCreateInfo>(const IRenderDevice*                   pDevice,
                                                             const GraphicsPipelineStateCreateInfo& CreateInfo) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     ValidateGraphicsPipelineCreateInfo(CreateInfo, pDevice);
 }
 
@@ -948,7 +948,7 @@ template <>
 void ValidatePSOCreateInfo<ComputePipelineStateCreateInfo>(const IRenderDevice*                  pDevice,
                                                            const ComputePipelineStateCreateInfo& CreateInfo) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     ValidateComputePipelineCreateInfo(CreateInfo, pDevice);
 }
 
@@ -957,7 +957,7 @@ template <>
 void ValidatePSOCreateInfo<RayTracingPipelineStateCreateInfo>(const IRenderDevice*                     pDevice,
                                                               const RayTracingPipelineStateCreateInfo& CreateInfo) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     ValidateRayTracingPipelineCreateInfo(pDevice, CreateInfo);
 }
 
@@ -965,7 +965,7 @@ template <>
 void ValidatePSOCreateInfo<TilePipelineStateCreateInfo>(const IRenderDevice*               pDevice,
                                                         const TilePipelineStateCreateInfo& CreateInfo) noexcept(false)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
     ValidateTilePipelineCreateInfo(CreateInfo, pDevice);
 }
 

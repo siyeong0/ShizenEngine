@@ -98,12 +98,12 @@ namespace shz
 			, SRBOffsetFromTableStart{ _SRBOffsetFromTableStart }
 
 		{
-			VERIFY(Register == _Register, "Shader register (", _Register, ") exceeds maximum representable value");
-			VERIFY(SRBRootIndex == _SRBRootIndex, "SRB Root index (", _SRBRootIndex, ") exceeds maximum representable value");
-			VERIFY(SigRootIndex == _SigRootIndex, "Signature Root index (", _SigRootIndex, ") exceeds maximum representable value");
-			VERIFY(SamplerInd == _SamplerInd, "Sampler index (", _SamplerInd, ") exceeds maximum representable value");
-			VERIFY(Space == _Space, "Space (", _Space, ") exceeds maximum representable value");
-			VERIFY(GetD3D12RootParamType() == _RootParamType, "Not enough bits to represent root parameter type");
+			ASSERT(Register == _Register, "Shader register (", _Register, ") exceeds maximum representable value");
+			ASSERT(SRBRootIndex == _SRBRootIndex, "SRB Root index (", _SRBRootIndex, ") exceeds maximum representable value");
+			ASSERT(SigRootIndex == _SigRootIndex, "Signature Root index (", _SigRootIndex, ") exceeds maximum representable value");
+			ASSERT(SamplerInd == _SamplerInd, "Sampler index (", _SamplerInd, ") exceeds maximum representable value");
+			ASSERT(Space == _Space, "Space (", _Space, ") exceeds maximum representable value");
+			ASSERT(GetD3D12RootParamType() == _RootParamType, "Not enough bits to represent root parameter type");
 		}
 
 		// Only for serialization

@@ -105,32 +105,32 @@ namespace shz
 				switch (TaskStatus)
 				{
 				case ASYNC_TASK_STATUS_UNKNOWN:
-					DEV_ERROR("UNKNOWN is invalid status.");
+					ASSERT(false, "UNKNOWN is invalid status.");
 					break;
 
 				case ASYNC_TASK_STATUS_NOT_STARTED:
-					DEV_CHECK_ERR(m_TaskStatus == ASYNC_TASK_STATUS_RUNNING,
+					ASSERT(m_TaskStatus == ASYNC_TASK_STATUS_RUNNING,
 						"A task should only be moved to NOT_STARTED state from RUNNING state.");
 					break;
 
 				case ASYNC_TASK_STATUS_RUNNING:
-					DEV_CHECK_ERR(m_TaskStatus == ASYNC_TASK_STATUS_NOT_STARTED,
+					ASSERT(m_TaskStatus == ASYNC_TASK_STATUS_NOT_STARTED,
 						"A task should be moved to RUNNING state from NOT_STARTED state.");
 					break;
 
 				case ASYNC_TASK_STATUS_CANCELLED:
-					DEV_CHECK_ERR((m_TaskStatus == ASYNC_TASK_STATUS_NOT_STARTED ||
+					ASSERT((m_TaskStatus == ASYNC_TASK_STATUS_NOT_STARTED ||
 						m_TaskStatus == ASYNC_TASK_STATUS_RUNNING),
 						"A task should be moved to CANCELLED state from either NOT_STARTED or RUNNING states.");
 					break;
 
 				case ASYNC_TASK_STATUS_COMPLETE:
-					DEV_CHECK_ERR(m_TaskStatus == ASYNC_TASK_STATUS_RUNNING,
+					ASSERT(m_TaskStatus == ASYNC_TASK_STATUS_RUNNING,
 						"A task should be moved to COMPLETE state from RUNNING state.");
 					break;
 
 				default:
-					UNEXPECTED("Unexpected task status");
+					ASSERT(false, "Unexpected task status");
 				}
 			}
 #endif

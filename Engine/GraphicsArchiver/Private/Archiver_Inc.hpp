@@ -54,11 +54,11 @@ namespace shz
 			for (uint32 i = 0; i < SrcSignaturesCount; ++i)
 			{
 				const auto* pSerPRS = ClassPtrCast<SerializedResourceSignatureImpl>(ppSrcSignatures[i]);
-				VERIFY_EXPR(pSerPRS != nullptr);
+				ASSERT_EXPR(pSerPRS != nullptr);
 
 				const auto& Desc = pSerPRS->GetDesc();
 
-				VERIFY(!SortedSignatures[Desc.BindingIndex], "Multiple signatures use the same binding index (", Desc.BindingIndex, ").");
+				ASSERT(!SortedSignatures[Desc.BindingIndex], "Multiple signatures use the same binding index (", Desc.BindingIndex, ").");
 				SortedSignatures[Desc.BindingIndex] = pSerPRS->template GetDeviceSignature<SignatureType>(Type);
 
 				SortedSignaturesCount = std::max(SortedSignaturesCount, uint32{ Desc.BindingIndex } + 1u);
@@ -112,7 +112,7 @@ namespace shz
 		const ShaderCreateInfo& ShaderCI,
 		const ArgTypes&... Args)
 	{
-		VERIFY(!m_Shaders[static_cast<size_t>(Type)], "Shader has already been initialized for this device type");
+		ASSERT(!m_Shaders[static_cast<size_t>(Type)], "Shader has already been initialized for this device type");
 		m_Shaders[static_cast<size_t>(Type)] = std::make_unique<ShaderType>(pRefCounters, ShaderCI, Args...);
 	}
 
@@ -141,8 +141,8 @@ namespace shz
 		using MeasureSerializerType = typename Traits::template PRSSerializerType<SerializerMode::Measure>;
 		using WriteSerializerType = typename Traits::template PRSSerializerType<SerializerMode::Write>;
 
-		VERIFY_EXPR(Type == Traits::Type || (Type == DeviceType::Metal_iOS && Traits::Type == DeviceType::Metal_MacOS));
-		VERIFY(!m_pDeviceSignatures[static_cast<size_t>(Type)], "Signature for this device type has already been initialized");
+		ASSERT_EXPR(Type == Traits::Type || (Type == DeviceType::Metal_iOS && Traits::Type == DeviceType::Metal_MacOS));
+		ASSERT(!m_pDeviceSignatures[static_cast<size_t>(Type)], "Signature for this device type has already been initialized");
 
 		auto  pDeviceSignature = std::make_unique<TPRS<SignatureImplType>>(GetReferenceCounters(), Desc, ShaderStages);
 		auto& DeviceSignature = *pDeviceSignature;
@@ -180,7 +180,7 @@ namespace shz
 
 			WriteSerializerType::SerializeInternalData(Ser, InternalData, nullptr);
 
-			VERIFY_EXPR(Ser.IsEnded());
+			ASSERT_EXPR(Ser.IsEnded());
 		}
 	}
 

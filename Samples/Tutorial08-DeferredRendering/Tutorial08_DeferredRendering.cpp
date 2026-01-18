@@ -237,7 +237,7 @@ namespace shz
 		{
 			// Shadow SRB
 			m_pShadowPSO->CreateShaderResourceBinding(&m_pShadowSRB, true);
-			VERIFY_EXPR(m_pShadowSRB != nullptr);
+			ASSERT_EXPR(m_pShadowSRB != nullptr);
 
 			if (auto* pObj = m_pShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, "OBJECT_CONSTANTS"))
 				pObj->Set(m_pObjectConstantsCB);
@@ -245,7 +245,7 @@ namespace shz
 			// GBuffer SRB
 			// Cube
 			m_pGBufferPSO->CreateShaderResourceBinding(&m_pGBufferSRB_Cube, true);
-			VERIFY_EXPR(m_pGBufferSRB_Cube);
+			ASSERT_EXPR(m_pGBufferSRB_Cube);
 
 			if (auto* pVar = m_pGBufferSRB_Cube->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
 				pVar->Set(m_CubeTextureSRV);
@@ -254,7 +254,7 @@ namespace shz
 
 			// Plane 
 			m_pGBufferPSO->CreateShaderResourceBinding(&m_pGBufferSRB_Plane, true);
-			VERIFY_EXPR(m_pGBufferSRB_Plane);
+			ASSERT_EXPR(m_pGBufferSRB_Plane);
 
 			if (auto* pVar = m_pGBufferSRB_Plane->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
 				pVar->Set(m_PlaneTextureSRV);
@@ -264,7 +264,7 @@ namespace shz
 
 			// Lighting SRB
 			m_pLightingPSO->CreateShaderResourceBinding(&m_pLightingSRB, true);
-			VERIFY_EXPR(m_pLightingSRB != nullptr);
+			ASSERT_EXPR(m_pLightingSRB != nullptr);
 
 			if (auto* pVar = m_pLightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer_Albedo"))
 				pVar->Set(m_GBuffer.pAlbedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
@@ -283,7 +283,7 @@ namespace shz
 
 			// Post SRB
 			m_pPostPSO->CreateShaderResourceBinding(&m_pPostSRB, true);
-			VERIFY_EXPR(m_pPostSRB != nullptr);
+			ASSERT_EXPR(m_pPostSRB != nullptr);
 
 			if (auto* pVar = m_pPostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_LightingTex"))
 				pVar->Set(m_Post.pLightingHDR->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
@@ -506,7 +506,7 @@ namespace shz
 				// Lighting SRB
 				m_pLightingSRB.Release();
 				m_pLightingPSO->CreateShaderResourceBinding(&m_pLightingSRB, true);
-				VERIFY_EXPR(m_pLightingSRB != nullptr);
+				ASSERT_EXPR(m_pLightingSRB != nullptr);
 
 				if (auto* pVar = m_pLightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBuffer_Albedo"))
 					pVar->Set(m_GBuffer.pAlbedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
@@ -598,7 +598,7 @@ namespace shz
 		RP.pSubpasses = &Subpass;
 
 		m_pDevice->CreateRenderPass(RP, &m_pShadowRenderPass);
-		VERIFY_EXPR(m_pShadowRenderPass != nullptr);
+		ASSERT_EXPR(m_pShadowRenderPass != nullptr);
 	}
 
 	void Tutorial08_DeferredRendering::createGBufferPass()
@@ -663,7 +663,7 @@ namespace shz
 		RP.pSubpasses = &Subpass;
 
 		m_pDevice->CreateRenderPass(RP, &m_pGBufferRenderPass);
-		VERIFY_EXPR(m_pGBufferRenderPass != nullptr);
+		ASSERT_EXPR(m_pGBufferRenderPass != nullptr);
 	}
 
 	void Tutorial08_DeferredRendering::createLightingPass()
@@ -690,7 +690,7 @@ namespace shz
 		RP.pSubpasses = &Subpass;
 
 		m_pDevice->CreateRenderPass(RP, &m_pLightingRenderPass);
-		VERIFY_EXPR(m_pLightingRenderPass != nullptr);
+		ASSERT_EXPR(m_pLightingRenderPass != nullptr);
 	}
 
 	void Tutorial08_DeferredRendering::createPostPass()
@@ -717,7 +717,7 @@ namespace shz
 		RP.pSubpasses = &Subpass;
 
 		m_pDevice->CreateRenderPass(RP, &m_pPostRenderPass);
-		VERIFY_EXPR(m_pPostRenderPass != nullptr);
+		ASSERT_EXPR(m_pPostRenderPass != nullptr);
 	}
 
 	// ============================================================================
@@ -745,7 +745,7 @@ namespace shz
 		td.ClearValue.DepthStencil.Stencil = 0;
 
 		m_pDevice->CreateTexture(td, nullptr, &m_Shadow.pShadowMap);
-		VERIFY_EXPR(m_Shadow.pShadowMap != nullptr);
+		ASSERT_EXPR(m_Shadow.pShadowMap != nullptr);
 
 		// DSV view (D32_FLOAT)
 		{
@@ -753,7 +753,7 @@ namespace shz
 			dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
 			dsvDesc.Format = TEX_FORMAT_D32_FLOAT;
 			m_Shadow.pShadowMap->CreateView(dsvDesc, &m_Shadow.pShadowDSV);
-			VERIFY_EXPR(m_Shadow.pShadowDSV != nullptr);
+			ASSERT_EXPR(m_Shadow.pShadowDSV != nullptr);
 		}
 
 		// SRV view (R32_FLOAT) - Lighting에서 Texture2D<float>로 읽음
@@ -762,7 +762,7 @@ namespace shz
 			srvDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
 			srvDesc.Format = TEX_FORMAT_R32_FLOAT;
 			m_Shadow.pShadowMap->CreateView(srvDesc, &m_Shadow.pShadowSRV);
-			VERIFY_EXPR(m_Shadow.pShadowSRV != nullptr);
+			ASSERT_EXPR(m_Shadow.pShadowSRV != nullptr);
 		}
 
 		ITextureView* pAttachments[] =
@@ -778,7 +778,7 @@ namespace shz
 
 		RefCntAutoPtr<IFramebuffer> out;
 		m_pDevice->CreateFramebuffer(fb, &out);
-		VERIFY_EXPR(out != nullptr);
+		ASSERT_EXPR(out != nullptr);
 		return out;
 	}
 
@@ -855,7 +855,7 @@ namespace shz
 
 		RefCntAutoPtr<IFramebuffer> out;
 		m_pDevice->CreateFramebuffer(fb, &out);
-		VERIFY_EXPR(out != nullptr);
+		ASSERT_EXPR(out != nullptr);
 		return out;
 	}
 
@@ -896,7 +896,7 @@ namespace shz
 
 		RefCntAutoPtr<IFramebuffer> out;
 		m_pDevice->CreateFramebuffer(fb, &out);
-		VERIFY_EXPR(out != nullptr);
+		ASSERT_EXPR(out != nullptr);
 		return out;
 	}
 
@@ -916,7 +916,7 @@ namespace shz
 
 		RefCntAutoPtr<IFramebuffer> out;
 		m_pDevice->CreateFramebuffer(fb, &out);
-		VERIFY_EXPR(out != nullptr);
+		ASSERT_EXPR(out != nullptr);
 
 		m_PostFBCache.emplace(pBackBufferRTV, out);
 		return out;
@@ -969,7 +969,7 @@ namespace shz
 			CI.Desc.Name = "ShadowMap VS";
 			CI.FilePath = "ShadowMap.vsh";
 			m_pDevice->CreateShader(CI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		RefCntAutoPtr<IShader> pPS;
@@ -979,7 +979,7 @@ namespace shz
 			CI.Desc.Name = "ShadowMap PS";
 			CI.FilePath = "ShadowMap.psh";
 			m_pDevice->CreateShader(CI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		const LayoutElement LayoutElems[] =
@@ -1004,7 +1004,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pShadowPSO);
-		VERIFY_EXPR(m_pShadowPSO != nullptr);
+		ASSERT_EXPR(m_pShadowPSO != nullptr);
 
 		bindStaticCB(m_pShadowPSO, SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS", m_pShadowConstantsCB);
 	}
@@ -1032,7 +1032,7 @@ namespace shz
 			CI.Desc.Name = "GBuffer VS";
 			CI.FilePath = "GBuffer.vsh";
 			m_pDevice->CreateShader(CI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		RefCntAutoPtr<IShader> pPS;
@@ -1042,7 +1042,7 @@ namespace shz
 			CI.Desc.Name = "GBuffer PS";
 			CI.FilePath = "GBuffer.psh";
 			m_pDevice->CreateShader(CI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		const LayoutElement LayoutElems[] =
@@ -1081,7 +1081,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumImmutableSamplers = _countof(Imtbl);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pGBufferPSO);
-		VERIFY_EXPR(m_pGBufferPSO != nullptr);
+		ASSERT_EXPR(m_pGBufferPSO != nullptr);
 
 		bindStaticCB(m_pGBufferPSO, SHADER_TYPE_VERTEX, "SHADER_CONSTANTS", m_pShaderConstantsCB);
 	}
@@ -1109,7 +1109,7 @@ namespace shz
 			CI.Desc.Name = "Lighting VS";
 			CI.FilePath = "Lighting.vsh";
 			m_pDevice->CreateShader(CI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		RefCntAutoPtr<IShader> pPS;
@@ -1119,7 +1119,7 @@ namespace shz
 			CI.Desc.Name = "Lighting PS";
 			CI.FilePath = "Lighting.psh";
 			m_pDevice->CreateShader(CI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		PSOCreateInfo.pVS = pVS;
@@ -1169,7 +1169,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumImmutableSamplers = _countof(Imtbl);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pLightingPSO);
-		VERIFY_EXPR(m_pLightingPSO != nullptr);
+		ASSERT_EXPR(m_pLightingPSO != nullptr);
 
 		bindStaticCB(m_pLightingPSO, SHADER_TYPE_VERTEX, "SHADER_CONSTANTS", m_pShaderConstantsCB);
 		bindStaticCB(m_pLightingPSO, SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS", m_pShadowConstantsCB);
@@ -1204,7 +1204,7 @@ namespace shz
 			CI.Desc.Name = "Post VS";
 			CI.FilePath = "Post.vsh";
 			m_pDevice->CreateShader(CI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		RefCntAutoPtr<IShader> pPS;
@@ -1214,7 +1214,7 @@ namespace shz
 			CI.Desc.Name = "Post PS";
 			CI.FilePath = "Post.psh";
 			m_pDevice->CreateShader(CI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		PSOCreateInfo.pVS = pVS;
@@ -1243,7 +1243,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumImmutableSamplers = _countof(Imtbl);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pPostPSO);
-		VERIFY_EXPR(m_pPostPSO != nullptr);
+		ASSERT_EXPR(m_pPostPSO != nullptr);
 
 		bindStaticCB(m_pPostPSO, SHADER_TYPE_PIXEL, "SHADER_CONSTANTS", m_pShaderConstantsCB);
 		bindStaticCB(m_pPostPSO, SHADER_TYPE_PIXEL, "SHADOW_CONSTANTS", m_pShadowConstantsCB);
@@ -1450,10 +1450,10 @@ namespace shz
 		bd.Size = sizeof(HLSL::LightAttribs) * static_cast<uint64>(m_LightsCount);
 
 		m_pDevice->CreateBuffer(bd, nullptr, &m_pLightsBuffer);
-		VERIFY_EXPR(m_pLightsBuffer != nullptr);
+		ASSERT_EXPR(m_pLightsBuffer != nullptr);
 
 		m_pLightsSRV = m_pLightsBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
-		VERIFY_EXPR(m_pLightsSRV != nullptr);
+		ASSERT_EXPR(m_pLightsSRV != nullptr);
 	}
 
 	void Tutorial08_DeferredRendering::updateLights(float fElapsedTime)

@@ -44,7 +44,7 @@ inline D3D_COMPARISON_FUNC ComparisonFuncToD3DComparisonFunc(COMPARISON_FUNCTION
     switch (Func)
     {
         
-        case COMPARISON_FUNC_UNKNOWN: UNEXPECTED("Comparison function is not specified" ); return D3D_COMPARISON_FUNC_ALWAYS;
+        case COMPARISON_FUNC_UNKNOWN: ASSERT(false, "Comparison function is not specified" ); return D3D_COMPARISON_FUNC_ALWAYS;
         case COMPARISON_FUNC_NEVER:         return D3D_COMPARISON_FUNC_NEVER;
         case COMPARISON_FUNC_LESS:          return D3D_COMPARISON_FUNC_LESS;
         case COMPARISON_FUNC_EQUAL:         return D3D_COMPARISON_FUNC_EQUAL;
@@ -53,7 +53,7 @@ inline D3D_COMPARISON_FUNC ComparisonFuncToD3DComparisonFunc(COMPARISON_FUNCTION
         case COMPARISON_FUNC_NOT_EQUAL:     return D3D_COMPARISON_FUNC_NOT_EQUAL;
         case COMPARISON_FUNC_GREATER_EQUAL: return D3D_COMPARISON_FUNC_GREATER_EQUAL;
         case COMPARISON_FUNC_ALWAYS:        return D3D_COMPARISON_FUNC_ALWAYS;
-        default: UNEXPECTED("Unknown comparison function" ); return D3D_COMPARISON_FUNC_ALWAYS;
+        default: ASSERT(false, "Unknown comparison function" ); return D3D_COMPARISON_FUNC_ALWAYS;
             
     }
 }
@@ -65,13 +65,13 @@ D3D_TEXTURE_ADDRESS_MODE TexAddressModeToD3DAddressMode(TEXTURE_ADDRESS_MODE Mod
     switch (Mode)
     {
         
-        case TEXTURE_ADDRESS_UNKNOWN: UNEXPECTED("Texture address mode is not specified" ); return D3D_TEXTURE_ADDRESS_CLAMP;
+        case TEXTURE_ADDRESS_UNKNOWN: ASSERT(false, "Texture address mode is not specified" ); return D3D_TEXTURE_ADDRESS_CLAMP;
         case TEXTURE_ADDRESS_WRAP:          return D3D_TEXTURE_ADDRESS_WRAP;
         case TEXTURE_ADDRESS_MIRROR:        return D3D_TEXTURE_ADDRESS_MIRROR;
         case TEXTURE_ADDRESS_CLAMP:         return D3D_TEXTURE_ADDRESS_CLAMP;
         case TEXTURE_ADDRESS_BORDER:        return D3D_TEXTURE_ADDRESS_BORDER;
         case TEXTURE_ADDRESS_MIRROR_ONCE:   return D3D_TEXTURE_ADDRESS_MIRROR_ONCE;
-        default: UNEXPECTED("Unknown texture address mode" ); return D3D_TEXTURE_ADDRESS_CLAMP;
+        default: ASSERT(false, "Unknown texture address mode" ); return D3D_TEXTURE_ADDRESS_CLAMP;
             
     }
 }
@@ -132,7 +132,7 @@ D3D_PRIM_TOPOLOGY TopologyToD3DTopology(PRIMITIVE_TOPOLOGY Topology)
         bIsInit = true;
     }
 
-    VERIFY_EXPR(Topology >= PRIMITIVE_TOPOLOGY_UNDEFINED && Topology < PRIMITIVE_TOPOLOGY_NUM_TOPOLOGIES);
+    ASSERT_EXPR(Topology >= PRIMITIVE_TOPOLOGY_UNDEFINED && Topology < PRIMITIVE_TOPOLOGY_NUM_TOPOLOGIES);
     return d3dPrimTopology[Topology];
 }
 
@@ -155,12 +155,12 @@ D3D_FILL_MODE FillModeToD3DFillMode(FILL_MODE FillMode)
     if (FILL_MODE_UNDEFINED < FillMode && FillMode < FILL_MODE_NUM_MODES)
     {
         D3D_FILL_MODE d3dFillMode = d3dFillModes[FillMode];
-        VERIFY(d3dFillMode != 0, "Incorrect fill mode");
+        ASSERT(d3dFillMode != 0, "Incorrect fill mode");
         return d3dFillMode;
     }
     else
     {
-        UNEXPECTED("Incorrect fill mode (", FillMode, ")");
+        ASSERT(false, "Incorrect fill mode (", FillMode, ")");
         return static_cast<D3D_FILL_MODE>(0);
     }
 }
@@ -183,12 +183,12 @@ D3D_CULL_MODE CullModeToD3DCullMode(CULL_MODE CullMode)
     if (CULL_MODE_UNDEFINED < CullMode && CullMode < CULL_MODE_NUM_MODES)
     {
         D3D_CULL_MODE d3dCullMode = d3dCullModes[CullMode];
-        VERIFY(d3dCullMode != 0, "Incorrect cull mode");
+        ASSERT(d3dCullMode != 0, "Incorrect cull mode");
         return d3dCullMode;
     }
     else
     {
-        UNEXPECTED("Incorrect cull mode (", CullMode, ")");
+        ASSERT(false, "Incorrect cull mode (", CullMode, ")");
         return static_cast<D3D_CULL_MODE>(0);
     }
 }
@@ -254,12 +254,12 @@ D3D_BLEND BlendFactorToD3DBlend(BLEND_FACTOR bf)
     if (bf > BLEND_FACTOR_UNDEFINED && bf < BLEND_FACTOR_NUM_FACTORS)
     {
         D3D_BLEND d3dbf = D3DBlend[bf];
-        VERIFY(d3dbf != 0, "Incorrect blend factor");
+        ASSERT(d3dbf != 0, "Incorrect blend factor");
         return d3dbf;
     }
     else
     {
-        UNEXPECTED("Incorrect blend factor (", bf, ")");
+        ASSERT(false, "Incorrect blend factor (", bf, ")");
         return static_cast<D3D_BLEND>(0);
     }
 }
@@ -287,12 +287,12 @@ D3D_BLEND_OP BlendOperationToD3DBlendOp(BLEND_OPERATION BlendOp)
     if (BlendOp > BLEND_OPERATION_UNDEFINED && BlendOp < BLEND_OPERATION_NUM_OPERATIONS)
     {
         D3D_BLEND_OP d3dbop = D3DBlendOp[BlendOp];
-        VERIFY(d3dbop != 0, "Incorrect blend operation");
+        ASSERT(d3dbop != 0, "Incorrect blend operation");
         return d3dbop;
     }
     else
     {
-        UNEXPECTED("Incorrect blend operation (", BlendOp, ")");
+        ASSERT(false, "Incorrect blend operation (", BlendOp, ")");
         return static_cast<D3D_BLEND_OP>(0);
     }
 }
@@ -306,7 +306,7 @@ void BlendStateDescToD3DBlendDesc(const BlendStateDesc& BSDesc, D3D_BLEND_DESC& 
 
     const RenderTargetBlendDesc& SrcRT0Desc = BSDesc.RenderTargets[0];
 
-    VERIFY(MAX_RENDER_TARGETS >= 8, "Number of render targets is expected to be at least 8");
+    ASSERT(MAX_RENDER_TARGETS >= 8, "Number of render targets is expected to be at least 8");
     for (int i = 0; i < 8; ++i)
     {
         const RenderTargetBlendDesc& SrcRTDesc   = BSDesc.RenderTargets[i];
@@ -366,12 +366,12 @@ D3D_STENCIL_OP StencilOpToD3DStencilOp(STENCIL_OP StencilOp)
     if (StencilOp > STENCIL_OP_UNDEFINED && StencilOp < STENCIL_OP_NUM_OPS)
     {
         D3D_STENCIL_OP d3dStencilOp = StOpToD3DStOpMap[StencilOp];
-        VERIFY(d3dStencilOp != 0, "Unexpected stencil op");
+        ASSERT(d3dStencilOp != 0, "Unexpected stencil op");
         return d3dStencilOp;
     }
     else
     {
-        UNEXPECTED("Stencil operation (", StencilOp, ") is out of allowed range [1, ", STENCIL_OP_NUM_OPS - 1, "]");
+        ASSERT(false, "Stencil operation (", StencilOp, ") is out of allowed range [1, ", STENCIL_OP_NUM_OPS - 1, "]");
         return static_cast<D3D_STENCIL_OP>(0);
     }
 }
@@ -431,7 +431,7 @@ D3D_FILTER FilterTypeToD3DFilter(FILTER_TYPE MinFilter, FILTER_TYPE MagFilter, F
     switch (MinFilter)
     {
         case FILTER_TYPE_UNKNOWN:
-            DEV_ERROR("Filter type is not defined");
+            ASSERT(false, "Filter type is not defined");
             break;
 
         // Regular filters
@@ -470,7 +470,7 @@ D3D_FILTER FilterTypeToD3DFilter(FILTER_TYPE MinFilter, FILTER_TYPE MagFilter, F
             break;
 
         case FILTER_TYPE_ANISOTROPIC:
-            VERIFY(MagFilter == FILTER_TYPE_ANISOTROPIC && MipFilter == FILTER_TYPE_ANISOTROPIC,
+            ASSERT(MagFilter == FILTER_TYPE_ANISOTROPIC && MipFilter == FILTER_TYPE_ANISOTROPIC,
                    "For anisotropic filtering, all filters must be anisotropic");
             return D3D_FILTER_ANISOTROPIC;
             break;
@@ -513,7 +513,7 @@ D3D_FILTER FilterTypeToD3DFilter(FILTER_TYPE MinFilter, FILTER_TYPE MagFilter, F
             break;
 
         case FILTER_TYPE_COMPARISON_ANISOTROPIC:
-            VERIFY(MagFilter == FILTER_TYPE_COMPARISON_ANISOTROPIC && MipFilter == FILTER_TYPE_COMPARISON_ANISOTROPIC,
+            ASSERT(MagFilter == FILTER_TYPE_COMPARISON_ANISOTROPIC && MipFilter == FILTER_TYPE_COMPARISON_ANISOTROPIC,
                    "For comparison anisotropic filtering, all filters must be anisotropic");
             return D3D_FILTER_COMPARISON_ANISOTROPIC;
             break;
@@ -556,7 +556,7 @@ D3D_FILTER FilterTypeToD3DFilter(FILTER_TYPE MinFilter, FILTER_TYPE MagFilter, F
             break;
 
         case FILTER_TYPE_MINIMUM_ANISOTROPIC:
-            VERIFY(MagFilter == FILTER_TYPE_MINIMUM_ANISOTROPIC && MipFilter == FILTER_TYPE_MINIMUM_ANISOTROPIC,
+            ASSERT(MagFilter == FILTER_TYPE_MINIMUM_ANISOTROPIC && MipFilter == FILTER_TYPE_MINIMUM_ANISOTROPIC,
                    "For minimum anisotropic filtering, all filters must be anisotropic");
             return D3D_FILTER_MINIMUM_ANISOTROPIC;
             break;
@@ -599,17 +599,17 @@ D3D_FILTER FilterTypeToD3DFilter(FILTER_TYPE MinFilter, FILTER_TYPE MagFilter, F
             break;
 
         case FILTER_TYPE_MAXIMUM_ANISOTROPIC:
-            VERIFY(MagFilter == FILTER_TYPE_MAXIMUM_ANISOTROPIC && MipFilter == FILTER_TYPE_MAXIMUM_ANISOTROPIC,
+            ASSERT(MagFilter == FILTER_TYPE_MAXIMUM_ANISOTROPIC && MipFilter == FILTER_TYPE_MAXIMUM_ANISOTROPIC,
                    "For maximum anisotropic filtering, all filters must be anisotropic");
             return D3D_FILTER_MAXIMUM_ANISOTROPIC;
             break;
 
         case FILTER_TYPE_NUM_FILTERS:
-            UNEXPECTED("This value does not define a valid filter type");
+            ASSERT(false, "This value does not define a valid filter type");
             break;
     }
 
-    UNEXPECTED("Unsupported filter combination");
+    ASSERT(false, "Unsupported filter combination");
     return D3D_FILTER_MIN_MAG_MIP_POINT;
 }
 

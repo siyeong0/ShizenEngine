@@ -138,7 +138,7 @@ namespace shz
 			for (ShaderStageInfo& Stage : ShaderStages)
 			{
 				const int32 Idx = GetShaderTypePipelineIndex(Stage.Type, PIPELINE_TYPE_RAY_TRACING);
-				VERIFY_EXPR(StagesPtr[Idx] == nullptr);
+				ASSERT_EXPR(StagesPtr[Idx] == nullptr);
 				StagesPtr[Idx] = &Stage;
 			}
 
@@ -155,8 +155,8 @@ namespace shz
 
 					// shaders must be in same order as in ExtractShaders()
 					RefCntAutoPtr<ShaderD3D12Impl> pShaderD3D12{ pShader, ShaderD3D12Impl::IID_InternalImpl };
-					VERIFY(pShaderD3D12, "Unexpected shader object implementation");
-					VERIFY_EXPR(Stage.Shaders[ShaderIndex] == pShaderD3D12);
+					ASSERT(pShaderD3D12, "Unexpected shader object implementation");
+					ASSERT_EXPR(Stage.Shaders[ShaderIndex] == pShaderD3D12);
 
 					D3D12_DXIL_LIBRARY_DESC& LibDesc = *TempPool.Construct<D3D12_DXIL_LIBRARY_DESC>();
 					D3D12_EXPORT_DESC& ExportDesc = *TempPool.Construct<D3D12_EXPORT_DESC>();
@@ -256,7 +256,7 @@ namespace shz
 				const RayTracingGeneralShaderGroup& GeneralShader = CreateInfo.pGeneralShaders[i];
 
 				auto iter = NameToGroupIndex.find(GeneralShader.Name);
-				VERIFY(iter != NameToGroupIndex.end(),
+				ASSERT(iter != NameToGroupIndex.end(),
 					"Can't find general shader '", GeneralShader.Name,
 					"'. This looks to be a bug as NameToGroupIndex is initialized by "
 					"CopyRTShaderGroupNames() that processes the same general shaders.");
@@ -273,7 +273,7 @@ namespace shz
 				const RayTracingTriangleHitShaderGroup& TriHitShader = CreateInfo.pTriangleHitShaders[i];
 
 				auto iter = NameToGroupIndex.find(TriHitShader.Name);
-				VERIFY(iter != NameToGroupIndex.end(),
+				ASSERT(iter != NameToGroupIndex.end(),
 					"Can't find triangle hit group '", TriHitShader.Name,
 					"'. This looks to be a bug as NameToGroupIndex is initialized by "
 					"CopyRTShaderGroupNames() that processes the same hit groups.");
@@ -290,7 +290,7 @@ namespace shz
 				const RayTracingProceduralHitShaderGroup& ProcHitShader = CreateInfo.pProceduralHitShaders[i];
 
 				auto iter = NameToGroupIndex.find(ProcHitShader.Name);
-				VERIFY(iter != NameToGroupIndex.end(),
+				ASSERT(iter != NameToGroupIndex.end(),
 					"Can't find procedural hit group '", ProcHitShader.Name,
 					"'. This looks to be a bug as NameToGroupIndex is initialized by "
 					"CopyRTShaderGroupNames() that processes the same hit groups.");
@@ -314,19 +314,19 @@ namespace shz
 
 	void PipelineStateD3D12Impl::ShaderStageInfo::Append(const ShaderD3D12Impl* pShader)
 	{
-		VERIFY_EXPR(pShader != nullptr);
-		VERIFY(std::find(Shaders.begin(), Shaders.end(), pShader) == Shaders.end(),
+		ASSERT_EXPR(pShader != nullptr);
+		ASSERT(std::find(Shaders.begin(), Shaders.end(), pShader) == Shaders.end(),
 			"Shader '", pShader->GetDesc().Name, "' already exists in the stage. Shaders must be deduplicated.");
 
 		const SHADER_TYPE NewShaderType = pShader->GetDesc().ShaderType;
 		if (Type == SHADER_TYPE_UNKNOWN)
 		{
-			VERIFY_EXPR(Shaders.empty());
+			ASSERT_EXPR(Shaders.empty());
 			Type = NewShaderType;
 		}
 		else
 		{
-			VERIFY(Type == NewShaderType, "The type (", GetShaderTypeLiteralName(NewShaderType),
+			ASSERT(Type == NewShaderType, "The type (", GetShaderTypeLiteralName(NewShaderType),
 				") of shader '", pShader->GetDesc().Name, "' being added to the stage is inconsistent with the stage type (",
 				GetShaderTypeLiteralName(Type), ").");
 		}
@@ -337,7 +337,7 @@ namespace shz
 
 	size_t PipelineStateD3D12Impl::ShaderStageInfo::Count() const
 	{
-		VERIFY_EXPR(Shaders.size() == ByteCodes.size());
+		ASSERT_EXPR(Shaders.size() == ByteCodes.size());
 		return Shaders.size();
 	}
 
@@ -428,7 +428,7 @@ namespace shz
 				if (pSignature == nullptr)
 					continue;
 
-				VERIFY_EXPR(pSignature->GetDesc().BindingIndex == sign);
+				ASSERT_EXPR(pSignature->GetDesc().BindingIndex == sign);
 				pSignature->UpdateShaderResourceBindingMap(ResourceMap, ShaderType, RootSig.GetBaseRegisterSpace(sign));
 
 				if (pSignature->HasImmutableSamplerArray(ShaderType))
@@ -524,7 +524,7 @@ namespace shz
 			// This may never be a problem as the PSO keeps the reference to the device if necessary.
 			constexpr bool bIsDeviceInternal = true;
 			InitDefaultSignature(SignDesc, GetActiveShaderStages(), bIsDeviceInternal);
-			VERIFY_EXPR(m_Signatures[0]);
+			ASSERT_EXPR(m_Signatures[0]);
 		}
 
 		m_RootSig = GetDevice()->GetRootSignatureCache().GetRootSig(m_Signatures, m_SignatureCount);
@@ -603,7 +603,7 @@ namespace shz
 				const PIPELINE_RESOURCE_FLAGS ResFlags = Attribs.GetPipelineResourceFlags();
 
 				const PipelineResourceSignatureD3D12Impl* const pSignature = ResAttribution.pSignature;
-				VERIFY_EXPR(pSignature != nullptr);
+				ASSERT_EXPR(pSignature != nullptr);
 
 				if (ResAttribution.ResourceIndex != ResourceAttribution::InvalidResourceIndex)
 				{
@@ -625,7 +625,7 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("Either immutable sampler or resource index should be valid");
+					ASSERT(false, "Either immutable sampler or resource index should be valid");
 				}
 			} //
 		);
@@ -643,10 +643,10 @@ namespace shz
 				{
 					if (*attrib_it && !attrib_it->IsImmutableSampler())
 					{
-						VERIFY_EXPR(attrib_it->pSignature != nullptr);
-						VERIFY_EXPR(attrib_it->pSignature->GetDesc().BindingIndex == attrib_it->SignatureIndex);
+						ASSERT_EXPR(attrib_it->pSignature != nullptr);
+						ASSERT_EXPR(attrib_it->pSignature->GetDesc().BindingIndex == attrib_it->SignatureIndex);
 						const ShaderResourceCacheD3D12* pResourceCache = ResourceCaches[attrib_it->SignatureIndex];
-						DEV_CHECK_ERR(pResourceCache != nullptr, "Resource cache at index ", attrib_it->SignatureIndex, " is null.");
+						ASSERT(pResourceCache != nullptr, "Resource cache at index ", attrib_it->SignatureIndex, " is null.");
 						attrib_it->pSignature->DvpValidateCommittedResource(pDeviceCtx, Attribs, attrib_it->ResourceIndex, *pResourceCache,
 							pResources->GetShaderName(), m_Desc.Name);
 					}
@@ -654,7 +654,7 @@ namespace shz
 				} //
 			);
 		}
-		VERIFY_EXPR(attrib_it == m_ResourceAttibutions.end());
+		ASSERT_EXPR(attrib_it == m_ResourceAttibutions.end());
 	}
 
 #endif // SHZ_DEBUG
@@ -696,7 +696,7 @@ namespace shz
 
 			for (const ShaderStageInfo& Stage : ShaderStages)
 			{
-				VERIFY_EXPR(Stage.Count() == 1);
+				ASSERT_EXPR(Stage.Count() == 1);
 				const IDataBlob* pByteCode = Stage.ByteCodes[0];
 
 				D3D12_SHADER_BYTECODE* pd3d12ShaderBytecode = nullptr;
@@ -709,7 +709,7 @@ namespace shz
 				case SHADER_TYPE_HULL:     pd3d12ShaderBytecode = &d3d12PSODesc.HS; break;
 				case SHADER_TYPE_DOMAIN:   pd3d12ShaderBytecode = &d3d12PSODesc.DS; break;
 
-				default: UNEXPECTED("Unexpected shader type");
+				default: ASSERT(false, "Unexpected shader type");
 				}
 
 				pd3d12ShaderBytecode->pShaderBytecode = pByteCode->GetConstDataPtr();
@@ -814,7 +814,7 @@ namespace shz
 
 			for (const ShaderStageInfo& Stage : ShaderStages)
 			{
-				VERIFY_EXPR(Stage.Count() == 1);
+				ASSERT_EXPR(Stage.Count() == 1);
 				const IDataBlob* pByteCode = Stage.ByteCodes[0];
 
 				D3D12_SHADER_BYTECODE* pd3d12ShaderBytecode = nullptr;
@@ -825,7 +825,7 @@ namespace shz
 				case SHADER_TYPE_MESH:          pd3d12ShaderBytecode = &d3d12PSODesc.MS; break;
 				case SHADER_TYPE_PIXEL:         pd3d12ShaderBytecode = &d3d12PSODesc.PS; break;
 
-				default: UNEXPECTED("Unexpected shader type");
+				default: ASSERT(false, "Unexpected shader type");
 				}
 
 				pd3d12ShaderBytecode->pShaderBytecode = pByteCode->GetConstDataPtr();
@@ -892,8 +892,8 @@ namespace shz
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC d3d12PSODesc = {};
 
-		VERIFY_EXPR(ShaderStages[0].Type == SHADER_TYPE_COMPUTE);
-		VERIFY_EXPR(ShaderStages[0].Count() == 1);
+		ASSERT_EXPR(ShaderStages[0].Type == SHADER_TYPE_COMPUTE);
+		ASSERT_EXPR(ShaderStages[0].Count() == 1);
 		const IDataBlob* pByteCode = ShaderStages[0].ByteCodes[0];
 		d3d12PSODesc.CS.pShaderBytecode = pByteCode->GetConstDataPtr();
 		d3d12PSODesc.CS.BytecodeLength = pByteCode->GetSize();
@@ -1029,16 +1029,16 @@ namespace shz
 
 	bool PipelineStateD3D12Impl::IsCompatibleWith(const IPipelineState* pPSO) const
 	{
-		DEV_CHECK_ERR(pPSO != nullptr, "pPSO must not be null");
+		ASSERT(pPSO != nullptr, "pPSO must not be null");
 
 		if (pPSO == this)
 			return true;
 
 		RefCntAutoPtr<PipelineStateD3D12Impl> pPSOImpl{ const_cast<IPipelineState*>(pPSO), PipelineStateImplType::IID_InternalImpl };
-		VERIFY(pPSOImpl, "Unknown PSO implementation type");
+		ASSERT(pPSOImpl, "Unknown PSO implementation type");
 
 		bool IsCompatible = (m_RootSig == pPSOImpl->m_RootSig);
-		VERIFY_EXPR(IsCompatible == TPipelineStateBase::IsCompatibleWith(pPSO));
+		ASSERT_EXPR(IsCompatible == TPipelineStateBase::IsCompatibleWith(pPSO));
 		return IsCompatible;
 	}
 

@@ -50,12 +50,12 @@ void CreateCubeGeometryInternal(uint32                          NumSubdivisions,
 {
     if (NumSubdivisions == 0)
     {
-        UNEXPECTED("NumSubdivisions must be positive");
+        ASSERT(false, "NumSubdivisions must be positive");
         return;
     }
     if (NumSubdivisions > 2048)
     {
-        UNEXPECTED("NumSubdivisions is too large");
+        ASSERT(false, "NumSubdivisions is too large");
         return;
     }
 
@@ -87,7 +87,7 @@ void CreateCubeGeometryInternal(uint32                          NumSubdivisions,
     if (ppVertices != nullptr && VertexFlags != GEOMETRY_PRIMITIVE_VERTEX_FLAG_NONE)
     {
         pVertexData = DataBlobImpl::Create(VertexDataSize);
-        DEV_CHECK_ERR(*ppVertices == nullptr, "*ppVertices is not null, which may cause memory leak");
+        ASSERT(*ppVertices == nullptr, "*ppVertices is not null, which may cause memory leak");
         pVertexData->QueryInterface(IID_DataBlob, ppVertices);
         pVert = pVertexData->GetDataPtr<uint8>();
     }
@@ -97,7 +97,7 @@ void CreateCubeGeometryInternal(uint32                          NumSubdivisions,
     if (ppIndices != nullptr)
     {
         pIndexData = DataBlobImpl::Create(IndexDataSize);
-        DEV_CHECK_ERR(*ppIndices == nullptr, "*ppIndices is not null, which may cause memory leak");
+        ASSERT(*ppIndices == nullptr, "*ppIndices is not null, which may cause memory leak");
         pIndexData->QueryInterface(IID_DataBlob, ppIndices);
         pIdx = pIndexData->GetDataPtr<uint32>();
     }
@@ -203,8 +203,8 @@ void CreateCubeGeometryInternal(uint32                          NumSubdivisions,
         }
     }
 
-    VERIFY_EXPR(pVert == nullptr || pVert == pVertexData->GetConstDataPtr<uint8>() + VertexDataSize);
-    VERIFY_EXPR(pIdx == nullptr || pIdx == pIndexData->GetConstDataPtr<uint32>() + IndexDataSize / sizeof(uint32));
+    ASSERT_EXPR(pVert == nullptr || pVert == pVertexData->GetConstDataPtr<uint8>() + VertexDataSize);
+    ASSERT_EXPR(pIdx == nullptr || pIdx == pIndexData->GetConstDataPtr<uint32>() + IndexDataSize / sizeof(uint32));
 }
 
 void CreateCubeGeometry(const CubeGeometryPrimitiveAttributes& Attribs,
@@ -215,7 +215,7 @@ void CreateCubeGeometry(const CubeGeometryPrimitiveAttributes& Attribs,
     const float Size = Attribs.Size;
     if (Size <= 0)
     {
-        UNEXPECTED("Size must be positive");
+        ASSERT(false, "Size must be positive");
         return;
     }
 
@@ -237,7 +237,7 @@ void CreateSphereGeometry(const SphereGeometryPrimitiveAttributes& Attribs,
     const float Radius = Attribs.Radius;
     if (Radius <= 0)
     {
-        UNEXPECTED("Radius must be positive");
+        ASSERT(false, "Radius must be positive");
         return;
     }
 
@@ -260,14 +260,14 @@ void CreateGeometryPrimitive(const GeometryPrimitiveAttributes& Attribs,
                              IDataBlob**                        ppIndices,
                              GeometryPrimitiveInfo*             pInfo)
 {
-    DEV_CHECK_ERR(ppVertices == nullptr || *ppVertices == nullptr, "*ppVertices is not null which may cause memory leaks");
-    DEV_CHECK_ERR(ppIndices == nullptr || *ppIndices == nullptr, "*ppIndices is not null which may cause memory leaks");
+    ASSERT(ppVertices == nullptr || *ppVertices == nullptr, "*ppVertices is not null which may cause memory leaks");
+    ASSERT(ppIndices == nullptr || *ppIndices == nullptr, "*ppIndices is not null which may cause memory leaks");
 
     static_assert(GEOMETRY_PRIMITIVE_TYPE_COUNT == 3, "Please update the switch below to handle the new geometry primitive type");
     switch (Attribs.Type)
     {
         case GEOMETRY_PRIMITIVE_TYPE_UNDEFINED:
-            UNEXPECTED("Undefined geometry primitive type");
+            ASSERT(false, "Undefined geometry primitive type");
             break;
 
         case GEOMETRY_PRIMITIVE_TYPE_CUBE:
@@ -279,7 +279,7 @@ void CreateGeometryPrimitive(const GeometryPrimitiveAttributes& Attribs,
             break;
 
         default:
-            UNEXPECTED("Unknown geometry primitive type");
+            ASSERT(false, "Unknown geometry primitive type");
     }
 }
 

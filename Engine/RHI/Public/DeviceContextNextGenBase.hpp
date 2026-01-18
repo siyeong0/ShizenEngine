@@ -64,13 +64,13 @@ namespace shz
 
 		virtual ICommandQueueType* SHZ_CALL_TYPE LockCommandQueue() override final
 		{
-			DEV_CHECK_ERR(!this->IsDeferred(), "Deferred contexts have no associated command queues");
+			ASSERT(!this->IsDeferred(), "Deferred contexts have no associated command queues");
 			return this->m_pDevice->LockCommandQueue(this->GetCommandQueueId());
 		}
 
 		virtual void SHZ_CALL_TYPE UnlockCommandQueue() override final
 		{
-			DEV_CHECK_ERR(!this->IsDeferred(), "Deferred contexts have no associated command queues");
+			ASSERT(!this->IsDeferred(), "Deferred contexts have no associated command queues");
 			this->m_pDevice->UnlockCommandQueue(this->GetCommandQueueId());
 		}
 

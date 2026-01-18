@@ -83,7 +83,7 @@ namespace shz
 			CREATE_SHADER_SOURCE_INPUT_STREAM_FLAGS Flags,
 			IFileStream** ppStream) override final
 		{
-			VERIFY_EXPR(ppStream != nullptr && *ppStream == nullptr);
+			ASSERT_EXPR(ppStream != nullptr && *ppStream == nullptr);
 			if (!m_FileSubstituteMap.empty())
 			{
 				auto it = m_FileSubstituteMap.find(Name);
@@ -151,8 +151,8 @@ namespace shz
 			for (uint32 i = 0; i < CI.NumSources; ++i)
 			{
 				const MemoryShaderSourceFileInfo& Source = CI.pSources[i];
-				DEV_CHECK_ERR(Source.Name != nullptr && Source.Name[0] != '\0', "Source name must not be null or empty");
-				DEV_CHECK_ERR(Source.pData != nullptr, "Source data must not be null");
+				ASSERT(Source.Name != nullptr && Source.Name[0] != '\0', "Source name must not be null or empty");
+				ASSERT(Source.pData != nullptr, "Source data must not be null");
 				m_NameToSourceMap.emplace(HashMapStringKey{ Source.Name, true }, CI.CopySources ? m_Sources[i].c_str() : Source.pData);
 			}
 		}

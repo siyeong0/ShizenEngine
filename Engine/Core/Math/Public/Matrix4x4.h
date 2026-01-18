@@ -262,8 +262,8 @@ namespace shz
 
 		static inline Matrix4x4 PerspectiveFovLH(float32 fovY, float32 aspect, float32 zn, float32 zf)
 		{
-			ASSERT(fovY > 0.0f && aspect > 0.0f);
-			ASSERT(zf > zn);
+			ASSERT(fovY > 0.0f && aspect > 0.0f, "Invalid perspective parameters.");
+			ASSERT(zf > zn, "Far clip plane must be greater than near clip plane.");
 
 			const float32 yScale = 1.0f / (float32)std::tan(fovY * 0.5f);
 			const float32 xScale = yScale / aspect;
@@ -314,9 +314,9 @@ namespace shz
 			float32 zn,
 			float32 zf)
 		{
-			ASSERT(std::fabs(right - left) > 1e-12f);
-			ASSERT(std::fabs(top - bottom) > 1e-12f);
-			ASSERT(std::fabs(zf - zn) > 1e-12f);
+			ASSERT(std::fabs(right - left) > 1e-12f, "");
+			ASSERT(std::fabs(top - bottom) > 1e-12f, "");
+			ASSERT(std::fabs(zf - zn) > 1e-12f, "");
 
 			const float32 invW = 1.0f / (right - left);
 			const float32 invH = 1.0f / (top - bottom);
@@ -357,7 +357,7 @@ namespace shz
 		inline Vector3 TransformPosition(const Vector3& p) const
 		{
 			const Vector4 r = MulVector4(Vector4(p.x, p.y, p.z, 1.0f));
-			ASSERT(std::fabs(r.w) > 1e-12f);
+			ASSERT(std::fabs(r.w) > 1e-12f, "Homogeneous w component is zero during position transformation.");
 			return Vector3(r.x / r.w, r.y / r.w, r.z / r.w);
 		}
 
@@ -419,7 +419,7 @@ namespace shz
 					}
 				}
 
-				ASSERT(pivotAbs > 1e-12f);
+				ASSERT(pivotAbs > 1e-12f, "Attempted to invert a matrix with zero determinant.");
 
 				if (pivotRow != col)
 				{
@@ -460,8 +460,8 @@ namespace shz
 
 		inline Matrix4x4 InverseAffineFast() const
 		{
-			ASSERT(std::fabs(_m03) < 1e-6f && std::fabs(_m13) < 1e-6f && std::fabs(_m23) < 1e-6f);
-			ASSERT(std::fabs(_m33 - 1.0f) < 1e-6f);
+			ASSERT(std::fabs(_m03) < 1e-6f && std::fabs(_m13) < 1e-6f && std::fabs(_m23) < 1e-6f, "Matrix is not affine.");
+			ASSERT(std::fabs(_m33 - 1.0f) < 1e-6f, "Matrix is not affine.");
 
 			const Matrix3x3 L = static_cast<Matrix3x3>(*this);
 			const Matrix3x3 invL = L.Inversed();

@@ -605,7 +605,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 				break;
 
 			default:
-				UNEXPECTED("Unknown render device type");
+				ASSERT(false, "Unknown render device type");
 			}
 			m_pDevice->CreateShader(ShaderCI, &pVS);
 		}
@@ -649,7 +649,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 				break;
 
 			default:
-				UNEXPECTED("Unknown render device type");
+				ASSERT(false, "Unknown render device type");
 			}
 			m_pDevice->CreateShader(ShaderCI, &pPS);
 		}
@@ -724,7 +724,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 		m_pSRB.Release();
 		m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 		m_pTextureVar = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "Texture");
-		VERIFY_EXPR(m_pTextureVar != nullptr);
+		ASSERT_EXPR(m_pTextureVar != nullptr);
 	}
 
 	float4 ImGuiShizenRenderer::TransformClipRect(const ImVec2& DisplaySize, const float4& rect) const
@@ -824,18 +824,18 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 		}
 
 		case SURFACE_TRANSFORM_OPTIMAL:
-			UNEXPECTED("SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
+			ASSERT(false, "SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
 			return rect;
 
 		case SURFACE_TRANSFORM_HORIZONTAL_MIRROR:
 		case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90:
 		case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180:
 		case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270:
-			UNEXPECTED("Mirror transforms are not supported");
+			ASSERT(false, "Mirror transforms are not supported");
 			return rect;
 
 		default:
-			UNEXPECTED("Unknown transform");
+			ASSERT(false, "Unknown transform");
 			return rect;
 		}
 	}
@@ -849,7 +849,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 		case ImTextureFormat_RGBA32:
 			return TEX_FORMAT_RGBA8_UNORM;
 		default:
-			UNEXPECTED("Unknown texture format");
+			ASSERT(false, "Unknown texture format");
 			return TEX_FORMAT_UNKNOWN;
 		}
 	}
@@ -877,9 +877,9 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 			TextureData init{ &mip0, 1 };
 
 			m_pDevice->CreateTexture(Desc, &init, &pTexture);
-			VERIFY_EXPR(pTexture != nullptr);
+			ASSERT_EXPR(pTexture != nullptr);
 			ITextureView* ptexView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			VERIFY_EXPR(ptexView != nullptr);
+			ASSERT_EXPR(ptexView != nullptr);
 
 			// store texture view and texture pointers inside imgui and set texture state to ok
 			pTexData->SetTexID(reinterpret_cast<ImTextureID>(ptexView));
@@ -1032,18 +1032,18 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 				break;
 
 			case SURFACE_TRANSFORM_OPTIMAL:
-				UNEXPECTED("SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
+				ASSERT(false, "SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
 				break;
 
 			case SURFACE_TRANSFORM_HORIZONTAL_MIRROR:
 			case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90:
 			case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180:
 			case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270:
-				UNEXPECTED("Mirror transforms are not supported");
+				ASSERT(false, "Mirror transforms are not supported");
 				break;
 
 			default:
-				UNEXPECTED("Unknown transform");
+				ASSERT(false, "Unknown transform");
 			}
 
 			MapHelper<float4x4> CBData{ pCtx, m_pVertexConstantBuffer, MAP_WRITE, MAP_FLAG_DISCARD };
@@ -1129,7 +1129,7 @@ fragment PSOut ps_main(VSOut in [[stage_in]],
 
 					// Bind texture
 					ITextureView* pTextureView = reinterpret_cast<ITextureView*>(pCmd->GetTexID());
-					VERIFY_EXPR(pTextureView);
+					ASSERT_EXPR(pTextureView);
 					if (pTextureView != pLastTextureView)
 					{
 						pLastTextureView = pTextureView;

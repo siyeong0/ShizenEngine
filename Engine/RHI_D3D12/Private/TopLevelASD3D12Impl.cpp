@@ -60,7 +60,7 @@ namespace shz
 			d3d12TopLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 			d3d12TopLevelInputs.NumDescs = m_Desc.MaxInstanceCount;
 
-			DEV_CHECK_ERR(m_Desc.MaxInstanceCount <= RTProps.MaxInstancesPerTLAS,
+			ASSERT(m_Desc.MaxInstanceCount <= RTProps.MaxInstancesPerTLAS,
 				"Max instance count (", m_Desc.MaxInstanceCount, ") exceeds device limit (", RTProps.MaxInstancesPerTLAS, ").");
 
 			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO d3d12TopLevelPrebuildInfo{};
@@ -113,7 +113,7 @@ namespace shz
 		d3d12SRVDesc.RaytracingAccelerationStructure.Location = GetGPUAddress();
 		pd3d12Device->CreateShaderResourceView(nullptr, &d3d12SRVDesc, m_DescriptorHandle.GetCpuHandle());
 
-		DEV_CHECK_ERR(GetGPUAddress() % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0, "GPU virtual address is expected to be at least 256-byte aligned");
+		ASSERT(GetGPUAddress() % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0, "GPU virtual address is expected to be at least 256-byte aligned");
 
 		SetState(RESOURCE_STATE_BUILD_AS_READ);
 	}

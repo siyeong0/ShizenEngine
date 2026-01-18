@@ -32,8 +32,11 @@
 #include <cstring>
 #include <algorithm>
 
-#include "Primitives/Errors.hpp"
 #include "Primitives/DebugUtilities.hpp"
+#include "Primitives/Align.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
+
 #include "Engine/RHI/Interface/ISampler.h"
 #include "Engine/RHI/Interface/RasterizerState.h"
 #include "Engine/RHI/Interface/DepthStencilState.h"
@@ -42,8 +45,6 @@
 #include "Engine/RHI/Interface/IPipelineResourceSignature.h"
 #include "Engine/RHI/Interface/IPipelineState.h"
 #include "Engine/GraphicsTools/Public/VertexPool.h"
-#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-#include "Primitives/Align.hpp"
 
 #define LOG_HASH_CONFLICTS 1
 
@@ -155,7 +156,7 @@ namespace shz
 			Buffer |= uint64{ *(BytePtr++) } << Shift;
 			Shift += 8;
 		}
-		VERIFY_EXPR(Shift <= 24);
+		ASSERT_EXPR(Shift <= 24);
 
 		// Process dwords
 		while (DwordPtr + 1 <= reinterpret_cast<const uint32*>(EndPtr))
@@ -172,7 +173,7 @@ namespace shz
 			Buffer |= uint64{ *(BytePtr++) } << Shift;
 			Shift += 8;
 		}
-		VERIFY_EXPR(Shift <= (3 + 3) * 8);
+		ASSERT_EXPR(Shift <= (3 + 3) * 8);
 
 		while (Shift != 0)
 		{
@@ -205,7 +206,7 @@ namespace shz
 	{
 		bool operator()(const CharType* str1, const CharType* str2) const
 		{
-			UNSUPPORTED("Template specialization is not implemented");
+			ASSERT(false, "Template specialization is not implemented");
 			return false;
 		}
 	};
@@ -233,7 +234,7 @@ namespace shz
 		HashMapStringKey(const Char* _Str, bool bMakeCopy = false)
 			: Str{ _Str }
 		{
-			VERIFY(Str, "String pointer must not be null");
+			ASSERT(Str, "String pointer must not be null");
 
 			Ownership_Hash = CStringHash<Char>{}.operator()(Str) & HashMask;
 			if (bMakeCopy)
@@ -301,12 +302,12 @@ namespace shz
 
 			if (Str == nullptr)
 			{
-				VERIFY_EXPR(rhs.Str != nullptr);
+				ASSERT_EXPR(rhs.Str != nullptr);
 				return false;
 			}
 			else if (rhs.Str == nullptr)
 			{
-				VERIFY_EXPR(Str != nullptr);
+				ASSERT_EXPR(Str != nullptr);
 				return false;
 			}
 
@@ -314,7 +315,7 @@ namespace shz
 			size_t rhsHash = rhs.GetHash();
 			if (Hash != rhsHash)
 			{
-				VERIFY_EXPR(strcmp(Str, rhs.Str) != 0);
+				ASSERT_EXPR(strcmp(Str, rhs.Str) != 0);
 				return false;
 			}
 
@@ -701,7 +702,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(LayoutDesc.NumVariables == 0);
+				ASSERT_EXPR(LayoutDesc.NumVariables == 0);
 			}
 
 			if (LayoutDesc.ImmutableSamplers != nullptr)
@@ -711,7 +712,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(LayoutDesc.NumImmutableSamplers == 0);
+				ASSERT_EXPR(LayoutDesc.NumImmutableSamplers == 0);
 			}
 
 			ASSERT_SIZEOF64(LayoutDesc, 40, "Did you add new members to PipelineResourceDesc? Please handle them here.");
@@ -802,7 +803,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Subpass.InputAttachmentCount == 0);
+				ASSERT_EXPR(Subpass.InputAttachmentCount == 0);
 			}
 
 			if (Subpass.pRenderTargetAttachments != nullptr)
@@ -812,7 +813,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Subpass.RenderTargetAttachmentCount == 0);
+				ASSERT_EXPR(Subpass.RenderTargetAttachmentCount == 0);
 			}
 
 			if (Subpass.pResolveAttachments != nullptr)
@@ -831,7 +832,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Subpass.PreserveAttachmentCount == 0);
+				ASSERT_EXPR(Subpass.PreserveAttachmentCount == 0);
 			}
 
 			if (Subpass.pShadingRateAttachment)
@@ -885,7 +886,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(RP.AttachmentCount == 0);
+				ASSERT_EXPR(RP.AttachmentCount == 0);
 			}
 
 			if (RP.pSubpasses != nullptr)
@@ -895,7 +896,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(RP.SubpassCount == 0);
+				ASSERT_EXPR(RP.SubpassCount == 0);
 			}
 
 			if (RP.pDependencies != nullptr)
@@ -905,7 +906,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(RP.DependencyCount == 0);
+				ASSERT_EXPR(RP.DependencyCount == 0);
 			}
 
 			ASSERT_SIZEOF64(RP, 56, "Did you add new members to RenderPassDesc? Please handle them here.");
@@ -959,7 +960,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Layout.NumElements == 0);
+				ASSERT_EXPR(Layout.NumElements == 0);
 			}
 
 			ASSERT_SIZEOF64(Layout, 16, "Did you add new members to InputLayoutDesc? Please handle them here.");
@@ -1071,7 +1072,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Desc.NumResources == 0);
+				ASSERT_EXPR(Desc.NumResources == 0);
 			}
 
 			if (Desc.ImmutableSamplers != nullptr)
@@ -1081,7 +1082,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(Desc.NumImmutableSamplers == 0);
+				ASSERT_EXPR(Desc.NumImmutableSamplers == 0);
 			}
 
 			if (Desc.UseCombinedTextureSamplers)
@@ -1152,7 +1153,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(CI.ResourceSignaturesCount == 0);
+				ASSERT_EXPR(CI.ResourceSignaturesCount == 0);
 			}
 		}
 	};
@@ -1166,7 +1167,7 @@ namespace shz
 		const void* pBytecode = nullptr;
 		uint64      Size = 0;
 		pShader->GetBytecode(&pBytecode, Size);
-		VERIFY_EXPR(pBytecode != nullptr && Size != 0);
+		ASSERT_EXPR(pBytecode != nullptr && Size != 0);
 		Hasher.UpdateRaw(pBytecode, static_cast<size_t>(Size));
 	}
 

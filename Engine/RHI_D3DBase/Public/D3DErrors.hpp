@@ -29,7 +29,7 @@
 
 #include <string.h>
 
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 // \file
 // Declaration of shz::ComErrorDesc class
@@ -86,7 +86,7 @@ private:
         if (FAILED(_hr_))                                          \
         {                                                          \
             ComErrorDesc ErrDesc(_hr_);                            \
-            DEV_ERROR(Message, "\nHRESULT Desc: ", ErrDesc.Get()); \
+            ASSERT(false, Message, "\nHRESULT Desc: ", ErrDesc.Get()); \
         }                                                          \
     } while (false)
 

@@ -83,7 +83,7 @@ namespace shz
 
         IDeviceContext* GetImmediateContext(size_t Ind = 0)
         {
-            VERIFY_EXPR(Ind < m_NumImmediateContexts);
+            ASSERT_EXPR(Ind < m_NumImmediateContexts);
             return m_pDeviceContexts[Ind];
         }
 

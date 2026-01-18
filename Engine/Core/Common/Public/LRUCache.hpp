@@ -94,7 +94,7 @@ public:
         // Get the data wrapper. Since this is a shared pointer, it may not be destroyed
         // while we keep one, even if it is popped from the cache by another thread.
         auto pDataWrpr = GetDataWrapper(Key);
-        VERIFY_EXPR(pDataWrpr);
+        ASSERT_EXPR(pDataWrpr);
 
         // Get data by value. It will be atomically initialized if necessary,
         // while the main cache mutex is not locked.
@@ -110,7 +110,7 @@ public:
 
             if (IsNewObject)
             {
-                VERIFY_EXPR(pDataWrpr->GetState() == DataWrapper::DataState::InitializedUnaccounted);
+                ASSERT_EXPR(pDataWrpr->GetState() == DataWrapper::DataState::InitializedUnaccounted);
 
                 // NB: since we released the cache mutex, there is no guarantee that pDataWrpr is
                 //     still in the cache as it could have been removed by another thread in <Erase>.
@@ -163,11 +163,11 @@ public:
                 const auto cache_it = m_Cache.find(EvictKey);
                 if (cache_it == m_Cache.end())
                 {
-                    UNEXPECTED("Unavailable key in LRU list. This should never happen.");
+                    ASSERT(false, "Unavailable key in LRU list. This should never happen.");
                     lru_it = m_LRU.erase(lru_it);
                     continue;
                 }
-                VERIFY_EXPR(cache_it->second.LRUIt == lru_it);
+                ASSERT_EXPR(cache_it->second.LRUIt == lru_it);
 
                 std::shared_ptr<DataWrapper>&         pWrpr = cache_it->second.Wrpr;
                 const typename DataWrapper::DataState State = pWrpr->GetState(); /* <ReadState> */
@@ -202,7 +202,7 @@ public:
 
                 // NB: if the state was not InitializedAccounted when we read it in <ReadState>, it can't be
                 //     InitializedAccounted now since the transition <U2A> is protected by mutex in <SA>.
-                VERIFY_EXPR((State == DataWrapper::DataState::InitializedAccounted && pWrpr->GetState() == DataWrapper::DataState::InitializedAccounted) ||
+                ASSERT_EXPR((State == DataWrapper::DataState::InitializedAccounted && pWrpr->GetState() == DataWrapper::DataState::InitializedAccounted) ||
                             (State != DataWrapper::DataState::InitializedAccounted && pWrpr->GetState() != DataWrapper::DataState::InitializedAccounted));
 
                 // Note that transition to InitializedAccounted state is protected by the mutex in <SA>, so
@@ -211,11 +211,11 @@ public:
                 DeleteList.emplace_back(std::move(pWrpr));
                 m_Cache.erase(cache_it); /* <Erase> */
                 lru_it = m_LRU.erase(lru_it);
-                VERIFY_EXPR(m_CurrSize >= AccountedSize);
+                ASSERT_EXPR(m_CurrSize >= AccountedSize);
                 m_CurrSize -= AccountedSize;
             }
 
-            VERIFY_EXPR(m_Cache.size() == m_LRU.size());
+            ASSERT_EXPR(m_Cache.size() == m_LRU.size());
         }
 
         // Delete objects after releasing the cache mutex
@@ -240,7 +240,7 @@ public:
     {
 #ifdef SHZ_DEBUG
         size_t DbgSize = 0;
-        VERIFY_EXPR(m_Cache.size() == m_LRU.size());
+        ASSERT_EXPR(m_Cache.size() == m_LRU.size());
         for (const KeyType& Key : m_LRU)
         {
             auto it = m_Cache.find(Key);
@@ -250,10 +250,10 @@ public:
             }
             else
             {
-                UNEXPECTED("Unexpected key in LRU list");
+                ASSERT(false, "Unexpected key in LRU list");
             }
         }
-        VERIFY_EXPR(DbgSize == m_CurrSize);
+        ASSERT_EXPR(DbgSize == m_CurrSize);
 #endif
     }
 
@@ -285,13 +285,13 @@ private:
             std::lock_guard<std::mutex> Lock{m_InitDataMtx};
             if (m_DataSize == 0)
             {
-                VERIFY_EXPR(m_State == DataState::Default || m_State == DataState::InitFailure);
+                ASSERT_EXPR(m_State == DataState::Default || m_State == DataState::InitFailure);
                 m_State.store(DataState::Default); /* <F2D> */
                 try
                 {
                     size_t DataSize = 0;
                     InitData(m_Data, DataSize); // May throw
-                    VERIFY_EXPR(DataSize > 0);
+                    ASSERT_EXPR(DataSize > 0);
                     m_DataSize.store((std::max)(DataSize, size_t{1}));
                     m_State.store(DataState::InitializedUnaccounted); /* <D2U> */
                     IsNewObject = true;                               /* <NewObj> */
@@ -305,24 +305,24 @@ private:
             }
             else
             {
-                VERIFY_EXPR(m_State == DataState::InitializedUnaccounted || m_State == DataState::InitializedAccounted);
-                VERIFY_EXPR(m_DataSize != 0);
+                ASSERT_EXPR(m_State == DataState::InitializedUnaccounted || m_State == DataState::InitializedAccounted);
+                ASSERT_EXPR(m_DataSize != 0);
             }
             return m_Data;
         }
 
         void SetAccounted()
         {
-            VERIFY(m_State == DataState::InitializedUnaccounted, "Initializing accounted size for an object that is not initialized.");
-            VERIFY(m_AccountedSize == 0, "Accounted size has already been initialized.");
-            VERIFY(m_DataSize != 0, "Data size has not been initialized.");
+            ASSERT(m_State == DataState::InitializedUnaccounted, "Initializing accounted size for an object that is not initialized.");
+            ASSERT(m_AccountedSize == 0, "Accounted size has already been initialized.");
+            ASSERT(m_DataSize != 0, "Data size has not been initialized.");
             m_AccountedSize.store(m_DataSize.load());
             m_State.store(DataState::InitializedAccounted); /* <U2A> */
         }
 
         size_t GetAccountedSize() const
         {
-            VERIFY_EXPR((m_State == DataState::InitializedAccounted && m_AccountedSize != 0) || (m_AccountedSize == 0));
+            ASSERT_EXPR((m_State == DataState::InitializedAccounted && m_AccountedSize != 0) || (m_AccountedSize == 0));
             return m_AccountedSize.load();
         }
 
@@ -366,7 +366,7 @@ private:
             m_LRU.splice(m_LRU.end(), m_LRU, it->second.LRUIt);
         }
 
-        VERIFY_EXPR(m_Cache.size() == m_LRU.size());
+        ASSERT_EXPR(m_Cache.size() == m_LRU.size());
 
         return it->second.Wrpr;
     }

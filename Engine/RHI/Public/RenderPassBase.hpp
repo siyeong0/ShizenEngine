@@ -116,7 +116,7 @@ namespace shz
 
 		void Destruct()
 		{
-			VERIFY(!m_IsDestructed, "This object has already been destructed");
+			ASSERT(!m_IsDestructed, "This object has already been destructed");
 
 			m_pRawMemory.reset();
 
@@ -132,8 +132,8 @@ namespace shz
 
 		RESOURCE_STATE GetAttachmentState(uint32 Subpass, uint32 Attachment) const
 		{
-			VERIFY_EXPR(Attachment < this->m_Desc.AttachmentCount);
-			VERIFY_EXPR(Subpass < this->m_Desc.SubpassCount);
+			ASSERT_EXPR(Attachment < this->m_Desc.AttachmentCount);
+			ASSERT_EXPR(Subpass < this->m_Desc.SubpassCount);
 			return m_AttachmentStates[this->m_Desc.AttachmentCount * Subpass + Attachment];
 		}
 
@@ -144,7 +144,7 @@ namespace shz
 
 		const SubpassDesc& GetSubpass(uint32 SubpassIndex) const
 		{
-			VERIFY_EXPR(SubpassIndex < this->m_Desc.SubpassCount);
+			ASSERT_EXPR(SubpassIndex < this->m_Desc.SubpassCount);
 			return this->m_Desc.pSubpasses[SubpassIndex];
 		}
 
@@ -197,16 +197,16 @@ namespace shz
 				}
 			}
 
-			VERIFY(Desc.SubpassCount != 0, "Render pass must have at least one subpass");
+			ASSERT(Desc.SubpassCount != 0, "Render pass must have at least one subpass");
 			const SubpassDesc* SrcSubpasses = Desc.pSubpasses;
 			SubpassDesc* DstSubpasses = MemPool.Allocate<SubpassDesc>(Desc.SubpassCount);
 			Desc.pSubpasses = DstSubpasses;
 
 			const auto SetAttachmentState = [AttachmentStates, &Desc](uint32 Subpass, uint32 Attachment, RESOURCE_STATE State) //
 				{
-					VERIFY_EXPR(Attachment < Desc.AttachmentCount);
-					VERIFY_EXPR(Subpass < Desc.SubpassCount);
-					VERIFY_EXPR((Desc.AttachmentCount * Subpass + Attachment) < (Desc.AttachmentCount * Desc.SubpassCount));
+					ASSERT_EXPR(Attachment < Desc.AttachmentCount);
+					ASSERT_EXPR(Subpass < Desc.SubpassCount);
+					ASSERT_EXPR((Desc.AttachmentCount * Subpass + Attachment) < (Desc.AttachmentCount * Desc.SubpassCount));
 					AttachmentStates[Desc.AttachmentCount * Subpass + Attachment] = State;
 				};
 

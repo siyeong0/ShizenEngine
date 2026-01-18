@@ -88,15 +88,15 @@ namespace shz
 
 		void* GetCPUAddress(uint64 Offset)
 		{
-			VERIFY_EXPR(m_pd3d12Buffer);
-			VERIFY(Offset < GetSize(), "Offset (", Offset, ") exceeds buffer size (", GetSize(), ")");
+			ASSERT_EXPR(m_pd3d12Buffer);
+			ASSERT(Offset < GetSize(), "Offset (", Offset, ") exceeds buffer size (", GetSize(), ")");
 			return reinterpret_cast<uint8*>(m_CPUVirtualAddress) + Offset;
 		}
 
 		D3D12_GPU_VIRTUAL_ADDRESS GetGPUAddress(uint64 Offset)
 		{
-			VERIFY_EXPR(m_pd3d12Buffer);
-			VERIFY(Offset < GetSize(), "Offset (", Offset, ") exceeds buffer size (", GetSize(), ")");
+			ASSERT_EXPR(m_pd3d12Buffer);
+			ASSERT(Offset < GetSize(), "Offset (", Offset, ") exceeds buffer size (", GetSize(), ")");
 			return m_GPUVirtualAddress + Offset;
 		}
 
@@ -107,7 +107,7 @@ namespace shz
 
 		uint64 GetSize() const
 		{
-			VERIFY_EXPR(m_pd3d12Buffer);
+			ASSERT_EXPR(m_pd3d12Buffer);
 			return m_pd3d12Buffer->GetDesc().Width;
 		}
 

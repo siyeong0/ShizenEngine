@@ -60,12 +60,12 @@ typename FileSystem::SearchFilesResult SearchRecursive(const Char* Dir, const Ch
 {
     if (Dir == nullptr || Dir[0] == '\0')
     {
-        UNEXPECTED("Directory must not be null or empty");
+        ASSERT(false, "Directory must not be null or empty");
         return {};
     }
     if (SearchPattern == nullptr || SearchPattern[0] == '\0')
     {
-        UNEXPECTED("Search pattern must not be null or empty");
+        ASSERT(false, "Search pattern must not be null or empty");
         return {};
     }
 

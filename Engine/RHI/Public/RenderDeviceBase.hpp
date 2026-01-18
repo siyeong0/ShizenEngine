@@ -220,8 +220,8 @@ namespace shz
 
 		~RenderDeviceBase()
 		{
-			VERIFY(m_RecycledDynamicBufferIds.size() == m_NextDynamicBufferId, "Not all dynamic buffer IDs have been recycled");
-			VERIFY(m_RecycledDynamicBufferIds.size() == m_DbgRecycledDynamicBufferIds.size(),
+			ASSERT(m_RecycledDynamicBufferIds.size() == m_NextDynamicBufferId, "Not all dynamic buffer IDs have been recycled");
+			ASSERT(m_RecycledDynamicBufferIds.size() == m_DbgRecycledDynamicBufferIds.size(),
 				"Recycled dynamic buffer ID set does not match the actual number of recycled IDs. This may happen if there were duplicate IDs or because of a bug.");
 		}
 
@@ -237,11 +237,11 @@ namespace shz
 		// Implementation of IRenderDevice::CreateResourceMapping().
 		virtual void SHZ_CALL_TYPE CreateResourceMapping(const ResourceMappingCreateInfo& ResMappingCI, IResourceMapping** ppMapping) override final
 		{
-			DEV_CHECK_ERR(ppMapping != nullptr, "Null pointer provided");
+			ASSERT(ppMapping != nullptr, "Null pointer provided");
 			if (ppMapping == nullptr)
 				return;
-			DEV_CHECK_ERR(*ppMapping == nullptr, "Overwriting reference to existing object may cause memory leaks");
-			DEV_CHECK_ERR(ResMappingCI.pEntries == nullptr || ResMappingCI.NumEntries != 0, "Starting with API253010, the number of entries is defined through the NumEntries member.");
+			ASSERT(*ppMapping == nullptr, "Overwriting reference to existing object may cause memory leaks");
+			ASSERT(ResMappingCI.pEntries == nullptr || ResMappingCI.NumEntries != 0, "Starting with API253010, the number of entries is defined through the NumEntries member.");
 
 			ResourceMappingImpl* pResourceMapping{ NEW_RC_OBJ(m_ResMappingAllocator, "ResourceMappingImpl instance", ResourceMappingImpl)(GetRawAllocator()) };
 			pResourceMapping->QueryInterface(IID_ResourceMapping, reinterpret_cast<IObject**>(ppMapping));
@@ -253,7 +253,7 @@ namespace shz
 					if (Entry.Name != nullptr && Entry.pObject != nullptr)
 						(*ppMapping)->AddResourceArray(Entry.Name, Entry.ArrayIndex, &Entry.pObject, 1, true);
 					else
-						DEV_ERROR("Name and pObject must not be null. Note that starting with API253010, the number of entries is defined through the NumEntries member.");
+						ASSERT(false, "Name and pObject must not be null. Note that starting with API253010, the number of entries is defined through the NumEntries member.");
 				}
 			}
 		}
@@ -274,18 +274,18 @@ namespace shz
 		// Implementation of IRenderDevice::GetTextureFormatInfo().
 		virtual const TextureFormatInfo& SHZ_CALL_TYPE GetTextureFormatInfo(TEXTURE_FORMAT TexFormat) const override final
 		{
-			VERIFY(TexFormat >= TEX_FORMAT_UNKNOWN && TexFormat < TEX_FORMAT_NUM_FORMATS, "Texture format out of range");
+			ASSERT(TexFormat >= TEX_FORMAT_UNKNOWN && TexFormat < TEX_FORMAT_NUM_FORMATS, "Texture format out of range");
 			const TextureFormatInfoExt& TexFmtInfo = m_TextureFormatsInfo[TexFormat];
-			VERIFY(TexFmtInfo.Format == TexFormat, "Sanity check failed");
+			ASSERT(TexFmtInfo.Format == TexFormat, "Sanity check failed");
 			return TexFmtInfo;
 		}
 
 		// Implementation of IRenderDevice::GetTextureFormatInfoExt().
 		virtual const TextureFormatInfoExt& SHZ_CALL_TYPE GetTextureFormatInfoExt(TEXTURE_FORMAT TexFormat) override final
 		{
-			VERIFY(TexFormat >= TEX_FORMAT_UNKNOWN && TexFormat < TEX_FORMAT_NUM_FORMATS, "Texture format out of range");
+			ASSERT(TexFormat >= TEX_FORMAT_UNKNOWN && TexFormat < TEX_FORMAT_NUM_FORMATS, "Texture format out of range");
 			const TextureFormatInfoExt& TexFmtInfo = m_TextureFormatsInfo[TexFormat];
-			VERIFY(TexFmtInfo.Format == TexFormat, "Sanity check failed");
+			ASSERT(TexFmtInfo.Format == TexFormat, "Sanity check failed");
 			if (!m_TexFmtInfoInitFlags[TexFormat])
 			{
 				if (TexFmtInfo.Supported)
@@ -304,13 +304,13 @@ namespace shz
 		virtual void SHZ_CALL_TYPE CreateTilePipelineState(const TilePipelineStateCreateInfo& PSOCreateInfo,
 			IPipelineState** ppPipelineState) override
 		{
-			UNSUPPORTED("Tile pipeline is not supported by this device. Please check DeviceFeatures.TileShaders feature.");
+			ASSERT(false, "Tile pipeline is not supported by this device. Please check DeviceFeatures.TileShaders feature.");
 		}
 
 		// Set weak reference to the immediate context
 		void SetImmediateContext(size_t Ctx, DeviceContextImplType* pImmediateContext)
 		{
-			VERIFY(m_wpImmediateContexts[Ctx].Lock() == nullptr, "Immediate context has already been set");
+			ASSERT(m_wpImmediateContexts[Ctx].Lock() == nullptr, "Immediate context has already been set");
 			m_wpImmediateContexts[Ctx] = pImmediateContext;
 		}
 
@@ -382,7 +382,7 @@ namespace shz
 			Threading::SpinLockGuard Guard{ m_RecycledDynamicBufferIdsLock };
 			m_RecycledDynamicBufferIds.push_back(Id);
 #ifdef SHZ_DEBUG
-			VERIFY(m_DbgRecycledDynamicBufferIds.emplace(Id).second, "Dynamic buffer ID ", Id, " has already been recycled. This appears to be a bug.");
+			ASSERT(m_DbgRecycledDynamicBufferIds.emplace(Id).second, "Dynamic buffer ID ", Id, " has already been recycled. This appears to be a bug.");
 #endif
 		}
 
@@ -432,11 +432,11 @@ namespace shz
 			ObjectType** ppObject,
 			ObjectConstructorType ConstructObject)
 		{
-			DEV_CHECK_ERR(ppObject != nullptr, "Null pointer provided");
+			ASSERT(ppObject != nullptr, "Null pointer provided");
 			if (!ppObject)
 				return;
 
-			DEV_CHECK_ERR(*ppObject == nullptr, "Overwriting reference to existing object may cause memory leaks");
+			ASSERT(*ppObject == nullptr, "Overwriting reference to existing object may cause memory leaks");
 			// Do not release *ppObject here!
 			// Should this happen, RefCntAutoPtr<> will take care of this!
 			//if( *ppObject )
@@ -453,7 +453,7 @@ namespace shz
 			}
 			catch (...)
 			{
-				VERIFY(*ppObject == nullptr, "Object was created despite error");
+				ASSERT(*ppObject == nullptr, "Object was created despite error");
 				if (*ppObject)
 				{
 					(*ppObject)->Release();
@@ -672,7 +672,7 @@ namespace shz
 			{
 				if (CtxIndex >= m_wpDeferredContexts.size())
 				{
-					VERIFY_EXPR(CtxIndex == m_wpDeferredContexts.size());
+					ASSERT_EXPR(CtxIndex == m_wpDeferredContexts.size());
 					m_wpDeferredContexts.resize(CtxIndex + 1);
 				}
 

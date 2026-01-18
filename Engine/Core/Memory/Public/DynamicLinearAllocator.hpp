@@ -56,7 +56,7 @@ namespace shz
 			: m_BlockSize{ BlockSize }
 			, m_pAllocator{ &Allocator }
 		{
-			VERIFY(IsPowerOfTwo(BlockSize), "Block size (", BlockSize, ") is not power of two");
+			ASSERT(IsPowerOfTwo(BlockSize), "Block size (", BlockSize, ") is not power of two");
 		}
 
 		~DynamicLinearAllocator()
@@ -106,7 +106,7 @@ namespace shz
 
 			Block& block = m_Blocks.back();
 			uint8_t* Ptr = AlignUp(block.Data, align);
-			VERIFY(Ptr + size <= block.Data + block.Size, "Not enough space in the new block - this is a bug");
+			ASSERT(Ptr + size <= block.Data + block.Size, "Not enough space in the new block - this is a bug");
 			block.CurrPtr = Ptr + size;
 			return Ptr;
 		}
@@ -155,7 +155,7 @@ namespace shz
 			if (len == 0)
 				len = strlen(Str);
 			else
-				VERIFY_EXPR(len <= strlen(Str));
+				ASSERT_EXPR(len <= strlen(Str));
 
 			Char* Dst = Allocate<Char>(len + 1);
 			std::memcpy(Dst, Str, sizeof(Char) * len);
@@ -171,7 +171,7 @@ namespace shz
 			if (len == 0)
 				len = strlen(Str);
 			else
-				VERIFY_EXPR(len <= strlen(Str));
+				ASSERT_EXPR(len <= strlen(Str));
 
 			wchar_t* Dst = Allocate<wchar_t>(len + 1);
 			for (size_t i = 0; i < len; ++i)

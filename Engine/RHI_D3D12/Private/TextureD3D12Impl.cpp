@@ -221,7 +221,7 @@ namespace shz
 		}
 		else if (m_Desc.Usage == USAGE_IMMUTABLE || m_Desc.Usage == USAGE_DEFAULT || m_Desc.Usage == USAGE_DYNAMIC)
 		{
-			VERIFY(m_Desc.Usage != USAGE_DYNAMIC || PlatformMisc::CountOneBits(m_Desc.ImmediateContextMask) <= 1,
+			ASSERT(m_Desc.Usage != USAGE_DYNAMIC || PlatformMisc::CountOneBits(m_Desc.ImmediateContextMask) <= 1,
 				"ImmediateContextMask must contain single set bit, this error should've been handled in ValidateTextureDesc()");
 
 			D3D12_HEAP_PROPERTIES HeapProps{};
@@ -296,7 +296,7 @@ namespace shz
 
 				RenderDeviceD3D12Impl::PooledCommandContext InitContext = pRenderDeviceD3D12->AllocateCommandContext(CmdQueueInd);
 				// copy data to the intermediate upload heap and then schedule a copy from the upload heap to the default texture
-				VERIFY_EXPR(CheckState(RESOURCE_STATE_COPY_DEST));
+				ASSERT_EXPR(CheckState(RESOURCE_STATE_COPY_DEST));
 				std::vector<D3D12_SUBRESOURCE_DATA, STDAllocatorRawMem<D3D12_SUBRESOURCE_DATA>> D3D12SubResData(pInitData->NumSubresources, D3D12_SUBRESOURCE_DATA(), STD_ALLOCATOR_RAW_MEM(D3D12_SUBRESOURCE_DATA, GetRawAllocator(), "Allocator for vector<D3D12_SUBRESOURCE_DATA>"));
 				for (size_t subres = 0; subres < D3D12SubResData.size(); ++subres)
 				{
@@ -305,7 +305,7 @@ namespace shz
 					D3D12SubResData[subres].SlicePitch = static_cast<LONG_PTR>(pInitData->pSubResources[subres].DepthStride);
 				}
 				UINT64 UploadedSize = UpdateSubresources(InitContext->GetCommandList(), m_pd3d12Resource, UploadBuffer, 0, 0, pInitData->NumSubresources, D3D12SubResData.data());
-				VERIFY(UploadedSize == uploadBufferSize, "Incorrect uploaded data size (", UploadedSize, "). ", uploadBufferSize, " is expected");
+				ASSERT(UploadedSize == uploadBufferSize, "Incorrect uploaded data size (", UploadedSize, "). ", uploadBufferSize, " is expected");
 
 				// Command list fence should only be signaled when submitting cmd list
 				// from the immediate context, otherwise the basic requirement will be violated
@@ -340,14 +340,14 @@ namespace shz
 		{
 			// Create staging buffer
 			D3D12_HEAP_PROPERTIES StaginHeapProps{};
-			DEV_CHECK_ERR((m_Desc.CPUAccessFlags & (CPU_ACCESS_READ | CPU_ACCESS_WRITE)) == CPU_ACCESS_READ ||
+			ASSERT((m_Desc.CPUAccessFlags & (CPU_ACCESS_READ | CPU_ACCESS_WRITE)) == CPU_ACCESS_READ ||
 				(m_Desc.CPUAccessFlags & (CPU_ACCESS_READ | CPU_ACCESS_WRITE)) == CPU_ACCESS_WRITE,
 				"Exactly one of CPU_ACCESS_READ or CPU_ACCESS_WRITE flags must be specified");
 
 			RESOURCE_STATE InitialState = RESOURCE_STATE_UNKNOWN;
 			if (m_Desc.CPUAccessFlags & CPU_ACCESS_READ)
 			{
-				DEV_CHECK_ERR(!bInitializeTexture, "Readback textures should not be initialized with data");
+				ASSERT(!bInitializeTexture, "Readback textures should not be initialized with data");
 				StaginHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
 				InitialState = RESOURCE_STATE_COPY_DEST;
 			}
@@ -357,7 +357,7 @@ namespace shz
 				InitialState = RESOURCE_STATE_GENERIC_READ;
 			}
 			else
-				UNEXPECTED("Unexpected CPU access");
+				ASSERT(false, "Unexpected CPU access");
 
 			SetState(InitialState);
 			D3D12_RESOURCE_STATES d3d12State = ResourceStateFlagsToD3D12ResourceStates(InitialState) & d3d12StateMask;
@@ -403,7 +403,7 @@ namespace shz
 
 				void* pStagingData = nullptr;
 				m_pd3d12Resource->Map(0, nullptr, &pStagingData);
-				DEV_CHECK_ERR(pStagingData != nullptr, "Failed to map staging buffer");
+				ASSERT(pStagingData != nullptr, "Failed to map staging buffer");
 				if (pStagingData != nullptr)
 				{
 					for (uint32 Subres = 0; Subres < NumSubresources; ++Subres)
@@ -414,9 +414,9 @@ namespace shz
 						const TextureSubResData& SrcSubresData = pInitData->pSubResources[Subres];
 						const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& DstFootprint = GetStagingFootprint(Subres);
 
-						VERIFY_EXPR(MipProps.StorageWidth == DstFootprint.Footprint.Width);
-						VERIFY_EXPR(MipProps.StorageHeight == DstFootprint.Footprint.Height);
-						VERIFY_EXPR(MipProps.Depth == DstFootprint.Footprint.Depth);
+						ASSERT_EXPR(MipProps.StorageWidth == DstFootprint.Footprint.Width);
+						ASSERT_EXPR(MipProps.StorageHeight == DstFootprint.Footprint.Height);
+						ASSERT_EXPR(MipProps.Depth == DstFootprint.Footprint.Depth);
 
 						CopyTextureSubresource(SrcSubresData,
 							MipProps.StorageHeight / FmtAttribs.BlockHeight, // NumRows
@@ -434,7 +434,7 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("Unexpected usage");
+			ASSERT(false, "Unexpected usage");
 		}
 	}
 
@@ -449,7 +449,7 @@ namespace shz
 		else
 		{
 			TEXTURE_FORMAT RefFormat = DXGI_FormatToTexFormat(d3d12Desc.Format);
-			DEV_CHECK_ERR(RefFormat == TexDesc.Format, "The format specified by texture description (", GetTextureFormatAttribs(TexDesc.Format).Name,
+			ASSERT(RefFormat == TexDesc.Format, "The format specified by texture description (", GetTextureFormatAttribs(TexDesc.Format).Name,
 				") does not match the D3D12 resource format (",
 				GetTextureFormatAttribs(RefFormat).Name, ")");
 			(void)RefFormat;
@@ -521,9 +521,9 @@ namespace shz
 
 	void TextureD3D12Impl::CreateViewInternal(const TextureViewDesc& ViewDesc, ITextureView** ppView, bool bIsDefaultView)
 	{
-		VERIFY(ppView != nullptr, "View pointer address is null");
+		ASSERT(ppView != nullptr, "View pointer address is null");
 		if (!ppView) return;
-		VERIFY(*ppView == nullptr, "Overwriting reference to existing object may cause memory leaks");
+		ASSERT(*ppView == nullptr, "Overwriting reference to existing object may cause memory leaks");
 
 		*ppView = nullptr;
 
@@ -531,7 +531,7 @@ namespace shz
 		{
 			RenderDeviceD3D12Impl* pDeviceD3D12Impl = GetDevice();
 			FixedBlockMemoryAllocator& TexViewAllocator = pDeviceD3D12Impl->GetTexViewObjAllocator();
-			VERIFY(&TexViewAllocator == &m_dbgTexViewObjAllocator, "Texture view allocator does not match allocator provided during texture initialization");
+			ASSERT(&TexViewAllocator == &m_dbgTexViewObjAllocator, "Texture view allocator does not match allocator provided during texture initialization");
 
 			TextureViewDesc UpdatedViewDesc = ViewDesc;
 			ValidatedAndCorrectTextureViewDesc(m_Desc, UpdatedViewDesc);
@@ -547,7 +547,7 @@ namespace shz
 			{
 			case TEXTURE_VIEW_SHADER_RESOURCE:
 			{
-				VERIFY(m_Desc.BindFlags & BIND_SHADER_RESOURCE, "BIND_SHADER_RESOURCE flag is not set");
+				ASSERT(m_Desc.BindFlags & BIND_SHADER_RESOURCE, "BIND_SHADER_RESOURCE flag is not set");
 				ViewDescriptor = pDeviceD3D12Impl->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 				CreateSRV(UpdatedViewDesc, ViewDescriptor.GetCpuHandle());
 			}
@@ -555,7 +555,7 @@ namespace shz
 
 			case TEXTURE_VIEW_RENDER_TARGET:
 			{
-				VERIFY(m_Desc.BindFlags & BIND_RENDER_TARGET, "BIND_RENDER_TARGET flag is not set");
+				ASSERT(m_Desc.BindFlags & BIND_RENDER_TARGET, "BIND_RENDER_TARGET flag is not set");
 				ViewDescriptor = pDeviceD3D12Impl->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 				CreateRTV(UpdatedViewDesc, ViewDescriptor.GetCpuHandle());
 			}
@@ -564,7 +564,7 @@ namespace shz
 			case TEXTURE_VIEW_DEPTH_STENCIL:
 			case TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL:
 			{
-				VERIFY(m_Desc.BindFlags & BIND_DEPTH_STENCIL, "BIND_DEPTH_STENCIL flag is not set");
+				ASSERT(m_Desc.BindFlags & BIND_DEPTH_STENCIL, "BIND_DEPTH_STENCIL flag is not set");
 				ViewDescriptor = pDeviceD3D12Impl->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 				CreateDSV(UpdatedViewDesc, ViewDescriptor.GetCpuHandle());
 			}
@@ -572,7 +572,7 @@ namespace shz
 
 			case TEXTURE_VIEW_UNORDERED_ACCESS:
 			{
-				VERIFY(m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "BIND_UNORDERED_ACCESS flag is not set");
+				ASSERT(m_Desc.BindFlags & BIND_UNORDERED_ACCESS, "BIND_UNORDERED_ACCESS flag is not set");
 				ViewDescriptor = pDeviceD3D12Impl->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 				CreateUAV(UpdatedViewDesc, ViewDescriptor.GetCpuHandle());
 			}
@@ -581,18 +581,18 @@ namespace shz
 			case TEXTURE_VIEW_SHADING_RATE:
 			{
 				// In Direct3D12 there is no special shading rate view, so use SRV instead because it is enabled by default
-				VERIFY(m_Desc.BindFlags & BIND_SHADING_RATE, "BIND_SHADING_RATE flag is not set");
+				ASSERT(m_Desc.BindFlags & BIND_SHADING_RATE, "BIND_SHADING_RATE flag is not set");
 				// Descriptor handle is not needed
 			}
 			break;
 
-			default: UNEXPECTED("Unknown view type"); break;
+			default: ASSERT(false, "Unknown view type"); break;
 			}
 
 			DescriptorHeapAllocation TexArraySRVDescriptor, MipUAVDescriptors;
 			if (UpdatedViewDesc.Flags & TEXTURE_VIEW_FLAG_ALLOW_MIP_MAP_GENERATION)
 			{
-				VERIFY_EXPR((m_Desc.MiscFlags & MISC_TEXTURE_FLAG_GENERATE_MIPS) != 0 && m_Desc.Is2D());
+				ASSERT_EXPR((m_Desc.MiscFlags & MISC_TEXTURE_FLAG_GENERATE_MIPS) != 0 && m_Desc.Is2D());
 
 				{
 					TexArraySRVDescriptor = pDeviceD3D12Impl->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -621,7 +621,7 @@ namespace shz
 			}
 			TextureViewD3D12Impl* pViewD3D12 = NEW_RC_OBJ(TexViewAllocator, "TextureViewD3D12Impl instance", TextureViewD3D12Impl, bIsDefaultView ? this : nullptr)(
 				GetDevice(), UpdatedViewDesc, this, std::move(ViewDescriptor), std::move(TexArraySRVDescriptor), std::move(MipUAVDescriptors), bIsDefaultView);
-			VERIFY(pViewD3D12->GetDesc().ViewType == ViewDesc.ViewType, "Incorrect view type");
+			ASSERT(pViewD3D12->GetDesc().ViewType == ViewDesc.ViewType, "Incorrect view type");
 
 			if (bIsDefaultView)
 				*ppView = pViewD3D12;
@@ -647,8 +647,8 @@ namespace shz
 
 	void TextureD3D12Impl::CreateSRV(const TextureViewDesc& SRVDesc, D3D12_CPU_DESCRIPTOR_HANDLE SRVHandle)
 	{
-		VERIFY(SRVDesc.ViewType == TEXTURE_VIEW_SHADER_RESOURCE, "Incorrect view type: shader resource is expected");
-		VERIFY_EXPR(SRVDesc.Format != TEX_FORMAT_UNKNOWN);
+		ASSERT(SRVDesc.ViewType == TEXTURE_VIEW_SHADER_RESOURCE, "Incorrect view type: shader resource is expected");
+		ASSERT_EXPR(SRVDesc.Format != TEX_FORMAT_UNKNOWN);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC D3D12_SRVDesc;
 		TextureViewDesc_to_D3D12_SRV_DESC(SRVDesc, D3D12_SRVDesc, m_Desc.SampleCount);
@@ -659,8 +659,8 @@ namespace shz
 
 	void TextureD3D12Impl::CreateRTV(const TextureViewDesc& RTVDesc, D3D12_CPU_DESCRIPTOR_HANDLE RTVHandle)
 	{
-		VERIFY(RTVDesc.ViewType == TEXTURE_VIEW_RENDER_TARGET, "Incorrect view type: render target is expected");
-		VERIFY_EXPR(RTVDesc.Format != TEX_FORMAT_UNKNOWN);
+		ASSERT(RTVDesc.ViewType == TEXTURE_VIEW_RENDER_TARGET, "Incorrect view type: render target is expected");
+		ASSERT_EXPR(RTVDesc.Format != TEX_FORMAT_UNKNOWN);
 
 		D3D12_RENDER_TARGET_VIEW_DESC D3D12_RTVDesc;
 		TextureViewDesc_to_D3D12_RTV_DESC(RTVDesc, D3D12_RTVDesc, m_Desc.SampleCount);
@@ -671,8 +671,8 @@ namespace shz
 
 	void TextureD3D12Impl::CreateDSV(const TextureViewDesc& DSVDesc, D3D12_CPU_DESCRIPTOR_HANDLE DSVHandle)
 	{
-		VERIFY(DSVDesc.ViewType == TEXTURE_VIEW_DEPTH_STENCIL || DSVDesc.ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL, "Incorrect view type: depth stencil is expected");
-		VERIFY_EXPR(DSVDesc.Format != TEX_FORMAT_UNKNOWN);
+		ASSERT(DSVDesc.ViewType == TEXTURE_VIEW_DEPTH_STENCIL || DSVDesc.ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL, "Incorrect view type: depth stencil is expected");
+		ASSERT_EXPR(DSVDesc.Format != TEX_FORMAT_UNKNOWN);
 
 		D3D12_DEPTH_STENCIL_VIEW_DESC D3D12_DSVDesc;
 		TextureViewDesc_to_D3D12_DSV_DESC(DSVDesc, D3D12_DSVDesc, m_Desc.SampleCount);
@@ -683,8 +683,8 @@ namespace shz
 
 	void TextureD3D12Impl::CreateUAV(const TextureViewDesc& UAVDesc, D3D12_CPU_DESCRIPTOR_HANDLE UAVHandle)
 	{
-		VERIFY(UAVDesc.ViewType == TEXTURE_VIEW_UNORDERED_ACCESS, "Incorrect view type: unordered access is expected");
-		VERIFY_EXPR(UAVDesc.Format != TEX_FORMAT_UNKNOWN);
+		ASSERT(UAVDesc.ViewType == TEXTURE_VIEW_UNORDERED_ACCESS, "Incorrect view type: unordered access is expected");
+		ASSERT_EXPR(UAVDesc.Format != TEX_FORMAT_UNKNOWN);
 
 		D3D12_UNORDERED_ACCESS_VIEW_DESC D3D12_UAVDesc;
 		TextureViewDesc_to_D3D12_UAV_DESC(UAVDesc, D3D12_UAVDesc);
@@ -705,8 +705,8 @@ namespace shz
 
 	void TextureD3D12Impl::InitSparseProperties()
 	{
-		VERIFY_EXPR(m_Desc.Usage == USAGE_SPARSE);
-		VERIFY_EXPR(m_pSparseProps == nullptr);
+		ASSERT_EXPR(m_Desc.Usage == USAGE_SPARSE);
+		ASSERT_EXPR(m_pSparseProps == nullptr);
 
 		m_pSparseProps = std::make_unique<SparseTextureProperties>();
 
@@ -743,7 +743,7 @@ namespace shz
 
 			// The number of overall tiles, packed or not, for a given array slice is simply the total number of tiles for the resource divided by the resource's array size
 			Props.MipTailStride = m_Desc.IsArray() ? (NumTilesForEntireResource / m_Desc.ArraySize) * D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES : 0;
-			VERIFY_EXPR(NumTilesForEntireResource % m_Desc.GetArraySize() == 0);
+			ASSERT_EXPR(NumTilesForEntireResource % m_Desc.GetArraySize() == 0);
 		}
 	}
 

@@ -34,16 +34,22 @@
 			<!-- Use C++20 -->
 			<LanguageStandard>stdcpp20</LanguageStandard>
 
+			<ConformanceMode>false</ConformanceMode>
+
 			<!-- High warning level and strict checks -->
 			<WarningLevel>Level4</WarningLevel>
 			<SDLCheck>true</SDLCheck>
 			<TreatWarningAsError>true</TreatWarningAsError>
+
+			<!-- Use conforming preprocessor -->
+			<AdditionalOptions>/Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
 
 			<!-- Platform-wide preprocessor definitions -->
 			<PreprocessorDefinitions>
 				PLATFORM_WIN32;
 				D3D12_SUPPORTED;
 				SHZ_DEBUG;
+				NOMINMAX;
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
 

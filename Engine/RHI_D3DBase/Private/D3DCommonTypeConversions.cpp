@@ -150,7 +150,7 @@ SHADER_CODE_VARIABLE_CLASS D3DShaderVariableClassToShaderCodeVaraibleClass(D3D_S
         case D3D_SVC_INTERFACE_POINTER: return SHADER_CODE_VARIABLE_CLASS_UNKNOWN;
 
         default:
-            UNEXPECTED("Unknown variable class");
+            ASSERT(false, "Unknown variable class");
             return SHADER_CODE_VARIABLE_CLASS_UNKNOWN;
     }
     

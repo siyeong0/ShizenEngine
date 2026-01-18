@@ -268,7 +268,7 @@ bool PSOSerializer<Mode>::SerializeCreateInfo(
                                if (!Ser(Group.Name, ShaderIndex))
                                    return false;
 
-                               VERIFY_EXPR(ShaderIndex != ~0u);
+                               ASSERT_EXPR(ShaderIndex != ~0u);
                                if (IsReading)
                                {
                                    ShaderToIndex(ShaderIndex, Group.pShader);
@@ -295,7 +295,7 @@ bool PSOSerializer<Mode>::SerializeCreateInfo(
                                if (!Ser(Group.Name, ClosestHitShaderIndex, AnyHitShaderIndex))
                                    return false;
 
-                               VERIFY_EXPR(ClosestHitShaderIndex != ~0u);
+                               ASSERT_EXPR(ClosestHitShaderIndex != ~0u);
                                if (IsReading)
                                {
                                    ShaderToIndex(ClosestHitShaderIndex, Group.pClosestHitShader);
@@ -325,7 +325,7 @@ bool PSOSerializer<Mode>::SerializeCreateInfo(
                                if (!Ser(Group.Name, IntersectionShaderIndex, ClosestHitShaderIndex, AnyHitShaderIndex))
                                    return false;
 
-                               VERIFY_EXPR(IntersectionShaderIndex != ~0u);
+                               ASSERT_EXPR(IntersectionShaderIndex != ~0u);
                                if (IsReading)
                                {
                                    ShaderToIndex(IntersectionShaderIndex, Group.pIntersectionShader);
@@ -456,7 +456,7 @@ template <SerializerMode Mode>
 bool ShaderSerializer<Mode>::SerializeBytecodeOrSource(Serializer<Mode>&            Ser,
                                                        ConstQual<ShaderCreateInfo>& CI)
 {
-    VERIFY(CI.Source == nullptr || CI.ByteCode == nullptr, "Only one of Source or Bytecode can be non-null");
+    ASSERT(CI.Source == nullptr || CI.ByteCode == nullptr, "Only one of Source or Bytecode can be non-null");
     const uint8 UseBytecode = CI.ByteCode != nullptr ? 1 : 0;
 
     if (!Ser(UseBytecode))

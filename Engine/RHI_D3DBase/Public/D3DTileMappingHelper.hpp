@@ -65,7 +65,7 @@ struct D3DTileMappingHelper
         d3dRegionSize.Height   = 0;
         d3dRegionSize.Depth    = 0;
 
-        VERIFY(d3dRegionSize.NumTiles > 0, "NumTiles must not be zero");
+        ASSERT(d3dRegionSize.NumTiles > 0, "NumTiles must not be zero");
 
         AddBindRange(d3dCoord, d3dRegionSize, BindRange.pMemory, MemOffsetInBytes);
     }
@@ -81,7 +81,7 @@ struct D3DTileMappingHelper
                              bool                                _UseNVApi,
                              uint64                              MemOffsetInBytes)
     {
-        VERIFY(Coordinates.empty() || UseNVApi == _UseNVApi, "Inconsistent use of NV API among different bind ranges");
+        ASSERT(Coordinates.empty() || UseNVApi == _UseNVApi, "Inconsistent use of NV API among different bind ranges");
         UseNVApi = _UseNVApi;
 
         const ThisImplType& This = *static_cast<const ThisImplType*>(this);
@@ -104,7 +104,7 @@ struct D3DTileMappingHelper
             d3dRegionSize.Height   = StaticCast<UINT16>(NumTiles.y);
             d3dRegionSize.Depth    = StaticCast<UINT16>(NumTiles.z);
 
-            VERIFY((BindRange.MemorySize == 0 ||
+            ASSERT((BindRange.MemorySize == 0 ||
                     d3dRegionSize.NumTiles == StaticCast<UINT>(BindRange.MemorySize / D3D_TILED_RESOURCE_TILE_SIZE_IN_BYTES)),
                    "MemorySize must be zero or equal to NumTiles * BlockSize");
         }
@@ -122,7 +122,7 @@ struct D3DTileMappingHelper
             d3dRegionSize.Depth    = 0;
         }
 
-        VERIFY(d3dRegionSize.NumTiles > 0, "NumTiles must not be zero");
+        ASSERT(d3dRegionSize.NumTiles > 0, "NumTiles must not be zero");
 
         AddBindRange(d3dCoord, d3dRegionSize, BindRange.pMemory, MemOffsetInBytes);
     }
@@ -155,7 +155,7 @@ private:
         const UINT StartTile      = StaticCast<UINT>(MemOffsetInBytes / D3D_TILED_RESOURCE_TILE_SIZE_IN_BYTES);
         const UINT RangeTileCount = d3dRegionSize.NumTiles;
 
-        VERIFY(RangeTileCount > 0, "Tile count must not be zero");
+        ASSERT(RangeTileCount > 0, "Tile count must not be zero");
 
         RangeFlags.emplace_back(d3dRangeFlags);
         RangeStartOffsets.emplace_back(StartTile);

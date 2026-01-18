@@ -136,7 +136,7 @@ namespace shz
 		{
 			if (m_pCache)
 			{
-				UNEXPECTED("Render state cache is already initialized");
+				ASSERT(false, "Render state cache is already initialized");
 				return;
 			}
 
@@ -144,20 +144,20 @@ namespace shz
 				CacheCI.pDevice = this->GetDevice();
 
 			shz::CreateRenderStateCache(CacheCI, &m_pCache);
-			VERIFY_EXPR(m_pCache);
+			ASSERT_EXPR(m_pCache);
 		}
 
 		void LoadCacheFromFile(const char* FilePath, bool UpdateOnExit, uint32 CacheContentVersion = ~0u)
 		{
 			if (!m_pCache)
 			{
-				UNEXPECTED("Render state cache is not initialized");
+				ASSERT(false, "Render state cache is not initialized");
 				return;
 			}
 
 			if (FilePath == nullptr)
 			{
-				UNEXPECTED("File path is null");
+				ASSERT(false, "File path is null");
 				return;
 			}
 

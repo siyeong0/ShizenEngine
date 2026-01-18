@@ -82,10 +82,10 @@ namespace shz
 		case SHADER_TYPE_RAY_INTERSECTION:
 		case SHADER_TYPE_CALLABLE:         strShaderProfile = "lib"; break;
 		case SHADER_TYPE_TILE:
-			UNSUPPORTED("Unsupported shader type");
+			ASSERT(false, "Unsupported shader type");
 			break;
 
-		default: UNEXPECTED("Unknown shader type");
+		default: ASSERT(false, "Unknown shader type");
 		}
 
 		strShaderProfile += "_";

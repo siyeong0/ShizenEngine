@@ -38,7 +38,6 @@
 #include "Engine/Core/Common/Public/DummyReferenceCounters.hpp"
 #include "Engine/Core/Memory/Public/EngineMemory.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-#include "Platforms/Common/PlatformDebug.hpp"
 
 namespace shz
 {
@@ -116,11 +115,6 @@ namespace shz
 		virtual void SHZ_CALL_TYPE SetMessageCallback(DebugMessageCallbackType MessageCallback) const override final
 		{
 			SetDebugMessageCallback(MessageCallback);
-		}
-
-		virtual void SHZ_CALL_TYPE SetBreakOnError(bool BreakOnError) const override final
-		{
-			PlatformDebug::SetBreakOnError(BreakOnError);
 		}
 
 		virtual void SHZ_CALL_TYPE SetMemoryAllocator(IMemoryAllocator* pAllocator) const override final

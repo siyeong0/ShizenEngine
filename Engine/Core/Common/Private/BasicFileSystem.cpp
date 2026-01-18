@@ -26,9 +26,9 @@
  */
 
 #include "pch.h"
-#include "Engine/Core/Common/Public/BasicFileSystem.hpp"
-
 #include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/BasicFileSystem.hpp"
 
 namespace shz
 {
@@ -90,7 +90,7 @@ namespace shz
 	void BasicFileSystem::CorrectSlashes(String& Path, Char Slash)
 	{
 		if (Slash != 0)
-			DEV_CHECK_ERR(IsSlash(Slash), "Incorrect slash symbol");
+			ASSERT(IsSlash(Slash), "Incorrect slash symbol");
 		else
 			Slash = SlashSymbol;
 		Char RevSlashSym = (Slash == '\\') ? '/' : '\\';
@@ -202,7 +202,7 @@ namespace shz
 	std::string BasicFileSystem::BuildPathFromComponents(const std::vector<String>& Components, Char Slash)
 	{
 		if (Slash != 0)
-			DEV_CHECK_ERR(IsSlash(Slash), "Incorrect slash symbol");
+			ASSERT(IsSlash(Slash), "Incorrect slash symbol");
 		else
 			Slash = SlashSymbol;
 
@@ -222,7 +222,7 @@ namespace shz
 		if (Path == nullptr || Path[0] == '\0')
 			return "";
 
-		DEV_CHECK_ERR(Slash == 0 || IsSlash(Slash), "Incorrect slash symbol");
+		ASSERT(Slash == 0 || IsSlash(Slash), "Incorrect slash symbol");
 		Slash = IsSlash(Slash) ? Slash : SlashSymbol;
 
 		std::string SimplifiedPath;
@@ -252,7 +252,7 @@ namespace shz
 		else
 		{
 			// Unix path
-			VERIFY_EXPR(Slash == UnixSlash);
+			ASSERT(Slash == UnixSlash, "Incorrect slash symbol");
 			if (IsSlash(*c))
 			{
 				// Unix absolute path (e.g., /home/user)
@@ -338,10 +338,10 @@ namespace shz
 		bool /*IsToDirectory*/,
 		Char Slash)
 	{
-		DEV_CHECK_ERR(PathFrom != nullptr, "Source path must not be null");
-		DEV_CHECK_ERR(PathTo != nullptr, "Destination path must not be null");
+		ASSERT(PathFrom != nullptr, "Source path must not be null");
+		ASSERT(PathTo != nullptr, "Destination path must not be null");
 		if (Slash != 0)
-			DEV_CHECK_ERR(IsSlash(Slash), "Incorrect slash symbol");
+			ASSERT(IsSlash(Slash), "Incorrect slash symbol");
 		else
 			Slash = SlashSymbol;
 

@@ -98,7 +98,7 @@ namespace shz
 			return Param0.Descriptor == Param1.Descriptor;
 
 		default:
-			UNEXPECTED("Unexpected root parameter type");
+			ASSERT(false, "Unexpected root parameter type");
 			return false;
 		}
 	}

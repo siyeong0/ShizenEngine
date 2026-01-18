@@ -27,10 +27,10 @@
 
 #include "pch.h"
 #include "Platforms/Common/PlatformDefinitions.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Runtime/Public/SampleBase.h"
-#include "Primitives/Errors.hpp"
-#include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
+#include "ThirdParty/imgui/imgui.h"
 
 namespace shz
 {
@@ -109,14 +109,14 @@ namespace shz
             return float4x4::RotationAxis(f3CameraViewAxis, -PI * 3.f / 2.f);
 
         case SURFACE_TRANSFORM_OPTIMAL:
-            UNEXPECTED("SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
+            ASSERT(false, "SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
             return float4x4::Identity();
 
         case SURFACE_TRANSFORM_HORIZONTAL_MIRROR:
         case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90:
         case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180:
         case SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270:
-            UNEXPECTED("Mirror transforms are not supported");
+            ASSERT(false, "Mirror transforms are not supported");
             return float4x4::Identity();
 
         default:

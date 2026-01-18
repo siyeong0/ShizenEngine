@@ -120,14 +120,14 @@ namespace shz
 		// Implementation of IShader::GetResourceCount() method.
 		virtual uint32 SHZ_CALL_TYPE GetResourceCount() const override final
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			return m_pShaderResources ? m_pShaderResources->GetTotalResources() : 0;
 		}
 
 		// Implementation of IShader::GetResource() method.
 		virtual void SHZ_CALL_TYPE GetResourceDesc(uint32 Index, ShaderResourceDesc& ResourceDesc) const override final
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			if (m_pShaderResources)
 			{
 				ResourceDesc = m_pShaderResources->GetHLSLShaderResourceDesc(Index);
@@ -137,7 +137,7 @@ namespace shz
 		// Implementation of IShader::GetConstantBufferDesc() method.
 		virtual const ShaderCodeBufferDesc* SHZ_CALL_TYPE GetConstantBufferDesc(uint32 Index) const override final
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			return m_pShaderResources ?
 				// Constant buffers always go first in the list of resources
 				m_pShaderResources->GetConstantBufferDesc(Index) :
@@ -147,7 +147,7 @@ namespace shz
 		// Implementation of IShaderD3D::GetHLSLResource() method.
 		virtual void SHZ_CALL_TYPE GetHLSLResource(uint32 Index, HLSLShaderResourceDesc& ResourceDesc) const override final
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			if (m_pShaderResources)
 			{
 				ResourceDesc = m_pShaderResources->GetHLSLShaderResourceDesc(Index);
@@ -157,7 +157,7 @@ namespace shz
 		virtual void SHZ_CALL_TYPE GetBytecode(const void** ppBytecode,
 			uint64& Size) const override final
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			if (m_pShaderByteCode)
 			{
 				*ppBytecode = m_pShaderByteCode->GetConstDataPtr();
@@ -179,7 +179,7 @@ namespace shz
 
 		const std::shared_ptr<const ShaderResourcesType>& GetShaderResources() const
 		{
-			DEV_CHECK_ERR(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
+			ASSERT(!this->IsCompiling(), "Shader resources are not available until compilation is complete. Use GetStatus() to check the shader status.");
 			return m_pShaderResources;
 		}
 

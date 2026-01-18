@@ -110,7 +110,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 		}
 	}
 
@@ -123,7 +123,7 @@ namespace shz
 	{
 		if (ppInterface == nullptr)
 			return;
-		DEV_CHECK_ERR(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
+		ASSERT(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
 		*ppInterface = nullptr;
 
 		if (IID == IID_InternalImpl || IID == IID_PipelineState || IID == IID_DeviceObject || IID == IID_Unknown)
@@ -210,7 +210,7 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("The number of resource signatures in old pipeline (", SrcSignCount, ") does not match the number of signatures in new pipeline (", DstSignCount, ")");
+			ASSERT(false, "The number of resource signatures in old pipeline (", SrcSignCount, ") does not match the number of signatures in new pipeline (", DstSignCount, ")");
 		}
 		m_pOldPipeline.Release();
 	}
@@ -266,7 +266,7 @@ namespace shz
 			return Reload<TilePipelineStateCreateInfo>(ReloadGraphicsPipeline, pUserData);
 
 		default:
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 			return false;
 		}
 	}

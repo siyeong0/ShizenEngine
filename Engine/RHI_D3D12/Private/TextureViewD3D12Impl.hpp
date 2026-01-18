@@ -64,13 +64,13 @@ namespace shz
 
 		D3D12_CPU_DESCRIPTOR_HANDLE GetMipLevelUAV(uint32 Mip)
 		{
-			VERIFY_EXPR((m_Desc.Flags & TEXTURE_VIEW_FLAG_ALLOW_MIP_MAP_GENERATION) != 0 && m_MipGenerationDescriptors != nullptr && Mip < m_Desc.NumMipLevels);
+			ASSERT_EXPR((m_Desc.Flags & TEXTURE_VIEW_FLAG_ALLOW_MIP_MAP_GENERATION) != 0 && m_MipGenerationDescriptors != nullptr && Mip < m_Desc.NumMipLevels);
 			return m_MipGenerationDescriptors[1].GetCpuHandle(Mip);
 		}
 
 		D3D12_CPU_DESCRIPTOR_HANDLE GetTexArraySRV()
 		{
-			VERIFY_EXPR((m_Desc.Flags & TEXTURE_VIEW_FLAG_ALLOW_MIP_MAP_GENERATION) != 0 && m_MipGenerationDescriptors != nullptr);
+			ASSERT_EXPR((m_Desc.Flags & TEXTURE_VIEW_FLAG_ALLOW_MIP_MAP_GENERATION) != 0 && m_MipGenerationDescriptors != nullptr);
 			return m_MipGenerationDescriptors[0].GetCpuHandle();
 		}
 

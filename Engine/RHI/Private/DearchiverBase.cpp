@@ -35,7 +35,7 @@ namespace shz
 #define CHECK_UNPACK_PARAMATER(Expr, ...)   \
     do                                      \
     {                                       \
-        DEV_CHECK_ERR(Expr, ##__VA_ARGS__); \
+        ASSERT(Expr, ##__VA_ARGS__); \
         if (!(Expr))                        \
             return false;                   \
     } while (false)
@@ -97,7 +97,7 @@ namespace shz
 
 	DearchiverBase::DeviceType DearchiverBase::GetArchiveDeviceType(const IRenderDevice* pDevice)
 	{
-		VERIFY_EXPR(pDevice != nullptr);
+		ASSERT_EXPR(pDevice != nullptr);
 		const RENDER_DEVICE_TYPE Type = pDevice->GetDeviceInfo().Type;
 		return RenderDeviceTypeToArchiveDeviceType(Type);
 	}
@@ -151,8 +151,8 @@ namespace shz
 	template <typename ResType>
 	bool DearchiverBase::NamedResourceCache<ResType>::Get(ResourceType Type, const char* Name, ResType** ppResource)
 	{
-		VERIFY_EXPR(Name != nullptr && Name[0] != '\0');
-		VERIFY_EXPR(ppResource != nullptr && *ppResource == nullptr);
+		ASSERT_EXPR(Name != nullptr && Name[0] != '\0');
+		ASSERT_EXPR(ppResource != nullptr && *ppResource == nullptr);
 		*ppResource = nullptr;
 
 		std::unique_lock<std::mutex> Lock{ m_Mtx };
@@ -172,8 +172,8 @@ namespace shz
 	template <typename ResType>
 	void DearchiverBase::NamedResourceCache<ResType>::Set(ResourceType Type, const char* Name, ResType* pResource)
 	{
-		VERIFY_EXPR(Name != nullptr && Name[0] != '\0');
-		VERIFY_EXPR(pResource != nullptr);
+		ASSERT_EXPR(Name != nullptr && Name[0] != '\0');
+		ASSERT_EXPR(pResource != nullptr);
 
 		std::unique_lock<std::mutex> Lock{ m_Mtx };
 		m_Map.emplace(NamedResourceKey{ Type, Name, /*CopyName = */ true }, pResource);
@@ -255,7 +255,7 @@ namespace shz
 	template <>
 	bool DearchiverBase::UnpackPSORenderPass<GraphicsPipelineStateCreateInfo>(PSOData<GraphicsPipelineStateCreateInfo>& PSO, IRenderDevice* pRenderDevice)
 	{
-		VERIFY_EXPR(pRenderDevice != nullptr);
+		ASSERT_EXPR(pRenderDevice != nullptr);
 		if (PSO.RenderPassName == nullptr || *PSO.RenderPassName == 0)
 			return true;
 
@@ -275,7 +275,7 @@ namespace shz
 		const uint32 ResourceSignaturesCount = PSO.CreateInfo.ResourceSignaturesCount;
 		if (ResourceSignaturesCount == 0)
 		{
-			UNEXPECTED("PSO must have at least one resource signature (including PSOs that use implicit signature)");
+			ASSERT(false, "PSO must have at least one resource signature (including PSOs that use implicit signature)");
 			return true;
 		}
 		IPipelineResourceSignature** const ppResourceSignatures = PSO.Allocator.template Allocate<IPipelineResourceSignature*>(ResourceSignaturesCount);
@@ -305,10 +305,10 @@ namespace shz
 
 	inline void AssignShader(IShader*& pDstShader, IShader* pSrcShader, SHADER_TYPE ExpectedType)
 	{
-		VERIFY_EXPR(pSrcShader != nullptr);
-		VERIFY_EXPR(pSrcShader->GetDesc().ShaderType == ExpectedType);
+		ASSERT_EXPR(pSrcShader != nullptr);
+		ASSERT_EXPR(pSrcShader->GetDesc().ShaderType == ExpectedType);
 
-		VERIFY(pDstShader == nullptr, "Non-null ", GetShaderTypeLiteralName(pDstShader->GetDesc().ShaderType), " has already been assigned. This might be a bug.");
+		ASSERT(pDstShader == nullptr, "Non-null ", GetShaderTypeLiteralName(pDstShader->GetDesc().ShaderType), " has already been assigned. This might be a bug.");
 		pDstShader = pSrcShader;
 	}
 
@@ -339,14 +339,14 @@ namespace shz
 	template <>
 	void DearchiverBase::PSOData<ComputePipelineStateCreateInfo>::AssignShaders()
 	{
-		VERIFY(Shaders.size() == 1, "Compute pipeline must have one shader");
+		ASSERT(Shaders.size() == 1, "Compute pipeline must have one shader");
 		AssignShader(CreateInfo.pCS, Shaders[0], SHADER_TYPE_COMPUTE);
 	}
 
 	template <>
 	void DearchiverBase::PSOData<TilePipelineStateCreateInfo>::AssignShaders()
 	{
-		VERIFY(Shaders.size() == 1, "Tile pipeline must have one shader");
+		ASSERT(Shaders.size() == 1, "Tile pipeline must have one shader");
 		AssignShader(CreateInfo.pTS, Shaders[0], SHADER_TYPE_TILE);
 	}
 
@@ -360,7 +360,7 @@ namespace shz
 					const_cast<IShader*&>(inoutShader) = Shaders[ShaderIndex];
 				else
 				{
-					VERIFY(ShaderIndex == ~0u, "Failed to remap shader");
+					ASSERT(ShaderIndex == ~0u, "Failed to remap shader");
 					const_cast<IShader*&>(inoutShader) = nullptr;
 				}
 			};
@@ -413,7 +413,7 @@ namespace shz
 		IRenderDevice* pDevice)
 	{
 		const auto& pObjArchive = Archive.pObjArchive;
-		VERIFY_EXPR(pObjArchive);
+		ASSERT_EXPR(pObjArchive);
 		const DeviceType      DevType = GetArchiveDeviceType(pDevice);
 		const SerializedData& ShaderIdxData = pObjArchive->GetDeviceSpecificData(PSO.ArchiveResType, PSO.CreateInfo.PSODesc.Name, DevType);
 		if (!ShaderIdxData)
@@ -429,7 +429,7 @@ namespace shz
 				LOG_ERROR_MESSAGE("Failed to deserialize PSO shader indices. Archive file may be corrupted or invalid.");
 				return false;
 			}
-			VERIFY(Ser.IsEnded(), "No other data besides shader indices is expected");
+			ASSERT(Ser.IsEnded(), "No other data besides shader indices is expected");
 		}
 
 		ShaderCacheData& ShaderCache = Archive.CachedShaders[static_cast<size_t>(DevType)];
@@ -465,7 +465,7 @@ namespace shz
 						LOG_ERROR_MESSAGE("Failed to deserialize shader create info. Archive file may be corrupted or invalid.");
 						return false;
 					}
-					VERIFY_EXPR(ShaderSer.IsEnded());
+					ASSERT_EXPR(ShaderSer.IsEnded());
 				}
 
 				if ((PSO.InternalCI.Flags & PSO_CREATE_INTERNAL_FLAG_NO_SHADER_REFLECTION) != 0)
@@ -490,8 +490,8 @@ namespace shz
 
 	DearchiverBase::ArchiveData* DearchiverBase::FindArchive(ResourceType ResType, const char* ResName)
 	{
-		VERIFY_EXPR(ResType != ResourceType::Undefined);
-		VERIFY_EXPR(ResName != nullptr);
+		ASSERT_EXPR(ResType != ResourceType::Undefined);
+		ASSERT_EXPR(ResName != nullptr);
 
 		const auto archive_idx_it = m_ResNameToArchiveIdx.find(NamedResourceKey{ ResType, ResName });
 		if (archive_idx_it == m_ResNameToArchiveIdx.end())
@@ -500,7 +500,7 @@ namespace shz
 		ArchiveData& Archive = m_Archives[archive_idx_it->second];
 		if (!Archive.pObjArchive)
 		{
-			UNEXPECTED("Null object archives should never be added to the list. This is a bug.");
+			ASSERT(false, "Null object archives should never be added to the list. This is a bug.");
 			return nullptr;
 		}
 
@@ -594,7 +594,7 @@ namespace shz
 	template <typename CreateInfoType>
 	void DearchiverBase::UnpackPipelineStateImpl(const PipelineStateUnpackInfo& UnpackInfo, IPipelineState** ppPSO)
 	{
-		VERIFY_EXPR(UnpackInfo.pDevice != nullptr);
+		ASSERT_EXPR(UnpackInfo.pDevice != nullptr);
 
 		constexpr auto ResType = PSOData<CreateInfoType>::ArchiveResType;
 
@@ -763,7 +763,7 @@ namespace shz
 			return;
 
 		const auto& pObjArchive = pArchiveData->pObjArchive;
-		VERIFY_EXPR(pObjArchive);
+		ASSERT_EXPR(pObjArchive);
 
 		const DeviceType      DevType = GetArchiveDeviceType(UnpackInfo.pDevice);
 		const SerializedData& ShaderIdxData = pObjArchive->GetDeviceSpecificData(ResType, UnpackInfo.Name, DevType);
@@ -778,7 +778,7 @@ namespace shz
 				LOG_ERROR_MESSAGE("Failed to deserialize compiled shader index. Archive file may be corrupted or invalid.");
 				return;
 			}
-			VERIFY_EXPR(Ser.IsEnded());
+			ASSERT_EXPR(Ser.IsEnded());
 		}
 
 		const SerializedData& SerializedShader = pObjArchive->GetSerializedShader(DevType, Idx);
@@ -793,7 +793,7 @@ namespace shz
 				LOG_ERROR_MESSAGE("Failed to deserialize shader create info. Archive file may be corrupted or invalid.");
 				return;
 			}
-			VERIFY_EXPR(Ser.IsEnded());
+			ASSERT_EXPR(Ser.IsEnded());
 		}
 
 		if (!ModifyShaderDesc(ShaderCI.Desc, UnpackInfo))
@@ -825,7 +825,7 @@ namespace shz
 
 		*ppRP = nullptr;
 
-		VERIFY_EXPR(UnpackInfo.pDevice != nullptr);
+		ASSERT_EXPR(UnpackInfo.pDevice != nullptr);
 		// Do not cache modified render passes.
 		if (UnpackInfo.ModifyRenderPassDesc == nullptr)
 		{
@@ -841,7 +841,7 @@ namespace shz
 			return;
 
 		const auto& pObjArchive = pArchiveData->pObjArchive;
-		VERIFY_EXPR(pObjArchive);
+		ASSERT_EXPR(pObjArchive);
 
 		RPData RP{ GetRawAllocator() };
 		if (!pArchiveData->pObjArchive->LoadResourceCommonData(RPData::ArchiveResType, UnpackInfo.Name, RP))
@@ -860,10 +860,10 @@ namespace shz
 	{
 		if (ppArchive == nullptr)
 		{
-			DEV_ERROR("ppArchive must not be null");
+			ASSERT(false, "ppArchive must not be null");
 			return false;
 		}
-		DEV_CHECK_ERR(*ppArchive == nullptr, "*ppArchive must be null - make sure you are not overwriting "
+		ASSERT(*ppArchive == nullptr, "*ppArchive must be null - make sure you are not overwriting "
 			"reference to an existing object as this will cause memory leaks.");
 
 		try

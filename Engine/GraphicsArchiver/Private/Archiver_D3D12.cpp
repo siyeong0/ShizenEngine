@@ -160,7 +160,7 @@ namespace shz
 				m_pSerializationDevice->GetD3D12Properties().pDxCompiler);
 		}
 
-		VERIFY_EXPR(m_Data.Shaders[static_cast<size_t>(DeviceType::Direct3D12)].empty());
+		ASSERT_EXPR(m_Data.Shaders[static_cast<size_t>(DeviceType::Direct3D12)].empty());
 		for (size_t j = 0; j < ShaderStagesD3D12.size(); ++j)
 		{
 			const PipelineStateD3D12Impl::ShaderStageInfo& Stage = ShaderStagesD3D12[j];

@@ -91,7 +91,7 @@ ShaderResourceCacheD3D12::MemoryRequirements ShaderResourceCacheD3D12::GetMemory
 
 size_t ShaderResourceCacheD3D12::AllocateMemory(IMemoryAllocator& MemAllocator)
 {
-    VERIFY(!m_pMemory, "Memory has already been allocated");
+    ASSERT(!m_pMemory, "Memory has already been allocated");
 
     const size_t MemorySize =
         (m_NumTables * sizeof(RootTable) +
@@ -123,13 +123,13 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator& MemAllocator,
                                           uint32            NumTables,
                                           const uint32      TableSizes[])
 {
-    VERIFY(GetContentType() == ResourceCacheContentType::Signature,
+    ASSERT(GetContentType() == ResourceCacheContentType::Signature,
            "This method should be called to initialize the cache to store resources of a pipeline resource signature");
 
-    DEV_CHECK_ERR(NumTables <= MaxRootTables, "The number of root tables (", NumTables, ") exceeds maximum allowed value (", MaxRootTables, ").");
+    ASSERT(NumTables <= MaxRootTables, "The number of root tables (", NumTables, ") exceeds maximum allowed value (", MaxRootTables, ").");
 
     m_NumTables = static_cast<decltype(m_NumTables)>(NumTables);
-    VERIFY_EXPR(m_NumTables == NumTables);
+    ASSERT_EXPR(m_NumTables == NumTables);
 
     m_TotalResourceCount = 0;
     for (uint32 t = 0; t < m_NumTables; ++t)
@@ -145,7 +145,7 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator& MemAllocator,
         new (&GetRootTable(t)) RootTable{TableSizes[t], TableSizes[t] > 0 ? &GetResource(ResIdx) : nullptr, false};
         ResIdx += TableSizes[t];
     }
-    VERIFY_EXPR(ResIdx == m_TotalResourceCount);
+    ASSERT_EXPR(ResIdx == m_TotalResourceCount);
 }
 
 
@@ -153,23 +153,23 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
                                           RenderDeviceD3D12Impl*   pDevice,
                                           const RootParamsManager& RootParams)
 {
-    VERIFY(GetContentType() == ResourceCacheContentType::SRB,
+    ASSERT(GetContentType() == ResourceCacheContentType::SRB,
            "This method should be called to initialize the cache to store resources of an SRB");
 
     const MemoryRequirements MemReq = GetMemoryRequirements(RootParams);
 
-    DEV_CHECK_ERR(MemReq.NumTables <= MaxRootTables, "The number of root tables (", MemReq.NumTables, ") exceeds maximum allowed value (", MaxRootTables, ").");
+    ASSERT(MemReq.NumTables <= MaxRootTables, "The number of root tables (", MemReq.NumTables, ") exceeds maximum allowed value (", MaxRootTables, ").");
 
     m_NumTables = static_cast<decltype(m_NumTables)>(MemReq.NumTables);
-    VERIFY_EXPR(m_NumTables == MemReq.NumTables);
+    ASSERT_EXPR(m_NumTables == MemReq.NumTables);
 
     m_TotalResourceCount = MemReq.TotalResources;
 
     m_NumDescriptorAllocations = static_cast<decltype(m_NumDescriptorAllocations)>(MemReq.NumDescriptorAllocations);
-    VERIFY_EXPR(m_NumDescriptorAllocations == MemReq.NumDescriptorAllocations);
+    ASSERT_EXPR(m_NumDescriptorAllocations == MemReq.NumDescriptorAllocations);
 
     const size_t MemSize = AllocateMemory(MemAllocator);
-    VERIFY_EXPR(MemSize == MemReq.TotalSize);
+    ASSERT_EXPR(MemSize == MemReq.TotalSize);
 
 #ifdef SHZ_DEBUG
     std::vector<bool> RootTableInitFlags(MemReq.NumTables);
@@ -181,11 +181,11 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
     for (uint32 i = 0; i < RootParams.GetNumRootTables(); ++i)
     {
         const RootParameter& RootTbl = RootParams.GetRootTable(i);
-        VERIFY(!RootTableInitFlags[RootTbl.RootIndex], "Root table at index ", RootTbl.RootIndex, " has already been initialized.");
-        VERIFY_EXPR(RootTbl.TableOffsetInGroupAllocation != RootParameter::InvalidTableOffsetInGroupAllocation);
+        ASSERT(!RootTableInitFlags[RootTbl.RootIndex], "Root table at index ", RootTbl.RootIndex, " has already been initialized.");
+        ASSERT_EXPR(RootTbl.TableOffsetInGroupAllocation != RootParameter::InvalidTableOffsetInGroupAllocation);
 
         const uint32 TableSize = RootTbl.GetDescriptorTableSize();
-        VERIFY(TableSize > 0, "Unexpected empty descriptor table");
+        ASSERT(TableSize > 0, "Unexpected empty descriptor table");
 
         new (&GetRootTable(RootTbl.RootIndex)) RootTable{
             TableSize,
@@ -203,9 +203,9 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
     for (uint32 i = 0; i < RootParams.GetNumRootViews(); ++i)
     {
         const RootParameter& RootView = RootParams.GetRootView(i);
-        VERIFY(!RootTableInitFlags[RootView.RootIndex], "Root table at index ", RootView.RootIndex, " has already been initialized.");
-        VERIFY_EXPR(RootView.TableOffsetInGroupAllocation == RootParameter::InvalidTableOffsetInGroupAllocation);
-        VERIFY_EXPR((RootView.d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_CBV ||
+        ASSERT(!RootTableInitFlags[RootView.RootIndex], "Root table at index ", RootView.RootIndex, " has already been initialized.");
+        ASSERT_EXPR(RootView.TableOffsetInGroupAllocation == RootParameter::InvalidTableOffsetInGroupAllocation);
+        ASSERT_EXPR((RootView.d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_CBV ||
                      RootView.d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV ||
                      RootView.d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV));
 
@@ -220,12 +220,12 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
         RootTableInitFlags[RootView.RootIndex] = true;
 #endif
     }
-    VERIFY_EXPR(ResIdx == m_TotalResourceCount);
+    ASSERT_EXPR(ResIdx == m_TotalResourceCount);
 
 #ifdef SHZ_DEBUG
     for (size_t i = 0; i < RootTableInitFlags.size(); ++i)
     {
-        VERIFY(RootTableInitFlags[i], "Root table at index ", i, " has not been initialized");
+        ASSERT(RootTableInitFlags[i], "Root table at index ", i, " has not been initialized");
     }
 #endif
 
@@ -241,10 +241,10 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
             int8&  AllocationIndex     = m_AllocationIndex[d3d12HeapType][GroupType];
             if (TotalTableResources != 0)
             {
-                VERIFY_EXPR(AllocationIndex == -1);
+                ASSERT_EXPR(AllocationIndex == -1);
                 AllocationIndex                      = static_cast<int8>(AllocationCount++);
                 DescriptorHeapAllocation& Allocation = m_DescriptorAllocations[AllocationIndex];
-                VERIFY_EXPR(Allocation.IsNull());
+                ASSERT_EXPR(Allocation.IsNull());
 
                 if (GroupType == ROOT_PARAMETER_GROUP_STATIC_MUTABLE)
                 {
@@ -258,10 +258,10 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
                 }
                 else
                 {
-                    UNEXPECTED("Unexpected root parameter group type");
+                    ASSERT(false, "Unexpected root parameter group type");
                 }
 
-                DEV_CHECK_ERR(!Allocation.IsNull(),
+                ASSERT(!Allocation.IsNull(),
                               "Failed to allocate ", TotalTableResources, ' ',
                               (GroupType == ROOT_PARAMETER_GROUP_STATIC_MUTABLE ? "GPU-visible" : "CPU-only"), ' ',
                               (d3d12HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? "CBV/SRV/UAV" : "Sampler"),
@@ -275,7 +275,7 @@ void ShaderResourceCacheD3D12::Initialize(IMemoryAllocator&        MemAllocator,
             }
         }
     }
-    VERIFY_EXPR(AllocationCount == m_NumDescriptorAllocations);
+    ASSERT_EXPR(AllocationCount == m_NumDescriptorAllocations);
 }
 
 ShaderResourceCacheD3D12::~ShaderResourceCacheD3D12()
@@ -315,7 +315,7 @@ const ShaderResourceCacheD3D12::Resource& ShaderResourceCacheD3D12::SetResource(
                     break;
 
                 default:
-                    UNEXPECTED("Only constant buffers and buffer SRVs/UAVs can be bound as root views.");
+                    ASSERT(false, "Only constant buffers and buffer SRVs/UAVs can be bound as root views.");
                     break;
             }
         }
@@ -357,7 +357,7 @@ const ShaderResourceCacheD3D12::Resource& ShaderResourceCacheD3D12::SetResource(
             }
             if (pBuffer != nullptr && pBuffer->GetDesc().Usage == USAGE_DYNAMIC)
             {
-                DEV_CHECK_ERR(pBuffer->GetD3D12Resource() != nullptr, "Dynamic buffers that don't have backing d3d12 resource must be bound as root views");
+                ASSERT(pBuffer->GetD3D12Resource() != nullptr, "Dynamic buffers that don't have backing d3d12 resource must be bound as root views");
             }
         }
 #endif
@@ -379,9 +379,9 @@ void ShaderResourceCacheD3D12::SetBufferDynamicOffset(uint32 RootIndex,
                                                       uint32 BufferDynamicOffset)
 {
     RootTable& Tbl = GetRootTable(RootIndex);
-    VERIFY(Tbl.IsRootView(), "Dynamic offsets may only be set for root views");
+    ASSERT(Tbl.IsRootView(), "Dynamic offsets may only be set for root views");
     Resource& Res = Tbl.GetResource(OffsetFromTableStart);
-    VERIFY_EXPR(Res.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER ||
+    ASSERT_EXPR(Res.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER ||
                 Res.Type == SHADER_RESOURCE_TYPE_BUFFER_SRV);
     Res.BufferDynamicOffset = BufferDynamicOffset;
 }
@@ -408,10 +408,10 @@ const ShaderResourceCacheD3D12::Resource& ShaderResourceCacheD3D12::CopyResource
             }
             else
             {
-                VERIFY(DstRes.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, "Null CPU descriptor is only allowed for constant buffers");
+                ASSERT(DstRes.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER, "Null CPU descriptor is only allowed for constant buffers");
                 const BufferD3D12Impl* pBuffer = DstRes.pObject.ConstPtr<BufferD3D12Impl>();
-                VERIFY(DstRes.BufferRangeSize < pBuffer->GetDesc().Size, "Null CPU descriptor is only allowed for partial views of constant buffers");
-                VERIFY(DstRes.BufferRangeSize < D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16, "Constant buffer range must not exceed 64Kb");
+                ASSERT(DstRes.BufferRangeSize < pBuffer->GetDesc().Size, "Null CPU descriptor is only allowed for partial views of constant buffers");
+                ASSERT(DstRes.BufferRangeSize < D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16, "Constant buffer range must not exceed 64Kb");
                 pBuffer->CreateCBV(DstDescrHandle, DstRes.BufferBaseOffset, DstRes.BufferRangeSize);
             }
         }
@@ -424,14 +424,14 @@ const ShaderResourceCacheD3D12::Resource& ShaderResourceCacheD3D12::CopyResource
 #ifdef SHZ_DEBUG
 void ShaderResourceCacheD3D12::DbgValidateDynamicBuffersMask() const
 {
-    VERIFY_EXPR((m_DynamicRootBuffersMask & m_NonDynamicRootBuffersMask) == 0);
+    ASSERT_EXPR((m_DynamicRootBuffersMask & m_NonDynamicRootBuffersMask) == 0);
     for (uint32 i = 0; i < GetNumRootTables(); ++i)
     {
         const RootTable& Tbl              = GetRootTable(i);
         const uint64     DynamicBufferBit = uint64{1} << uint64{i};
         if (Tbl.IsRootView())
         {
-            VERIFY_EXPR(Tbl.GetSize() == 1);
+            ASSERT_EXPR(Tbl.GetSize() == 1);
             const Resource& Res = Tbl.GetResource(0);
 
             const BufferD3D12Impl* pBuffer = nullptr;
@@ -449,7 +449,7 @@ void ShaderResourceCacheD3D12::DbgValidateDynamicBuffersMask() const
                         break;
 
                     default:
-                        UNEXPECTED("Only constant buffers and buffer SRVs/UAVs can be bound as root views.");
+                        ASSERT(false, "Only constant buffers and buffer SRVs/UAVs can be bound as root views.");
                         break;
                 }
             }
@@ -462,21 +462,21 @@ void ShaderResourceCacheD3D12::DbgValidateDynamicBuffersMask() const
                     (BuffDesc.Usage == USAGE_DYNAMIC) ||
                     (Res.BufferRangeSize != 0 && Res.BufferRangeSize < BuffDesc.Size);
 
-                VERIFY(((m_DynamicRootBuffersMask & DynamicBufferBit) != 0) == IsDynamicBuffer,
+                ASSERT(((m_DynamicRootBuffersMask & DynamicBufferBit) != 0) == IsDynamicBuffer,
                        "Incorrect bit set in the dynamic buffer mask");
-                VERIFY(((m_NonDynamicRootBuffersMask & DynamicBufferBit) != 0) == !IsDynamicBuffer,
+                ASSERT(((m_NonDynamicRootBuffersMask & DynamicBufferBit) != 0) == !IsDynamicBuffer,
                        "Incorrect bit set in the non-dynamic buffer mask");
             }
             else
             {
-                VERIFY((m_DynamicRootBuffersMask & DynamicBufferBit) == 0, "Bit must not be set when there is no buffer.");
-                VERIFY((m_NonDynamicRootBuffersMask & DynamicBufferBit) == 0, "Bit must not be set when there is no buffer.");
+                ASSERT((m_DynamicRootBuffersMask & DynamicBufferBit) == 0, "Bit must not be set when there is no buffer.");
+                ASSERT((m_NonDynamicRootBuffersMask & DynamicBufferBit) == 0, "Bit must not be set when there is no buffer.");
             }
         }
         else
         {
-            VERIFY((m_DynamicRootBuffersMask & DynamicBufferBit) == 0, "Dynamic buffer mask bit may only be set for root views");
-            VERIFY((m_NonDynamicRootBuffersMask & DynamicBufferBit) == 0, "Non-dynamic buffer mask bit may only be set for root views");
+            ASSERT((m_DynamicRootBuffersMask & DynamicBufferBit) == 0, "Dynamic buffer mask bit may only be set for root views");
+            ASSERT((m_NonDynamicRootBuffersMask & DynamicBufferBit) == 0, "Non-dynamic buffer mask bit may only be set for root views");
         }
     }
 }
@@ -560,8 +560,8 @@ void ShaderResourceCacheD3D12::Resource::TransitionResource(CommandContext& Ctx)
 
         default:
             // Resource is not bound
-            VERIFY(Type == SHADER_RESOURCE_TYPE_UNKNOWN, "Unexpected resource type");
-            VERIFY(pObject == nullptr && CPUDescriptorHandle.ptr == 0, "Bound resource is unexpected");
+            ASSERT(Type == SHADER_RESOURCE_TYPE_UNKNOWN, "Unexpected resource type");
+            ASSERT(pObject == nullptr && CPUDescriptorHandle.ptr == 0, "Bound resource is unexpected");
     }
 }
 
@@ -676,8 +676,8 @@ void ShaderResourceCacheD3D12::Resource::DvpVerifyResourceState()
 
         default:
             // Resource is not bound
-            VERIFY(Type == SHADER_RESOURCE_TYPE_UNKNOWN, "Unexpected resource type");
-            VERIFY(pObject == nullptr && CPUDescriptorHandle.ptr == 0, "Bound resource is unexpected");
+            ASSERT(Type == SHADER_RESOURCE_TYPE_UNKNOWN, "Unexpected resource type");
+            ASSERT(pObject == nullptr && CPUDescriptorHandle.ptr == 0, "Bound resource is unexpected");
     }
 }
 #endif // SHZ_DEBUG
@@ -700,7 +700,7 @@ void ShaderResourceCacheD3D12::TransitionResourceStates(CommandContext& Ctx, Sta
                 break;
 
             default:
-                UNEXPECTED("Unexpected mode");
+                ASSERT(false, "Unexpected mode");
         }
     }
 }

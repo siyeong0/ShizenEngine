@@ -88,15 +88,15 @@ namespace shz
 
 		uint32 GetDescriptorTableSize() const
 		{
-			VERIFY(d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+			ASSERT(d3d12RootParam.ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
 				"Incorrect parameter type: descriptor table is expected");
 
 			// All descriptors in the table are tightly packed, so the table size is given
 			// by the end of the last range
 			const D3D12_ROOT_DESCRIPTOR_TABLE& d3d12Tbl = d3d12RootParam.DescriptorTable;
-			VERIFY(d3d12Tbl.NumDescriptorRanges > 0, "Descriptor table must contain at least one range");
+			ASSERT(d3d12Tbl.NumDescriptorRanges > 0, "Descriptor table must contain at least one range");
 			const D3D12_DESCRIPTOR_RANGE& d3d12LastRange = d3d12Tbl.pDescriptorRanges[d3d12Tbl.NumDescriptorRanges - 1];
-			VERIFY(d3d12LastRange.NumDescriptors > 0, "The range must not be empty");
+			ASSERT(d3d12LastRange.NumDescriptors > 0, "The range must not be empty");
 			return d3d12LastRange.OffsetInDescriptorsFromTableStart + d3d12LastRange.NumDescriptors;
 		}
 
@@ -142,13 +142,13 @@ namespace shz
 
 		const RootParameter& GetRootTable(uint32 TableInd) const
 		{
-			VERIFY_EXPR(TableInd < m_NumRootTables);
+			ASSERT_EXPR(TableInd < m_NumRootTables);
 			return m_pRootTables[TableInd];
 		}
 
 		const RootParameter& GetRootView(uint32 ViewInd) const
 		{
-			VERIFY_EXPR(ViewInd < m_NumRootViews);
+			ASSERT_EXPR(ViewInd < m_NumRootViews);
 			return m_pRootViews[ViewInd];
 		}
 

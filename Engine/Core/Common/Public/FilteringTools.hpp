@@ -155,7 +155,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected texture address mode");
+			ASSERT(false, "Unexpected texture address mode");
 		}
 
 		return SampleInfo;
@@ -170,9 +170,9 @@ namespace shz
 	template <>
 	inline void _DbgVerifyFilterInfo<TEXTURE_ADDRESS_UNKNOWN>(const LinearTexFilterSampleInfo& FilterInfo, uint32 Width, const char* Direction, float u)
 	{
-		VERIFY(FilterInfo.i0 >= 0 && FilterInfo.i0 < static_cast<int32>(Width), "First ", Direction, " sample index (", FilterInfo.i0,
+		ASSERT(FilterInfo.i0 >= 0 && FilterInfo.i0 < static_cast<int32>(Width), "First ", Direction, " sample index (", FilterInfo.i0,
 			") is out of allowed range [0, ", Width - 1, "]. Correct sample coordinate (", u, ") or use one of the texture address modes.");
-		VERIFY(FilterInfo.i1 >= 0 && FilterInfo.i1 < static_cast<int32>(Width), "Second ", Direction, " sample index (", FilterInfo.i1,
+		ASSERT(FilterInfo.i1 >= 0 && FilterInfo.i1 < static_cast<int32>(Width), "Second ", Direction, " sample index (", FilterInfo.i1,
 			") is out of allowed range [0, ", Width - 1, "]. Correct sample coordinate (", u, ") or use one of the texture address modes.");
 	}
 #endif

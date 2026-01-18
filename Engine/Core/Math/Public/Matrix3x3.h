@@ -118,7 +118,7 @@ namespace shz
 		{
 			// General 3x3 inverse via adjugate.
 			const float32 det = Determinant();
-			ASSERT(std::fabs(det) > 1e-12f);
+			ASSERT(std::fabs(det) > 1e-12f, "Attempted to invert a matrix with zero determinant.");
 			const float32 invDet = 1.0f / det;
 
 			const float32 a = _m00, b = _m01, c = _m02;

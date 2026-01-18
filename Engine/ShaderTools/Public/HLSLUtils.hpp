@@ -33,7 +33,7 @@
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 #include "Engine/RHI/Interface/IShader.h"
 #include "Engine/Core/Common/Public/RefCountedObjectImpl.hpp"
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Memory/Public/DataBlobImpl.hpp"
 
 namespace shz

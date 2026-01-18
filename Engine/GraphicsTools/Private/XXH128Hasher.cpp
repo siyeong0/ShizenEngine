@@ -39,7 +39,7 @@ namespace shz
 	XXH128State::XXH128State()
 		:m_State{ XXH3_createState() }
 	{
-		VERIFY_EXPR(m_State != nullptr);
+		ASSERT_EXPR(m_State != nullptr);
 		XXH3_128bits_reset(m_State);
 	}
 
@@ -50,8 +50,8 @@ namespace shz
 
 	void XXH128State::UpdateRaw(const void* pData, uint64_t Size) noexcept
 	{
-		VERIFY_EXPR(pData != nullptr);
-		VERIFY_EXPR(Size != 0);
+		ASSERT_EXPR(pData != nullptr);
+		ASSERT_EXPR(Size != 0);
 		XXH3_128bits_update(m_State, pData, StaticCast<size_t>(Size));
 	}
 
@@ -79,7 +79,7 @@ namespace shz
 
 		if (ShaderCI.Source != nullptr || ShaderCI.FilePath != nullptr)
 		{
-			DEV_CHECK_ERR(ShaderCI.ByteCode == nullptr, "ShaderCI.ByteCode must be null when either Source or FilePath is specified");
+			ASSERT(ShaderCI.ByteCode == nullptr, "ShaderCI.ByteCode must be null when either Source or FilePath is specified");
 			ProcessShaderIncludes(ShaderCI, [this](const ShaderIncludePreprocessInfo& ProcessInfo) {
 				UpdateStr(ProcessInfo.Source, ProcessInfo.SourceLength);
 				});

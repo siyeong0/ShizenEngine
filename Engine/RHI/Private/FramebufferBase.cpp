@@ -83,7 +83,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
         // Metal backend has different implementation for ITextureView with shading rate view.
         if (IsMetal && ViewDesc.ViewType == TEXTURE_VIEW_SHADING_RATE)
         {
-            VERIFY_EXPR(Desc.ppAttachments[i]->GetTexture() == nullptr);
+            ASSERT_EXPR(Desc.ppAttachments[i]->GetTexture() == nullptr);
             continue;
         }
 
@@ -173,7 +173,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
             if (AttchRef.AttachmentIndex == ATTACHMENT_UNUSED)
                 continue;
 
-            VERIFY(AttchRef.AttachmentIndex < Desc.AttachmentCount,
+            ASSERT(AttchRef.AttachmentIndex < Desc.AttachmentCount,
                    "Input attachment index (", AttchRef.AttachmentIndex, ") must be less than the attachment count (",
                    Desc.AttachmentCount, ") as this is ensured by ValidateRenderPassDesc.");
 
@@ -206,7 +206,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
             if (AttchRef.AttachmentIndex == ATTACHMENT_UNUSED)
                 continue;
 
-            VERIFY(AttchRef.AttachmentIndex < Desc.AttachmentCount,
+            ASSERT(AttchRef.AttachmentIndex < Desc.AttachmentCount,
                    "Render target attachment index (", AttchRef.AttachmentIndex, ") must be less than the attachment count (",
                    Desc.AttachmentCount, ") as this is ensured by ValidateRenderPassDesc.");
 
@@ -251,7 +251,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
                 if (AttchRef.AttachmentIndex == ATTACHMENT_UNUSED)
                     continue;
 
-                VERIFY(AttchRef.AttachmentIndex < Desc.AttachmentCount,
+                ASSERT(AttchRef.AttachmentIndex < Desc.AttachmentCount,
                        "Resolve attachment index (", AttchRef.AttachmentIndex, ") must be less than the attachment count (",
                        Desc.AttachmentCount, ") as this is ensured by ValidateRenderPassDesc.");
 
@@ -294,7 +294,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
             const AttachmentReference& AttchRef = *Subpass.pDepthStencilAttachment;
             if (AttchRef.AttachmentIndex != ATTACHMENT_UNUSED)
             {
-                VERIFY(AttchRef.AttachmentIndex < Desc.AttachmentCount,
+                ASSERT(AttchRef.AttachmentIndex < Desc.AttachmentCount,
                        "Depth-stencil attachment index (", AttchRef.AttachmentIndex, ") must be less than the attachment count (",
                        Desc.AttachmentCount, ") as this is ensured by ValidateRenderPassDesc.");
 
@@ -342,7 +342,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
             const ShadingRateAttachment& AttchRef = *Subpass.pShadingRateAttachment;
             if (AttchRef.Attachment.AttachmentIndex != ATTACHMENT_UNUSED)
             {
-                VERIFY(AttchRef.Attachment.AttachmentIndex < Desc.AttachmentCount,
+                ASSERT(AttchRef.Attachment.AttachmentIndex < Desc.AttachmentCount,
                        "Shading rate attachment index (", AttchRef.Attachment.AttachmentIndex, ") must be less than the attachment count (",
                        Desc.AttachmentCount, ") as this is ensured by ValidateRenderPassDesc.");
 
@@ -366,7 +366,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
 
                 if (IsMetal)
                 {
-                    VERIFY_EXPR(pAttachment->GetTexture() == nullptr);
+                    ASSERT_EXPR(pAttachment->GetTexture() == nullptr);
                 }
                 else
                 {
@@ -388,7 +388,7 @@ void ValidateFramebufferDesc(const FramebufferDesc& Desc, IRenderDevice* pDevice
     const ShadingRateProperties& SRProps = pDevice->GetAdapterInfo().ShadingRate;
     if (!IsMetal && IsVRSEnabled && (SRProps.CapFlags & SHADING_RATE_CAP_FLAG_NON_SUBSAMPLED_RENDER_TARGET) == 0)
     {
-        VERIFY((SRProps.CapFlags & SHADING_RATE_CAP_FLAG_SUBSAMPLED_RENDER_TARGET) != 0,
+        ASSERT((SRProps.CapFlags & SHADING_RATE_CAP_FLAG_SUBSAMPLED_RENDER_TARGET) != 0,
                "One of NON_SUBSAMPLED_RENDER_TARGET or SUBSAMPLED_RENDER_TARGET caps must be presented if texture-based VRS is supported");
 
         for (uint32 i = 0; i < RPDesc.AttachmentCount; ++i)

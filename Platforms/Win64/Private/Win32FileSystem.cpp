@@ -27,8 +27,8 @@
 
 #include "pch.h"
 #include "Win32FileSystem.hpp"
-#include "Primitives/Errors.hpp"
-#include "Engine/Core/Common/Public/StringTools.hpp" // TODO: Replace with Platform-specific string conversion
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/StringTools.hpp"
 #include "Engine/Core/Common/Public/SearchRecursive.inl"
 
  // We can't use namespace Diligent before #including <Windows.h> because shz::INTERFACE_ID will conflict with windows InterfaceID
@@ -163,7 +163,7 @@ namespace shz
 
 				// BufferSize must include room for a terminating null character.
 				auto NumChars = GetCurrentDirectoryA(BufferSize, &CurrDir[0]);
-				VERIFY_EXPR(CurrDir.length() == NumChars);
+				ASSERT_EXPR(CurrDir.length() == NumChars);
 			}
 			return CurrDir;
 		}
@@ -230,7 +230,7 @@ namespace shz
 	WindowsFile::WindowsFile(const FileOpenAttribs& OpenAttribs)
 		: StandardFile{ OpenAttribs }
 	{
-		VERIFY_EXPR(m_pFile == nullptr);
+		ASSERT_EXPR(m_pFile == nullptr);
 		const auto ModeStr = GetOpenModeStr();
 
 		const WindowsPathHelper WndPath{ m_OpenAttribs.strFilePath };
@@ -290,7 +290,7 @@ namespace shz
 	{
 		if (strPath == nullptr || strPath[0] == '\0')
 		{
-			UNEXPECTED("Path must not be null or empty");
+			ASSERT(false, "Path must not be null or empty");
 			return false;
 		}
 
@@ -487,7 +487,7 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("Unknown file dialog flag (", Flag, ")");
+				ASSERT(false, "Unknown file dialog flag (", Flag, ")");
 			}
 			FileDialogFlags &= ~Flag;
 		}
@@ -525,7 +525,7 @@ namespace shz
 		auto hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&pDialog));
 		if (FAILED(hr))
 		{
-			UNEXPECTED("Failed to create File Open Dialog");
+			ASSERT(false, "Failed to create File Open Dialog");
 			return "";
 		}
 
@@ -590,7 +590,7 @@ namespace shz
 		auto        hr = SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, NULL, &Path);
 		if (SUCCEEDED(hr))
 		{
-			VERIFY_EXPR(Path != nullptr);
+			ASSERT_EXPR(Path != nullptr);
 			AppDataDir = NarrowString(Path);
 			if (!WindowsFileSystem::IsSlash(AppDataDir.back()))
 				AppDataDir.push_back(WindowsFileSystem::SlashSymbol);

@@ -113,7 +113,7 @@ namespace shz
 				size_t StringPoolSize = 0;
 				for (uint32 i = 0; i < InstanceCount; ++i)
 				{
-					VERIFY_EXPR(pInstances[i].InstanceName != nullptr);
+					ASSERT_EXPR(pInstances[i].InstanceName != nullptr);
 					StringPoolSize += StringPool::GetRequiredReserveSize(pInstances[i].InstanceName);
 				}
 
@@ -140,7 +140,7 @@ namespace shz
 						LOG_ERROR_AND_THROW("Instance name must be unique!");
 				}
 
-				VERIFY_EXPR(this->m_StringPool.GetRemainingSize() == 0);
+				ASSERT_EXPR(this->m_StringPool.GetRemainingSize() == 0);
 
 				InstanceOffset = InstanceOffset + (BindingMode == HIT_GROUP_BINDING_MODE_PER_TLAS ? HitGroupStride : 0) - 1;
 
@@ -172,7 +172,7 @@ namespace shz
 			const uint32                 HitGroupStride,
 			const HIT_GROUP_BINDING_MODE BindingMode) noexcept
 		{
-			VERIFY_EXPR(this->m_BuildInfo.InstanceCount == InstanceCount);
+			ASSERT_EXPR(this->m_BuildInfo.InstanceCount == InstanceCount);
 #ifdef SHZ_DEBUG
 			bool Changed = false;
 #endif
@@ -185,7 +185,7 @@ namespace shz
 
 				if (Iter == this->m_Instances.end())
 				{
-					UNEXPECTED("Failed to find instance with name '", Inst.InstanceName, "' in instances from the previous build");
+					ASSERT(false, "Failed to find instance with name '", Inst.InstanceName, "' in instances from the previous build");
 					return false;
 				}
 
@@ -236,7 +236,7 @@ namespace shz
 				this->m_Instances.emplace(NameCopy, SrcInst.second);
 			}
 
-			VERIFY_EXPR(this->m_StringPool.GetRemainingSize() == 0);
+			ASSERT_EXPR(this->m_StringPool.GetRemainingSize() == 0);
 
 #ifdef SHZ_DEBUG
 			this->m_DvpVersion.fetch_add(1);
@@ -246,7 +246,7 @@ namespace shz
 		// Implementation of ITopLevelAS::GetInstanceDesc().
 		virtual TLASInstanceDesc SHZ_CALL_TYPE GetInstanceDesc(const char* Name) const override final
 		{
-			VERIFY_EXPR(Name != nullptr && Name[0] != '\0');
+			ASSERT_EXPR(Name != nullptr && Name[0] != '\0');
 
 			TLASInstanceDesc Result = {};
 
@@ -277,7 +277,7 @@ namespace shz
 		// Implementation of ITopLevelAS::SetState().
 		virtual void SHZ_CALL_TYPE SetState(RESOURCE_STATE State) override final
 		{
-			VERIFY(State == RESOURCE_STATE_UNKNOWN || State == RESOURCE_STATE_BUILD_AS_READ || State == RESOURCE_STATE_BUILD_AS_WRITE || State == RESOURCE_STATE_RAY_TRACING,
+			ASSERT(State == RESOURCE_STATE_UNKNOWN || State == RESOURCE_STATE_BUILD_AS_READ || State == RESOURCE_STATE_BUILD_AS_WRITE || State == RESOURCE_STATE_RAY_TRACING,
 				"Unsupported state for top-level acceleration structure");
 			this->m_State = State;
 		}
@@ -301,8 +301,8 @@ namespace shz
 
 		bool CheckState(RESOURCE_STATE State) const
 		{
-			VERIFY((State & (State - 1)) == 0, "Single state is expected");
-			VERIFY(IsInKnownState(), "TLAS state is unknown");
+			ASSERT((State & (State - 1)) == 0, "Single state is expected");
+			ASSERT(IsInKnownState(), "TLAS state is unknown");
 			return (this->m_State & State) == State;
 		}
 
@@ -371,18 +371,18 @@ namespace shz
 				case HIT_GROUP_BINDING_MODE_PER_GEOMETRY:     InstanceOffset += Desc.pBLAS->GetActualGeometryCount() * HitGroupStride;                            break;
 				case HIT_GROUP_BINDING_MODE_PER_INSTANCE:     InstanceOffset += HitGroupStride;                                                                   break;
 				case HIT_GROUP_BINDING_MODE_PER_TLAS:         /* InstanceOffset is constant */                                                                  break;
-				case HIT_GROUP_BINDING_MODE_USER_DEFINED:     UNEXPECTED("TLAS_INSTANCE_OFFSET_AUTO is not compatible with HIT_GROUP_BINDING_MODE_USER_DEFINED"); break;
-				default:                                      UNEXPECTED("Unknown ray tracing shader binding mode");
+				case HIT_GROUP_BINDING_MODE_USER_DEFINED:     ASSERT(false, "TLAS_INSTANCE_OFFSET_AUTO is not compatible with HIT_GROUP_BINDING_MODE_USER_DEFINED"); break;
+				default:                                      ASSERT(false, "Unknown ray tracing shader binding mode");
 
 				}
 			}
 			else
 			{
-				VERIFY(BindingMode == HIT_GROUP_BINDING_MODE_USER_DEFINED, "BindingMode must be HIT_GROUP_BINDING_MODE_USER_DEFINED");
+				ASSERT(BindingMode == HIT_GROUP_BINDING_MODE_USER_DEFINED, "BindingMode must be HIT_GROUP_BINDING_MODE_USER_DEFINED");
 			}
 
 			constexpr uint32 MaxIndex = (1u << 24);
-			VERIFY(Desc.ContributionToHitGroupIndex < MaxIndex, "ContributionToHitGroupIndex must be less than ", MaxIndex);
+			ASSERT(Desc.ContributionToHitGroupIndex < MaxIndex, "ContributionToHitGroupIndex must be less than ", MaxIndex);
 		}
 
 	protected:

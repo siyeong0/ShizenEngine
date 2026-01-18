@@ -112,7 +112,7 @@ void TextureViewDesc_to_D3D_SRV_DESC(const TextureViewDesc& SRVDesc, D3D_SHADER_
             break;
 
         default:
-            UNEXPECTED("Unexpected view type");
+            ASSERT(false, "Unexpected view type");
     }
 }
 
@@ -174,7 +174,7 @@ void TextureViewDesc_to_D3D_RTV_DESC(const TextureViewDesc& RTVDesc, D3D_RENDER_
             break;
 
         default:
-            UNEXPECTED("Unexpected view type");
+            ASSERT(false, "Unexpected view type");
     }
 }
 
@@ -242,7 +242,7 @@ void TextureViewDesc_to_D3D_DSV_DESC(const TextureViewDesc& DSVDesc, D3D_DEPTH_S
             break;
 
         default:
-            UNEXPECTED("Unexpected view type");
+            ASSERT(false, "Unexpected view type");
     }
 }
 
@@ -286,14 +286,14 @@ void TextureViewDesc_to_D3D_UAV_DESC(const TextureViewDesc& UAVDesc, D3D_UNORDER
             break;
 
         default:
-            UNEXPECTED("Unexpected view type");
+            ASSERT(false, "Unexpected view type");
     }
 }
 
 template <typename D3D_UNORDERED_ACCESS_VIEW_DESC>
 void BufferViewDesc_to_D3D_SRV_DESC(const BufferDesc& BuffDesc, const BufferViewDesc& SRVDesc, D3D_UNORDERED_ACCESS_VIEW_DESC& d3dSRVDesc)
 {
-    VERIFY(SRVDesc.ViewType == BUFFER_VIEW_SHADER_RESOURCE, "Incorrect view type: shader resource is expected");
+    ASSERT(SRVDesc.ViewType == BUFFER_VIEW_SHADER_RESOURCE, "Incorrect view type: shader resource is expected");
 
     memset(&d3dSRVDesc, 0, sizeof(d3dSRVDesc));
     const BufferFormat& BuffFmt = SRVDesc.Format;
@@ -308,8 +308,8 @@ void BufferViewDesc_to_D3D_SRV_DESC(const BufferDesc& BuffDesc, const BufferView
 
     if (ElementByteStride != 0)
     {
-        DEV_CHECK_ERR((SRVDesc.ByteOffset % ElementByteStride) == 0, "Byte offset (", SRVDesc.ByteOffset, ") is not multiple of element byte stride (", ElementByteStride, ")");
-        DEV_CHECK_ERR((SRVDesc.ByteWidth % ElementByteStride) == 0, "Byte width (", SRVDesc.ByteWidth, ")is not multiple of element byte stride (", ElementByteStride, ")");
+        ASSERT((SRVDesc.ByteOffset % ElementByteStride) == 0, "Byte offset (", SRVDesc.ByteOffset, ") is not multiple of element byte stride (", ElementByteStride, ")");
+        ASSERT((SRVDesc.ByteWidth % ElementByteStride) == 0, "Byte width (", SRVDesc.ByteWidth, ")is not multiple of element byte stride (", ElementByteStride, ")");
         d3dSRVDesc.Buffer.FirstElement = StaticCast<UINT>(SRVDesc.ByteOffset / ElementByteStride);
         d3dSRVDesc.Buffer.NumElements  = StaticCast<UINT>(SRVDesc.ByteWidth / ElementByteStride);
     }
@@ -319,7 +319,7 @@ void BufferViewDesc_to_D3D_SRV_DESC(const BufferDesc& BuffDesc, const BufferView
 template <typename D3D_UNORDERED_ACCESS_VIEW_DESC>
 void BufferViewDesc_to_D3D_UAV_DESC(const BufferDesc& BuffDesc, const BufferViewDesc& UAVDesc, D3D_UNORDERED_ACCESS_VIEW_DESC& d3dUAVDesc)
 {
-    VERIFY(UAVDesc.ViewType == BUFFER_VIEW_UNORDERED_ACCESS, "Incorrect view type: unordered access is expected");
+    ASSERT(UAVDesc.ViewType == BUFFER_VIEW_UNORDERED_ACCESS, "Incorrect view type: unordered access is expected");
 
     memset(&d3dUAVDesc, 0, sizeof(d3dUAVDesc));
     const BufferFormat& BuffFmt = UAVDesc.Format;
@@ -334,8 +334,8 @@ void BufferViewDesc_to_D3D_UAV_DESC(const BufferDesc& BuffDesc, const BufferView
 
     if (ElementByteStride != 0)
     {
-        DEV_CHECK_ERR((UAVDesc.ByteOffset % ElementByteStride) == 0, "Byte offset (", UAVDesc.ByteOffset, ") is not multiple of element byte stride (", ElementByteStride, ")");
-        DEV_CHECK_ERR((UAVDesc.ByteWidth % ElementByteStride) == 0, "Byte width (", UAVDesc.ByteWidth, ")is not multiple of element byte stride (", ElementByteStride, ")");
+        ASSERT((UAVDesc.ByteOffset % ElementByteStride) == 0, "Byte offset (", UAVDesc.ByteOffset, ") is not multiple of element byte stride (", ElementByteStride, ")");
+        ASSERT((UAVDesc.ByteWidth % ElementByteStride) == 0, "Byte width (", UAVDesc.ByteWidth, ")is not multiple of element byte stride (", ElementByteStride, ")");
         d3dUAVDesc.Buffer.FirstElement = StaticCast<UINT>(UAVDesc.ByteOffset / ElementByteStride);
         d3dUAVDesc.Buffer.NumElements  = StaticCast<UINT>(UAVDesc.ByteWidth / ElementByteStride);
     }

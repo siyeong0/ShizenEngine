@@ -61,7 +61,7 @@ namespace shz
 			[&](const char* Path, size_t Len) //
 			{
 				String SearchPath{ Path, Len };
-				VERIFY_EXPR(!SearchPath.empty());
+				ASSERT_EXPR(!SearchPath.empty());
 				if (!FileSystem::IsSlash(SearchPath.back()))
 					SearchPath.push_back(FileSystem::SlashSymbol);
 				m_SearchDirectories.emplace_back(std::move(SearchPath));
@@ -121,8 +121,8 @@ namespace shz
 
 	void CreateDefaultShaderSourceStreamFactory(const Char* SearchDirectories, IShaderSourceInputStreamFactory** ppShaderSourceStreamFactory)
 	{
-		DEV_CHECK_ERR(ppShaderSourceStreamFactory != nullptr, "ppShaderSourceStreamFactory must not be null.");
-		DEV_CHECK_ERR(*ppShaderSourceStreamFactory == nullptr, "*ppShaderSourceStreamFactory is not null. Make sure the pointer is null to avoid memory leaks.");
+		ASSERT(ppShaderSourceStreamFactory != nullptr, "ppShaderSourceStreamFactory must not be null.");
+		ASSERT(*ppShaderSourceStreamFactory == nullptr, "*ppShaderSourceStreamFactory is not null. Make sure the pointer is null to avoid memory leaks.");
 
 		IMemoryAllocator& Allocator = GetRawAllocator();
 		DefaultShaderSourceStreamFactory* pStreamFactory =

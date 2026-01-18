@@ -145,7 +145,7 @@ namespace shz
 				}
 
 				ITextureView* pDepthAttachment = m_ppAttachments[Subpass.pDepthStencilAttachment->AttachmentIndex];
-				VERIFY_EXPR(pDepthAttachment != nullptr);
+				ASSERT_EXPR(pDepthAttachment != nullptr);
 
 				TextureViewDesc DSVDesc = pDepthAttachment->GetDesc();
 				if (DSVDesc.ViewType == TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL)
@@ -156,12 +156,12 @@ namespace shz
 				else
 				{
 					// Create read-only depth view for this attachment
-					VERIFY_EXPR(DSVDesc.ViewType == TEXTURE_VIEW_DEPTH_STENCIL);
+					ASSERT_EXPR(DSVDesc.ViewType == TEXTURE_VIEW_DEPTH_STENCIL);
 					DSVDesc.ViewType = TEXTURE_VIEW_READ_ONLY_DEPTH_STENCIL;
 					std::string ViewName = std::string{ DSVDesc.Name } + " (read-only)";
 					DSVDesc.Name = ViewName.c_str();
 					pDepthAttachment->GetTexture()->CreateView(DSVDesc, &m_ppReadOnlyDSVs[subpass]);
-					VERIFY_EXPR(m_ppReadOnlyDSVs[subpass] != nullptr);
+					ASSERT_EXPR(m_ppReadOnlyDSVs[subpass] != nullptr);
 				}
 			}
 		}
@@ -170,7 +170,7 @@ namespace shz
 		{
 			if (this->m_Desc.AttachmentCount > 0)
 			{
-				VERIFY_EXPR(m_ppAttachments != nullptr);
+				ASSERT_EXPR(m_ppAttachments != nullptr);
 				for (uint32 i = 0; i < this->m_Desc.AttachmentCount; ++i)
 				{
 					if (m_ppAttachments[i] != nullptr)
@@ -197,7 +197,7 @@ namespace shz
 
 		ITextureView* GetReadOnlyDSV(uint32 Subpass) const
 		{
-			VERIFY(Subpass < this->m_Desc.pRenderPass->GetDesc().SubpassCount, "Subpass index (", Subpass, ") is out of range.");
+			ASSERT(Subpass < this->m_Desc.pRenderPass->GetDesc().SubpassCount, "Subpass index (", Subpass, ") is out of range.");
 			return m_ppReadOnlyDSVs != nullptr ?
 				m_ppReadOnlyDSVs[Subpass] :
 				nullptr;

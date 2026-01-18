@@ -90,13 +90,13 @@ namespace shz
 
 		Version GetVersion() const
 		{
-			VERIFY(m_Loaded.load(), "DXCompiler library is not loaded");
+			ASSERT(m_Loaded.load(), "DXCompiler library is not loaded");
 			return m_Version;
 		}
 
 		ShaderVersion GetMaxShaderModel() const
 		{
-			VERIFY(m_Loaded.load(), "DXCompiler library is not loaded");
+			ASSERT(m_Loaded.load(), "DXCompiler library is not loaded");
 			return m_MaxShaderModel;
 		}
 

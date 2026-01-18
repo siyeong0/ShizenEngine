@@ -143,7 +143,7 @@ public:
     // Returns the number of free regions in the atlas.
     uint32 GetFreeRegionCount() const
     {
-        VERIFY_EXPR(m_FreeRegionsByWidth.size() == m_FreeRegionsByHeight.size());
+        ASSERT_EXPR(m_FreeRegionsByWidth.size() == m_FreeRegionsByHeight.size());
         return static_cast<uint32>(m_FreeRegionsByWidth.size());
     }
 
@@ -162,7 +162,7 @@ public:
     // Checks if the atlas is empty, i.e. if there are no allocated regions.
     bool IsEmpty() const
     {
-        VERIFY_EXPR(m_AllocatedRegions.empty() && (m_TotalFreeArea == uint64{m_Width} * uint64{m_Height}) ||
+        ASSERT_EXPR(m_AllocatedRegions.empty() && (m_TotalFreeArea == uint64{m_Width} * uint64{m_Height}) ||
                     !m_AllocatedRegions.empty() && (m_TotalFreeArea < uint64{m_Width} * uint64{m_Height}));
         return m_AllocatedRegions.empty();
     }
@@ -221,19 +221,19 @@ private:
         void MergeChildren();
         bool HasChildren() const
         {
-            VERIFY_EXPR(NumChildren == 0 && !Children || NumChildren != 0 && Children);
-            VERIFY(!IsAllocated || NumChildren == 0, "Allocated nodes can't have children");
+            ASSERT_EXPR(NumChildren == 0 && !Children || NumChildren != 0 && Children);
+            ASSERT(!IsAllocated || NumChildren == 0, "Allocated nodes can't have children");
             return NumChildren != 0;
         }
 
         const Node& Child(uint32 i) const
         {
-            VERIFY_EXPR(i < NumChildren);
+            ASSERT_EXPR(i < NumChildren);
             return Children[i];
         }
         Node& Child(uint32 i)
         {
-            VERIFY_EXPR(i < NumChildren);
+            ASSERT_EXPR(i < NumChildren);
             return Children[i];
         }
 

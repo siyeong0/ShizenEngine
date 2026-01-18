@@ -242,7 +242,7 @@ namespace shz
 		const auto& pObjArchive = m_Archives[archive_idx_it->second].pObjArchive;
 		if (!pObjArchive)
 		{
-			UNEXPECTED("Null object archives should never be added to the list. This is a bug.");
+			ASSERT(false, "Null object archives should never be added to the list. This is a bug.");
 			return {};
 		}
 
@@ -284,7 +284,7 @@ namespace shz
 			LOG_ERROR_MESSAGE("Failed to deserialize PRS internal data. Archive file may be corrupted or invalid.");
 			return {};
 		}
-		VERIFY_EXPR(Ser.IsEnded());
+		ASSERT_EXPR(Ser.IsEnded());
 
 		RenderDeviceImplType* pRenderDevice = ClassPtrCast<RenderDeviceImplType>(DeArchiveInfo.pDevice);
 		pRenderDevice->CreatePipelineResourceSignature(PRS.Desc, InternalData, &pSignature);

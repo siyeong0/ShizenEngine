@@ -55,7 +55,7 @@ public:
     // http://en.cppreference.com/w/cpp/thread/condition_variable
     void Trigger(bool NotifyAll = false, int SignalValue = 1)
     {
-        VERIFY(SignalValue != 0, "Signal value must not be zero");
+        ASSERT(SignalValue != 0, "Signal value must not be zero");
 
         //  The thread that intends to modify the variable has to
         //  * acquire a std::mutex (typically via std::lock_guard)
@@ -64,8 +64,8 @@ public:
         {
             // std::condition_variable works only with std::unique_lock<std::mutex>
             std::lock_guard<std::mutex> Lock{m_Mutex};
-            VERIFY(SignalValue != 0, "Signal value must not be 0");
-            VERIFY(m_SignaledValue.load() == 0 && m_NumThreadsAwaken.load() == 0, "Not all threads have been awaken since the signal was triggered last time, or the signal has not been reset");
+            ASSERT(SignalValue != 0, "Signal value must not be 0");
+            ASSERT(m_SignaledValue.load() == 0 && m_NumThreadsAwaken.load() == 0, "Not all threads have been awaken since the signal was triggered last time, or the signal has not been reset");
             m_SignaledValue.store(SignalValue);
         }
         // Unlocking is done before notifying, to avoid waking up the waiting
@@ -104,7 +104,7 @@ public:
         // fetch_add returns the original value immediately preceding the addition.
         if (AutoReset)
         {
-            VERIFY(NumThreadsWaiting > 0, "Number of waiting threads must not be 0 when auto resetting the signal");
+            ASSERT(NumThreadsWaiting > 0, "Number of waiting threads must not be 0 when auto resetting the signal");
             // Reset the signal while holding the mutex. If Trigger() is executed by another
             // thread, it will wait until we release the mutex
             if (NumThreadsAwaken == NumThreadsWaiting)

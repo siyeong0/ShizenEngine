@@ -88,7 +88,7 @@ namespace shz
 
 		FixedLinearAllocator& operator=(FixedLinearAllocator&& rhs) noexcept
 		{
-			VERIFY_EXPR(IsEmpty());
+			ASSERT_EXPR(IsEmpty());
 
 			m_pDataStart = rhs.m_pDataStart;
 			m_pCurrPtr = rhs.m_pCurrPtr;
@@ -140,21 +140,21 @@ namespace shz
 		template <typename Type>
 		NODISCARD Type* GetDataPtr() const noexcept
 		{
-			VERIFY(AlignDown(m_pDataStart, alignof(Type)) == m_pDataStart, "Data pointer is not aligned for the requested type");
+			ASSERT(AlignDown(m_pDataStart, alignof(Type)) == m_pDataStart, "Data pointer is not aligned for the requested type");
 			return reinterpret_cast<Type*>(m_pDataStart);
 		}
 
 		void AddSpace(size_t size, size_t alignment = 1) noexcept
 		{
-			VERIFY(m_pDataStart == nullptr, "Memory has already been allocated or assigned");
-			VERIFY(IsPowerOfTwo(alignment), "Alignment is not a power of two!");
+			ASSERT(m_pDataStart == nullptr, "Memory has already been allocated or assigned");
+			ASSERT(IsPowerOfTwo(alignment), "Alignment is not a power of two!");
 
 			if (size == 0)
 				return;
 
 			if (m_CurrAlignment == 0)
 			{
-				VERIFY(m_ReservedSize == 0, "This is expected to be a very first time the space is added");
+				ASSERT(m_ReservedSize == 0, "This is expected to be a very first time the space is added");
 				m_CurrAlignment = sizeof(void*);
 			}
 
@@ -197,22 +197,22 @@ namespace shz
 
 		void Reserve(size_t size)
 		{
-			VERIFY(m_pDataStart == nullptr, "Memory has already been allocated");
-			VERIFY(m_ReservedSize == 0, "Space has been added to the allocator and will be overridden");
+			ASSERT(m_pDataStart == nullptr, "Memory has already been allocated");
+			ASSERT(m_ReservedSize == 0, "Space has been added to the allocator and will be overridden");
 			m_ReservedSize = size;
 			Reserve();
 		}
 
 		void Reserve()
 		{
-			VERIFY(m_pDataStart == nullptr, "Memory has already been allocated");
-			VERIFY(m_pAllocator != nullptr, "Allocator must not be null");
+			ASSERT(m_pDataStart == nullptr, "Memory has already been allocated");
+			ASSERT(m_pAllocator != nullptr, "Allocator must not be null");
 			// Make sure the data size is at least sizeof(void*)-aligned
 			m_ReservedSize = AlignUp(m_ReservedSize, sizeof(void*));
 			if (m_ReservedSize > 0)
 			{
 				m_pDataStart = reinterpret_cast<uint8_t*>(m_pAllocator->Allocate(m_ReservedSize, "Raw memory for linear allocator", __FILE__, __LINE__));
-				VERIFY(m_pDataStart == AlignUp(m_pDataStart, sizeof(void*)), "Memory pointer must be at least sizeof(void*)-aligned");
+				ASSERT(m_pDataStart == AlignUp(m_pDataStart, sizeof(void*)), "Memory pointer must be at least sizeof(void*)-aligned");
 
 				m_pCurrPtr = m_pDataStart;
 			}
@@ -221,8 +221,8 @@ namespace shz
 
 		NODISCARD void* Allocate(size_t size, size_t alignment = 1)
 		{
-			VERIFY(size == 0 || m_pDataStart != nullptr, "Memory has not been allocated");
-			VERIFY(IsPowerOfTwo(alignment), "Alignment is not a power of two!");
+			ASSERT(size == 0 || m_pDataStart != nullptr, "Memory has not been allocated");
+			ASSERT(IsPowerOfTwo(alignment), "Alignment is not a power of two!");
 
 			if (size == 0)
 				return nullptr;
@@ -233,30 +233,30 @@ namespace shz
 			size_t dbgReservedSize = 0;
 			if (!m_DbgUsingExternalMemory)
 			{
-				VERIFY(m_DbgCurrAllocation < m_DbgAllocations.size(), "Allocation number exceed the number of allocations that were originally reserved.");
+				ASSERT(m_DbgCurrAllocation < m_DbgAllocations.size(), "Allocation number exceed the number of allocations that were originally reserved.");
 				const DbgAllocationInfo& CurrAllocation = m_DbgAllocations[m_DbgCurrAllocation++];
-				VERIFY(CurrAllocation.size == size, "Allocation size (", size, ") does not match the initially requested size (", CurrAllocation.size, ")");
-				VERIFY(CurrAllocation.alignment == alignment, "Allocation alignment (", alignment, ") does not match the initially requested alignment (", CurrAllocation.alignment, ")");
+				ASSERT(CurrAllocation.size == size, "Allocation size (", size, ") does not match the initially requested size (", CurrAllocation.size, ")");
+				ASSERT(CurrAllocation.alignment == alignment, "Allocation alignment (", alignment, ") does not match the initially requested alignment (", CurrAllocation.alignment, ")");
 				dbgReservedSize = CurrAllocation.reserved_size;
 			}
 			else
 			{
 				// Allocating in place in assigned memory
-				VERIFY_EXPR(m_DbgAllocations.empty());
+				ASSERT_EXPR(m_DbgAllocations.empty());
 			}
 #endif
 
-			VERIFY(AlignUp(m_pCurrPtr, m_CurrAlignment) == m_pCurrPtr, "Current pointer is not aligned as expected");
+			ASSERT(AlignUp(m_pCurrPtr, m_CurrAlignment) == m_pCurrPtr, "Current pointer is not aligned as expected");
 			m_pCurrPtr = AlignUp(m_pCurrPtr, alignment);
 			m_CurrAlignment = alignment;
 
-			VERIFY(m_DbgUsingExternalMemory || m_pCurrPtr + size <= m_pDataStart + dbgReservedSize,
+			ASSERT(m_DbgUsingExternalMemory || m_pCurrPtr + size <= m_pDataStart + dbgReservedSize,
 				"Allocation size exceeds the initially reserved space. This is likely a bug.");
 
 			uint8_t* ptr = m_pCurrPtr;
 			m_pCurrPtr += size;
 
-			VERIFY(m_pCurrPtr <= m_pDataStart + m_ReservedSize, "Allocation size exceeds the reserved space");
+			ASSERT(m_pCurrPtr <= m_pDataStart + m_ReservedSize, "Allocation size exceeds the reserved space");
 
 			return ptr;
 		}
@@ -338,7 +338,7 @@ namespace shz
 
 		NODISCARD size_t GetCurrentSize() const
 		{
-			VERIFY(m_pDataStart != nullptr, "Memory has not been allocated");
+			ASSERT(m_pDataStart != nullptr, "Memory has not been allocated");
 			return static_cast<size_t>(m_pCurrPtr - m_pDataStart);
 		}
 

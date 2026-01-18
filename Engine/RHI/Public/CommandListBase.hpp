@@ -73,7 +73,7 @@ namespace shz
 			: TDeviceObjectBase(pRefCounters, pDevice, CommandListDesc{}, bIsDeviceInternal)
 			, m_QueueId(pDeferredCtx->GetDesc().QueueId)
 		{
-			VERIFY_EXPR(pDeferredCtx->GetDesc().IsDeferred);
+			ASSERT_EXPR(pDeferredCtx->GetDesc().IsDeferred);
 		}
 
 		~CommandListBase()

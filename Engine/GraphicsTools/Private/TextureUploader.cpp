@@ -50,7 +50,7 @@ void CreateTextureUploader(IRenderDevice* pDevice, const TextureUploaderDesc& De
 #endif
 
         default:
-            UNEXPECTED("Unsupported device type");
+            ASSERT(false, "Unsupported device type");
     }
     if (*ppUploader != nullptr)
         (*ppUploader)->AddRef();

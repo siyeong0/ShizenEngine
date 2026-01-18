@@ -100,7 +100,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 		}
 	}
 
@@ -113,7 +113,7 @@ namespace shz
 	{
 		if (ppInterface == nullptr)
 			return;
-		DEV_CHECK_ERR(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
+		ASSERT(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
 		*ppInterface = nullptr;
 
 		if (IID == IID_InternalImpl || IID == IID_PipelineState || IID == IID_DeviceObject || IID == IID_Unknown)
@@ -153,10 +153,10 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 		}
 
-		DEV_CHECK_ERR(!RefCntAutoPtr<IPipelineState>(m_pPipeline, IID_InternalImpl),
+		ASSERT(!RefCntAutoPtr<IPipelineState>(m_pPipeline, IID_InternalImpl),
 			"Asynchronous pipeline must not be created here as we checked that all shaders are ready and we "
 			"don't want to wrap async pipeline into another async pipeline.");
 	}
@@ -170,7 +170,7 @@ namespace shz
 		switch (ShadersStatus)
 		{
 		case SHADER_STATUS_UNINITIALIZED:
-			UNEXPECTED("Shader status must not be uninitialized");
+			ASSERT(false, "Shader status must not be uninitialized");
 			return PIPELINE_STATE_STATUS_FAILED;
 
 		case SHADER_STATUS_COMPILING:
@@ -184,7 +184,7 @@ namespace shz
 			return PIPELINE_STATE_STATUS_FAILED;
 
 		default:
-			UNEXPECTED("Unexpected shader status");
+			ASSERT(false, "Unexpected shader status");
 			return PIPELINE_STATE_STATUS_FAILED;
 		}
 	}

@@ -49,20 +49,20 @@ namespace shz
 	public:
 		inline virtual ReferenceCounterValueType AddStrongRef() override final
 		{
-			VERIFY(m_ObjectState.load() == ObjectState::Alive, "Attempting to increment strong reference counter for a destroyed or not initialized object!");
-			VERIFY(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
+			ASSERT(m_ObjectState.load() == ObjectState::Alive, "Attempting to increment strong reference counter for a destroyed or not initialized object!");
+			ASSERT(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
 			return m_NumStrongReferences.fetch_add(+1) + 1;
 		}
 
 		template <class TPreObjectDestroy>
 		inline ReferenceCounterValueType ReleaseStrongRef(TPreObjectDestroy&& PreObjectDestroy)
 		{
-			VERIFY(m_ObjectState.load() == ObjectState::Alive, "Attempting to decrement strong reference counter for an object that is not alive");
-			VERIFY(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
+			ASSERT(m_ObjectState.load() == ObjectState::Alive, "Attempting to decrement strong reference counter for an object that is not alive");
+			ASSERT(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
 
 			// Decrement strong reference counter without acquiring the lock.
 			const ReferenceCounterValueType RefCount = m_NumStrongReferences.fetch_add(-1) - 1;
-			VERIFY(RefCount >= 0, "Inconsistent call to ReleaseStrongRef()");
+			ASSERT(RefCount >= 0, "Inconsistent call to ReleaseStrongRef()");
 			if (RefCount == 0)
 			{
 				PreObjectDestroy();
@@ -92,7 +92,7 @@ namespace shz
 			// may be destroyed twice if ReleaseStrongRef() is executed by other
 			// thread.
 			const ReferenceCounterValueType NumWeakReferences = m_NumWeakReferences.fetch_add(-1) - 1;
-			VERIFY(NumWeakReferences >= 0, "Inconsistent call to ReleaseWeakRef()");
+			ASSERT(NumWeakReferences >= 0, "Inconsistent call to ReleaseWeakRef()");
 
 			// There are two special case when we must not destroy the ref counters object even
 			// when NumWeakReferences == 0 && m_NumStrongReferences == 0 :
@@ -136,8 +136,8 @@ namespace shz
 			//
 			if (NumWeakReferences == 0 && /*m_NumStrongReferences == 0 &&*/ m_ObjectState.load() == ObjectState::Destroyed)
 			{
-				VERIFY_EXPR(m_NumStrongReferences.load() == 0);
-				VERIFY(m_ObjectWrapperBuffer[0] == 0 && m_ObjectWrapperBuffer[1] == 0, "Object wrapper must be null");
+				ASSERT_EXPR(m_NumStrongReferences.load() == 0);
+				ASSERT(m_ObjectWrapperBuffer[0] == 0 && m_ObjectWrapperBuffer[1] == 0, "Object wrapper must be null");
 				// m_ObjectState is set to ObjectState::Destroyed under the lock. If the state is not Destroyed,
 				// ReleaseStrongRef() will take care of it.
 				// Access to Object wrapper and decrementing m_NumWeakReferences is atomic. Since we acquired the lock,
@@ -196,7 +196,7 @@ namespace shz
 
 			if (m_ObjectState == ObjectState::Alive && StrongRefCnt > 1)
 			{
-				VERIFY(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
+				ASSERT(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
 				// QueryInterface() must not lock the object, or a deadlock happens.
 				// The only other two methods that lock the object are ReleaseStrongRef()
 				// and ReleaseWeakRef(), which are never called by QueryInterface()
@@ -268,7 +268,7 @@ namespace shz
 		template <typename ObjectType, typename AllocatorType>
 		void Attach(ObjectType* pObject, AllocatorType* pAllocator)
 		{
-			VERIFY(m_ObjectState.load() == ObjectState::NotInitialized, "Object has already been attached");
+			ASSERT(m_ObjectState.load() == ObjectState::NotInitialized, "Object has already been attached");
 			static_assert(sizeof(ObjectWrapper<ObjectType, AllocatorType>) == sizeof(m_ObjectWrapperBuffer), "Unexpected object wrapper size");
 			new (m_ObjectWrapperBuffer) ObjectWrapper<ObjectType, AllocatorType>{pObject, pAllocator};
 			m_ObjectState.store(ObjectState::Alive);
@@ -359,7 +359,7 @@ namespace shz
 #ifdef SHZ_DEBUG
 			{
 				ReferenceCounterValueType NumStrongRefs = m_NumStrongReferences.load();
-				VERIFY(NumStrongRefs == 0 || NumStrongRefs == 1, "Num strong references (", NumStrongRefs, ") is expected to be 0 or 1");
+				ASSERT(NumStrongRefs == 0 || NumStrongRefs == 1, "Num strong references (", NumStrongRefs, ") is expected to be 0 or 1");
 			}
 #endif
 
@@ -370,12 +370,12 @@ namespace shz
 			// decrements the ref counter. If it reads 1 after incrementing the counter,
 			// it does not return the reference to the object and decrements the counter.
 			// If we acquired the lock, QueryObject() will not start until we are done
-			VERIFY_EXPR(m_NumStrongReferences.load() == 0 && m_ObjectState.load() == ObjectState::Alive);
+			ASSERT_EXPR(m_NumStrongReferences.load() == 0 && m_ObjectState.load() == ObjectState::Alive);
 
 			// Extra caution
 			if (m_NumStrongReferences.load() == 0 && m_ObjectState.load() == ObjectState::Alive)
 			{
-				VERIFY(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
+				ASSERT(m_ObjectWrapperBuffer[0] != 0 && m_ObjectWrapperBuffer[1] != 0, "Object wrapper is not initialized");
 				// We cannot destroy the object while reference counters are locked as this will
 				// cause a deadlock in cases like this:
 				//
@@ -459,7 +459,7 @@ namespace shz
 
 		virtual ~RefCountersImpl()
 		{
-			VERIFY(m_NumStrongReferences.load() == 0 && m_NumWeakReferences.load() == 0,
+			ASSERT(m_NumStrongReferences.load() == 0 && m_NumWeakReferences.load() == 0,
 				"There exist outstanding references to the object being destroyed");
 		}
 
@@ -509,7 +509,7 @@ namespace shz
 
 		{
 			// If object is allocated on stack, ref counters will be null
-			//VERIFY(pRefCounters != nullptr, "Reference counters must not be null")
+			//ASSERT(pRefCounters != nullptr, "Reference counters must not be null")
 		}
 
 		// Virtual destructor makes sure all derived classes can be destroyed
@@ -528,24 +528,24 @@ namespace shz
 			//                wpA.ReleaseWeakRef(){ // NumStrongRef == 0, NumWeakRef == 0, m_pObject==nullptr
 			//                    delete RefCounters_A;
 			//        ...
-			//        VERIFY( m_pRefCounters->GetNumStrongRefs() == 0 // Access violation!
+			//        ASSERT( m_pRefCounters->GetNumStrongRefs() == 0 // Access violation!
 
 			// This also may happen if one thread is executing ReleaseStrongRef(), while
 			// another one is simultaneously running ReleaseWeakRef().
 
-			//VERIFY( m_pRefCounters->GetNumStrongRefs() == 0,
+			//ASSERT( m_pRefCounters->GetNumStrongRefs() == 0,
 			//        "There remain strong references to the object being destroyed" );
 		}
 
 		inline virtual IReferenceCounters* SHZ_CALL_TYPE GetReferenceCounters() const override final
 		{
-			VERIFY_EXPR(m_pRefCounters != nullptr);
+			ASSERT_EXPR(m_pRefCounters != nullptr);
 			return m_pRefCounters;
 		}
 
 		inline virtual ReferenceCounterValueType SHZ_CALL_TYPE AddRef() override final
 		{
-			VERIFY_EXPR(m_pRefCounters != nullptr);
+			ASSERT_EXPR(m_pRefCounters != nullptr);
 			// Since type of m_pRefCounters is RefCountersImpl,
 			// this call will not be virtual and should be inlined
 			return m_pRefCounters->AddStrongRef();
@@ -553,7 +553,7 @@ namespace shz
 
 		inline virtual ReferenceCounterValueType SHZ_CALL_TYPE Release() override
 		{
-			VERIFY_EXPR(m_pRefCounters != nullptr);
+			ASSERT_EXPR(m_pRefCounters != nullptr);
 			// Since type of m_pRefCounters is RefCountersImpl,
 			// this call will not be virtual and should be inlined
 			return m_pRefCounters->ReleaseStrongRef();
@@ -562,7 +562,7 @@ namespace shz
 		template <class TPreObjectDestroy>
 		inline ReferenceCounterValueType Release(TPreObjectDestroy&& PreObjectDestroy)
 		{
-			VERIFY_EXPR(m_pRefCounters != nullptr);
+			ASSERT_EXPR(m_pRefCounters != nullptr);
 			return m_pRefCounters->ReleaseStrongRef(PreObjectDestroy);
 		}
 

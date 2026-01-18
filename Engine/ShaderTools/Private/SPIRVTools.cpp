@@ -25,10 +25,10 @@
  */
 
 #include "pch.h"
-#include "SPIRVTools.hpp"
-#include "Primitives/Errors.hpp"
 #include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
+#include <SPIRVTools.hpp>
 #include <spirv-tools/optimizer.hpp>
 
 namespace shz
@@ -111,7 +111,7 @@ namespace shz
 
 	std::vector<uint32_t> OptimizeSPIRV(const std::vector<uint32_t>& SrcSPIRV, spv_target_env TargetEnv, SPIRV_OPTIMIZATION_FLAGS Passes)
 	{
-		VERIFY_EXPR(Passes != SPIRV_OPTIMIZATION_FLAG_NONE);
+		ASSERT_EXPR(Passes != SPIRV_OPTIMIZATION_FLAG_NONE);
 
 		if (TargetEnv == SPV_ENV_MAX)
 			TargetEnv = SpvTargetEnvFromSPIRV(SrcSPIRV);

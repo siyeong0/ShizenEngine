@@ -58,7 +58,7 @@ namespace shz
 		if (ppInterface == nullptr)
 			return;
 
-		DEV_CHECK_ERR(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
+		ASSERT(*ppInterface == nullptr, "Overwriting reference to an existing object may result in memory leaks");
 		*ppInterface = nullptr;
 
 		if (IID == IID_InternalImpl || IID == IID_Shader || IID == IID_DeviceObject || IID == IID_Unknown)

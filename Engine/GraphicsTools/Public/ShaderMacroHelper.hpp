@@ -48,7 +48,7 @@ namespace shz
 			{
 				if (strcmp(m_Macros[i].Name, Name) == 0)
 				{
-					UNEXPECTED("Macro '", Name, "' already exists. Use Update() to update the macro value.");
+					ASSERT(false, "Macro '", Name, "' already exists. Use Update() to update the macro value.");
 				}
 			}
 #endif

@@ -33,10 +33,10 @@
 
 #include "Primitives/Align.hpp"
 #include "Primitives/BasicTypes.h"
-#include "Primitives/Errors.hpp"
 #include "Primitives/IMemoryAllocator.h"
 #include "Primitives/CheckBaseStructAlignment.hpp"
 #include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Memory/Public/DynamicLinearAllocator.hpp"
 
 namespace shz
@@ -248,8 +248,8 @@ namespace shz
 		TReadOnly<T> Cast()
 		{
 			static_assert(std::is_trivially_destructible<T>::value, "Can not cast to non triavial type");
-			VERIFY(reinterpret_cast<size_t>(m_Ptr) % alignof(T) == 0, "Pointer must be properly aligned");
-			VERIFY_EXPR(m_Ptr + sizeof(T) <= m_End);
+			ASSERT(reinterpret_cast<size_t>(m_Ptr) % alignof(T) == 0, "Pointer must be properly aligned");
+			ASSERT_EXPR(m_Ptr + sizeof(T) <= m_End);
 			auto* Ptr = m_Ptr;
 			m_Ptr += sizeof(T);
 			return reinterpret_cast<const T*>(Ptr);
@@ -272,13 +272,13 @@ namespace shz
 
 		size_t GetSize() const
 		{
-			VERIFY_EXPR(m_Ptr >= m_Start);
+			ASSERT_EXPR(m_Ptr >= m_Start);
 			return m_Ptr - m_Start;
 		}
 
 		size_t GetRemainingSize() const
 		{
-			VERIFY_EXPR(m_End >= m_Ptr);
+			ASSERT_EXPR(m_End >= m_Ptr);
 			return m_End - m_Ptr;
 		}
 
@@ -308,7 +308,7 @@ namespace shz
 		{
 			const size_t Size = GetSize();
 			const size_t AlignShift = AlignUp(Size, Alignment) - Size;
-			VERIFY_EXPR(m_Ptr + AlignShift <= m_End);
+			ASSERT_EXPR(m_Ptr + AlignShift <= m_End);
 			m_Ptr += AlignShift;
 		}
 
@@ -324,7 +324,7 @@ namespace shz
     {                                   \
         if (m_Ptr + Size > m_End)       \
         {                               \
-            UNEXPECTED(__VA_ARGS__);    \
+            ASSERT(false, __VA_ARGS__);    \
             return false;               \
         }                               \
     } while (false)
@@ -355,7 +355,7 @@ namespace shz
 	template <typename T>
 	bool Serializer<SerializerMode::Measure>::Copy(T* pData, size_t Size)
 	{
-		VERIFY_EXPR(m_Ptr + Size <= m_End);
+		ASSERT_EXPR(m_Ptr + Size <= m_End);
 		m_Ptr += Size;
 		return true;
 	}
@@ -371,7 +371,7 @@ namespace shz
 		CHECK_REMAINING_SIZE(LenWithNull, "Note enough data to read ", LenWithNull, " characters.");
 
 		Str = LenWithNull > 1 ? reinterpret_cast<const char*>(m_Ptr) : "";
-		VERIFY_EXPR(Str[0] == '\0' || strlen(Str) < LenWithNull);
+		ASSERT_EXPR(Str[0] == '\0' || strlen(Str) < LenWithNull);
 		m_Ptr += LenWithNull;
 		return true;
 	}
@@ -450,7 +450,7 @@ namespace shz
 		CountType& Count,
 		ArrayElemSerializerType ElemSerializer)
 	{
-		VERIFY_EXPR((SrcArray != nullptr) == (Count != 0));
+		ASSERT_EXPR((SrcArray != nullptr) == (Count != 0));
 
 		if (!(*this)(Count))
 			return false;
@@ -472,8 +472,8 @@ namespace shz
 		CountType& Count,
 		ArrayElemSerializerType ElemSerializer)
 	{
-		VERIFY_EXPR(Allocator != nullptr);
-		VERIFY_EXPR(DstArray == nullptr);
+		ASSERT_EXPR(Allocator != nullptr);
+		ASSERT_EXPR(DstArray == nullptr);
 
 		if (!(*this)(Count))
 			return false;

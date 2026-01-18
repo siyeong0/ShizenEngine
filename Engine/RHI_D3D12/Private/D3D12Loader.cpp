@@ -27,7 +27,7 @@
 
 #include "pch.h"
 #include "D3D12Loader.hpp"
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 #include "Platforms/Win64/Public/WinHPreface.h"
 #include <Windows.h>

@@ -60,7 +60,7 @@ void ValidateShaderResourceBindings(const char*                  PSOName,
                                     const ShaderResources&       Resources,
                                     const ResourceBinding::TMap& BindingsMap) noexcept(false)
 {
-    VERIFY_EXPR(PSOName != nullptr);
+    ASSERT_EXPR(PSOName != nullptr);
     Resources.ProcessResources(
         [&](const D3DShaderResourceAttribs& Attribs, uint32) //
         {

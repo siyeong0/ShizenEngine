@@ -82,8 +82,8 @@ namespace shz
     template <typename SrcChannelType, typename DstChannelType>
     void CopyPixelsImpl(const CopyPixelsAttribs& Attribs)
     {
-        VERIFY_EXPR(sizeof(SrcChannelType) == Attribs.SrcComponentSize);
-        VERIFY_EXPR(sizeof(DstChannelType) == Attribs.DstComponentSize);
+        ASSERT_EXPR(sizeof(SrcChannelType) == Attribs.SrcComponentSize);
+        ASSERT_EXPR(sizeof(DstChannelType) == Attribs.DstComponentSize);
 
         auto ProcessRows = [&Attribs](auto&& Handler) {
             for (size_t row = 0; row < size_t{ Attribs.Height }; ++row)
@@ -151,7 +151,7 @@ namespace shz
                 case TEXTURE_COMPONENT_SWIZZLE_A:        SrcCompOffset = 3;                  break;
                     
                 default:
-                    UNEXPECTED("Unexpected swizzle value");
+                    ASSERT(false, "Unexpected swizzle value");
                 }
                 if (SrcCompOffset >= static_cast<int>(Attribs.SrcCompCount))
                     SrcCompOffset = SrcCompOffset_ZERO;
@@ -185,18 +185,18 @@ namespace shz
 
     void CopyPixels(const CopyPixelsAttribs& Attribs)
     {
-        DEV_CHECK_ERR(Attribs.Width > 0, "Width must not be zero");
-        DEV_CHECK_ERR(Attribs.Height > 0, "Height must not be zero");
-        DEV_CHECK_ERR(Attribs.SrcComponentSize > 0, "Source component size must not be zero");
-        DEV_CHECK_ERR(Attribs.pSrcPixels != nullptr, "Source pixels pointer must not be null");
-        DEV_CHECK_ERR(Attribs.SrcStride != 0 || Attribs.Height == 1, "Source stride must not be null");
-        DEV_CHECK_ERR(Attribs.SrcCompCount != 0, "Source component count must not be zero");
-        DEV_CHECK_ERR(Attribs.pDstPixels != nullptr, "Destination pixels pointer must not be null");
-        DEV_CHECK_ERR(Attribs.DstComponentSize > 0, "Destination component size must not be zero");
-        DEV_CHECK_ERR(Attribs.DstStride != 0 || Attribs.Height == 1, "Destination stride must not be null");
-        DEV_CHECK_ERR(Attribs.DstCompCount != 0, "Destination component count must not be zero");
-        DEV_CHECK_ERR(Attribs.SrcStride >= Attribs.Width * Attribs.SrcComponentSize * Attribs.SrcCompCount || Attribs.Height == 1, "Source stride is too small");
-        DEV_CHECK_ERR(Attribs.DstStride >= Attribs.Width * Attribs.DstComponentSize * Attribs.DstCompCount || Attribs.Height == 1, "Destination stride is too small");
+        ASSERT(Attribs.Width > 0, "Width must not be zero");
+        ASSERT(Attribs.Height > 0, "Height must not be zero");
+        ASSERT(Attribs.SrcComponentSize > 0, "Source component size must not be zero");
+        ASSERT(Attribs.pSrcPixels != nullptr, "Source pixels pointer must not be null");
+        ASSERT(Attribs.SrcStride != 0 || Attribs.Height == 1, "Source stride must not be null");
+        ASSERT(Attribs.SrcCompCount != 0, "Source component count must not be zero");
+        ASSERT(Attribs.pDstPixels != nullptr, "Destination pixels pointer must not be null");
+        ASSERT(Attribs.DstComponentSize > 0, "Destination component size must not be zero");
+        ASSERT(Attribs.DstStride != 0 || Attribs.Height == 1, "Destination stride must not be null");
+        ASSERT(Attribs.DstCompCount != 0, "Destination component count must not be zero");
+        ASSERT(Attribs.SrcStride >= Attribs.Width * Attribs.SrcComponentSize * Attribs.SrcCompCount || Attribs.Height == 1, "Source stride is too small");
+        ASSERT(Attribs.DstStride >= Attribs.Width * Attribs.DstComponentSize * Attribs.DstCompCount || Attribs.Height == 1, "Destination stride is too small");
 
 
         switch (Attribs.SrcComponentSize)
@@ -208,7 +208,7 @@ namespace shz
             case 1: CopyPixelsImpl<SRC_TYPE, uint8>(Attribs); break;                                    \
             case 2: CopyPixelsImpl<SRC_TYPE, uint16>(Attribs); break;                                   \
             case 4: CopyPixelsImpl<SRC_TYPE, uint32>(Attribs); break;                                   \
-            default: UNSUPPORTED("Unsupported destination component size: ", Attribs.DstComponentSize); \
+            default: ASSERT(false, "Unsupported destination component size: ", Attribs.DstComponentSize); \
         }                                                                                               \
         break
 
@@ -218,25 +218,25 @@ namespace shz
 #undef CASE_SRC_COMPONENT_SIZE
 
         default:
-            UNSUPPORTED("Unsupported source component size: ", Attribs.SrcComponentSize);
+            ASSERT(false, "Unsupported source component size: ", Attribs.SrcComponentSize);
         }
     }
 
     void ExpandPixels(const ExpandPixelsAttribs& Attribs)
     {
-        DEV_CHECK_ERR(Attribs.SrcWidth > 0, "Source width must not be zero");
-        DEV_CHECK_ERR(Attribs.SrcHeight > 0, "Source height must not be zero");
-        DEV_CHECK_ERR(Attribs.ComponentSize > 0, "Component size must not be zero");
-        DEV_CHECK_ERR(Attribs.ComponentCount != 0, "Component count must not be zero");
-        DEV_CHECK_ERR(Attribs.pSrcPixels != nullptr, "Source pixels pointer must not be null");
-        DEV_CHECK_ERR(Attribs.SrcStride != 0 || Attribs.SrcHeight == 1, "Source stride must not be null");
+        ASSERT(Attribs.SrcWidth > 0, "Source width must not be zero");
+        ASSERT(Attribs.SrcHeight > 0, "Source height must not be zero");
+        ASSERT(Attribs.ComponentSize > 0, "Component size must not be zero");
+        ASSERT(Attribs.ComponentCount != 0, "Component count must not be zero");
+        ASSERT(Attribs.pSrcPixels != nullptr, "Source pixels pointer must not be null");
+        ASSERT(Attribs.SrcStride != 0 || Attribs.SrcHeight == 1, "Source stride must not be null");
 
-        DEV_CHECK_ERR(Attribs.DstWidth > 0, "Destination width must not be zero");
-        DEV_CHECK_ERR(Attribs.DstHeight > 0, "Destination height must not be zero");
-        DEV_CHECK_ERR(Attribs.pDstPixels != nullptr, "Destination pixels pointer must not be null");
-        DEV_CHECK_ERR(Attribs.DstStride != 0 || Attribs.DstHeight == 1, "Destination stride must not be null");
-        DEV_CHECK_ERR(Attribs.SrcStride >= Attribs.SrcWidth * Attribs.ComponentSize * Attribs.ComponentCount || Attribs.SrcHeight == 1, "Source stride is too small");
-        DEV_CHECK_ERR(Attribs.DstStride >= Attribs.DstWidth * Attribs.ComponentSize * Attribs.ComponentCount || Attribs.DstHeight == 1, "Destination stride is too small");
+        ASSERT(Attribs.DstWidth > 0, "Destination width must not be zero");
+        ASSERT(Attribs.DstHeight > 0, "Destination height must not be zero");
+        ASSERT(Attribs.pDstPixels != nullptr, "Destination pixels pointer must not be null");
+        ASSERT(Attribs.DstStride != 0 || Attribs.DstHeight == 1, "Destination stride must not be null");
+        ASSERT(Attribs.SrcStride >= Attribs.SrcWidth * Attribs.ComponentSize * Attribs.ComponentCount || Attribs.SrcHeight == 1, "Source stride is too small");
+        ASSERT(Attribs.DstStride >= Attribs.DstWidth * Attribs.ComponentSize * Attribs.ComponentCount || Attribs.DstHeight == 1, "Destination stride is too small");
 
         const uint32 NumRowsToCopy = std::min(Attribs.SrcHeight, Attribs.DstHeight);
         const uint32 NumColsToCopy = std::min(Attribs.SrcWidth, Attribs.DstWidth);
@@ -385,12 +385,12 @@ namespace shz
     {
         const uint32 ValueSize = GetValueSize(Attribs.ComponentType);
 
-        DEV_CHECK_ERR(Attribs.Width > 0, "Eidth must not be zero");
-        DEV_CHECK_ERR(Attribs.Height > 0, "Height must not be zero");
-        DEV_CHECK_ERR(Attribs.ComponentCount >= 2, "The number of components must be at least two");
-        DEV_CHECK_ERR(Attribs.pPixels != nullptr, "Pixels pointer must not be null");
-        DEV_CHECK_ERR(Attribs.Stride != 0 || Attribs.Height == 1, "Source stride must not be null");
-        DEV_CHECK_ERR(Attribs.Stride >= Attribs.Width * ValueSize * Attribs.ComponentCount || Attribs.Height == 1, "Source stride is too small");
+        ASSERT(Attribs.Width > 0, "Eidth must not be zero");
+        ASSERT(Attribs.Height > 0, "Height must not be zero");
+        ASSERT(Attribs.ComponentCount >= 2, "The number of components must be at least two");
+        ASSERT(Attribs.pPixels != nullptr, "Pixels pointer must not be null");
+        ASSERT(Attribs.Stride != 0 || Attribs.Height == 1, "Source stride must not be null");
+        ASSERT(Attribs.Stride >= Attribs.Width * ValueSize * Attribs.ComponentCount || Attribs.Height == 1, "Source stride is too small");
 
         switch (Attribs.ComponentType)
         {
@@ -405,7 +405,7 @@ namespace shz
         case VT_FLOAT32: PremultiplyAlphaImpl<float>(Attribs); break;
 
         default:
-            UNSUPPORTED("Unsupported component type ", GetValueTypeString(Attribs.ComponentType));
+            ASSERT(false, "Unsupported component type ", GetValueTypeString(Attribs.ComponentType));
         }
     }
 

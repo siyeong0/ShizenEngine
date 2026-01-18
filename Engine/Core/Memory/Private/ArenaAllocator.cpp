@@ -49,8 +49,8 @@ namespace shz
 	{
 		Shutdown();
 
-		ASSERT(buffer != nullptr, "ArenaAllocator::Initialize: buffer is null");
-		ASSERT(bytes > 0, "ArenaAllocator::Initialize: bytes is zero");
+		ASSERT(buffer != nullptr, "Buffer is null");
+		ASSERT(bytes > 0, "Bytes is zero");
 
 		m_Mode = eMode::FixedBuffer;
 		m_Base = reinterpret_cast<byte*>(buffer);
@@ -62,7 +62,7 @@ namespace shz
 	{
 		Shutdown();
 
-		ASSERT(firstChunkBytes > 0, "ArenaAllocator::InitializeGrowable: firstChunkBytes is zero");
+		ASSERT(firstChunkBytes > 0, "FirstChunkBytes is zero");
 		if (nextChunkBytes == 0)
 		{
 			nextChunkBytes = firstChunkBytes;
@@ -103,8 +103,8 @@ namespace shz
 
 	void* ArenaAllocator::Allocate(size_t bytes, size_t alignment)
 	{
-		ASSERT(m_Mode != eMode::Uninitialized, "ArenaAllocator::Allocate: allocator is uninitialized");
-		ASSERT(isPowerOfTwo(alignment), "ArenaAllocator::Allocate: alignment is not power-of-two");
+		ASSERT(m_Mode != eMode::Uninitialized, "Allocator is uninitialized");
+		ASSERT(isPowerOfTwo(alignment), "Alignment is not power-of-two");
 		if (bytes == 0) bytes = 1;
 
 		if (m_Mode == eMode::FixedBuffer)
@@ -151,7 +151,7 @@ namespace shz
 		const size_t totalBytes = headerSize + payloadBytes + (kChunkAlignment - 1);
 
 		void* raw = AlignedAlloc(kChunkAlignment, totalBytes);
-		ASSERT(raw != nullptr, "ArenaAllocator::allocateChunk: allocation failed");
+		ASSERT(raw != nullptr, "Allocation failed");
 
 		Chunk* c = reinterpret_cast<Chunk*>(raw);
 
@@ -169,7 +169,7 @@ namespace shz
 
 	void* ArenaAllocator::allocateGrowable(size_t bytes, size_t alignment)
 	{
-		ASSERT(m_Tail != nullptr, "ArenaAllocator::AllocateGrowable: m_Tail is null");
+		ASSERT(m_Tail != nullptr, "m_Tail is null");
 
 		// Try current tail
 		{
@@ -222,7 +222,7 @@ namespace shz
 
 	void ArenaAllocator::Reset()
 	{
-		ASSERT(m_Mode != eMode::Uninitialized, "ArenaAllocator::Reset: allocator is uninitialized");
+		ASSERT(m_Mode != eMode::Uninitialized, "Allocator is uninitialized");
 
 		if (m_Mode == eMode::FixedBuffer)
 		{
@@ -238,7 +238,7 @@ namespace shz
 
 	ArenaAllocator::Marker ArenaAllocator::Save() const
 	{
-		ASSERT(m_Mode != eMode::Uninitialized, "ArenaAllocator::Save: allocator is uninitialized");
+		ASSERT(m_Mode != eMode::Uninitialized, "Allocator is uninitialized");
 
 		Marker m{};
 		if (m_Mode == eMode::FixedBuffer)
@@ -256,19 +256,19 @@ namespace shz
 
 	void ArenaAllocator::Restore(Marker marker)
 	{
-		ASSERT(m_Mode != eMode::Uninitialized, "ArenaAllocator::Restore: allocator is uninitialized");
+		ASSERT(m_Mode != eMode::Uninitialized, "Allocator is uninitialized");
 
 		if (m_Mode == eMode::FixedBuffer)
 		{
-			ASSERT(marker.Chunk == nullptr);
-			ASSERT(marker.Offset <= m_Capacity);
+			ASSERT(marker.Chunk == nullptr, "Invalid marker for fixed buffer");
+			ASSERT(marker.Offset <= m_Capacity, "Invalid marker offset");
 			m_Offset = marker.Offset;
 			return;
 		}
 
 		// Growable: free chunks after marker.chunk and restore offset.
 		Chunk* target = reinterpret_cast<Chunk*>(const_cast<void*>(marker.Chunk));
-		ASSERT(target != nullptr, "ArenaAllocator::Restore: invalid marker chunk");
+		ASSERT(target != nullptr, "Invalid marker chunk");
 
 		// Find target in list (debug safety)
 		bool found = false;
@@ -276,7 +276,7 @@ namespace shz
 		{
 			if (c == target) { found = true; break; }
 		}
-		ASSERT(found, "ArenaAllocator::Restore: marker chunk not found in allocator");
+		ASSERT(found, "Marker chunk not found in allocator");
 
 		// Free all chunks after target
 		Chunk* c = target->Next;
@@ -290,7 +290,7 @@ namespace shz
 		}
 
 		m_Tail = target;
-		ASSERT(marker.Offset <= m_Tail->Capacity, "ArenaAllocator::Restore: invalid marker offset");
+		ASSERT(marker.Offset <= m_Tail->Capacity, "Invalid marker offset");
 		m_Tail->Offset = marker.Offset;
 	}
 

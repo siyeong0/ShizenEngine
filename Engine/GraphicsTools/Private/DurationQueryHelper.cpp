@@ -27,6 +27,7 @@
 
 #include "pch.h"
 #include "DurationQueryHelper.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {
@@ -37,11 +38,11 @@ namespace shz
 
 		queryDesc.Name = "Duration start timestamp query";
 		pDevice->CreateQuery(queryDesc, &StartTimestamp);
-		VERIFY(StartTimestamp, "Failed to create start query");
+		ASSERT(StartTimestamp, "Failed to create start query");
 
 		queryDesc.Name = "Duration end timestamp query";
 		pDevice->CreateQuery(queryDesc, &EndTimestamp);
-		VERIFY(EndTimestamp, "Failed to create end query");
+		ASSERT(EndTimestamp, "Failed to create end query");
 	}
 
 	DurationQueryHelper::DurationQueryHelper(

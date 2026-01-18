@@ -176,7 +176,7 @@ namespace shz
 				, BufferRangeSize{ _BufferRangeSize }
 
 			{
-				VERIFY(Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER || (BufferBaseOffset == 0 && BufferRangeSize == 0),
+				ASSERT(Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER || (BufferBaseOffset == 0 && BufferRangeSize == 0),
 					"Buffer range may only be specified for constant buffers");
 				if (pObject && (Type == SHADER_RESOURCE_TYPE_BUFFER_SRV || Type == SHADER_RESOURCE_TYPE_BUFFER_UAV))
 				{
@@ -223,14 +223,14 @@ namespace shz
 				, m_pResources{ _pResources }
 
 			{
-				VERIFY_EXPR(GetSize() == _NumResources);
-				VERIFY_EXPR(IsRootView() == _IsRootView);
-				VERIFY(!IsRootView() || GetSize() == 1, "Root views may only contain one resource");
+				ASSERT_EXPR(GetSize() == _NumResources);
+				ASSERT_EXPR(IsRootView() == _IsRootView);
+				ASSERT(!IsRootView() || GetSize() == 1, "Root views may only contain one resource");
 			}
 
 			const Resource& GetResource(uint32 OffsetFromTableStart) const
 			{
-				VERIFY(OffsetFromTableStart < m_NumResources, "Root table is not large enough to store descriptor at offset ", OffsetFromTableStart);
+				ASSERT(OffsetFromTableStart < m_NumResources, "Root table is not large enough to store descriptor at offset ", OffsetFromTableStart);
 				return m_pResources[OffsetFromTableStart];
 			}
 
@@ -242,7 +242,7 @@ namespace shz
 			friend class ShaderResourceCacheD3D12;
 			Resource& GetResource(uint32 OffsetFromTableStart)
 			{
-				VERIFY(OffsetFromTableStart < m_NumResources, "Root table is not large enough to store descriptor at offset ", OffsetFromTableStart);
+				ASSERT(OffsetFromTableStart < m_NumResources, "Root table is not large enough to store descriptor at offset ", OffsetFromTableStart);
 				return m_pResources[OffsetFromTableStart];
 			}
 
@@ -287,7 +287,7 @@ namespace shz
 
 		const RootTable& GetRootTable(uint32 RootIndex) const
 		{
-			VERIFY_EXPR(RootIndex < m_NumTables);
+			ASSERT_EXPR(RootIndex < m_NumTables);
 			return reinterpret_cast<const RootTable*>(m_pMemory.get())[RootIndex];
 		}
 
@@ -308,12 +308,12 @@ namespace shz
 			uint32                     OffsetFromTableStart = 0) const
 		{
 			const RootTable& RootParam = GetRootTable(RootParamInd);
-			VERIFY(RootParam.GetStartOffset() != InvalidDescriptorOffset, "This root parameter is not assigned a valid descriptor table offset");
-			VERIFY(OffsetFromTableStart < RootParam.GetSize(), "Offset is out of range");
+			ASSERT(RootParam.GetStartOffset() != InvalidDescriptorOffset, "This root parameter is not assigned a valid descriptor table offset");
+			ASSERT(OffsetFromTableStart < RootParam.GetSize(), "Offset is out of range");
 
 			const int8 AllocationIdx = m_AllocationIndex[HeapType][Group];
-			VERIFY(AllocationIdx >= 0, "Descriptor space is not assigned to this table");
-			VERIFY_EXPR(AllocationIdx < m_NumDescriptorAllocations);
+			ASSERT(AllocationIdx >= 0, "Descriptor space is not assigned to this table");
+			ASSERT_EXPR(AllocationIdx < m_NumDescriptorAllocations);
 
 			return m_DescriptorAllocations[AllocationIdx].GetHandle<HandleType>(RootParam.GetStartOffset() + OffsetFromTableStart);
 		}
@@ -321,8 +321,8 @@ namespace shz
 		const DescriptorHeapAllocation& GetDescriptorAllocation(D3D12_DESCRIPTOR_HEAP_TYPE HeapType, ROOT_PARAMETER_GROUP Group) const
 		{
 			const int8 AllocationIdx = m_AllocationIndex[HeapType][Group];
-			VERIFY(AllocationIdx >= 0, "Descriptor space is not assigned to this combination of heap type and parameter group");
-			VERIFY_EXPR(AllocationIdx < m_NumDescriptorAllocations);
+			ASSERT(AllocationIdx >= 0, "Descriptor space is not assigned to this combination of heap type and parameter group");
+			ASSERT_EXPR(AllocationIdx < m_NumDescriptorAllocations);
 			return m_DescriptorAllocations[AllocationIdx];
 		}
 
@@ -353,13 +353,13 @@ namespace shz
 	private:
 		RootTable& GetRootTable(uint32 RootIndex)
 		{
-			VERIFY_EXPR(RootIndex < m_NumTables);
+			ASSERT_EXPR(RootIndex < m_NumTables);
 			return reinterpret_cast<RootTable*>(m_pMemory.get())[RootIndex];
 		}
 
 		Resource& GetResource(uint32 Idx)
 		{
-			VERIFY_EXPR(Idx < m_TotalResourceCount);
+			ASSERT_EXPR(Idx < m_TotalResourceCount);
 			return reinterpret_cast<Resource*>(reinterpret_cast<RootTable*>(m_pMemory.get()) + m_NumTables)[Idx];
 		}
 

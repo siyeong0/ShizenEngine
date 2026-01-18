@@ -35,7 +35,7 @@ namespace shz
 	{
 		if (Path == nullptr || Path[0] == '\0')
 		{
-			DEV_ERROR("Path must not be null or empty");
+			ASSERT(false, "Path must not be null or empty");
 			return {};
 		}
 

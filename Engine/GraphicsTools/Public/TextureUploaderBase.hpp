@@ -72,7 +72,7 @@ namespace shz
 				if (Desc.Depth > 1)
 				{
 					StagingTexDesc.Depth = Desc.Depth;
-					VERIFY(Desc.ArraySize == 1, "3D textures cannot have array size greater than 1");
+					ASSERT(Desc.ArraySize == 1, "3D textures cannot have array size greater than 1");
 					StagingTexDesc.Type = RESOURCE_DIM_TEX_3D;
 				}
 				else if (Desc.ArraySize > 1)
@@ -110,20 +110,20 @@ namespace shz
 
 		virtual MappedTextureSubresource GetMappedData(uint32 Mip, uint32 Slice) override final
 		{
-			VERIFY_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
+			ASSERT_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
 			return m_MappedData[size_t{ m_Desc.MipLevels } *size_t{ Slice } + size_t{ Mip }];
 		}
 		virtual const UploadBufferDesc& GetDesc() const override final { return m_Desc; }
 
 		void SetMappedData(uint32 Mip, uint32 Slice, const MappedTextureSubresource& MappedData)
 		{
-			VERIFY_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
+			ASSERT_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
 			m_MappedData[size_t{ m_Desc.MipLevels } *size_t{ Slice } + size_t{ Mip }] = MappedData;
 		}
 
 		bool IsMapped(uint32 Mip, uint32 Slice) const
 		{
-			VERIFY_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
+			ASSERT_EXPR(Mip < m_Desc.MipLevels && Slice < m_Desc.ArraySize);
 			return m_MappedData[size_t{ m_Desc.MipLevels } *size_t{ Slice } + size_t{ Mip }].pData != nullptr;
 		}
 
@@ -174,7 +174,7 @@ namespace shz
 				: OpType{ Op }
 				, pUploadBuffer{ pBuff }
 			{
-				VERIFY_EXPR(OpType == Type::Map);
+				ASSERT_EXPR(OpType == Type::Map);
 			}
 
 			PendingOperation(
@@ -191,7 +191,7 @@ namespace shz
 				, DstSlice{ dstSlice }
 				, DstMip{ dstMip }
 			{
-				VERIFY_EXPR(OpType == Type::Copy);
+				ASSERT_EXPR(OpType == Type::Copy);
 			}
 		};
 

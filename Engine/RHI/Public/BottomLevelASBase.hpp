@@ -122,7 +122,7 @@ namespace shz
 		// Returns the geometry index in geometry description.
 		uint32 UpdateGeometryIndex(const char* Name, uint32& ActualIndex, bool OnUpdate)
 		{
-			DEV_CHECK_ERR(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
+			ASSERT(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
 
 			auto iter = m_NameToIndex.find(Name);
 			if (iter != m_NameToIndex.end())
@@ -140,7 +140,7 @@ namespace shz
 		// Implementation of IBottomLevelAS::GetGeometryDescIndex()
 		virtual uint32 SHZ_CALL_TYPE GetGeometryDescIndex(const char* Name) const override final
 		{
-			DEV_CHECK_ERR(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
+			ASSERT(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
 
 			auto iter = m_NameToIndex.find(Name);
 			if (iter != m_NameToIndex.end())
@@ -153,12 +153,12 @@ namespace shz
 		// Implementation of IBottomLevelAS::GetGeometryIndex()
 		virtual uint32 SHZ_CALL_TYPE GetGeometryIndex(const char* Name) const override final
 		{
-			DEV_CHECK_ERR(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
+			ASSERT(Name != nullptr && Name[0] != '\0', "Geometry name must not be empty");
 
 			auto iter = m_NameToIndex.find(Name);
 			if (iter != m_NameToIndex.end())
 			{
-				VERIFY(iter->second.ActualIndex != INVALID_INDEX, "Geometry with name '", Name, "', exists, but was not enabled in the last build");
+				ASSERT(iter->second.ActualIndex != INVALID_INDEX, "Geometry with name '", Name, "', exists, but was not enabled in the last build");
 				return iter->second.ActualIndex;
 			}
 			LOG_ERROR_MESSAGE("Can't find geometry with name '", Name, '\'');
@@ -168,7 +168,7 @@ namespace shz
 		// Implementation of IBottomLevelAS::SetState()
 		virtual void SHZ_CALL_TYPE SetState(RESOURCE_STATE State) override final
 		{
-			DEV_CHECK_ERR(State == RESOURCE_STATE_UNKNOWN || State == RESOURCE_STATE_BUILD_AS_READ || State == RESOURCE_STATE_BUILD_AS_WRITE,
+			ASSERT(State == RESOURCE_STATE_UNKNOWN || State == RESOURCE_STATE_BUILD_AS_READ || State == RESOURCE_STATE_BUILD_AS_WRITE,
 				"Unsupported state for a bottom-level acceleration structure");
 			this->m_State = State;
 		}
@@ -192,8 +192,8 @@ namespace shz
 
 		bool CheckState(RESOURCE_STATE State) const
 		{
-			DEV_CHECK_ERR((State & (State - 1)) == 0, "Single state is expected");
-			DEV_CHECK_ERR(IsInKnownState(), "BLAS state is unknown");
+			ASSERT((State & (State - 1)) == 0, "Single state is expected");
+			ASSERT(IsInKnownState(), "BLAS state is unknown");
 			return (this->m_State & State) == State;
 		}
 

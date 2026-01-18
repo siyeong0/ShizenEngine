@@ -59,7 +59,7 @@ namespace shz
 		CComPtr<ID3D12ShaderReflection> pShaderReflection;
 		if (IsDXILBytecode(pShaderBytecode->GetConstDataPtr(), pShaderBytecode->GetSize()))
 		{
-			VERIFY(pDXCompiler != nullptr, "DXC is not initialized");
+			ASSERT(pDXCompiler != nullptr, "DXC is not initialized");
 			CComPtr<IDxcBlob> pDxcBytecode;
 			CreateDxcBlobWrapper(pShaderBytecode, &pDxcBytecode);
 			pDXCompiler->GetD3D12ShaderReflection(pDxcBytecode, &pShaderReflection);

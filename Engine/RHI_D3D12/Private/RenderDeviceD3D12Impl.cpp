@@ -199,7 +199,7 @@ namespace shz
 				case D3D_FEATURE_LEVEL_11_0: m_DeviceInfo.APIVersion = { 11, 0 }; break;
 				case D3D_FEATURE_LEVEL_10_1: m_DeviceInfo.APIVersion = { 10, 1 }; break;
 				case D3D_FEATURE_LEVEL_10_0: m_DeviceInfo.APIVersion = { 10, 0 }; break;
-				default: UNEXPECTED("Unexpected D3D feature level");
+				default: ASSERT(false, "Unexpected D3D feature level");
 				}
 #if defined(_MSC_VER) && !defined(NTDDI_WIN10_FE)
 #    pragma warning(pop)
@@ -304,20 +304,20 @@ namespace shz
 #ifdef SHZ_DEBUG
 			for (size_t i = 0; i < _countof(m_CPUDescriptorHeaps); ++i)
 			{
-				DEV_CHECK_ERR(m_CPUDescriptorHeaps[i].DvpGetTotalAllocationCount() == 0, "All CPU descriptor heap allocations must be released");
+				ASSERT(m_CPUDescriptorHeaps[i].DvpGetTotalAllocationCount() == 0, "All CPU descriptor heap allocations must be released");
 			}
 			for (size_t i = 0; i < _countof(m_GPUDescriptorHeaps); ++i)
 			{
-				DEV_CHECK_ERR(m_GPUDescriptorHeaps[i].DvpGetTotalAllocationCount() == 0, "All GPU descriptor heap allocations must be released");
+				ASSERT(m_GPUDescriptorHeaps[i].DvpGetTotalAllocationCount() == 0, "All GPU descriptor heap allocations must be released");
 			}
 #endif
 
-			DEV_CHECK_ERR(m_DynamicMemoryManager.GetAllocatedPageCounter() == 0, "All allocated dynamic pages must have been returned to the manager at this point.");
+			ASSERT(m_DynamicMemoryManager.GetAllocatedPageCounter() == 0, "All allocated dynamic pages must have been returned to the manager at this point.");
 			m_DynamicMemoryManager.Destroy();
 
 			for (CommandListManager& CmdListMngr : m_CmdListManagers)
-				DEV_CHECK_ERR(CmdListMngr.GetAllocatorCounter() == 0, "All allocators must have been returned to the manager at this point.");
-			DEV_CHECK_ERR(m_AllocatedCtxCounter == 0, "All contexts must have been released.");
+				ASSERT(CmdListMngr.GetAllocatorCounter() == 0, "All allocators must have been returned to the manager at this point.");
+			ASSERT(m_AllocatedCtxCounter == 0, "All contexts must have been released.");
 
 			m_ContextPool.clear();
 			DestroyCommandQueues();
@@ -348,11 +348,11 @@ namespace shz
 		void RenderDeviceD3D12Impl::CloseAndExecuteTransientCommandContext(SoftwareQueueIndex CommandQueueId, PooledCommandContext&& Ctx)
 		{
 			CommandListManager& CmdListMngr = GetCmdListManager(CommandQueueId);
-			VERIFY_EXPR(CmdListMngr.GetCommandListType() == Ctx->GetCommandListType());
+			ASSERT_EXPR(CmdListMngr.GetCommandListType() == Ctx->GetCommandListType());
 
 			CComPtr<ID3D12CommandAllocator> pAllocator;
 			ID3D12CommandList* const        pCmdList = Ctx->Close(pAllocator);
-			VERIFY(pCmdList != nullptr, "Command list must not be null");
+			ASSERT(pCmdList != nullptr, "Command list must not be null");
 			uint64 FenceValue = 0;
 			// Execute command list directly through the queue to avoid interference with command list numbers in the queue
 			LockCmdQueueAndRun(CommandQueueId,
@@ -372,7 +372,7 @@ namespace shz
 			std::vector<std::pair<uint64, RefCntAutoPtr<IFence>>>* pSignalFences,
 			std::vector<std::pair<uint64, RefCntAutoPtr<IFence>>>* pWaitFences)
 		{
-			VERIFY_EXPR(NumContexts > 0 && pContexts != 0);
+			ASSERT_EXPR(NumContexts > 0 && pContexts != 0);
 
 			// TODO: use small_vector
 			std::vector<ID3D12CommandList*>              d3d12CmdLists;
@@ -384,8 +384,8 @@ namespace shz
 			for (uint32 i = 0; i < NumContexts; ++i)
 			{
 				PooledCommandContext& pCtx = pContexts[i];
-				VERIFY_EXPR(pCtx);
-				VERIFY_EXPR(CmdListMngr.GetCommandListType() == pCtx->GetCommandListType());
+				ASSERT_EXPR(pCtx);
+				ASSERT_EXPR(CmdListMngr.GetCommandListType() == pCtx->GetCommandListType());
 				CComPtr<ID3D12CommandAllocator> pAllocator;
 				d3d12CmdLists.emplace_back(pCtx->Close(pAllocator));
 				CmdAllocators.emplace_back(std::move(pAllocator));
@@ -506,7 +506,7 @@ namespace shz
 		void RenderDeviceD3D12Impl::TestTextureFormat(TEXTURE_FORMAT TexFormat)
 		{
 			TextureFormatInfoExt& TexFormatInfo = m_TextureFormatsInfo[TexFormat];
-			VERIFY(TexFormatInfo.Supported, "Texture format is not supported");
+			ASSERT(TexFormatInfo.Supported, "Texture format is not supported");
 
 			DXGI_FORMAT DXGIFormat = TexFormatToDXGI_Format(TexFormat);
 
@@ -702,13 +702,13 @@ namespace shz
 
 		DescriptorHeapAllocation RenderDeviceD3D12Impl::AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE Type, UINT Count /*= 1*/)
 		{
-			VERIFY(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES, "Invalid heap type");
+			ASSERT(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES, "Invalid heap type");
 			return m_CPUDescriptorHeaps[Type].Allocate(Count);
 		}
 
 		DescriptorHeapAllocation RenderDeviceD3D12Impl::AllocateGPUDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE Type, UINT Count /*= 1*/)
 		{
-			VERIFY(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type <= D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type");
+			ASSERT(Type >= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && Type <= D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "Invalid heap type");
 			return m_GPUDescriptorHeaps[Type].Allocate(Count);
 		}
 

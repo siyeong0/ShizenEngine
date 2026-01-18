@@ -119,7 +119,7 @@ namespace shz
 
 		if (!outTex)
 		{
-			ASSERT(false, "RenderResourceCache: Failed to create texture from asset.");
+			ASSERT(false, "Failed to create texture from asset.");
 			return false;
 		}
 
@@ -146,7 +146,7 @@ namespace shz
 		TextureRenderData rd = {};
 		if (!createTextureFromAsset(asset, &rd))
 		{
-			ASSERT(false, "RenderResourceCache: Failed to create TextureRenderData.");
+			ASSERT(false, "Failed to create TextureRenderData.");
 			return {};
 		}
 
@@ -156,7 +156,7 @@ namespace shz
 		EnsureSlotCapacity<TextureRenderData>(hRD.GetIndex(), m_TexRDSlots);
 
 		auto& slot = m_TexRDSlots[hRD.GetIndex()];
-		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid());
+		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid(), "TextureRenderData slot already occupied.");
 
 		slot.Owner = std::move(owner);
 		slot.Value.emplace(std::move(rd));
@@ -185,7 +185,7 @@ namespace shz
 		// Resolve CPU asset through new asset manager
 		if (!m_pAssetManager)
 		{
-			ASSERT(false, "RenderResourceCache: AssetManagerImpl is null (required for AssetRef-based textures).");
+			ASSERT(false, "AssetManagerImpl is null (required for AssetRef-based textures).");
 			return {};
 		}
 
@@ -193,7 +193,7 @@ namespace shz
 		const TextureAsset* pTex = texPtr.Get();
 		if (!pTex)
 		{
-			ASSERT(false, "RenderResourceCache: Failed to load TextureAsset from AssetRef.");
+			ASSERT(false, "Failed to load TextureAsset from AssetRef.");
 			return {};
 		}
 
@@ -343,7 +343,7 @@ namespace shz
 		StaticMeshRenderData rd = {};
 		if (!createStaticMeshFromAsset(asset, rd, pCtx))
 		{
-			ASSERT(false, "RenderResourceCache: Failed to create StaticMeshRenderData.");
+			ASSERT(false, "Failed to create StaticMeshRenderData.");
 			return {};
 		}
 
@@ -353,7 +353,7 @@ namespace shz
 		EnsureSlotCapacity<StaticMeshRenderData>(hRD.GetIndex(), m_MeshRDSlots);
 
 		auto& slot = m_MeshRDSlots[hRD.GetIndex()];
-		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid());
+		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid(), "Slot collision detected for StaticMeshRenderData.");
 
 		slot.Owner = std::move(owner);
 		slot.Value.emplace(std::move(rd));
@@ -436,7 +436,7 @@ namespace shz
 		EnsureSlotCapacity<MaterialRenderData>(hRD.GetIndex(), m_MaterialRDSlots);
 
 		auto& slot = m_MaterialRDSlots[hRD.GetIndex()];
-		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid());
+		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid(), "Slot collision detected for MaterialRenderData.");
 
 		slot.Owner = std::move(owner);
 		slot.Value.emplace(std::move(rd));

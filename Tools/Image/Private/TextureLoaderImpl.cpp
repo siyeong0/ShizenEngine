@@ -140,7 +140,7 @@ namespace shz
 				// Note that there is RGB32_FLOAT format, but it can't be filtered, so always extend RGB to RGBA.
 				NumComponents = 4;
 			}
-			DEV_CHECK_ERR(CompType != COMPONENT_TYPE_UNDEFINED, "Failed to deduce component type from image component type ", GetValueTypeString(ImgDesc.ComponentType), " and sRGB flag ", TexLoadInfo.IsSRGB);
+			ASSERT(CompType != COMPONENT_TYPE_UNDEFINED, "Failed to deduce component type from image component type ", GetValueTypeString(ImgDesc.ComponentType), " and sRGB flag ", TexLoadInfo.IsSRGB);
 
 			const uint32 CompSize = GetValueSize(ImgDesc.ComponentType);
 
@@ -162,7 +162,7 @@ namespace shz
 
 	void TextureLoaderImpl::LoadFromImage(RefCntAutoPtr<Image> pImage, const TextureLoadInfo& TexLoadInfo)
 	{
-		VERIFY_EXPR(pImage != nullptr);
+		ASSERT_EXPR(pImage != nullptr);
 
 		ImageDesc ImgDesc = pImage->GetDesc();
 		if (TexLoadInfo.UniformImageClipDim != 0 && pImage->IsUniform())
@@ -225,7 +225,7 @@ namespace shz
 				}
 				else
 				{
-					VERIFY(CopyAttribs.SrcCompCount == 3, "Unexpected number of components");
+					ASSERT(CopyAttribs.SrcCompCount == 3, "Unexpected number of components");
 				}
 			}
 
@@ -310,7 +310,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected number of components ", NumComponents);
+			ASSERT(false, "Unexpected number of components ", NumComponents);
 			return TEX_FORMAT_UNKNOWN;
 		}
 	}
@@ -390,7 +390,7 @@ namespace shz
 						}
 						else
 						{
-							UNEXPECTED("Unexpected number of components");
+							ASSERT(false, "Unexpected number of components");
 						}
 					}
 				}
@@ -400,7 +400,7 @@ namespace shz
 				m_Mips[SubResIndex].Release();
 				if (SubResIndex == 0)
 				{
-					VERIFY(!m_pImage || m_TexDesc.GetArraySize() == 1, "Array textures can't be loaded from an image");
+					ASSERT(!m_pImage || m_TexDesc.GetArraySize() == 1, "Array textures can't be loaded from an image");
 					m_pImage.Release();
 				}
 			}
@@ -445,7 +445,7 @@ namespace shz
 		const TextureLoadInfo& TexLoadInfo,
 		ITextureLoader** ppLoader)
 	{
-		VERIFY_EXPR(pData != nullptr && Size > 0);
+		ASSERT_EXPR(pData != nullptr && Size > 0);
 		try
 		{
 			RefCntAutoPtr<IDataBlob> pDataCopy;
@@ -491,7 +491,7 @@ namespace shz
 
 	void CreateTextureLoaderFromImage(Image* pSrcImage, const TextureLoadInfo& TexLoadInfo, ITextureLoader** ppLoader)
 	{
-		VERIFY_EXPR(pSrcImage != nullptr);
+		ASSERT_EXPR(pSrcImage != nullptr);
 		try
 		{
 			RefCntAutoPtr<ITextureLoader> pTexLoader{ MakeNewRCObj<TextureLoaderImpl>()(TexLoadInfo, RefCntAutoPtr<Image>{pSrcImage}) };

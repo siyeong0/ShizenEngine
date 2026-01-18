@@ -93,9 +93,9 @@ namespace shz
 			, m_AllocationManagerId{ AllocationManagerId }
 
 		{
-			VERIFY_EXPR(m_pAllocator != nullptr && m_pDescriptorHeap != nullptr);
+			ASSERT_EXPR(m_pAllocator != nullptr && m_pDescriptorHeap != nullptr);
 			uint32 DescriptorSize = m_pAllocator->GetDescriptorSize();
-			VERIFY(DescriptorSize < std::numeric_limits<uint16>::max(), "DescriptorSize exceeds allowed limit");
+			ASSERT(DescriptorSize < std::numeric_limits<uint16>::max(), "DescriptorSize exceeds allowed limit");
 			m_DescriptorSize = static_cast<uint16>(DescriptorSize);
 		}
 
@@ -152,13 +152,13 @@ namespace shz
 			if (!IsNull() && m_pAllocator)
 				m_pAllocator->Free(std::move(*this), ~uint64{ 0 });
 			// Allocation must have been disposed by the allocator
-			VERIFY(IsNull(), "Non-null descriptor is being destroyed");
+			ASSERT(IsNull(), "Non-null descriptor is being destroyed");
 		}
 
 		// Returns CPU descriptor handle at the specified offset
 		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(uint32 Offset = 0) const
 		{
-			VERIFY_EXPR(Offset >= 0 && Offset < m_NumHandles);
+			ASSERT_EXPR(Offset >= 0 && Offset < m_NumHandles);
 
 			D3D12_CPU_DESCRIPTOR_HANDLE CPUHandle = m_FirstCpuHandle;
 			CPUHandle.ptr += SIZE_T{ m_DescriptorSize } *SIZE_T{ Offset };
@@ -169,7 +169,7 @@ namespace shz
 		// Returns GPU descriptor handle at the specified offset
 		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(uint32 Offset = 0) const
 		{
-			VERIFY_EXPR(Offset >= 0 && Offset < m_NumHandles);
+			ASSERT_EXPR(Offset >= 0 && Offset < m_NumHandles);
 			D3D12_GPU_DESCRIPTOR_HANDLE GPUHandle = m_FirstGpuHandle;
 			GPUHandle.ptr += SIZE_T{ m_DescriptorSize } *SIZE_T{ Offset };
 

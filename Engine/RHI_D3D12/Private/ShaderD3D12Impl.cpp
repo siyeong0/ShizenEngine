@@ -72,7 +72,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY(ShaderCI.ShaderCompiler == SHADER_COMPILER_FXC || ShaderCI.ShaderCompiler == SHADER_COMPILER_DEFAULT, "Unexpected compiler");
+				ASSERT(ShaderCI.ShaderCompiler == SHADER_COMPILER_FXC || ShaderCI.ShaderCompiler == SHADER_COMPILER_DEFAULT, "Unexpected compiler");
 				// Direct3D12 supports shader model 5.1 on all feature levels.
 				// https://docs.microsoft.com/en-us/windows/win32/direct3d12/hardware-feature-levels#feature-level-support
 				CompilerSM = ShaderVersion{ 5, 1 };
@@ -89,7 +89,7 @@ namespace shz
 		}
 		else
 		{
-			VERIFY(ShaderCI.ByteCode != nullptr, "ByteCode must not be null when both Source and FilePath are null");
+			ASSERT(ShaderCI.ByteCode != nullptr, "ByteCode must not be null when both Source and FilePath are null");
 		}
 
 		if (HLSLVersion == ShaderVersion{ 0, 0 })

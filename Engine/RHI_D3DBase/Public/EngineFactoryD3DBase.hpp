@@ -292,32 +292,32 @@ namespace shz
 			case 10:
 				switch (MinVersion.Minor)
 				{
-				case 0: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_10_0); break;
-				case 1: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_10_1); break;
-				default: UNEXPECTED("unknown feature level 10.", uint32{ MinVersion.Minor });
+				case 0: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_10_0); break;
+				case 1: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_10_1); break;
+				default: ASSERT(false, "unknown feature level 10.", uint32{ MinVersion.Minor });
 				}
 				break;
 			case 11:
 				switch (MinVersion.Minor)
 				{
-				case 0: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_11_0); break;
-				case 1: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_11_1); break;
-				default: UNEXPECTED("unknown feature level 11.", uint32{ MinVersion.Minor });
+				case 0: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_11_0); break;
+				case 1: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_11_1); break;
+				default: ASSERT(false, "unknown feature level 11.", uint32{ MinVersion.Minor });
 				}
 				break;
 #    if defined(_WIN32_WINNT_WIN10) && (_WIN32_WINNT >= _WIN32_WINNT_WIN10)
 			case 12:
 				switch (MinVersion.Minor)
 				{
-				case 0: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_0); break;
-				case 1: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_1); break;
-				case 2: VERIFY_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_2); break;
-				default: UNEXPECTED("unknown feature level 12.", uint32{ MinVersion.Minor });
+				case 0: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_0); break;
+				case 1: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_1); break;
+				case 2: ASSERT_EXPR(FeatureLevel == D3D_FEATURE_LEVEL_12_2); break;
+				default: ASSERT(false, "unknown feature level 12.", uint32{ MinVersion.Minor });
 				}
 				break;
 #    endif
 			default:
-				UNEXPECTED("Unknown major version of the feature level");
+				ASSERT(false, "Unknown major version of the feature level");
 			}
 #endif
 

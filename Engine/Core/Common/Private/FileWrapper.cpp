@@ -31,109 +31,109 @@
 namespace shz
 {
 
-bool FileWrapper::ReadWholeFile(const char* FilePath, std::vector<uint8>& Data, bool Silent)
-{
-    if (FilePath == nullptr)
-    {
-        DEV_ERROR("File path must not be null");
-        return false;
-    }
+	bool FileWrapper::ReadWholeFile(const char* FilePath, std::vector<uint8>& Data, bool Silent)
+	{
+		if (FilePath == nullptr)
+		{
+			ASSERT(false, "File path must not be null");
+			return false;
+		}
 
-    FileWrapper File{FilePath, EFileAccessMode::Read};
-    if (!File)
-    {
-        if (!Silent)
-        {
-            LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
-        }
-        return false;
-    }
+		FileWrapper File{ FilePath, EFileAccessMode::Read };
+		if (!File)
+		{
+			if (!Silent)
+			{
+				LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
+			}
+			return false;
+		}
 
-    const size_t Size = File->GetSize();
-    Data.resize(Size);
-    if (Size > 0)
-    {
-        if (!File->Read(Data.data(), Size))
-        {
-            if (!Silent)
-            {
-                LOG_ERROR_MESSAGE("Failed to read file '", FilePath, "'.");
-            }
-            return false;
-        }
-    }
+		const size_t Size = File->GetSize();
+		Data.resize(Size);
+		if (Size > 0)
+		{
+			if (!File->Read(Data.data(), Size))
+			{
+				if (!Silent)
+				{
+					LOG_ERROR_MESSAGE("Failed to read file '", FilePath, "'.");
+				}
+				return false;
+			}
+		}
 
-    return true;
-}
+		return true;
+	}
 
-bool FileWrapper::ReadWholeFile(const char* FilePath, IDataBlob** ppData, bool Silent)
-{
-    if (ppData == nullptr)
-    {
-        DEV_ERROR("Data pointer must not be null");
-        return false;
-    }
+	bool FileWrapper::ReadWholeFile(const char* FilePath, IDataBlob** ppData, bool Silent)
+	{
+		if (ppData == nullptr)
+		{
+			ASSERT(false, "Data pointer must not be null");
+			return false;
+		}
 
-    DEV_CHECK_ERR(*ppData == nullptr, "Data pointer is not null. This may result in memory leak.");
+		ASSERT(*ppData == nullptr, "Data pointer is not null. This may result in memory leak.");
 
-    FileWrapper File{FilePath, EFileAccessMode::Read};
-    if (!File)
-    {
-        if (!Silent)
-        {
-            LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
-        }
-        return false;
-    }
+		FileWrapper File{ FilePath, EFileAccessMode::Read };
+		if (!File)
+		{
+			if (!Silent)
+			{
+				LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
+			}
+			return false;
+		}
 
-    RefCntAutoPtr<DataBlobImpl> pData = DataBlobImpl::Create();
-    if (!File->Read(pData))
-    {
-        if (!Silent)
-        {
-            LOG_ERROR_MESSAGE("Failed to read file '", FilePath, "'.");
-        }
-        return false;
-    }
+		RefCntAutoPtr<DataBlobImpl> pData = DataBlobImpl::Create();
+		if (!File->Read(pData))
+		{
+			if (!Silent)
+			{
+				LOG_ERROR_MESSAGE("Failed to read file '", FilePath, "'.");
+			}
+			return false;
+		}
 
-    *ppData = pData.Detach();
-    return true;
-}
+		*ppData = pData.Detach();
+		return true;
+	}
 
-bool FileWrapper::WriteFile(const char* FilePath, const void* Data, size_t Size, bool Silent)
-{
-    if (FilePath == nullptr || FilePath[0] == '\0')
-    {
-        DEV_ERROR("File path must not be null or empty");
-        return false;
-    }
+	bool FileWrapper::WriteFile(const char* FilePath, const void* Data, size_t Size, bool Silent)
+	{
+		if (FilePath == nullptr || FilePath[0] == '\0')
+		{
+			ASSERT(false, "File path must not be null or empty");
+			return false;
+		}
 
-    if (Data == nullptr)
-    {
-        DEV_ERROR("Data pointer must not be null");
-        return false;
-    }
+		if (Data == nullptr)
+		{
+			ASSERT(false, "Data pointer must not be null");
+			return false;
+		}
 
-    FileWrapper File{FilePath, EFileAccessMode::Overwrite};
-    if (!File)
-    {
-        if (!Silent)
-        {
-            LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
-        }
-        return false;
-    }
+		FileWrapper File{ FilePath, EFileAccessMode::Overwrite };
+		if (!File)
+		{
+			if (!Silent)
+			{
+				LOG_ERROR_MESSAGE("Failed to open file '", FilePath, "'.");
+			}
+			return false;
+		}
 
-    if (!File->Write(Data, Size))
-    {
-        if (!Silent)
-        {
-            LOG_ERROR_MESSAGE("Failed to write to file '", FilePath, "'.");
-        }
-        return false;
-    }
+		if (!File->Write(Data, Size))
+		{
+			if (!Silent)
+			{
+				LOG_ERROR_MESSAGE("Failed to write to file '", FilePath, "'.");
+			}
+			return false;
+		}
 
-    return true;
-}
+		return true;
+	}
 
 } // namespace shz

@@ -106,7 +106,7 @@ namespace shz
 			// 1/det * | d -b|
 			//         |-c  a|
 			const float32 det = Determinant();
-			ASSERT(std::fabs(det) > 1e-12f);
+			ASSERT(std::fabs(det) > 1e-12f, "Attempted to invert a matrix with zero determinant.");
 			const float32 invDet = 1.0f / det;
 
 			return Matrix2x2(

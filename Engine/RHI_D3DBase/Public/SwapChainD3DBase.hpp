@@ -121,7 +121,7 @@ namespace shz
 			}
 #endif
 
-			VERIFY(m_DesiredPreTransform == SURFACE_TRANSFORM_OPTIMAL || m_DesiredPreTransform == SURFACE_TRANSFORM_IDENTITY,
+			ASSERT(m_DesiredPreTransform == SURFACE_TRANSFORM_OPTIMAL || m_DesiredPreTransform == SURFACE_TRANSFORM_IDENTITY,
 				"Direct3D swap chains only support identity transform.");
 			m_DesiredPreTransform = SURFACE_TRANSFORM_OPTIMAL;
 			m_SwapChainDesc.PreTransform = SURFACE_TRANSFORM_IDENTITY;
@@ -160,7 +160,7 @@ namespace shz
 			swapChainDesc.SampleDesc.Count = 1;
 			swapChainDesc.SampleDesc.Quality = 0;
 
-			DEV_CHECK_ERR(m_SwapChainDesc.Usage != 0, "No swap chain usage flags defined");
+			ASSERT(m_SwapChainDesc.Usage != 0, "No swap chain usage flags defined");
 			static_assert(SWAP_CHAIN_USAGE_LAST == 8u, "Please update this function to handle the new swapchain usage");
 			swapChainDesc.BufferUsage = 0;
 			if (m_SwapChainDesc.Usage & SWAP_CHAIN_USAGE_RENDER_TARGET)
@@ -276,7 +276,7 @@ namespace shz
 					pSwapChain2->SetMaximumFrameLatency(m_MaxFrameLatency);
 
 					m_FrameLatencyWaitableObject = pSwapChain2->GetFrameLatencyWaitableObject();
-					VERIFY(m_FrameLatencyWaitableObject != NULL, "Waitable object must not be null");
+					ASSERT(m_FrameLatencyWaitableObject != NULL, "Waitable object must not be null");
 				}
 			}
 			else

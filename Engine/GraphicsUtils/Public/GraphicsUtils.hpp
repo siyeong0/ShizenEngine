@@ -165,7 +165,7 @@ namespace shz
 	// Returns the size of the specified value type
 	inline uint32 GetValueSize(VALUE_TYPE Val)
 	{
-		VERIFY_EXPR(Val < _countof(ValueTypeToSizeMap));
+		ASSERT_EXPR(Val < _countof(ValueTypeToSizeMap));
 		return ValueTypeToSizeMap[Val];
 	}
 
@@ -604,8 +604,8 @@ namespace shz
 		if (Type == SHADER_TYPE_UNKNOWN)
 			return -1;
 
-		VERIFY(Type > SHADER_TYPE_UNKNOWN && Type <= SHADER_TYPE_LAST, "Value ", uint32{ Type }, " is not a valid SHADER_TYPE enum value");
-		VERIFY(((uint32{ Type } &(uint32{ Type } - 1)) == 0), "Only single shader stage should be provided");
+		ASSERT(Type > SHADER_TYPE_UNKNOWN && Type <= SHADER_TYPE_LAST, "Value ", uint32{ Type }, " is not a valid SHADER_TYPE enum value");
+		ASSERT(((uint32{ Type } &(uint32{ Type } - 1)) == 0), "Only single shader stage should be provided");
 
 		return PlatformMisc::GetLSB(Type);
 	}
@@ -615,7 +615,7 @@ namespace shz
 		if (Stages == SHADER_TYPE_UNKNOWN)
 			return -1;
 
-		VERIFY(Stages > SHADER_TYPE_UNKNOWN && Stages < SHADER_TYPE_LAST * 2, "Value ", uint32{ Stages }, " is not a valid SHADER_TYPE enum value");
+		ASSERT(Stages > SHADER_TYPE_UNKNOWN && Stages < SHADER_TYPE_LAST * 2, "Value ", uint32{ Stages }, " is not a valid SHADER_TYPE enum value");
 
 		return PlatformMisc::GetLSB(Stages);
 	}
@@ -625,7 +625,7 @@ namespace shz
 		if (Stages == SHADER_TYPE_UNKNOWN)
 			return -1;
 
-		VERIFY(Stages > SHADER_TYPE_UNKNOWN && Stages < SHADER_TYPE_LAST * 2, "Value ", uint32{ Stages }, " is not a valid SHADER_TYPE enum value");
+		ASSERT(Stages > SHADER_TYPE_UNKNOWN && Stages < SHADER_TYPE_LAST * 2, "Value ", uint32{ Stages }, " is not a valid SHADER_TYPE enum value");
 
 		const uint32 StageIndex = PlatformMisc::GetLSB(Stages);
 		Stages &= ~static_cast<SHADER_TYPE>(1u << StageIndex);
@@ -675,7 +675,7 @@ namespace shz
 
 	inline SHADER_TYPE GetShaderTypeFromIndex(int32 Index)
 	{
-		VERIFY(Index >= 0 && Index <= LastShaderInd, "Shader type index is out of range");
+		ASSERT(Index >= 0 && Index <= LastShaderInd, "Shader type index is out of range");
 		return static_cast<SHADER_TYPE>(1 << Index);
 	}
 
@@ -802,7 +802,7 @@ namespace shz
 
 	inline String GetShaderResourcePrintName(const char* Name, uint32 ArraySize, uint32 ArrayIndex)
 	{
-		VERIFY(ArrayIndex < ArraySize, "Array index is out of range");
+		ASSERT(ArrayIndex < ArraySize, "Array index is out of range");
 		String PrintName = Name;
 		if (ArraySize > 1)
 		{
@@ -1000,7 +1000,7 @@ namespace shz
 			switch (ShaderStatus)
 			{
 			case SHADER_STATUS_UNINITIALIZED:
-				UNEXPECTED("Shader status must not be uninitialized");
+				ASSERT(false, "Shader status must not be uninitialized");
 				break;
 
 			case SHADER_STATUS_COMPILING:
@@ -1016,7 +1016,7 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("Unexpected shader status");
+				ASSERT(false, "Unexpected shader status");
 			}
 			});
 		return OverallStatus;
@@ -1041,7 +1041,7 @@ namespace shz
 		int                 Spacing = 4,
 		uint32              Flags = ~0u)
 	{
-		VERIFY_EXPR(NumColumns > 0);
+		ASSERT_EXPR(NumColumns > 0);
 
 		std::vector<std::string> FeatureStrings;
 		std::vector<size_t>      ColWidth(NumColumns);

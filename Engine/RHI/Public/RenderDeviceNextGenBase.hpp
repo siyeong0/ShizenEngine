@@ -64,7 +64,7 @@ namespace shz
 			: TBase{ pRefCounters, RawMemAllocator, pEngineFactory, EngineCI, AdapterInfo }
 			, m_CmdQueueCount{ CmdQueueCount }
 		{
-			VERIFY(m_CmdQueueCount < MAX_COMMAND_QUEUES, "The number of command queue is greater than maximum allowed value (", MAX_COMMAND_QUEUES, ")");
+			ASSERT(m_CmdQueueCount < MAX_COMMAND_QUEUES, "The number of command queue is greater than maximum allowed value (", MAX_COMMAND_QUEUES, ")");
 
 			m_CommandQueues = ALLOCATE(this->m_RawMemAllocator, "Raw memory for the device command/release queues", CommandQueue, m_CmdQueueCount);
 			for (size_t q = 0; q < m_CmdQueueCount; ++q)
@@ -105,11 +105,11 @@ namespace shz
 		template <typename ObjectType, typename = typename std::enable_if<std::is_object<ObjectType>::value>::type>
 		void SafeReleaseDeviceObject(ObjectType&& Object, uint64 QueueMask)
 		{
-			VERIFY(m_CommandQueues != nullptr, "Command queues have been destroyed. Are you releasing an object from the render device destructor?");
+			ASSERT(m_CommandQueues != nullptr, "Command queues have been destroyed. Are you releasing an object from the render device destructor?");
 
 			QueueMask &= GetCommandQueueMask();
 
-			VERIFY(QueueMask != 0, "At least one bit should be set in the command queue mask");
+			ASSERT(QueueMask != 0, "At least one bit should be set in the command queue mask");
 			if (QueueMask == 0)
 				return;
 
@@ -120,7 +120,7 @@ namespace shz
 			while (QueueMask != 0)
 			{
 				uint32 QueueInd = PlatformMisc::GetLSB(QueueMask);
-				VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+				ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 
 				CommandQueue& Queue = m_CommandQueues[QueueInd];
 				// Do not use std::move on wrapper!!!
@@ -128,7 +128,7 @@ namespace shz
 				QueueMask &= ~(uint64{ 1 } << uint64{ QueueInd });
 				--NumReferences;
 			}
-			VERIFY_EXPR(NumReferences == 0);
+			ASSERT_EXPR(NumReferences == 0);
 
 			Wrapper.GiveUpOwnership();
 		}
@@ -151,7 +151,7 @@ namespace shz
 
 		void PurgeReleaseQueue(SoftwareQueueIndex QueueInd, bool ForceRelease = false)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 			uint64        CompletedFenceValue = ForceRelease ? std::numeric_limits<uint64>::max() : Queue.CmdQueue->GetCompletedFenceValue();
 			Queue.ReleaseQueue.Purge(CompletedFenceValue);
@@ -159,7 +159,7 @@ namespace shz
 
 		void IdleCommandQueue(SoftwareQueueIndex QueueInd, bool ReleaseResources)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 
 			uint64 CmdBufferNumber = 0;
@@ -201,7 +201,7 @@ namespace shz
 		SubmittedCommandBufferInfo SubmitCommandBuffer(SoftwareQueueIndex QueueInd, bool DiscardStaleResources, const SubmitDataType&... SubmitData)
 		{
 			SubmittedCommandBufferInfo CmdBuffInfo;
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 
 			{
@@ -238,13 +238,13 @@ namespace shz
 
 		ResourceReleaseQueue<DynamicStaleResourceWrapper>& GetReleaseQueue(SoftwareQueueIndex QueueInd)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			return m_CommandQueues[QueueInd].ReleaseQueue;
 		}
 
 		const CommandQueueType& GetCommandQueue(SoftwareQueueIndex CommandQueueInd) const
 		{
-			VERIFY_EXPR(CommandQueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(CommandQueueInd < m_CmdQueueCount);
 			return *m_CommandQueues[CommandQueueInd].CmdQueue;
 		}
 
@@ -261,7 +261,7 @@ namespace shz
 		template <typename TAction>
 		void LockCmdQueueAndRun(SoftwareQueueIndex QueueInd, TAction Action)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 			std::lock_guard<std::mutex> Lock{ Queue.Mutex };
 			Action(Queue.CmdQueue);
@@ -269,7 +269,7 @@ namespace shz
 
 		CommandQueueType* LockCommandQueue(SoftwareQueueIndex QueueInd)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 			Queue.Mutex.lock();
 			return Queue.CmdQueue;
@@ -277,7 +277,7 @@ namespace shz
 
 		void UnlockCommandQueue(SoftwareQueueIndex QueueInd)
 		{
-			VERIFY_EXPR(QueueInd < m_CmdQueueCount);
+			ASSERT_EXPR(QueueInd < m_CmdQueueCount);
 			CommandQueue& Queue = m_CommandQueues[QueueInd];
 			Queue.Mutex.unlock();
 		}
@@ -290,8 +290,8 @@ namespace shz
 				for (size_t q = 0; q < m_CmdQueueCount; ++q)
 				{
 					CommandQueue& Queue = m_CommandQueues[q];
-					DEV_CHECK_ERR(Queue.ReleaseQueue.GetStaleResourceCount() == 0, "All stale resources must be released before destroying a command queue");
-					DEV_CHECK_ERR(Queue.ReleaseQueue.GetPendingReleaseResourceCount() == 0, "All resources must be released before destroying a command queue");
+					ASSERT(Queue.ReleaseQueue.GetStaleResourceCount() == 0, "All stale resources must be released before destroying a command queue");
+					ASSERT(Queue.ReleaseQueue.GetPendingReleaseResourceCount() == 0, "All resources must be released before destroying a command queue");
 					Queue.~CommandQueue();
 				}
 				this->m_RawMemAllocator.Free(m_CommandQueues);

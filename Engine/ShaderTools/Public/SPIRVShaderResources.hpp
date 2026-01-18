@@ -195,7 +195,7 @@ namespace shz
 
 		const SPIRVShaderStageInputAttribs& GetShaderStageInputAttribs(uint32 n) const noexcept
 		{
-			VERIFY(n < m_NumShaderStageInputs, "Shader stage input index (", n, ") is out of range. Total input count: ", m_NumShaderStageInputs);
+			ASSERT(n < m_NumShaderStageInputs, "Shader stage input index (", n, ") is out of range. Total input count: ", m_NumShaderStageInputs);
 			const SPIRVShaderResourceAttribs* ResourceMemoryEnd = reinterpret_cast<const SPIRVShaderResourceAttribs*>(m_MemoryBuffer.get()) + m_TotalResources;
 			return reinterpret_cast<const SPIRVShaderStageInputAttribs*>(ResourceMemoryEnd)[n];
 		}
@@ -204,13 +204,13 @@ namespace shz
 		{
 			if (Index >= GetNumUBs())
 			{
-				UNEXPECTED("Uniform buffer index (", Index, ") is out of range.");
+				ASSERT(false, "Uniform buffer index (", Index, ") is out of range.");
 				return nullptr;
 			}
 
 			if (!m_UBReflectionBuffer)
 			{
-				UNEXPECTED("Uniform buffer reflection information is not loaded. Please set the LoadConstantBufferReflection flag when creating the shader.");
+				ASSERT(false, "Uniform buffer reflection information is not loaded. Please set the LoadConstantBufferReflection flag when creating the shader.");
 				return nullptr;
 			}
 
@@ -347,15 +347,15 @@ namespace shz
 
 		SPIRVShaderResourceAttribs& GetResAttribs(uint32 n, uint32 NumResources, uint32 Offset) noexcept
 		{
-			VERIFY(n < NumResources, "Resource index (", n, ") is out of range. Total resource count: ", NumResources);
-			VERIFY_EXPR(Offset + n < m_TotalResources);
+			ASSERT(n < NumResources, "Resource index (", n, ") is out of range. Total resource count: ", NumResources);
+			ASSERT_EXPR(Offset + n < m_TotalResources);
 			return reinterpret_cast<SPIRVShaderResourceAttribs*>(m_MemoryBuffer.get())[Offset + n];
 		}
 
 		const SPIRVShaderResourceAttribs& GetResAttribs(uint32 n, uint32 NumResources, uint32 Offset) const noexcept
 		{
-			VERIFY(n < NumResources, "Resource index (", n, ") is out of range. Total resource count: ", NumResources);
-			VERIFY_EXPR(Offset + n < m_TotalResources);
+			ASSERT(n < NumResources, "Resource index (", n, ") is out of range. Total resource count: ", NumResources);
+			ASSERT_EXPR(Offset + n < m_TotalResources);
 			return reinterpret_cast<SPIRVShaderResourceAttribs*>(m_MemoryBuffer.get())[Offset + n];
 		}
 

@@ -52,7 +52,7 @@ namespace shz
 	bool QueryD3D12Impl::AllocateQueries()
 	{
 		DiscardQueries();
-		VERIFY_EXPR(m_pContext != nullptr);
+		ASSERT_EXPR(m_pContext != nullptr);
 		m_pQueryMgr = &m_pContext->GetQueryManager();
 		for (uint32 i = 0; i < (m_Desc.Type == QUERY_TYPE_DURATION ? uint32{ 2 } : uint32{ 1 }); ++i)
 		{
@@ -79,7 +79,7 @@ namespace shz
 		{
 			if (HeapIdx != QueryManagerD3D12::InvalidIndex)
 			{
-				VERIFY_EXPR(m_pQueryMgr != nullptr);
+				ASSERT_EXPR(m_pQueryMgr != nullptr);
 				m_pQueryMgr->ReleaseQuery(m_Desc.Type, HeapIdx);
 				HeapIdx = QueryManagerD3D12::InvalidIndex;
 			}
@@ -117,7 +117,7 @@ namespace shz
 			return false;
 		}
 
-		VERIFY_EXPR(m_pQueryMgr != nullptr);
+		ASSERT_EXPR(m_pQueryMgr != nullptr);
 		SoftwareQueueIndex CmdQueueId = m_pQueryMgr->GetCommandQueueId();
 		m_QueryEndFenceValue = m_pDevice->GetNextFenceValue(CmdQueueId);
 
@@ -128,7 +128,7 @@ namespace shz
 	{
 		TQueryBase::CheckQueryDataPtr(pData, DataSize);
 
-		VERIFY_EXPR(m_pQueryMgr != nullptr);
+		ASSERT_EXPR(m_pQueryMgr != nullptr);
 		SoftwareQueueIndex CmdQueueId = m_pQueryMgr->GetCommandQueueId();
 		uint64             CompletedFenceValue = m_pDevice->GetCompletedFenceValue(CmdQueueId);
 		if (CompletedFenceValue >= m_QueryEndFenceValue)
@@ -222,7 +222,7 @@ namespace shz
 			break;
 
 			default:
-				UNEXPECTED("Unexpected query type");
+				ASSERT(false, "Unexpected query type");
 			}
 
 			if (pData != nullptr && AutoInvalidate)
@@ -240,7 +240,7 @@ namespace shz
 
 	ID3D12QueryHeap* QueryD3D12Impl::GetD3D12QueryHeap()
 	{
-		VERIFY_EXPR(m_pQueryMgr != nullptr);
+		ASSERT_EXPR(m_pQueryMgr != nullptr);
 		return m_pQueryMgr->GetQueryHeap(m_Desc.Type);
 	}
 

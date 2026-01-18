@@ -277,7 +277,7 @@ namespace shz
 			HRESULT hr = pd3d12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(pd3d12Fence), reinterpret_cast<void**>(static_cast<ID3D12Fence**>(&pd3d12Fence)));
 			CHECK_D3D_RESULT_THROW(hr, "Failed to create command queue fence");
 			hr = pd3d12Fence->SetName(FenceName);
-			VERIFY_EXPR(SUCCEEDED(hr));
+			ASSERT_EXPR(SUCCEEDED(hr));
 
 			return RefCntAutoPtr<CommandQueueD3D12Impl>{NEW_RC_OBJ(GetRawAllocator(), "CommandQueueD3D12 instance", CommandQueueD3D12Impl)(pd3d12Queue, pd3d12Fence)};
 		}
@@ -297,7 +297,7 @@ namespace shz
 		if (!LoadD3D12(EngineCI.D3D12DllName))
 			return;
 
-		VERIFY(ppDevice && ppContexts, "Null pointer provided");
+		ASSERT(ppDevice && ppContexts, "Null pointer provided");
 		if (!ppDevice || !ppContexts)
 			return;
 
@@ -385,7 +385,7 @@ namespace shz
 				hr = D3D12CreateDevice(hardwareAdapter, d3dFeatureLevel, __uuidof(d3d12Device), reinterpret_cast<void**>(static_cast<ID3D12Device**>(&d3d12Device)));
 				if (SUCCEEDED(hr))
 				{
-					VERIFY_EXPR(d3d12Device);
+					ASSERT_EXPR(d3d12Device);
 					break;
 				}
 			}
@@ -404,7 +404,7 @@ namespace shz
 					hr = D3D12CreateDevice(warpAdapter, d3dFeatureLevel, __uuidof(d3d12Device), reinterpret_cast<void**>(static_cast<ID3D12Device**>(&d3d12Device)));
 					if (SUCCEEDED(hr))
 					{
-						VERIFY_EXPR(d3d12Device);
+						ASSERT_EXPR(d3d12Device);
 						break;
 					}
 				}
@@ -449,18 +449,18 @@ namespace shz
 					NewFilter.DenyList.pIDList = DenyIds;
 
 					hr = pInfoQueue->PushStorageFilter(&NewFilter);
-					VERIFY(SUCCEEDED(hr), "Failed to push storage filter");
+					ASSERT(SUCCEEDED(hr), "Failed to push storage filter");
 
 					if (EngineCI.D3D12ValidationFlags & D3D12_VALIDATION_FLAG_BREAK_ON_CORRUPTION)
 					{
 						hr = pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-						VERIFY(SUCCEEDED(hr), "Failed to set break on corruption");
+						ASSERT(SUCCEEDED(hr), "Failed to set break on corruption");
 					}
 
 					if (EngineCI.D3D12ValidationFlags & D3D12_VALIDATION_FLAG_BREAK_ON_ERROR)
 					{
 						hr = pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-						VERIFY(SUCCEEDED(hr), "Failed to set break on error");
+						ASSERT(SUCCEEDED(hr), "Failed to set break on error");
 					}
 				}
 			}
@@ -488,7 +488,7 @@ namespace shz
 					hr = d3d12Device->CreateCommandQueue(&queueDesc, __uuidof(pd3d12CmdQueue), reinterpret_cast<void**>(static_cast<ID3D12CommandQueue**>(&pd3d12CmdQueue)));
 					CHECK_D3D_RESULT_THROW(hr, "Failed to create command queue");
 					hr = pd3d12CmdQueue->SetName(WidenString(ContextCI.Name).c_str());
-					VERIFY_EXPR(SUCCEEDED(hr));
+					ASSERT_EXPR(SUCCEEDED(hr));
 
 					RefCntAutoPtr<CommandQueueD3D12Impl> pCmdQueueD3D12 = shz::CreateCommandQueueD3D12(d3d12Device, pd3d12CmdQueue, (WidenString(ContextCI.Name) + L" Fence").c_str());
 					CmdQueueD3D12Refs.push_back(pCmdQueueD3D12);
@@ -497,7 +497,7 @@ namespace shz
 
 			if (EngineCI.NumImmediateContexts > 0)
 			{
-				VERIFY(EngineCI.pImmediateContextInfo != nullptr, "Must have been caught by VerifyEngineCreateInfo()");
+				ASSERT(EngineCI.pImmediateContextInfo != nullptr, "Must have been caught by VerifyEngineCreateInfo()");
 				for (uint32 CtxInd = 0; CtxInd < EngineCI.NumImmediateContexts; ++CtxInd)
 					CreateQueue(EngineCI.pImmediateContextInfo[CtxInd]);
 			}
@@ -525,7 +525,7 @@ namespace shz
 		IMemoryAllocator* pRawMemAllocator,
 		ICommandQueueD3D12** ppCommandQueue)
 	{
-		VERIFY(pd3d12NativeDevice && pd3d12NativeCommandQueue && ppCommandQueue, "Null pointer provided");
+		ASSERT(pd3d12NativeDevice && pd3d12NativeCommandQueue && ppCommandQueue, "Null pointer provided");
 		if (!pd3d12NativeDevice || !pd3d12NativeCommandQueue || !ppCommandQueue)
 			return;
 
@@ -564,7 +564,7 @@ namespace shz
 		if (!LoadD3D12(EngineCI.D3D12DllName))
 			return;
 
-		VERIFY(pd3d12NativeDevice && ppCommandQueues && ppDevice && ppContexts, "Null pointer provided");
+		ASSERT(pd3d12NativeDevice && ppCommandQueues && ppDevice && ppContexts, "Null pointer provided");
 		if (!pd3d12NativeDevice || !ppCommandQueues || !ppDevice || !ppContexts)
 			return;
 
@@ -573,7 +573,7 @@ namespace shz
 		const uint32                            NumImmediateContexts = EngineCI.NumImmediateContexts > 0 ? EngineCI.NumImmediateContexts : 1;
 		const ImmediateContextCreateInfo* const pImmediateContextInfo = EngineCI.NumImmediateContexts > 0 ? EngineCI.pImmediateContextInfo : &DefaultImmediateCtxCI;
 
-		VERIFY_EXPR(NumImmediateContexts == CommandQueueCount);
+		ASSERT_EXPR(NumImmediateContexts == CommandQueueCount);
 
 		*ppDevice = nullptr;
 		memset(ppContexts, 0, sizeof(*ppContexts) * (size_t{ CommandQueueCount } + size_t{ EngineCI.NumDeferredContexts }));
@@ -668,7 +668,7 @@ namespace shz
 		const NativeWindow& Window,
 		ISwapChain** ppSwapChain)
 	{
-		VERIFY(ppSwapChain, "Null pointer provided");
+		ASSERT(ppSwapChain, "Null pointer provided");
 		if (!ppSwapChain)
 			return;
 
@@ -743,7 +743,7 @@ namespace shz
 				HRESULT hr = D3D12CreateDevice(pDXIAdapter, d3dFeatureLevel, __uuidof(d3d12Device), reinterpret_cast<void**>(static_cast<ID3D12Device**>(&d3d12Device)));
 				if (SUCCEEDED(hr))
 				{
-					VERIFY_EXPR(d3d12Device);
+					ASSERT_EXPR(d3d12Device);
 					break;
 				}
 			}
@@ -984,7 +984,7 @@ namespace shz
 					ShadingRateProperties& ShadingRateProps{ AdapterInfo.ShadingRate };
 
 					auto AddShadingRate = [&ShadingRateProps](SHADING_RATE Rate, SAMPLE_COUNT SampleBits) {
-						VERIFY_EXPR(ShadingRateProps.NumShadingRates < MAX_SHADING_RATES);
+						ASSERT_EXPR(ShadingRateProps.NumShadingRates < MAX_SHADING_RATES);
 						ShadingRateProps.ShadingRates[ShadingRateProps.NumShadingRates++] = { Rate, SampleBits };
 						};
 					if (d3d12Features6.AdditionalShadingRatesSupported != FALSE)

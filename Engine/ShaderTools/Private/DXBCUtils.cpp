@@ -594,7 +594,7 @@ namespace shz
 				return RES_TYPE_UAV;
 
 			default:
-				UNEXPECTED("Unsupported shader input type");
+				ASSERT(false, "Unsupported shader input type");
 				return RES_TYPE_COUNT;
 			}
 		}
@@ -610,7 +610,7 @@ namespace shz
 			case RES_TYPE_UAV:     return "UAV";
 
 			default:
-				UNEXPECTED("Unknown resource type");
+				ASSERT(false, "Unknown resource type");
 				return "";
 			}
 		}
@@ -852,7 +852,7 @@ namespace shz
 			case D3DWDDM1_3_SB_OPCODE_SAMPLE_C_CLAMP_FEEDBACK: return 7;
 			case D3DWDDM1_3_SB_OPCODE_CHECK_ACCESS_FULLY_MAPPED: return 2;
 			default:
-				UNEXPECTED("Unknown opcode");
+				ASSERT(false, "Unknown opcode");
 				return ~0u;
 			}
 		}
@@ -866,14 +866,14 @@ namespace shz
 
 		inline bool PatchSpace(ResourceBindingInfo50&, ResourceExtendedInfo& Ext, const DXBCUtils::BindInfo& Info)
 		{
-			VERIFY_EXPR(Ext.SrcSpace == ~0u);
+			ASSERT_EXPR(Ext.SrcSpace == ~0u);
 			return Info.Space == 0 || Info.Space == ~0U;
 		}
 
 		template <typename ResourceBindingInfoType>
 		void RemapShaderResources(const DXBCUtils::TResourceBindingMap& ResourceMap, const void* ChunkEnd, ResourceDefChunkHeader& RDEFHeader, TExtendedResourceMap& ExtResMap, ResourceBindingPerType& BindingsPerType)
 		{
-			VERIFY_EXPR(RDEFHeader.Magic == RDEFFourCC);
+			ASSERT_EXPR(RDEFHeader.Magic == RDEFFourCC);
 
 			char* Ptr = reinterpret_cast<char*>(&RDEFHeader) + sizeof(ChunkHeader);
 			ResourceBindingInfoType* ResBinding = reinterpret_cast<ResourceBindingInfoType*>(Ptr + RDEFHeader.ResBindingOffset);
@@ -912,7 +912,7 @@ namespace shz
 					{
 						if (TempName[ArrStart] == '[')
 							break;
-						VERIFY_EXPR(TempName[ArrStart] >= '0' && TempName[ArrStart] <= '9');
+						ASSERT_EXPR(TempName[ArrStart] >= '0' && TempName[ArrStart] <= '9');
 					}
 
 					ArrayInd = std::stoi(TempName.substr(ArrStart + 1, ArrEnd - ArrStart - 1));
@@ -929,10 +929,10 @@ namespace shz
 				auto& Binding = BindingsPerType[ResType];
 				Binding.emplace_back(&Iter->second);
 
-				VERIFY_EXPR(ArrayInd < Iter->second.ArraySize);
-				VERIFY_EXPR(Ext.SrcBindPoint == ~0u || Ext.SrcBindPoint == Res.BindPoint - ArrayInd);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_COUNT || Ext.Type == ResType);
-				VERIFY_EXPR((ResType != RES_TYPE_CBV && Res.BindCount == 0) ||
+				ASSERT_EXPR(ArrayInd < Iter->second.ArraySize);
+				ASSERT_EXPR(Ext.SrcBindPoint == ~0u || Ext.SrcBindPoint == Res.BindPoint - ArrayInd);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_COUNT || Ext.Type == ResType);
+				ASSERT_EXPR((ResType != RES_TYPE_CBV && Res.BindCount == 0) ||
 					(ResType == RES_TYPE_CBV && Res.BindCount == ~0u) ||
 					Iter->second.ArraySize >= Res.BindCount);
 
@@ -941,15 +941,15 @@ namespace shz
 				switch (Iter->second.ResType)
 				{
 
-				case SHADER_RESOURCE_TYPE_CONSTANT_BUFFER:  VERIFY_EXPR(ResType == RES_TYPE_CBV);     break;
-				case SHADER_RESOURCE_TYPE_TEXTURE_SRV:      VERIFY_EXPR(ResType == RES_TYPE_SRV);     break;
-				case SHADER_RESOURCE_TYPE_BUFFER_SRV:       VERIFY_EXPR(ResType == RES_TYPE_SRV);     break;
-				case SHADER_RESOURCE_TYPE_TEXTURE_UAV:      VERIFY_EXPR(ResType == RES_TYPE_UAV);     break;
-				case SHADER_RESOURCE_TYPE_BUFFER_UAV:       VERIFY_EXPR(ResType == RES_TYPE_UAV);     break;
-				case SHADER_RESOURCE_TYPE_SAMPLER:          VERIFY_EXPR(ResType == RES_TYPE_SAMPLER); break;
-				case SHADER_RESOURCE_TYPE_INPUT_ATTACHMENT: VERIFY_EXPR(ResType == RES_TYPE_SRV);     break;
+				case SHADER_RESOURCE_TYPE_CONSTANT_BUFFER:  ASSERT_EXPR(ResType == RES_TYPE_CBV);     break;
+				case SHADER_RESOURCE_TYPE_TEXTURE_SRV:      ASSERT_EXPR(ResType == RES_TYPE_SRV);     break;
+				case SHADER_RESOURCE_TYPE_BUFFER_SRV:       ASSERT_EXPR(ResType == RES_TYPE_SRV);     break;
+				case SHADER_RESOURCE_TYPE_TEXTURE_UAV:      ASSERT_EXPR(ResType == RES_TYPE_UAV);     break;
+				case SHADER_RESOURCE_TYPE_BUFFER_UAV:       ASSERT_EXPR(ResType == RES_TYPE_UAV);     break;
+				case SHADER_RESOURCE_TYPE_SAMPLER:          ASSERT_EXPR(ResType == RES_TYPE_SAMPLER); break;
+				case SHADER_RESOURCE_TYPE_INPUT_ATTACHMENT: ASSERT_EXPR(ResType == RES_TYPE_SRV);     break;
 
-				default: UNEXPECTED("Unsupported shader resource type.");
+				default: ASSERT(false, "Unsupported shader resource type.");
 				}
 #endif
 				Ext.Type = ResType;
@@ -976,10 +976,10 @@ namespace shz
 			{
 				const ShaderChunkHeader& Header = GetHeader();
 
-				VERIFY_EXPR(Header.VersionMajor >= 4);
-				VERIFY_EXPR(Header.ProgramType < PROGRAM_TYPE_COUNT_SM5);
-				VERIFY_EXPR(Header.NumDWords * 4 == Header.Length);
-				VERIFY(ChunkOffset % 4 == 0, "Chunk offset must be a multiple of 4");
+				ASSERT_EXPR(Header.VersionMajor >= 4);
+				ASSERT_EXPR(Header.ProgramType < PROGRAM_TYPE_COUNT_SM5);
+				ASSERT_EXPR(Header.NumDWords * 4 == Header.Length);
+				ASSERT(ChunkOffset % 4 == 0, "Chunk offset must be a multiple of 4");
 
 				IsSM51 = Header.VersionMajor == 5 && Header.VersionMinor >= 1;
 
@@ -1016,7 +1016,7 @@ namespace shz
 			void InsertToken(uint32*& Token, uint32 Offset, uint32 Value)
 			{
 				const ptrdiff_t TokenIdx = reinterpret_cast<uint8*>(Token) - Bytecode.data();
-				VERIFY_EXPR(static_cast<size_t>(TokenIdx) < Bytecode.size());
+				ASSERT_EXPR(static_cast<size_t>(TokenIdx) < Bytecode.size());
 				Bytecode.insert(Bytecode.begin() + TokenIdx + Offset * 4, { 0, 0, 0, 0 });
 				Token = reinterpret_cast<uint32*>(&Bytecode[TokenIdx]);
 				Token[Offset] = Value;
@@ -1072,7 +1072,7 @@ namespace shz
 						if (Token >= Ext.SrcBindPoint && Token < Ext.SrcBindPoint + Info->ArraySize)
 						{
 							Token = Info->BindPoint + (Token - Ext.SrcBindPoint);
-							VERIFY_EXPR(Ext.Type == Type);
+							ASSERT_EXPR(Ext.Type == Type);
 							return true;
 						}
 					}
@@ -1086,10 +1086,10 @@ namespace shz
 				// 0 - cbuffer bind point
 				// 1 - row offset (16 bytes per row) | cbuffer size
 
-				VERIFY_EXPR(Token + 2 <= GetChunkEnd());
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_2D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 2 <= GetChunkEnd());
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_2D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				if (!FindResourceBindings(RES_TYPE_CBV, Token[0]))
 					LOG_ERROR_AND_THROW("Failed to find cbuffer with bind point (", Token[0], ").");
@@ -1100,9 +1100,9 @@ namespace shz
 			{
 				// 0 - sampler bind point
 
-				VERIFY_EXPR(Token + 1 <= GetChunkEnd());
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 1 <= GetChunkEnd());
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				if (!FindResourceBindings(RES_TYPE_SAMPLER, Token[0]))
 					LOG_ERROR_AND_THROW("Failed to find sampler with bind point (", Token[0], ").");
@@ -1113,9 +1113,9 @@ namespace shz
 			{
 				// 0 - texture bind point
 
-				VERIFY_EXPR(Token + 1 <= GetChunkEnd());
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 1 <= GetChunkEnd());
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				if (!FindResourceBindings(RES_TYPE_SRV, Token[0]))
 					LOG_ERROR_AND_THROW("Failed to find texture with bind point (", Token[0], ").");
@@ -1126,9 +1126,9 @@ namespace shz
 			{
 				// 0 - UAV bind point
 
-				VERIFY_EXPR(Token + 1 <= GetChunkEnd());
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 1 <= GetChunkEnd());
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				if (!FindResourceBindings(RES_TYPE_UAV, Token[0]))
 					LOG_ERROR_AND_THROW("Failed to find UAV with bind point (", Token[0], ").");
@@ -1166,24 +1166,24 @@ namespace shz
 			case D3D10_SB_OPERAND_INDEX_RELATIVE:
 			{
 				const OperandToken Operand2 = reinterpret_cast<const OperandToken&>(Token[1]);
-				VERIFY_EXPR(Operand2.OperandType == D3D10_SB_OPERAND_TYPE_TEMP);
-				VERIFY_EXPR(Operand2.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
-				VERIFY_EXPR(Operand2.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand2.OperandType == D3D10_SB_OPERAND_TYPE_TEMP);
+				ASSERT_EXPR(Operand2.IndexDim == D3D10_SB_OPERAND_INDEX_1D);
+				ASSERT_EXPR(Operand2.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				if (Info.BindPoint != 0)
 				{
-					VERIFY(Ext.SrcBindPoint == 0, "If source bind point is not 0, D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE should be used");
+					ASSERT(Ext.SrcBindPoint == 0, "If source bind point is not 0, D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE should be used");
 					// Change D3D10_SB_OPERAND_INDEX_RELATIVE to D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE
 					Operand->OperandIndex2D = D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE;
 
 					const ptrdiff_t OperandOffset = reinterpret_cast<uint8*>(Operand) - Bytecode.data();
-					VERIFY_EXPR(static_cast<size_t>(OperandOffset) < Bytecode.size());
+					ASSERT_EXPR(static_cast<size_t>(OperandOffset) < Bytecode.size());
 
 					// Insert immediate index token
 					InsertToken(Token, 1, Info.BindPoint);
 
 					Operand = reinterpret_cast<OperandToken*>(&Bytecode[OperandOffset]);
-					VERIFY_EXPR(Operand->OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE);
+					ASSERT_EXPR(Operand->OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32_PLUS_RELATIVE);
 				}
 
 				break;
@@ -1204,9 +1204,9 @@ namespace shz
 				// 1 - cbuffer bind point
 				// 2 - row offset (16 bytes per row)
 
-				VERIFY_EXPR(Token + 3 <= GetChunkEnd());
-				VERIFY_EXPR(Operand->IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 3 <= GetChunkEnd());
+				ASSERT_EXPR(Operand->IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				RemapResourceOperandSM51_2(Operand, Token, RES_TYPE_CBV);
 				break;
@@ -1217,9 +1217,9 @@ namespace shz
 				// 0 - sampler index in resource definition
 				// 1 - sampler bind point
 
-				VERIFY_EXPR(Token + 2 <= GetChunkEnd());
-				VERIFY_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
-				VERIFY_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 2 <= GetChunkEnd());
+				ASSERT_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
+				ASSERT_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				RemapResourceOperandSM51_2(Operand, Token, RES_TYPE_SAMPLER);
 				break;
@@ -1230,9 +1230,9 @@ namespace shz
 				// 0 - texture index in resource definition
 				// 1 - texture bind point
 
-				VERIFY_EXPR(Token + 2 <= GetChunkEnd());
-				VERIFY_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
-				VERIFY_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 2 <= GetChunkEnd());
+				ASSERT_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
+				ASSERT_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				RemapResourceOperandSM51_2(Operand, Token, RES_TYPE_SRV);
 				break;
@@ -1243,9 +1243,9 @@ namespace shz
 				// 0 - UAV index in resource definition
 				// 1 - UAV bind point
 
-				VERIFY_EXPR(Token + 2 <= GetChunkEnd());
-				VERIFY_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
-				VERIFY_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 2 <= GetChunkEnd());
+				ASSERT_EXPR(Operand->IndexDim >= D3D10_SB_OPERAND_INDEX_2D);
+				ASSERT_EXPR(Operand->OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				RemapResourceOperandSM51_2(Operand, Token, RES_TYPE_UAV);
 				break;
@@ -1274,13 +1274,13 @@ namespace shz
 				// 4 - cbuffer size
 				// 5 - register space
 
-				VERIFY_EXPR(Token + 6 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 5);
-				VERIFY_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_CONSTANT_BUFFER);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 6 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 5);
+				ASSERT_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_CONSTANT_BUFFER);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_CBV];
 				if (Token[1] >= Bindings.size())
@@ -1288,8 +1288,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_CBV);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_CBV);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid cbuffer bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1311,13 +1311,13 @@ namespace shz
 				// 3 - last bind point
 				// 4 - register space
 
-				VERIFY_EXPR(Token + 5 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 4);
-				VERIFY_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_SAMPLER);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 5 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 4);
+				ASSERT_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_SAMPLER);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_SAMPLER];
 				if (Token[1] >= Bindings.size())
@@ -1325,8 +1325,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_SAMPLER);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_SAMPLER);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid sampler bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1351,13 +1351,13 @@ namespace shz
 				// 4 - format? / struct size
 				// 5 - register space
 
-				VERIFY_EXPR(Token + 6 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 5);
-				VERIFY_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_RESOURCE);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 6 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 5);
+				ASSERT_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_RESOURCE);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_SRV];
 				if (Token[1] >= Bindings.size())
@@ -1365,8 +1365,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_SRV);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_SRV);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid texture bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1387,13 +1387,13 @@ namespace shz
 				// 3 - last bind point
 				// 4 - register space
 
-				VERIFY_EXPR(Token + 5 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 4);
-				VERIFY_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_RESOURCE);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 5 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 4);
+				ASSERT_EXPR(Operand.OperandType == D3D10_SB_OPERAND_TYPE_RESOURCE);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_SRV];
 				if (Token[1] >= Bindings.size())
@@ -1401,8 +1401,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_SRV);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_SRV);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid texture bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1427,13 +1427,13 @@ namespace shz
 				// 4 - format? / struct size
 				// 5 - register space
 
-				VERIFY_EXPR(Token + 6 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 5);
-				VERIFY_EXPR(Operand.OperandType == D3D11_SB_OPERAND_TYPE_UNORDERED_ACCESS_VIEW);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 6 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 5);
+				ASSERT_EXPR(Operand.OperandType == D3D11_SB_OPERAND_TYPE_UNORDERED_ACCESS_VIEW);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_UAV];
 				if (Token[1] >= Bindings.size())
@@ -1441,8 +1441,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_UAV);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_UAV);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid UAV bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1463,13 +1463,13 @@ namespace shz
 				// 3 - last bind point
 				// 4 - register space
 
-				VERIFY_EXPR(Token + 5 <= Finish);
-				VERIFY_EXPR(Opcode.OpcodeLength > 4);
-				VERIFY_EXPR(Operand.OperandType == D3D11_SB_OPERAND_TYPE_UNORDERED_ACCESS_VIEW);
-				VERIFY_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
-				VERIFY_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
-				VERIFY_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Token + 5 <= Finish);
+				ASSERT_EXPR(Opcode.OpcodeLength > 4);
+				ASSERT_EXPR(Operand.OperandType == D3D11_SB_OPERAND_TYPE_UNORDERED_ACCESS_VIEW);
+				ASSERT_EXPR(Operand.IndexDim == D3D10_SB_OPERAND_INDEX_3D);
+				ASSERT_EXPR(Operand.OperandIndex1D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex2D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
+				ASSERT_EXPR(Operand.OperandIndex3D == D3D10_SB_OPERAND_INDEX_IMMEDIATE32);
 
 				const auto& Bindings = BindingsPerType[RES_TYPE_UAV];
 				if (Token[1] >= Bindings.size())
@@ -1477,8 +1477,8 @@ namespace shz
 
 				const DXBCUtils::BindInfo& Info = *Bindings[Token[1]];
 				const ResourceExtendedInfo& Ext = ExtResourceMap[&Info];
-				VERIFY_EXPR(Info.BindPoint == Token[2]);
-				VERIFY_EXPR(Ext.Type == RES_TYPE_UAV);
+				ASSERT_EXPR(Info.BindPoint == Token[2]);
+				ASSERT_EXPR(Ext.Type == RES_TYPE_UAV);
 
 				if (Token[3] != RuntimeSizedArraySize && Token[3] != Ext.SrcBindPoint + Info.ArraySize - 1)
 					LOG_ERROR_AND_THROW("Invalid UAV bind point (", Token[3], "), expected (", Ext.SrcBindPoint + Info.ArraySize - 1, ").");
@@ -1623,7 +1623,7 @@ namespace shz
 					ParseIndex(Operand->OperandIndex3D, Token);
 			}
 
-			VERIFY_EXPR(Token <= GetChunkEnd());
+			ASSERT_EXPR(Token <= GetChunkEnd());
 		}
 
 		void ShaderBytecodeRemapper::ParseCustomData(uint32*& Token, D3D10_SB_CUSTOMDATA_CLASS Type)
@@ -1685,7 +1685,7 @@ namespace shz
 			{
 				const D3D10_SB_CUSTOMDATA_CLASS Type = static_cast<D3D10_SB_CUSTOMDATA_CLASS>((*(Token - 1) & 0xfffff800) >> 11);
 				InstructionLength = *Token;
-				VERIFY_EXPR(InstructionLength >= 2);
+				ASSERT_EXPR(InstructionLength >= 2);
 
 				ParseCustomData(Token, Type);
 				break;
@@ -1732,7 +1732,7 @@ namespace shz
 
 			uint32* StartToken = reinterpret_cast<uint32*>(&Bytecode[OpcodeOffset]);
 			uint32* EndToken = StartToken + InstructionLength;
-			VERIFY_EXPR(Token <= EndToken);
+			ASSERT_EXPR(Token <= EndToken);
 
 			RemapResourceBinding(Opcode, StartToken + 1, EndToken);
 
@@ -1741,7 +1741,7 @@ namespace shz
 
 		void ShaderBytecodeRemapper::PatchBytecode(const void* ChunkEnd) noexcept(false)
 		{
-			VERIFY_EXPR(ChunkEnd == GetChunkEnd());
+			ASSERT_EXPR(ChunkEnd == GetChunkEnd());
 
 			uint32* Token = reinterpret_cast<uint32*>(&Bytecode[ChunkOffset + sizeof(ShaderChunkHeader)]);
 			while (Token < GetChunkEnd())
@@ -1786,7 +1786,7 @@ namespace shz
 				   DWORD Checksum[4] = {};
 				   CalculateDXBCChecksum(static_cast<const BYTE*>(pBytecode), static_cast<DWORD>(Size), Checksum);
 
-				   DEV_CHECK_ERR((Checksum[0] == Header.Checksum[0] &&
+				   ASSERT((Checksum[0] == Header.Checksum[0] &&
 								  Checksum[1] == Header.Checksum[1] &&
 								  Checksum[2] == Header.Checksum[2] &&
 								  Checksum[3] == Header.Checksum[3]),

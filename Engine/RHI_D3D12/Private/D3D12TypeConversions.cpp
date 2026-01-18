@@ -118,7 +118,7 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("Incorrect blend factor (", lo, ")");
+			ASSERT(false, "Incorrect blend factor (", lo, ")");
 			return static_cast<D3D12_LOGIC_OP>(0);
 		}
 	}
@@ -166,7 +166,7 @@ namespace shz
 		case TEXTURE_COMPONENT_SWIZZLE_A:        return D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_3;
 			
 		default:
-			UNEXPECTED("Unknown swizzle");
+			ASSERT(false, "Unknown swizzle");
 			return IdentityComponent;
 		}
 	}
@@ -237,7 +237,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected view type");
+			ASSERT(false, "Unexpected view type");
 		}
 	}
 
@@ -278,7 +278,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected view type");
+			ASSERT(false, "Unexpected view type");
 		}
 	}
 
@@ -313,7 +313,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected view type");
+			ASSERT(false, "Unexpected view type");
 		}
 	}
 
@@ -331,7 +331,7 @@ namespace shz
 		}
 		else
 			D3D12SRVDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-		VERIFY_EXPR(BuffDesc.BindFlags & BIND_SHADER_RESOURCE);
+		ASSERT_EXPR(BuffDesc.BindFlags & BIND_SHADER_RESOURCE);
 		if (BuffDesc.Mode == BUFFER_MODE_STRUCTURED)
 			D3D12SRVDesc.Buffer.StructureByteStride = BuffDesc.ElementByteStride;
 	}
@@ -341,7 +341,7 @@ namespace shz
 		D3D12_UNORDERED_ACCESS_VIEW_DESC& D3D12UAVDesc)
 	{
 		BufferViewDesc_to_D3D_UAV_DESC(BuffDesc, UAVDesc, D3D12UAVDesc);
-		VERIFY_EXPR(BuffDesc.BindFlags & BIND_UNORDERED_ACCESS);
+		ASSERT_EXPR(BuffDesc.BindFlags & BIND_UNORDERED_ACCESS);
 		if (BuffDesc.Mode == BUFFER_MODE_STRUCTURED)
 			D3D12UAVDesc.Buffer.StructureByteStride = BuffDesc.ElementByteStride;
 	}
@@ -366,7 +366,7 @@ namespace shz
 	static D3D12_RESOURCE_STATES ResourceStateFlagToD3D12ResourceState(RESOURCE_STATE StateFlag)
 	{
 		static_assert(RESOURCE_STATE_MAX_BIT == (1u << 21), "This function must be updated to handle new resource state flag");
-		VERIFY(IsPowerOfTwo(StateFlag), "Only single bit must be set");
+		ASSERT(IsPowerOfTwo(StateFlag), "Only single bit must be set");
 		switch (StateFlag)
 		{
 			
@@ -394,7 +394,7 @@ namespace shz
 		case RESOURCE_STATE_SHADING_RATE:      return D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
 			
 		default:
-			UNEXPECTED("Unexpected resource state flag");
+			ASSERT(false, "Unexpected resource state flag");
 			return static_cast<D3D12_RESOURCE_STATES>(0);
 		}
 	}
@@ -404,7 +404,7 @@ namespace shz
 	public:
 		D3D12_RESOURCE_STATES operator()(uint32 BitPos) const
 		{
-			VERIFY(BitPos <= MaxFlagBitPos, "Resource state flag bit position (", BitPos, ") exceeds max bit position (", MaxFlagBitPos, ")");
+			ASSERT(BitPos <= MaxFlagBitPos, "Resource state flag bit position (", BitPos, ") exceeds max bit position (", MaxFlagBitPos, ")");
 			return FlagBitPosToResStateMap[BitPos];
 		}
 
@@ -426,7 +426,7 @@ namespace shz
 
 	D3D12_RESOURCE_STATES ResourceStateFlagsToD3D12ResourceStates(RESOURCE_STATE StateFlags)
 	{
-		VERIFY(StateFlags < (RESOURCE_STATE_MAX_BIT << 1), "Resource state flags are out of range");
+		ASSERT(StateFlags < (RESOURCE_STATE_MAX_BIT << 1), "Resource state flags are out of range");
 		static const StateFlagBitPosToD3D12ResourceState BitPosToD3D12ResState;
 		D3D12_RESOURCE_STATES                            D3D12ResourceStates = static_cast<D3D12_RESOURCE_STATES>(0);
 		uint32                                           Bits = StateFlags;
@@ -474,7 +474,7 @@ namespace shz
 		case D3D12_COMMAND_LIST_TYPE_COPY:    return TransferResStates;
 			
 		default:
-			UNEXPECTED("Unexpected command list type");
+			ASSERT(false, "Unexpected command list type");
 			return D3D12_RESOURCE_STATE_COMMON;
 		}
 	}
@@ -482,7 +482,7 @@ namespace shz
 	static RESOURCE_STATE D3D12ResourceStateToResourceStateFlags(D3D12_RESOURCE_STATES state)
 	{
 		static_assert(RESOURCE_STATE_MAX_BIT == (1u << 21), "This function must be updated to handle new resource state flag");
-		VERIFY(IsPowerOfTwo(state), "Only single state must be set");
+		ASSERT(IsPowerOfTwo(state), "Only single state must be set");
 		switch (state)
 		{
 			
@@ -508,7 +508,7 @@ namespace shz
 #endif
 			
 		default:
-			UNEXPECTED("Unexpected D3D12 resource state");
+			ASSERT(false, "Unexpected D3D12 resource state");
 			return RESOURCE_STATE_UNKNOWN;
 		}
 	}
@@ -519,7 +519,7 @@ namespace shz
 	public:
 		RESOURCE_STATE operator()(uint32 BitPos) const
 		{
-			VERIFY(BitPos <= MaxFlagBitPos, "Resource state flag bit position (", BitPos, ") exceeds max bit position (", MaxFlagBitPos, ")");
+			ASSERT(BitPos <= MaxFlagBitPos, "Resource state flag bit position (", BitPos, ") exceeds max bit position (", MaxFlagBitPos, ")");
 			return FlagBitPosToResStateMap[BitPos];
 		}
 
@@ -569,7 +569,7 @@ namespace shz
 
 			static_assert(QUERY_TYPE_NUM_TYPES == 6, "Not all QUERY_TYPE enum values are handled");
 		default:
-			UNEXPECTED("Unexpected query type");
+			ASSERT(false, "Unexpected query type");
 			return static_cast<D3D12_QUERY_TYPE>(-1);
 		}
 		
@@ -580,15 +580,15 @@ namespace shz
 		switch (QueryType)
 		{
 		case QUERY_TYPE_OCCLUSION:
-			VERIFY(QueueId == D3D12HWQueueIndex_Graphics, "Occlusion queries are only supported in graphics queue");
+			ASSERT(QueueId == D3D12HWQueueIndex_Graphics, "Occlusion queries are only supported in graphics queue");
 			return D3D12_QUERY_HEAP_TYPE_OCCLUSION;
 
 		case QUERY_TYPE_BINARY_OCCLUSION:
-			VERIFY(QueueId == D3D12HWQueueIndex_Graphics, "Occlusion queries are only supported in graphics queue");
+			ASSERT(QueueId == D3D12HWQueueIndex_Graphics, "Occlusion queries are only supported in graphics queue");
 			return D3D12_QUERY_HEAP_TYPE_OCCLUSION;
 
 		case QUERY_TYPE_PIPELINE_STATISTICS:
-			VERIFY(QueueId == D3D12HWQueueIndex_Graphics, "Pipeline statistics queries are only supported in graphics queue");
+			ASSERT(QueueId == D3D12HWQueueIndex_Graphics, "Pipeline statistics queries are only supported in graphics queue");
 			return D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
 
 		case QUERY_TYPE_DURATION:
@@ -597,7 +597,7 @@ namespace shz
 
 			static_assert(QUERY_TYPE_NUM_TYPES == 6, "Not all QUERY_TYPE enum values are handled");
 		default:
-			UNEXPECTED("Unexpected query type");
+			ASSERT(false, "Unexpected query type");
 			return static_cast<D3D12_QUERY_HEAP_TYPE>(-1);
 		}
 	}
@@ -612,7 +612,7 @@ namespace shz
 		case ATTACHMENT_LOAD_OP_DISCARD: return D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_DISCARD;
 
 		default:
-			UNEXPECTED("Unexpected attachment load op");
+			ASSERT(false, "Unexpected attachment load op");
 			return D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
 		}
 		
@@ -627,7 +627,7 @@ namespace shz
 		case ATTACHMENT_STORE_OP_DISCARD:  return D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_DISCARD;
 
 		default:
-			UNEXPECTED("Unexpected attachment store op");
+			ASSERT(false, "Unexpected attachment store op");
 			return D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE;
 		}
 		
@@ -635,7 +635,7 @@ namespace shz
 
 	D3D12_SHADER_VISIBILITY ShaderTypeToD3D12ShaderVisibility(SHADER_TYPE ShaderType)
 	{
-		VERIFY(IsPowerOfTwo(ShaderType), "Only single shader stage should be provided");
+		ASSERT(IsPowerOfTwo(ShaderType), "Only single shader stage should be provided");
 
 		static_assert(SHADER_TYPE_LAST == 0x4000, "Please update the switch below to handle the new shader type");
 		switch (ShaderType)
@@ -659,10 +659,10 @@ namespace shz
 		case SHADER_TYPE_CALLABLE:          return D3D12_SHADER_VISIBILITY_ALL;
 			
 		case SHADER_TYPE_TILE:
-			UNSUPPORTED("Unsupported shader type (", GetShaderTypeLiteralName(ShaderType), ")");
+			ASSERT(false, "Unsupported shader type (", GetShaderTypeLiteralName(ShaderType), ")");
 			return D3D12_SHADER_VISIBILITY_ALL;
 		default:
-			UNSUPPORTED("Unknown shader type (", ShaderType, ")");
+			ASSERT(false, "Unknown shader type (", ShaderType, ")");
 			return D3D12_SHADER_VISIBILITY_ALL;
 		}
 	}
@@ -700,7 +700,7 @@ namespace shz
 		case VT_UINT32:    return DXGI_FORMAT_R32_UINT;
 			
 		default:
-			UNEXPECTED("Unexpected index type");
+			ASSERT(false, "Unexpected index type");
 			return DXGI_FORMAT_R32_UINT;
 		}
 	}
@@ -720,7 +720,7 @@ namespace shz
 			case RAYTRACING_GEOMETRY_FLAG_OPAQUE:                          Result |= D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;                         break;
 			case RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANY_HIT_INVOCATION: Result |= D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION; break;
 				
-			default: UNEXPECTED("unknown geometry flag");
+			default: ASSERT(false, "unknown geometry flag");
 			}
 			Flags &= ~FlagBit;
 		}
@@ -744,7 +744,7 @@ namespace shz
 			case RAYTRACING_INSTANCE_FORCE_OPAQUE:                    Result |= D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE;                    break;
 			case RAYTRACING_INSTANCE_FORCE_NO_OPAQUE:                 Result |= D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE;                break;
 				
-			default: UNEXPECTED("unknown instance flag");
+			default: ASSERT(false, "unknown instance flag");
 			}
 			Flags &= ~FlagBit;
 		}
@@ -769,7 +769,7 @@ namespace shz
 			case RAYTRACING_BUILD_AS_PREFER_FAST_BUILD: Result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD; break;
 			case RAYTRACING_BUILD_AS_LOW_MEMORY:        Result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_MINIMIZE_MEMORY;   break;
 				
-			default: UNEXPECTED("unknown build AS flag");
+			default: ASSERT(false, "unknown build AS flag");
 			}
 			Flags &= ~FlagBit;
 		}
@@ -788,7 +788,7 @@ namespace shz
 		case COPY_AS_MODE_COMPACT: return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT;
 			
 		default:
-			UNEXPECTED("unknown AS copy mode");
+			ASSERT(false, "unknown AS copy mode");
 			return static_cast<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE>(~0u);
 		}
 	}
@@ -812,7 +812,7 @@ namespace shz
 			case 3: return DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 			default:
-				UNEXPECTED("Only 2 and 3 component vertex formats are expected");
+				ASSERT(false, "Only 2 and 3 component vertex formats are expected");
 				return DXGI_FORMAT_UNKNOWN;
 			}
 			break;
@@ -824,7 +824,7 @@ namespace shz
 			case 3: return DXGI_FORMAT_R32G32B32_FLOAT;
 
 			default:
-				UNEXPECTED("Only 2 and 3 component vertex formats are expected");
+				ASSERT(false, "Only 2 and 3 component vertex formats are expected");
 				return DXGI_FORMAT_UNKNOWN;
 			}
 			break;
@@ -836,13 +836,13 @@ namespace shz
 			case 3: return DXGI_FORMAT_R16G16B16A16_SNORM;
 
 			default:
-				UNEXPECTED("Only 2 and 3 component vertex formats are expected");
+				ASSERT(false, "Only 2 and 3 component vertex formats are expected");
 				return DXGI_FORMAT_UNKNOWN;
 			}
 			break;
 
 		default:
-			UNEXPECTED(GetValueTypeString(ValueType), " is not a valid vertex component type");
+			ASSERT(false, GetValueTypeString(ValueType), " is not a valid vertex component type");
 			return DXGI_FORMAT_UNKNOWN;
 		}
 	}
@@ -864,14 +864,14 @@ namespace shz
 		case SHADER_RESOURCE_TYPE_INPUT_ATTACHMENT:return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 			
 		default:
-			UNEXPECTED("Unknown resource type");
+			ASSERT(false, "Unknown resource type");
 			return static_cast<D3D12_DESCRIPTOR_RANGE_TYPE>(-1);
 		}
 	}
 
 	D3D12_DESCRIPTOR_HEAP_TYPE D3D12DescriptorRangeTypeToD3D12HeapType(D3D12_DESCRIPTOR_RANGE_TYPE RangeType)
 	{
-		VERIFY_EXPR(RangeType >= D3D12_DESCRIPTOR_RANGE_TYPE_SRV && RangeType <= D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER);
+		ASSERT_EXPR(RangeType >= D3D12_DESCRIPTOR_RANGE_TYPE_SRV && RangeType <= D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER);
 		switch (RangeType)
 		{
 		case D3D12_DESCRIPTOR_RANGE_TYPE_CBV:
@@ -883,7 +883,7 @@ namespace shz
 			return D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
 
 		default:
-			UNEXPECTED("Unexpected descriptor range type");
+			ASSERT(false, "Unexpected descriptor range type");
 			return static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(-1);
 		}
 	}
@@ -903,7 +903,7 @@ namespace shz
 		case D3D12_COMMAND_LIST_TYPE_COPY:    return D3D12HWQueueIndex_Copy;
 			
 		default:
-			UNEXPECTED("Unexpected command list type");
+			ASSERT(false, "Unexpected command list type");
 			return HardwareQueueIndex{ MAX_COMMAND_QUEUES };
 		}
 	}
@@ -918,7 +918,7 @@ namespace shz
 		case D3D12HWQueueIndex_Copy: return D3D12_COMMAND_LIST_TYPE_COPY;
 			
 		default:
-			UNEXPECTED("Unexpected queue id");
+			ASSERT(false, "Unexpected queue id");
 			return D3D12_COMMAND_LIST_TYPE_DIRECT;
 		}
 	}
@@ -934,7 +934,7 @@ namespace shz
 		case D3D12_COMMAND_LIST_TYPE_COPY:    return COMMAND_QUEUE_TYPE_TRANSFER;
 			
 		default:
-			UNEXPECTED("Unexpected command list type");
+			ASSERT(false, "Unexpected command list type");
 			return COMMAND_QUEUE_TYPE_UNKNOWN;
 		}
 	}
@@ -951,7 +951,7 @@ namespace shz
 		case QUEUE_PRIORITY_REALTIME: return D3D12_COMMAND_QUEUE_PRIORITY_GLOBAL_REALTIME;
 			
 		default:
-			UNEXPECTED("Unexpected queue priority");
+			ASSERT(false, "Unexpected queue priority");
 			return D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
 		}
 	}
@@ -984,10 +984,10 @@ namespace shz
 		static_assert(d3d12Rates[SHADING_RATE_4X4] == D3D12_SHADING_RATE_4X4, "Incorrect mapping to D3D12 shading rate");
 		static_assert(_countof(d3d12Rates) == SHADING_RATE_MAX + 1, "Invalid number of elements in d3d12Rates");
 
-		VERIFY_EXPR(Rate <= SHADING_RATE_MAX);
+		ASSERT_EXPR(Rate <= SHADING_RATE_MAX);
 		return d3d12Rates[Rate];
 #else
-		UNEXPECTED("Requires WinSDK 10.0.18362.0");
+		ASSERT(false, "Requires WinSDK 10.0.18362.0");
 		return static_cast<D3D12_SHADING_RATE>(0);
 #endif
 	}
@@ -996,7 +996,7 @@ namespace shz
 	{
 #ifdef NTDDI_WIN10_19H1
 		static_assert(SHADING_RATE_COMBINER_LAST == (1u << 5), "Please update the switch below to handle the new shading rate combiner");
-		VERIFY(IsPowerOfTwo(Combiner), "Only a single combiner should be provided");
+		ASSERT(IsPowerOfTwo(Combiner), "Only a single combiner should be provided");
 		switch (Combiner)
 		{
 			
@@ -1007,11 +1007,11 @@ namespace shz
 		case SHADING_RATE_COMBINER_SUM:         return D3D12_SHADING_RATE_COMBINER_SUM;
 			
 		default:
-			UNEXPECTED("Unexpected shading rate combiner");
+			ASSERT(false, "Unexpected shading rate combiner");
 			return D3D12_SHADING_RATE_COMBINER_PASSTHROUGH;
 		}
 #else
-		UNEXPECTED("Requires WinSDK 10.0.18362.0");
+		ASSERT(false, "Requires WinSDK 10.0.18362.0");
 		return static_cast<D3D12_SHADING_RATE_COMBINER>(0);
 #endif
 	}

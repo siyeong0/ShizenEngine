@@ -69,7 +69,7 @@ namespace shz
 		template <typename ResourceType, typename = typename std::enable_if<std::is_object<ResourceType>::value>::type>
 		static DynamicStaleResourceWrapper Create(ResourceType&& Resource, RefCounterType NumReferences)
 		{
-			VERIFY_EXPR(NumReferences >= 1);
+			ASSERT_EXPR(NumReferences >= 1);
 
 			class SpecificStaleResource final : public StaleResourceBase
 			{
@@ -186,7 +186,7 @@ namespace shz
 
 		static StaticStaleResourceWrapper Create(ResourceType&& Resource, RefCounterType NumReferences)
 		{
-			VERIFY(NumReferences == 1, "Number of references must be 1 for StaticStaleResourceWrapper");
+			ASSERT(NumReferences == 1, "Number of references must be 1 for StaticStaleResourceWrapper");
 			return StaticStaleResourceWrapper{ std::move(Resource) };
 		}
 
@@ -239,8 +239,8 @@ namespace shz
 
 		~ResourceReleaseQueue()
 		{
-			DEV_CHECK_ERR(m_StaleResources.empty(), "Not all stale objects were destroyed");
-			DEV_CHECK_ERR(m_ReleaseQueue.empty(), "Release queue is not empty");
+			ASSERT(m_StaleResources.empty(), "Not all stale objects were destroyed");
+			ASSERT(m_ReleaseQueue.empty(), "Release queue is not empty");
 		}
 
 		// Creates a resource wrapper for the specific resource type

@@ -83,7 +83,7 @@ namespace shz
 				LOG_ERROR_AND_THROW("Failed to get back buffer ", backbuff, " from the swap chain");
 
 			hr = pBackBuffer->SetName(L"Main back buffer");
-			VERIFY_EXPR(SUCCEEDED(hr));
+			ASSERT_EXPR(SUCCEEDED(hr));
 
 			TextureDesc BackBufferDesc;
 			String      Name = "Main back buffer ";
@@ -154,7 +154,7 @@ namespace shz
 		WaitForFrame();
 
 		HRESULT hr = PresentInternal(SyncInterval);
-		VERIFY(SUCCEEDED(hr), "Present failed");
+		ASSERT(SUCCEEDED(hr), "Present failed");
 
 		if (m_SwapChainDesc.IsPrimary)
 		{
@@ -175,7 +175,7 @@ namespace shz
 			return;
 
 		RefCntAutoPtr<IDeviceContext> pDeviceContext = m_wpDeviceContext.Lock();
-		VERIFY(pDeviceContext, "Immediate context has been released");
+		ASSERT(pDeviceContext, "Immediate context has been released");
 		if (pDeviceContext)
 		{
 			RenderDeviceD3D12Impl* pDeviceD3D12 = m_pRenderDevice.RawPtr<RenderDeviceD3D12Impl>();

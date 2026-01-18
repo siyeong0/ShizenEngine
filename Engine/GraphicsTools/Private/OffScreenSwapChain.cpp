@@ -124,9 +124,9 @@ namespace shz
 					RenderTargetDesc.Usage = USAGE_DEFAULT;
 					RenderTargetDesc.BindFlags = BIND_RENDER_TARGET;
 					m_pRenderDevice->CreateTexture(RenderTargetDesc, nullptr, &m_pRenderTarget);
-					VERIFY_EXPR(m_pRenderTarget != nullptr);
+					ASSERT_EXPR(m_pRenderTarget != nullptr);
 					m_pRTV = m_pRenderTarget->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-					VERIFY_EXPR(m_pRTV != nullptr);
+					ASSERT_EXPR(m_pRTV != nullptr);
 				}
 
 				if (m_SwapChainDesc.DepthBufferFormat != TEX_FORMAT_UNKNOWN)
@@ -146,26 +146,26 @@ namespace shz
 					DepthBufferDesc.ClearValue.DepthStencil.Stencil = m_SwapChainDesc.DefaultStencilValue;
 
 					m_pRenderDevice->CreateTexture(DepthBufferDesc, nullptr, &m_pDepthBuffer);
-					VERIFY_EXPR(m_pDepthBuffer != nullptr);
+					ASSERT_EXPR(m_pDepthBuffer != nullptr);
 					m_pDSV = m_pDepthBuffer->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
-					VERIFY_EXPR(m_pDSV != nullptr);
+					ASSERT_EXPR(m_pDSV != nullptr);
 				}
 			}
 		}
 
 		virtual void SHZ_CALL_TYPE SetFullscreenMode(const DisplayModeAttribs& DisplayMode) override final
 		{
-			UNEXPECTED("Off-screen swap chain can't go into full screen mode");
+			ASSERT(false, "Off-screen swap chain can't go into full screen mode");
 		}
 
 		virtual void SHZ_CALL_TYPE SetWindowedMode() override final
 		{
-			UNEXPECTED("Off-screen swap chain can't switch between windowed and full screen modes");
+			ASSERT(false, "Off-screen swap chain can't switch between windowed and full screen modes");
 		}
 
 		virtual void SHZ_CALL_TYPE SetMaximumFrameLatency(uint32 MaxLatency) override final
 		{
-			UNEXPECTED("Off-screen swap chain can't set the maximum frame latency");
+			ASSERT(false, "Off-screen swap chain can't set the maximum frame latency");
 		}
 
 		virtual ITextureView* SHZ_CALL_TYPE GetCurrentBackBufferRTV() override final

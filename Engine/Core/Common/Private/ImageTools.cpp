@@ -39,30 +39,30 @@ namespace shz
 
 		if (Attribs.pImage1 == nullptr || Attribs.pImage2 == nullptr)
 		{
-			UNEXPECTED("Image pointers cannot be null");
+			ASSERT(false, "Image pointers cannot be null");
 			return;
 		}
 
 		if (Attribs.NumChannels1 == 0)
 		{
-			UNEXPECTED("NumChannels1 cannot be zero");
+			ASSERT(false, "NumChannels1 cannot be zero");
 			return;
 		}
 
 		if (Attribs.Stride1 < Attribs.Width * Attribs.NumChannels1)
 		{
-			UNEXPECTED("Stride1 is too small. It must be at least ", Attribs.Width * Attribs.NumChannels1, " bytes long.");
+			ASSERT(false, "Stride1 is too small. It must be at least ", Attribs.Width * Attribs.NumChannels1, " bytes long.");
 			return;
 		}
 
 		if (Attribs.NumChannels2 == 0)
 		{
-			UNEXPECTED("NumChannels2 cannot be zero");
+			ASSERT(false, "NumChannels2 cannot be zero");
 			return;
 		}
 		if (Attribs.Stride2 < Attribs.Width * Attribs.NumChannels2)
 		{
-			UNEXPECTED("Stride2 is too small. It must be at least ", Attribs.Width * Attribs.NumChannels2, " bytes long.");
+			ASSERT(false, "Stride2 is too small. It must be at least ", Attribs.Width * Attribs.NumChannels2, " bytes long.");
 			return;
 		}
 
@@ -72,7 +72,7 @@ namespace shz
 		{
 			if (Attribs.DiffStride < Attribs.Width * NumDiffChannels)
 			{
-				UNEXPECTED("DiffStride is too small. It must be at least ", Attribs.Width * NumDiffChannels, " bytes long.");
+				ASSERT(false, "DiffStride is too small. It must be at least ", Attribs.Width * NumDiffChannels, " bytes long.");
 				return;
 			}
 		}

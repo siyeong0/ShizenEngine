@@ -246,7 +246,7 @@ namespace shz
 
 		ShaderCodeVariableDescX* FindMember(const char* MemberName)
 		{
-			VERIFY_EXPR(MemberName != nullptr);
+			ASSERT_EXPR(MemberName != nullptr);
 			for (ShaderCodeVariableDescX& Member : Members)
 			{
 				if (strcmp(Member.Name, MemberName) == 0)
@@ -368,7 +368,7 @@ namespace shz
 			std::unique_ptr<void, STDDeleterRawMem<void>> DataBuffer{ Allocator.ReleaseOwnership(), STDDeleterRawMem<void>{RawAllocator} };
 
 			ShaderCodeBufferDesc* pRefl = Allocator.ConstructArray<ShaderCodeBufferDesc>(Size);
-			VERIFY_EXPR(pRefl == DataBuffer.get());
+			ASSERT_EXPR(pRefl == DataBuffer.get());
 			for (auto Refl = RangeStart; Refl != RangeEnd; ++Refl)
 				*(pRefl++) = Refl->MakeCopy(Allocator);
 

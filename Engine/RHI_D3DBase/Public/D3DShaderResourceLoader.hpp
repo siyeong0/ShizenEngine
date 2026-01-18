@@ -63,7 +63,7 @@ void LoadShaderCodeVariableDesc(TD3DShaderReflectionType* pd3dReflecionType, Sha
 
     if (pd3dReflecionType == nullptr)
     {
-        UNEXPECTED("Reflection type is null");
+        ASSERT(false, "Reflection type is null");
         return;
     }
 
@@ -98,9 +98,9 @@ void LoadShaderCodeVariableDesc(TD3DShaderReflectionType* pd3dReflecionType, Sha
         MemberDesc.Name = pd3dReflecionType->GetMemberTypeName(m);
 
         auto idx = TypeDesc.AddMember(MemberDesc);
-        VERIFY_EXPR(idx == m);
+        ASSERT_EXPR(idx == m);
         auto* pd3dMemberType = pd3dReflecionType->GetMemberTypeByIndex(m);
-        VERIFY_EXPR(pd3dMemberType != nullptr);
+        ASSERT_EXPR(pd3dMemberType != nullptr);
         LoadShaderCodeVariableDesc<TReflectionTraits>(pd3dMemberType, TypeDesc.GetMember(idx));
     }
 }
@@ -123,15 +123,15 @@ void LoadD3DShaderConstantBufferReflection(TShaderReflection* pBuffReflection, S
             VarDesc.Offset = d3dShaderVarDesc.StartOffset; // Offset from the start of the parent structure to the beginning of the variable.
 
             auto idx = BufferDesc.AddVariable(VarDesc);
-            VERIFY_EXPR(idx == var);
+            ASSERT_EXPR(idx == var);
 
             auto* pd3dReflecionType = pVaribable->GetType();
-            VERIFY_EXPR(pd3dReflecionType != nullptr);
+            ASSERT_EXPR(pd3dReflecionType != nullptr);
             LoadShaderCodeVariableDesc<TReflectionTraits>(pd3dReflecionType, BufferDesc.GetVariable(idx));
         }
         else
         {
-            UNEXPECTED("Failed to get constant buffer variable reflection information.");
+            ASSERT(false, "Failed to get constant buffer variable reflection information.");
         }
     }
 }
@@ -196,7 +196,7 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
         else if (ArrayIndex > 0)
         {
             // Adjust bind point for array index
-            VERIFY(BindingDesc.BindPoint >= static_cast<UINT>(ArrayIndex), "Resource '", BindingDesc.Name, "' uses bind point point ", BindingDesc.BindPoint,
+            ASSERT(BindingDesc.BindPoint >= static_cast<UINT>(ArrayIndex), "Resource '", BindingDesc.Name, "' uses bind point point ", BindingDesc.BindPoint,
                    ", which is invalid for its array index ", ArrayIndex);
             BindingDesc.BindPoint -= static_cast<UINT>(ArrayIndex);
         }
@@ -229,12 +229,12 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
         SkipCount = 1;
         if (ArrayIndex >= 0)
         {
-            VERIFY(BindCount == 1, "When array elements are enumerated individually, BindCount is expected to always be 1");
+            ASSERT(BindCount == 1, "When array elements are enumerated individually, BindCount is expected to always be 1");
 
 #ifdef SHZ_DEBUG
             for (const auto& ExistingRes : Resources)
             {
-                VERIFY(Name.compare(ExistingRes.Name) != 0, "Resource with the same name has already been enumerated. All array elements are expected to be enumerated one after another");
+                ASSERT(Name.compare(ExistingRes.Name) != 0, "Resource with the same name has already been enumerated. All array elements are expected to be enumerated one after another");
             }
 #endif
             for (UINT ArrElem = Res + 1; ArrElem < shaderDesc.BoundResources; ++ArrElem)
@@ -249,10 +249,10 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
                 // "g_tex2DDiffuse[.]" != "g_tex2DDiffuse2[.]"
                 if (Name == NextElemName)
                 {
-                    VERIFY_EXPR(NextElemIndex > 0);
+                    ASSERT_EXPR(NextElemIndex > 0);
 
                     BindCount = std::max(BindCount, static_cast<UINT>(NextElemIndex) + 1);
-                    VERIFY(NextElemBindingDesc.BindPoint == BindingDesc.BindPoint + NextElemIndex,
+                    ASSERT(NextElemBindingDesc.BindPoint == BindingDesc.BindPoint + NextElemIndex,
                            "Array elements are expected to use contiguous bind points.\n",
                            BindingDesc.Name, " uses slot ", BindingDesc.BindPoint, ", so ", NextElemBindingDesc.Name,
                            " is expected to use slot ", BindingDesc.BindPoint + NextElemIndex, " while ", NextElemBindingDesc.BindPoint,
@@ -273,7 +273,7 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
         {
             
             case D3D_SIT_CBUFFER:                       ++RC.NumCBs;                                                                           break;
-            case D3D_SIT_TBUFFER:                       UNSUPPORTED( "TBuffers are not supported" );                                           break;
+            case D3D_SIT_TBUFFER:                       ASSERT(false,  "TBuffers are not supported" );                                           break;
             case D3D_SIT_TEXTURE:                       ++(BindingDesc.Dimension == D3D_SRV_DIMENSION_BUFFER ? RC.NumBufSRVs : RC.NumTexSRVs); break;
             case D3D_SIT_SAMPLER:                       ++RC.NumSamplers;                                                                      break;
             case D3D_SIT_UAV_RWTYPED:                   ++(BindingDesc.Dimension == D3D_SRV_DIMENSION_BUFFER ? RC.NumBufUAVs : RC.NumTexUAVs); break;
@@ -281,9 +281,9 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
             case D3D_SIT_UAV_RWSTRUCTURED:              ++RC.NumBufUAVs;                                                                       break;
             case D3D_SIT_BYTEADDRESS:                   ++RC.NumBufSRVs;                                                                       break;
             case D3D_SIT_UAV_RWBYTEADDRESS:             ++RC.NumBufUAVs;                                                                       break;
-            case D3D_SIT_UAV_APPEND_STRUCTURED:         UNSUPPORTED( "Append structured buffers are not supported" );                          break;
-            case D3D_SIT_UAV_CONSUME_STRUCTURED:        UNSUPPORTED( "Consume structured buffers are not supported" );                         break;
-            case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER: UNSUPPORTED( "RW structured buffers with counter are not supported" );                 break;
+            case D3D_SIT_UAV_APPEND_STRUCTURED:         ASSERT(false,  "Append structured buffers are not supported" );                          break;
+            case D3D_SIT_UAV_CONSUME_STRUCTURED:        ASSERT(false,  "Consume structured buffers are not supported" );                         break;
+            case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER: ASSERT(false,  "RW structured buffers with counter are not supported" );                 break;
                 
 
 #pragma warning(push)
@@ -294,7 +294,7 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
             case D3D_SIT_RTACCELERATIONSTRUCTURE: ++RC.NumAccelStructs; break;
 #pragma warning(pop)
 
-            default: UNEXPECTED("Unexpected resource type");
+            default: ASSERT(false, "Unexpected resource type");
         }
         ResourceNamesPoolSize += Name.length() + 1;
         auto it = ResourceNamesTmpPool.emplace(std::move(Name));
@@ -327,15 +327,15 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
                     {
                         D3D_SHADER_BUFFER_DESC ShaderBuffDesc = {};
                         pBuffReflection->GetDesc(&ShaderBuffDesc);
-                        VERIFY_EXPR(SafeStrEqual(Res.Name, ShaderBuffDesc.Name));
-                        VERIFY_EXPR(ShaderBuffDesc.Type == D3D_CT_CBUFFER);
+                        ASSERT_EXPR(SafeStrEqual(Res.Name, ShaderBuffDesc.Name));
+                        ASSERT_EXPR(ShaderBuffDesc.Type == D3D_CT_CBUFFER);
 
                         BufferDesc.Size = ShaderBuffDesc.Size;
                         LoadD3DShaderConstantBufferReflection<TReflectionTraits>(pBuffReflection, BufferDesc, ShaderBuffDesc.Variables);
                     }
                     else
                     {
-                        UNEXPECTED("Failed to get constant buffer reflection information.");
+                        ASSERT(false, "Failed to get constant buffer reflection information.");
                     }
                 }
 
@@ -345,7 +345,7 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
 
             case D3D_SIT_TBUFFER:
             {
-                UNSUPPORTED("TBuffers are not supported");
+                ASSERT(false, "TBuffers are not supported");
                 break;
             }
 
@@ -408,19 +408,19 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
 
             case D3D_SIT_UAV_APPEND_STRUCTURED:
             {
-                UNSUPPORTED("Append structured buffers are not supported");
+                ASSERT(false, "Append structured buffers are not supported");
                 break;
             }
 
             case D3D_SIT_UAV_CONSUME_STRUCTURED:
             {
-                UNSUPPORTED("Consume structured buffers are not supported");
+                ASSERT(false, "Consume structured buffers are not supported");
                 break;
             }
 
             case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
             {
-                UNSUPPORTED("RW structured buffers with counter are not supported");
+                ASSERT(false, "RW structured buffers with counter are not supported");
                 break;
             }
 
@@ -438,7 +438,7 @@ void LoadD3DShaderResources(TShaderReflection*  pShaderReflection,
 
             default:
             {
-                UNEXPECTED("Unexpected resource input type");
+                ASSERT(false, "Unexpected resource input type");
             }
         }
     }

@@ -106,8 +106,8 @@ namespace shz
 			, Min(_Min)
 			, Range(_Max - _Min + 1)
 		{
-			VERIFY_EXPR(_Max > _Min);
-			VERIFY(Range <= static_cast<int>(FastRand::Max), "Range is too large");
+			ASSERT_EXPR(_Max > _Min);
+			ASSERT(Range <= static_cast<int>(FastRand::Max), "Range is too large");
 		}
 
 		int operator()()

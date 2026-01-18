@@ -61,7 +61,7 @@ namespace shz
 						auto KeywordIt = m_Keywords.find(HashMapStringKey{ std::string{Start, End} });
 						if (KeywordIt != m_Keywords.end())
 						{
-							VERIFY(std::string(Start, End) == KeywordIt->second.Literal, "Inconsistent literal");
+							ASSERT(std::string(Start, End) == KeywordIt->second.Literal, "Inconsistent literal");
 							return KeywordIt->second.Type;
 						}
 						return HLSLTokenType::Identifier;

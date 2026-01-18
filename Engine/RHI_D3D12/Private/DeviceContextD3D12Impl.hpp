@@ -372,8 +372,8 @@ namespace shz
 
 		QueryManagerD3D12& GetQueryManager()
 		{
-			VERIFY(m_QueryMgr != nullptr || IsDeferred(), "Query manager should never be null for immediate contexts. This might be a bug.");
-			DEV_CHECK_ERR(m_QueryMgr != nullptr, "Query manager is null, which indicates that this deferred context is not in a recording state");
+			ASSERT(m_QueryMgr != nullptr || IsDeferred(), "Query manager should never be null for immediate contexts. This might be a bug.");
+			ASSERT(m_QueryMgr != nullptr, "Query manager is null, which indicates that this deferred context is not in a recording state");
 			return *m_QueryMgr;
 		}
 
@@ -560,7 +560,7 @@ namespace shz
 
 	__forceinline D3D12_GPU_VIRTUAL_ADDRESS DeviceContextD3D12Impl::GetBufferGPUAddress(const BufferD3D12Impl* pBuffer, bool VerifyDynamicAllocation) const
 	{
-		VERIFY_EXPR(pBuffer != nullptr);
+		ASSERT_EXPR(pBuffer != nullptr);
 
 		if (pBuffer->GetD3D12Resource() != nullptr)
 		{
@@ -575,7 +575,7 @@ namespace shz
 #endif
 
 		const uint32 DynamicBufferId = pBuffer->GetDynamicBufferId();
-		VERIFY(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
+		ASSERT(DynamicBufferId != ~0u, "Dynamic buffer '", pBuffer->GetDesc().Name, "' does not have dynamic buffer ID");
 		return DynamicBufferId < m_MappedBuffers.size() ? m_MappedBuffers[DynamicBufferId].Allocation.GPUAddress : 0;
 	}
 

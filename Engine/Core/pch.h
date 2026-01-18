@@ -23,7 +23,6 @@
 #include "Primitives/BasicTypes.h"
 #include "Primitives/FlagEnum.h"
 #include "Primitives/FormatString.hpp"
-#include "Primitives/Errors.hpp"
 #include "Primitives/DataBlob.h"
 
 #include "Platforms/Common/Intrinsics.hpp"

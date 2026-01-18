@@ -41,7 +41,7 @@ namespace shz
 
 	CommandListManager::~CommandListManager()
 	{
-		DEV_CHECK_ERR(m_AllocatorCounter == 0, m_AllocatorCounter, " allocator(s) have not been returned to the manager. This will cause a crash if these allocators are referenced by release queues and later returned via FreeAllocator()");
+		ASSERT(m_AllocatorCounter == 0, m_AllocatorCounter, " allocator(s) have not been returned to the manager. This will cause a crash if these allocators are referenced by release queues and later returned via FreeAllocator()");
 		LOG_INFO_MESSAGE("Command list manager: created ", m_FreeAllocators.size(), " allocators");
 	}
 
@@ -74,7 +74,7 @@ namespace shz
 			}
 		}
 
-		VERIFY(SUCCEEDED(hr), "Failed to create command list");
+		ASSERT(SUCCEEDED(hr), "Failed to create command list");
 		(*List)->SetName(L"CommandList");
 	}
 
@@ -83,14 +83,14 @@ namespace shz
 	{
 		std::lock_guard<std::mutex> LockGuard{ m_AllocatorMutex };
 
-		VERIFY((*ppAllocator) == nullptr, "Allocator pointer is not null");
+		ASSERT((*ppAllocator) == nullptr, "Allocator pointer is not null");
 		(*ppAllocator) = nullptr;
 
 		if (!m_FreeAllocators.empty())
 		{
 			*ppAllocator = m_FreeAllocators.back().Detach();
 			HRESULT hr = (*ppAllocator)->Reset();
-			DEV_CHECK_ERR(SUCCEEDED(hr), "Failed to reset command allocator");
+			ASSERT(SUCCEEDED(hr), "Failed to reset command allocator");
 			m_FreeAllocators.pop_back();
 		}
 
@@ -99,7 +99,7 @@ namespace shz
 		{
 			ID3D12Device* pd3d12Device = m_DeviceD3D12Impl.GetD3D12Device();
 			HRESULT       hr = pd3d12Device->CreateCommandAllocator(m_CmdListType, __uuidof(*ppAllocator), reinterpret_cast<void**>(ppAllocator));
-			VERIFY(SUCCEEDED(hr), "Failed to create command allocator");
+			ASSERT(SUCCEEDED(hr), "Failed to create command allocator");
 			wchar_t AllocatorName[32];
 			swprintf(AllocatorName, _countof(AllocatorName), L"Cmd list allocator %ld", m_NumAllocators.fetch_add(1));
 			(*ppAllocator)->SetName(AllocatorName);

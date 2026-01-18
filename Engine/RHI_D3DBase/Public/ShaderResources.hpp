@@ -138,15 +138,15 @@ namespace shz
 		{
 #ifdef SHZ_DEBUG
 
-			VERIFY(_InputType < (1 << ShaderInputTypeBits), "Shader input type is out of expected range");
-			VERIFY(_SRVDimension < (1 << SRVDimBits), "SRV dimensions is out of expected range");
-			VERIFY(_SamplerId < (1 << SamplerOrTexSRVIdBits), "SamplerOrTexSRVId is out of representable range");
+			ASSERT(_InputType < (1 << ShaderInputTypeBits), "Shader input type is out of expected range");
+			ASSERT(_SRVDimension < (1 << SRVDimBits), "SRV dimensions is out of expected range");
+			ASSERT(_SamplerId < (1 << SamplerOrTexSRVIdBits), "SamplerOrTexSRVId is out of representable range");
 
 
 			if (_InputType == D3D_SIT_TEXTURE && _SRVDimension != D3D_SRV_DIMENSION_BUFFER)
-				VERIFY_EXPR(GetCombinedSamplerId() == _SamplerId);
+				ASSERT_EXPR(GetCombinedSamplerId() == _SamplerId);
 			else
-				VERIFY(_SamplerId == InvalidSamplerId, "Only texture SRV can be assigned a valid texture sampler");
+				ASSERT(_SamplerId == InvalidSamplerId, "Only texture SRV can be assigned a valid texture sampler");
 #endif
 		}
 
@@ -160,7 +160,7 @@ namespace shz
 				rhs.GetSRVDimension(),
 				_SamplerId)
 		{
-			VERIFY(_SamplerId == InvalidSamplerId || (GetInputType() == D3D_SIT_TEXTURE && GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER),
+			ASSERT(_SamplerId == InvalidSamplerId || (GetInputType() == D3D_SIT_TEXTURE && GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER),
 				"Only texture SRV can be assigned a valid texture sampler");
 		}
 
@@ -244,7 +244,7 @@ namespace shz
 
 		uint32 GetCombinedSamplerId() const
 		{
-			VERIFY(GetInputType() == D3D_SIT_TEXTURE && GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER, "Invalid input type: D3D_SIT_TEXTURE is expected");
+			ASSERT(GetInputType() == D3D_SIT_TEXTURE && GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER, "Invalid input type: D3D_SIT_TEXTURE is expected");
 			return SamplerOrTexSRVId;
 		}
 
@@ -256,14 +256,14 @@ namespace shz
 
 		void SetTexSRVId(uint32 TexSRVId)
 		{
-			VERIFY(GetInputType() == D3D_SIT_SAMPLER, "Invalid input type: D3D_SIT_SAMPLER is expected");
-			VERIFY(TexSRVId < (1 << SamplerOrTexSRVIdBits), "TexSRVId (", TexSRVId, ") is out of representable range");
+			ASSERT(GetInputType() == D3D_SIT_SAMPLER, "Invalid input type: D3D_SIT_SAMPLER is expected");
+			ASSERT(TexSRVId < (1 << SamplerOrTexSRVIdBits), "TexSRVId (", TexSRVId, ") is out of representable range");
 			SamplerOrTexSRVId = TexSRVId;
 		}
 
 		uint32 GetCombinedTexSRVId() const
 		{
-			VERIFY(GetInputType() == D3D_SIT_SAMPLER, "Invalid input type: D3D_SIT_SAMPLER is expected");
+			ASSERT(GetInputType() == D3D_SIT_SAMPLER, "Invalid input type: D3D_SIT_SAMPLER is expected");
 			return SamplerOrTexSRVId;
 		}
 	};
@@ -309,13 +309,13 @@ namespace shz
 
 		const D3DShaderResourceAttribs& GetCombinedSampler(const D3DShaderResourceAttribs& TexSRV) const noexcept
 		{
-			VERIFY(TexSRV.IsCombinedWithSampler(), "This texture SRV is not combined with any sampler");
+			ASSERT(TexSRV.IsCombinedWithSampler(), "This texture SRV is not combined with any sampler");
 			return GetSampler(TexSRV.GetCombinedSamplerId());
 		}
 
 		const D3DShaderResourceAttribs& GetCombinedTextureSRV(const D3DShaderResourceAttribs& Sampler) const noexcept
 		{
-			VERIFY(Sampler.IsCombinedWithTexSRV(), "This sampler is not combined with any texture SRV");
+			ASSERT(Sampler.IsCombinedWithTexSRV(), "This sampler is not combined with any texture SRV");
 			return GetTexSRV(Sampler.GetCombinedTexSRVId());
 		}
 
@@ -327,13 +327,13 @@ namespace shz
 		{
 			if (Index >= GetNumCBs())
 			{
-				UNEXPECTED("Constant buffer index (", Index, ") is out of range.");
+				ASSERT(false, "Constant buffer index (", Index, ") is out of range.");
 				return nullptr;
 			}
 
 			if (!m_CBReflectionBuffer)
 			{
-				UNEXPECTED("Constant buffer reflection information is not loaded. Please set the LoadConstantBufferReflection flag when creating the shader.");
+				ASSERT(false, "Constant buffer reflection information is not loaded. Please set the LoadConstantBufferReflection flag when creating the shader.");
 				return nullptr;
 			}
 
@@ -437,15 +437,15 @@ namespace shz
 
 		__forceinline D3DShaderResourceAttribs& GetResAttribs(uint32 n, uint32 NumResources, uint32 Offset) noexcept
 		{
-			VERIFY(n < NumResources, "Resource index (", n, ") is out of range. Resource array size: ", NumResources);
-			VERIFY_EXPR(Offset + n < m_TotalResources);
+			ASSERT(n < NumResources, "Resource index (", n, ") is out of range. Resource array size: ", NumResources);
+			ASSERT_EXPR(Offset + n < m_TotalResources);
 			return reinterpret_cast<D3DShaderResourceAttribs*>(m_MemoryBuffer.get())[Offset + n];
 		}
 
 		__forceinline const D3DShaderResourceAttribs& GetResAttribs(uint32 n, uint32 NumResources, uint32 Offset) const noexcept
 		{
-			VERIFY(n < NumResources, "Resource index (", n, ") is out of range. Resource array size: ", NumResources);
-			VERIFY_EXPR(Offset + n < m_TotalResources);
+			ASSERT(n < NumResources, "Resource index (", n, ") is out of range. Resource array size: ", NumResources);
+			ASSERT_EXPR(Offset + n < m_TotalResources);
 			return reinterpret_cast<const D3DShaderResourceAttribs*>(m_MemoryBuffer.get())[Offset + n];
 		}
 
@@ -522,7 +522,7 @@ namespace shz
 
 			[&](const D3DShaderResourceCounters& ResCounters, size_t ResourceNamesPoolSize) //
 			{
-				VERIFY_EXPR(ShaderName != nullptr);
+				ASSERT_EXPR(ShaderName != nullptr);
 				ResourceNamesPoolSize += strlen(ShaderName) + 1;
 
 				if (CombinedSamplerSuffix != nullptr)
@@ -533,7 +533,7 @@ namespace shz
 
 			[&](const D3DShaderResourceAttribs& CBAttribs, ShaderCodeBufferDescX&& CBReflection) //
 			{
-				VERIFY_EXPR(CBAttribs.GetInputType() == D3D_SIT_CBUFFER);
+				ASSERT_EXPR(CBAttribs.GetInputType() == D3D_SIT_CBUFFER);
 				D3DShaderResourceAttribs* pNewCB = new (&GetCB(CurrCB++)) D3DShaderResourceAttribs{ ResourceNamesPool, CBAttribs };
 				NewResHandler.OnNewCB(*pNewCB);
 				if (LoadConstantBufferReflection)
@@ -542,36 +542,36 @@ namespace shz
 
 			[&](const D3DShaderResourceAttribs& TexUAV) //
 			{
-				VERIFY_EXPR(TexUAV.GetInputType() == D3D_SIT_UAV_RWTYPED && TexUAV.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
+				ASSERT_EXPR(TexUAV.GetInputType() == D3D_SIT_UAV_RWTYPED && TexUAV.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
 				D3DShaderResourceAttribs* pNewTexUAV = new (&GetTexUAV(CurrTexUAV++)) D3DShaderResourceAttribs{ ResourceNamesPool, TexUAV };
 				NewResHandler.OnNewTexUAV(*pNewTexUAV);
 			},
 
 			[&](const D3DShaderResourceAttribs& BuffUAV) //
 			{
-				VERIFY_EXPR(BuffUAV.GetInputType() == D3D_SIT_UAV_RWTYPED && BuffUAV.GetSRVDimension() == D3D_SRV_DIMENSION_BUFFER || BuffUAV.GetInputType() == D3D_SIT_UAV_RWSTRUCTURED || BuffUAV.GetInputType() == D3D_SIT_UAV_RWBYTEADDRESS);
+				ASSERT_EXPR(BuffUAV.GetInputType() == D3D_SIT_UAV_RWTYPED && BuffUAV.GetSRVDimension() == D3D_SRV_DIMENSION_BUFFER || BuffUAV.GetInputType() == D3D_SIT_UAV_RWSTRUCTURED || BuffUAV.GetInputType() == D3D_SIT_UAV_RWBYTEADDRESS);
 				D3DShaderResourceAttribs* pNewBufUAV = new (&GetBufUAV(CurrBufUAV++)) D3DShaderResourceAttribs{ ResourceNamesPool, BuffUAV };
 				NewResHandler.OnNewBuffUAV(*pNewBufUAV);
 			},
 
 			[&](const D3DShaderResourceAttribs& BuffSRV) //
 			{
-				VERIFY_EXPR(BuffSRV.GetInputType() == D3D_SIT_TEXTURE && BuffSRV.GetSRVDimension() == D3D_SRV_DIMENSION_BUFFER || BuffSRV.GetInputType() == D3D_SIT_STRUCTURED || BuffSRV.GetInputType() == D3D_SIT_BYTEADDRESS);
+				ASSERT_EXPR(BuffSRV.GetInputType() == D3D_SIT_TEXTURE && BuffSRV.GetSRVDimension() == D3D_SRV_DIMENSION_BUFFER || BuffSRV.GetInputType() == D3D_SIT_STRUCTURED || BuffSRV.GetInputType() == D3D_SIT_BYTEADDRESS);
 				D3DShaderResourceAttribs* pNewBuffSRV = new (&GetBufSRV(CurrBufSRV++)) D3DShaderResourceAttribs{ ResourceNamesPool, BuffSRV };
 				NewResHandler.OnNewBuffSRV(*pNewBuffSRV);
 			},
 
 			[&](const D3DShaderResourceAttribs& SamplerAttribs) //
 			{
-				VERIFY_EXPR(SamplerAttribs.GetInputType() == D3D_SIT_SAMPLER);
+				ASSERT_EXPR(SamplerAttribs.GetInputType() == D3D_SIT_SAMPLER);
 				D3DShaderResourceAttribs* pNewSampler = new (&GetSampler(CurrSampler++)) D3DShaderResourceAttribs{ ResourceNamesPool, SamplerAttribs };
 				NewResHandler.OnNewSampler(*pNewSampler);
 			},
 
 			[&](const D3DShaderResourceAttribs& TexAttribs) //
 			{
-				VERIFY_EXPR(TexAttribs.GetInputType() == D3D_SIT_TEXTURE && TexAttribs.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
-				VERIFY(CurrSampler == GetNumSamplers(), "All samplers must be initialized before texture SRVs");
+				ASSERT_EXPR(TexAttribs.GetInputType() == D3D_SIT_TEXTURE && TexAttribs.GetSRVDimension() != D3D_SRV_DIMENSION_BUFFER);
+				ASSERT(CurrSampler == GetNumSamplers(), "All samplers must be initialized before texture SRVs");
 
 				uint32 SamplerId = CombinedSamplerSuffix != nullptr ? FindAssignedSamplerId(TexAttribs, CombinedSamplerSuffix) : D3DShaderResourceAttribs::InvalidSamplerId;
 				D3DShaderResourceAttribs* pNewTexSRV = new (&GetTexSRV(CurrTexSRV)) D3DShaderResourceAttribs{ ResourceNamesPool, TexAttribs, SamplerId };
@@ -585,7 +585,7 @@ namespace shz
 
 			[&](const D3DShaderResourceAttribs& AccelStructAttribs) //
 			{
-				VERIFY_EXPR(AccelStructAttribs.GetInputType() == D3D_SIT_RTACCELERATIONSTRUCTURE);
+				ASSERT_EXPR(AccelStructAttribs.GetInputType() == D3D_SIT_RTACCELERATIONSTRUCTURE);
 				D3DShaderResourceAttribs* pNewAccelStruct = new (&GetAccelStruct(CurrAS++)) D3DShaderResourceAttribs{ ResourceNamesPool, AccelStructAttribs };
 				NewResHandler.OnNewAccelStruct(*pNewAccelStruct);
 			} //
@@ -607,21 +607,21 @@ namespace shz
 #endif
 		}
 
-		VERIFY_EXPR(ResourceNamesPool.GetRemainingSize() == 0);
+		ASSERT_EXPR(ResourceNamesPool.GetRemainingSize() == 0);
 
-		VERIFY(CurrCB == GetNumCBs(), "Not all CBs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrTexSRV == GetNumTexSRV(), "Not all Tex SRVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrTexUAV == GetNumTexUAV(), "Not all Tex UAVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrBufSRV == GetNumBufSRV(), "Not all Buf SRVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrBufUAV == GetNumBufUAV(), "Not all Buf UAVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrSampler == GetNumSamplers(), "Not all Samplers are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
-		VERIFY(CurrAS == GetNumAccelStructs(), "Not all Accel Structs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrCB == GetNumCBs(), "Not all CBs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrTexSRV == GetNumTexSRV(), "Not all Tex SRVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrTexUAV == GetNumTexUAV(), "Not all Tex UAVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrBufSRV == GetNumBufSRV(), "Not all Buf SRVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrBufUAV == GetNumBufUAV(), "Not all Buf UAVs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrSampler == GetNumSamplers(), "Not all Samplers are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
+		ASSERT(CurrAS == GetNumAccelStructs(), "Not all Accel Structs are initialized which will cause a crash when ~D3DShaderResourceAttribs() is called");
 
 
 		if (!CBReflections.empty())
 		{
-			VERIFY_EXPR(LoadConstantBufferReflection);
-			VERIFY_EXPR(CBReflections.size() == GetNumCBs());
+			ASSERT_EXPR(LoadConstantBufferReflection);
+			ASSERT_EXPR(CBReflections.size() == GetNumCBs());
 			m_CBReflectionBuffer = ShaderCodeBufferDescX::PackArray(CBReflections.cbegin(), CBReflections.cend(), GetRawAllocator());
 		}
 	}

@@ -142,7 +142,7 @@ void ValidateBufferDesc(const BufferDesc& Desc, const IRenderDevice* pDevice) no
         }
 
         default:
-            UNEXPECTED("Unknown usage");
+            ASSERT(false, "Unknown usage");
     }
 
 
@@ -224,7 +224,7 @@ void ValidateAndCorrectBufferViewDesc(const BufferDesc& BuffDesc,
 {
     if (ViewDesc.ByteWidth == 0)
     {
-        DEV_CHECK_ERR(BuffDesc.Size > ViewDesc.ByteOffset, "Byte offset (", ViewDesc.ByteOffset, ") exceeds buffer size (", BuffDesc.Size, ")");
+        ASSERT(BuffDesc.Size > ViewDesc.ByteOffset, "Byte offset (", ViewDesc.ByteOffset, ") exceeds buffer size (", BuffDesc.Size, ")");
         ViewDesc.ByteWidth = BuffDesc.Size - ViewDesc.ByteOffset;
     }
 
@@ -236,7 +236,7 @@ void ValidateAndCorrectBufferViewDesc(const BufferDesc& BuffDesc,
     {
         if (BuffDesc.Mode == BUFFER_MODE_STRUCTURED || BuffDesc.Mode == BUFFER_MODE_FORMATTED)
         {
-            VERIFY(BuffDesc.ElementByteStride != 0, "Element byte stride is zero");
+            ASSERT(BuffDesc.ElementByteStride != 0, "Element byte stride is zero");
             if ((ViewDesc.ByteOffset % BuffDesc.ElementByteStride) != 0)
                 LOG_ERROR_AND_THROW("Buffer view byte offset (", ViewDesc.ByteOffset, ") is not a multiple of element byte stride (", BuffDesc.ElementByteStride, ").");
             if ((ViewDesc.ByteWidth % BuffDesc.ElementByteStride) != 0)
@@ -274,7 +274,7 @@ void ValidateAndCorrectBufferViewDesc(const BufferDesc& BuffDesc,
 
         if (BuffDesc.Mode == BUFFER_MODE_STRUCTURED)
         {
-            VERIFY_EXPR(StructuredBufferOffsetAlignment != 0);
+            ASSERT_EXPR(StructuredBufferOffsetAlignment != 0);
             if ((ViewDesc.ByteOffset % StructuredBufferOffsetAlignment) != 0)
             {
                 LOG_ERROR_AND_THROW("Structured buffer view byte offset (", ViewDesc.ByteOffset,

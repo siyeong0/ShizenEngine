@@ -76,7 +76,7 @@ namespace shz
 		{
 #ifdef SHZ_DEBUG
 			uint64 EnqueuedValue = m_EnqueuedFenceValue.load();
-			DEV_CHECK_ERR(NewValue >= EnqueuedValue,
+			ASSERT(NewValue >= EnqueuedValue,
 				"Fence '", this->m_Desc.Name, "' is being signaled or enqueued for signal with value ", NewValue,
 				", but the previous value (", EnqueuedValue,
 				") is greater than the new value. Signal operation will have no effect.");
@@ -95,7 +95,7 @@ namespace shz
 			if (!this->GetDevice()->GetFeatures().NativeFence)
 			{
 				uint64 EnqueuedValue = m_EnqueuedFenceValue.load();
-				DEV_CHECK_ERR(Value <= EnqueuedValue,
+				ASSERT(Value <= EnqueuedValue,
 					"Can not wait for value ", Value, " that is greater than the last enqueued for signal value (", EnqueuedValue,
 					"). This is not supported when NativeFence feature is disabled.");
 			}

@@ -138,8 +138,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\Win32Debug.hpp" />
-    <ClInclude Include="Public\Win32FileSystem.hpp" />
     <ClInclude Include="Public\Win64NativeWindow.h" />
     <ClInclude Include="Public\Win32PlatformDefinitions.h" />
     <ClInclude Include="Public\Win32PlatformMisc.hpp" />
@@ -153,7 +151,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\Win32Debug.cpp" />
     <ClCompile Include="Private\Win32FileSystem.cpp" />
     <ClCompile Include="Private\Win32PlatformMisc.cpp" />
   </ItemGroup>

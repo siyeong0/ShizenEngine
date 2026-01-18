@@ -14,10 +14,8 @@
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)FileSystem.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Intrinsics.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)NativeWindow.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)PlatformDebug.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)PlatformDefinitions.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)PlatformMisc.hpp" />
   </ItemGroup>

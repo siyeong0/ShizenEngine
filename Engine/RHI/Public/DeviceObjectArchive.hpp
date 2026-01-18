@@ -258,14 +258,14 @@ namespace shz
 				LOG_ERROR_MESSAGE("Resource '", Name, "' is not present in the archive");
 				return false;
 			}
-			VERIFY_EXPR(SafeStrEqual(Name, it->first.GetName()));
+			ASSERT_EXPR(SafeStrEqual(Name, it->first.GetName()));
 			// Use string copy from the map
 			Name = it->first.GetName();
 
 			Serializer<SerializerMode::Read> Ser{ it->second.Common };
 
 			auto Res = ResData.Deserialize(Name, Ser);
-			VERIFY_EXPR(Ser.IsEnded());
+			ASSERT_EXPR(Ser.IsEnded());
 			return Res;
 		}
 

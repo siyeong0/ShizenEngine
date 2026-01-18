@@ -59,7 +59,7 @@ namespace shz
 
 
 		default:
-			UNEXPECTED("Unexpected device type");
+			ASSERT(false, "Unexpected device type");
 			return DeviceObjectArchive::DeviceType::Count;
 		}
 	}
@@ -217,7 +217,7 @@ namespace shz
 			const char* Name = nullptr;
 			ResourceType ResType = ResourceType::Undefined;
 			CHECK_ARCHIVE(Reader(ResType, Name), "Failed to read the type and name of resource ", res, "/", NumResources, '.');
-			VERIFY_EXPR(Name != nullptr);
+			ASSERT_EXPR(Name != nullptr);
 
 			// No need to make the name copy as we keep the source data blob alive.
 			constexpr bool MakeNameCopy = false;
@@ -239,10 +239,10 @@ namespace shz
 	{
 		if (ppDataBlob == nullptr)
 		{
-			DEV_ERROR("Pointer to the data blob object must not be null");
+			ASSERT(false, "Pointer to the data blob object must not be null");
 			return;
 		}
-		DEV_CHECK_ERR(*ppDataBlob == nullptr, "Data blob object must be null");
+		ASSERT(*ppDataBlob == nullptr, "Data blob object must be null");
 
 		auto SerializeThis = [this](auto& Ser) {
 			constexpr auto SerMode = std::remove_reference<decltype(Ser)>::type::GetMode();
@@ -252,11 +252,11 @@ namespace shz
 			Header.ContentVersion = m_ContentVersion;
 
 			auto res = ArchiveSer.SerializeHeader(Header);
-			VERIFY(res, "Failed to serialize header");
+			ASSERT(res, "Failed to serialize header");
 
 			uint32 NumResources = StaticCast<uint32>(m_NamedResources.size());
 			res = Ser(NumResources);
-			VERIFY(res, "Failed to serialize the number of resources");
+			ASSERT(res, "Failed to serialize the number of resources");
 
 			for (const auto& res_it : m_NamedResources)
 			{
@@ -264,16 +264,16 @@ namespace shz
 				const ResourceType ResType = res_it.first.GetType();
 
 				res = Ser(ResType, Name);
-				VERIFY(res, "Failed to serialize resource type and name");
+				ASSERT(res, "Failed to serialize resource type and name");
 
 				res = ArchiveSer.SerializeResourceData(res_it.second);
-				VERIFY(res, "Failed to serialize resource data");
+				ASSERT(res, "Failed to serialize resource data");
 			}
 
 			for (const std::vector<SerializedData>& Shaders : m_DeviceShaders)
 			{
 				res = ArchiveSer.SerializeShaders(Shaders);
-				VERIFY(res, "Failed to serialize shaders");
+				ASSERT(res, "Failed to serialize shaders");
 			}
 			};
 
@@ -284,7 +284,7 @@ namespace shz
 
 		Serializer<SerializerMode::Write> Writer{ SerializedData{pDataBlob->GetDataPtr(), pDataBlob->GetSize()} };
 		SerializeThis(Writer);
-		VERIFY_EXPR(Writer.IsEnded());
+		ASSERT_EXPR(Writer.IsEnded());
 
 		*ppDataBlob = pDataBlob.Detach();
 	}
@@ -309,7 +309,7 @@ namespace shz
 			case DeviceType::WebGPU:      return "WebGPU";
 
 			default:
-				UNEXPECTED("Unexpected device type");
+				ASSERT(false, "Unexpected device type");
 				return "unknown";
 			}
 		}
@@ -331,7 +331,7 @@ namespace shz
 			case ResourceType::RenderPass:         return "Render Passes";
 
 			default:
-				UNEXPECTED("Unexpected chunk type");
+				ASSERT(false, "Unexpected chunk type");
 				return "";
 			}
 		}
@@ -358,7 +358,7 @@ namespace shz
 			static const SerializedData NullData;
 			return NullData;
 		}
-		VERIFY_EXPR(SafeStrEqual(Name, it->first.GetName()));
+		ASSERT_EXPR(SafeStrEqual(Name, it->first.GetName()));
 		return it->second.DeviceSpecific[static_cast<size_t>(DevType)];
 	}
 
@@ -622,7 +622,7 @@ namespace shz
 							Serializer<SerializerMode::Read> Ser{ DeviceData };
 							if (!Ser(ShaderIndex))
 								LOG_ERROR_AND_THROW("Failed to deserialize standalone shader index. Archive file may be corrupted or invalid.");
-							VERIFY(Ser.IsEnded(), "No other data besides the shader index is expected");
+							ASSERT(Ser.IsEnded(), "No other data besides the shader index is expected");
 						}
 
 						ShaderIndex += BaseIdx;
@@ -630,7 +630,7 @@ namespace shz
 						{
 							Serializer<SerializerMode::Write> Ser{ DeviceData };
 							Ser(ShaderIndex);
-							VERIFY_EXPR(Ser.IsEnded());
+							ASSERT_EXPR(Ser.IsEnded());
 						}
 					}
 					else if (IsPipeline)
@@ -641,7 +641,7 @@ namespace shz
 							Serializer<SerializerMode::Read> Ser{ DeviceData };
 							if (!PSOSerializer<SerializerMode::Read>::SerializeShaderIndices(Ser, ShaderIndices, &DynAllocator))
 								LOG_ERROR_AND_THROW("Failed to deserialize PSO shader indices. Archive file may be corrupted or invalid.");
-							VERIFY(Ser.IsEnded(), "No other data besides shader indices is expected");
+							ASSERT(Ser.IsEnded(), "No other data besides shader indices is expected");
 						}
 
 						std::vector<uint32> NewIndices{ ShaderIndices.pIndices, ShaderIndices.pIndices + ShaderIndices.Count };
@@ -651,12 +651,12 @@ namespace shz
 						{
 							Serializer<SerializerMode::Write> Ser{ DeviceData };
 							PSOSerializer<SerializerMode::Write>::SerializeShaderIndices(Ser, ShaderIndexArray{ NewIndices.data(), ShaderIndices.Count }, nullptr);
-							VERIFY_EXPR(Ser.IsEnded());
+							ASSERT_EXPR(Ser.IsEnded());
 						}
 					}
 					else
 					{
-						UNEXPECTED("Unexpected resource type");
+						ASSERT(false, "Unexpected resource type");
 					}
 				}
 			}
@@ -665,10 +665,10 @@ namespace shz
 
 	void DeviceObjectArchive::Serialize(IFileStream* pStream) const
 	{
-		DEV_CHECK_ERR(pStream != nullptr, "File stream must not be null");
+		ASSERT(pStream != nullptr, "File stream must not be null");
 		RefCntAutoPtr<IDataBlob> pDataBlob;
 		Serialize(&pDataBlob);
-		VERIFY_EXPR(pDataBlob);
+		ASSERT_EXPR(pDataBlob);
 		pStream->Write(pDataBlob->GetConstDataPtr(), pDataBlob->GetSize());
 	}
 

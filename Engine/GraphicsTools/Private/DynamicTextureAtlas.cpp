@@ -70,8 +70,8 @@ namespace shz
 			, m_Size(Size)
 
 		{
-			VERIFY_EXPR(m_pParentAtlas);
-			VERIFY_EXPR(!m_Subregion.IsEmpty());
+			ASSERT_EXPR(m_pParentAtlas);
+			ASSERT_EXPR(!m_Subregion.IsEmpty());
 		}
 
 		~TextureAtlasSuballocationImpl();
@@ -204,8 +204,8 @@ namespace shz
 
 				DynamicAtlasManager::Region Allocate(uint32 Width, uint32 Height)
 				{
-					VERIFY_EXPR(pAtlasMgr != nullptr);
-					VERIFY_EXPR(pAtlasMgr->UseCount > 0);
+					ASSERT_EXPR(pAtlasMgr != nullptr);
+					ASSERT_EXPR(pAtlasMgr->UseCount > 0);
 					std::lock_guard<std::mutex> Guard{ pAtlasMgr->Mtx };
 					return pAtlasMgr->Mgr.Allocate(Width, Height);
 				}
@@ -213,8 +213,8 @@ namespace shz
 				// Frees a region and returns true if the atlas is empty
 				bool Free(DynamicAtlasManager::Region&& R)
 				{
-					VERIFY_EXPR(pAtlasMgr != nullptr);
-					VERIFY_EXPR(pAtlasMgr->UseCount > 0);
+					ASSERT_EXPR(pAtlasMgr != nullptr);
+					ASSERT_EXPR(pAtlasMgr->UseCount > 0);
 					std::lock_guard<std::mutex> Guard{ pAtlasMgr->Mtx };
 					pAtlasMgr->Mgr.Free(std::move(R));
 					return pAtlasMgr->Mgr.IsEmpty();
@@ -222,8 +222,8 @@ namespace shz
 
 				bool IsEmpty()
 				{
-					VERIFY_EXPR(pAtlasMgr != nullptr);
-					VERIFY_EXPR(pAtlasMgr->UseCount > 0);
+					ASSERT_EXPR(pAtlasMgr != nullptr);
+					ASSERT_EXPR(pAtlasMgr->UseCount > 0);
 					std::lock_guard<std::mutex> Guard{ pAtlasMgr->Mtx };
 					return pAtlasMgr->Mgr.IsEmpty();
 				}
@@ -256,14 +256,14 @@ namespace shz
 			int AddUse()
 			{
 				int Uses = UseCount.fetch_add(1) + 1;
-				VERIFY_EXPR(Uses > 0);
+				ASSERT_EXPR(Uses > 0);
 				return Uses;
 			}
 
 			int ReleaseUse()
 			{
 				int Uses = UseCount.fetch_add(-1) - 1;
-				VERIFY_EXPR(Uses >= 0);
+				ASSERT_EXPR(Uses >= 0);
 				return Uses;
 			}
 
@@ -284,7 +284,7 @@ namespace shz
 
 			~SliceBatch()
 			{
-				VERIFY(m_Slices.empty(), "Not all slice managers have been released.");
+				ASSERT(m_Slices.empty(), "Not all slice managers have been released.");
 			}
 
 
@@ -322,7 +322,7 @@ namespace shz
 			{
 				std::lock_guard<std::mutex> Guard{ m_Mtx };
 
-				VERIFY(m_Slices.find(Slice) == m_Slices.end(), "Slice ", Slice, " already present in the batch.");
+				ASSERT(m_Slices.find(Slice) == m_Slices.end(), "Slice ", Slice, " already present in the batch.");
 				auto it = m_Slices.emplace(Slice, m_AtlasDim).first;
 				// NB: Lock() atomically increases the use count of the slice while we hold the mutex.
 				return it->second.Lock();
@@ -346,12 +346,12 @@ namespace shz
 				// If the slice is empty, but the use count is not zero, another thread may
 				// allocate from this slice after we checked if it is empty.
 				ThreadSafeAtlasManager::ManagerGuard SliceMgr = it->second.Lock();
-				VERIFY_EXPR(SliceMgr);
+				ASSERT_EXPR(SliceMgr);
 				if (!SliceMgr.IsEmpty())
 					return false;
 
 				const int UseCnt = SliceMgr.Release();
-				VERIFY(UseCnt == 0, "There must be no other uses of this slice since we checked the use count already.");
+				ASSERT(UseCnt == 0, "There must be no other uses of this slice since we checked the use count already.");
 				m_Slices.erase(it);
 
 				return true;
@@ -429,7 +429,7 @@ namespace shz
 				if (pDevice != nullptr)
 				{
 					pDevice->CreateTexture(m_Desc, nullptr, &m_pTexture);
-					VERIFY_EXPR(m_pTexture);
+					ASSERT_EXPR(m_pTexture);
 				}
 			}
 			else
@@ -443,10 +443,10 @@ namespace shz
 
 		~DynamicTextureAtlasImpl()
 		{
-			VERIFY_EXPR(m_AllocatedArea.load() == 0);
-			VERIFY_EXPR(m_UsedArea.load() == 0);
-			VERIFY_EXPR(m_AllocationCount.load() == 0);
-			VERIFY_EXPR(m_AvailableSlices.size() == m_MaxSliceCount);
+			ASSERT_EXPR(m_AllocatedArea.load() == 0);
+			ASSERT_EXPR(m_UsedArea.load() == 0);
+			ASSERT_EXPR(m_AllocationCount.load() == 0);
+			ASSERT_EXPR(m_AvailableSlices.size() == m_MaxSliceCount);
 		}
 
 		IMPLEMENT_QUERY_INTERFACE_IN_PLACE(IID_DynamicTextureAtlas, TBase);
@@ -465,12 +465,12 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(m_Desc.Type == RESOURCE_DIM_TEX_2D);
+				ASSERT_EXPR(m_Desc.Type == RESOURCE_DIM_TEX_2D);
 				if (!m_pTexture)
 				{
-					DEV_CHECK_ERR(pDevice != nullptr, "Texture must be created, but pDevice is null");
+					ASSERT(pDevice != nullptr, "Texture must be created, but pDevice is null");
 					pDevice->CreateTexture(m_Desc, nullptr, &m_pTexture);
-					DEV_CHECK_ERR(m_pTexture, "Failed to create atlas texture");
+					ASSERT(m_pTexture, "Failed to create atlas texture");
 				}
 
 				return m_pTexture;
@@ -491,7 +491,7 @@ namespace shz
 		{
 			if (Width == 0 || Height == 0)
 			{
-				UNEXPECTED("Subregion size must not be zero");
+				ASSERT(false, "Subregion size must not be zero");
 				return;
 			}
 
@@ -506,7 +506,7 @@ namespace shz
 			const uint32 AlignedHeight = AlignUp(Height, Alignment);
 
 			SliceBatch* pBatch = GetSliceBatch(Alignment, m_Desc.Width / Alignment, m_Desc.Height / Alignment);
-			VERIFY_EXPR(pBatch != nullptr);
+			ASSERT_EXPR(pBatch != nullptr);
 
 			DynamicAtlasManager::Region Subregion;
 
@@ -522,7 +522,7 @@ namespace shz
 					{
 						Slice = NewSlice;
 						SliceMgr = pBatch->AddSlice(Slice);
-						VERIFY_EXPR(SliceMgr);
+						ASSERT_EXPR(SliceMgr);
 					}
 					else
 					{
@@ -581,7 +581,7 @@ namespace shz
 			SliceBatch* pBatch = GetSliceBatch(Alignment);
 			if (pBatch == nullptr)
 			{
-				UNEXPECTED("There are no slices with alignment ", Alignment,
+				ASSERT(false, "There are no slices with alignment ", Alignment,
 					". This may only happen when double-freeing the allocation or "
 					"freeing an allocation that was not allocated from this atlas.");
 				return;
@@ -595,7 +595,7 @@ namespace shz
 			}
 			else
 			{
-				UNEXPECTED("Slice ", Slice, " is not found in the batch of slices with alignment ", Alignment);
+				ASSERT(false, "Slice ", Slice, " is not found in the batch of slices with alignment ", Alignment);
 				return;
 			}
 
@@ -659,7 +659,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(m_Desc.Type == RESOURCE_DIM_TEX_2D);
+				ASSERT_EXPR(m_Desc.Type == RESOURCE_DIM_TEX_2D);
 				Stats.CommittedSize = 0;
 				for (uint32 mip = 0; mip < m_Desc.MipLevels; ++mip)
 					Stats.CommittedSize += GetMipLevelProperties(m_Desc, mip).MipSize;
@@ -679,7 +679,7 @@ namespace shz
 				return ~uint32{ 0 };
 
 			uint32 FirstFreeSlice = *m_AvailableSlices.begin();
-			VERIFY_EXPR(FirstFreeSlice < m_MaxSliceCount);
+			ASSERT_EXPR(FirstFreeSlice < m_MaxSliceCount);
 			m_AvailableSlices.erase(m_AvailableSlices.begin());
 
 			while (m_TexArraySize <= FirstFreeSlice)
@@ -697,7 +697,7 @@ namespace shz
 		void RecycleSlice(uint32 Slice)
 		{
 			std::lock_guard<std::mutex> Guard{ m_AvailableSlicesMtx };
-			VERIFY(m_AvailableSlices.find(Slice) == m_AvailableSlices.end(), "Slice ", Slice, " is already in the available slices list. This is a bug.");
+			ASSERT(m_AvailableSlices.find(Slice) == m_AvailableSlices.end(), "Slice ", Slice, " is already in the available slices list. This is a bug.");
 			m_AvailableSlices.insert(Slice);
 		}
 

@@ -29,7 +29,6 @@
 #include "ArchiverFactoryLoader.h"
 
 #include "Engine/Core/Common/Public/DummyReferenceCounters.hpp"
-#include "Platforms/Common/PlatformDebug.hpp"
 #include "Engine/RHI/Public/DefaultShaderSourceStreamFactory.h"
 
 #include "ArchiverImpl.hpp"
@@ -42,12 +41,12 @@ namespace shz
 	DeviceObjectArchive::DeviceType ArchiveDeviceDataFlagToArchiveDeviceType(ARCHIVE_DEVICE_DATA_FLAGS DeviceFlag)
 	{
 		using DeviceType = DeviceObjectArchive::DeviceType;
-		VERIFY(IsPowerOfTwo(DeviceFlag), "Only single flag is expected");
+		ASSERT(IsPowerOfTwo(DeviceFlag), "Only single flag is expected");
 		static_assert(ARCHIVE_DEVICE_DATA_FLAG_LAST == 1 << 7, "Please handle the new data type below");
 		switch (DeviceFlag)
 		{
 		case ARCHIVE_DEVICE_DATA_FLAG_NONE:
-			UNEXPECTED("Archive data type is undefined");
+			ASSERT(false, "Archive data type is undefined");
 			return DeviceType::Count;
 
 		case ARCHIVE_DEVICE_DATA_FLAG_D3D11:
@@ -73,7 +72,7 @@ namespace shz
 			return DeviceType::WebGPU;
 
 		default:
-			UNEXPECTED("Unexpected data type");
+			ASSERT(false, "Unexpected data type");
 			return DeviceType::Count;
 		}
 	}
@@ -144,8 +143,6 @@ namespace shz
 
 			virtual void SHZ_CALL_TYPE SetMessageCallback(DebugMessageCallbackType MessageCallback) const override final;
 
-			virtual void SHZ_CALL_TYPE SetBreakOnError(bool BreakOnError) const override final;
-
 			virtual void SHZ_CALL_TYPE SetMemoryAllocator(IMemoryAllocator* pAllocator) const override final;
 
 		private:
@@ -168,7 +165,7 @@ namespace shz
 
 		void ArchiverFactoryImpl::CreateArchiver(ISerializationDevice* pDevice, IArchiver** ppArchiver)
 		{
-			DEV_CHECK_ERR(ppArchiver != nullptr, "ppArchiver must not be null");
+			ASSERT(ppArchiver != nullptr, "ppArchiver must not be null");
 			if (!ppArchiver)
 				return;
 
@@ -187,7 +184,7 @@ namespace shz
 
 		void ArchiverFactoryImpl::CreateSerializationDevice(const SerializationDeviceCreateInfo& CreateInfo, ISerializationDevice** ppDevice)
 		{
-			DEV_CHECK_ERR(ppDevice != nullptr, "ppDevice must not be null");
+			ASSERT(ppDevice != nullptr, "ppDevice must not be null");
 			if (!ppDevice)
 				return;
 
@@ -208,10 +205,10 @@ namespace shz
 		{
 			if (ppShaderSourceFactory == nullptr)
 			{
-				DEV_ERROR("ppShaderSourceFactory must not be null.");
+				ASSERT(false, "ppShaderSourceFactory must not be null.");
 				return;
 			}
-			DEV_CHECK_ERR(*ppShaderSourceFactory == nullptr, "*ppShaderSourceFactory is not null. Make sure the pointer is null to avoid memory leaks.");
+			ASSERT(*ppShaderSourceFactory == nullptr, "*ppShaderSourceFactory is not null. Make sure the pointer is null to avoid memory leaks.");
 
 			shz::CreateDefaultShaderSourceStreamFactory(SearchDirectories, ppShaderSourceFactory);
 		}
@@ -223,15 +220,15 @@ namespace shz
 		{
 			if (pSrcArchive == nullptr)
 			{
-				DEV_ERROR("pSrcArchive must not be null");
+				ASSERT(false, "pSrcArchive must not be null");
 				return false;
 			}
 			if (ppDstArchive == nullptr)
 			{
-				DEV_ERROR("ppDstArchive must not be null");
+				ASSERT(false, "ppDstArchive must not be null");
 				return false;
 			}
-			DEV_CHECK_ERR(*ppDstArchive == nullptr, "*ppDstArchive must be null");
+			ASSERT(*ppDstArchive == nullptr, "*ppDstArchive must be null");
 
 			try
 			{
@@ -262,20 +259,20 @@ namespace shz
 		{
 			if (pSrcArchive == nullptr)
 			{
-				DEV_ERROR("pSrcArchive must not be null");
+				ASSERT(false, "pSrcArchive must not be null");
 				return false;
 			}
 			if (pDeviceArchive == nullptr)
 			{
-				DEV_ERROR("pDeviceArchive must not be null");
+				ASSERT(false, "pDeviceArchive must not be null");
 				return false;
 			}
 			if (ppDstArchive == nullptr)
 			{
-				DEV_ERROR("ppDstArchive must not be null");
+				ASSERT(false, "ppDstArchive must not be null");
 				return false;
 			}
-			DEV_CHECK_ERR(*ppDstArchive == nullptr, "*ppDstArchive must be null");
+			ASSERT(*ppDstArchive == nullptr, "*ppDstArchive must be null");
 
 			try
 			{
@@ -307,8 +304,8 @@ namespace shz
 			if (NumSrcArchives == 0)
 				return false;
 
-			DEV_CHECK_ERR(ppSrcArchives != nullptr, "ppSrcArchives must not be null");
-			DEV_CHECK_ERR(ppDstArchive != nullptr, "ppDstArchive must not be null");
+			ASSERT(ppSrcArchives != nullptr, "ppSrcArchives must not be null");
+			ASSERT(ppDstArchive != nullptr, "ppDstArchive must not be null");
 
 			if (ppSrcArchives == nullptr || ppDstArchive == nullptr)
 				return false;
@@ -349,11 +346,6 @@ namespace shz
 		void ArchiverFactoryImpl::SetMessageCallback(DebugMessageCallbackType MessageCallback) const
 		{
 			SetDebugMessageCallback(MessageCallback);
-		}
-
-		void ArchiverFactoryImpl::SetBreakOnError(bool BreakOnError) const
-		{
-			PlatformDebug::SetBreakOnError(BreakOnError);
 		}
 
 		void ArchiverFactoryImpl::SetMemoryAllocator(IMemoryAllocator* pAllocator) const

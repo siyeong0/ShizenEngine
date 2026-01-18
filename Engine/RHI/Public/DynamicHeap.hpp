@@ -118,7 +118,7 @@ namespace shz
 
 			~MasterBlockListBasedManager()
 			{
-				DEV_CHECK_ERR(m_MasterBlockCounter == 0, m_MasterBlockCounter, " master block(s) have not been returned to the manager");
+				ASSERT(m_MasterBlockCounter == 0, m_MasterBlockCounter, " master block(s) have not been returned to the manager");
 			}
 
 			template <typename RenderDeviceImplType>
@@ -162,7 +162,7 @@ namespace shz
 				};
 				for (MasterBlock& Block : Blocks)
 				{
-					DEV_CHECK_ERR(Block.IsValid(), "Attempting to release invalid master block");
+					ASSERT(Block.IsValid(), "Attempting to release invalid master block");
 					Device.SafeReleaseDeviceObject(StaleMasterBlock{ std::move(Block), this }, CmdQueueMask);
 				}
 			}

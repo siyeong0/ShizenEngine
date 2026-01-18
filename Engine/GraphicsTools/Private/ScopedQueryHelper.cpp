@@ -27,6 +27,7 @@
 
 #include "pch.h"
 #include "ScopedQueryHelper.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {
@@ -39,12 +40,12 @@ namespace shz
 		, m_QueryDesc{ queryDesc }
 		, m_ExpectedQueryLimit{ ExpectedQueryLimit }
 	{
-		VERIFY(queryDesc.Type != QUERY_TYPE_TIMESTAMP, "Scoped query type is expected");
+		ASSERT(queryDesc.Type != QUERY_TYPE_TIMESTAMP, "Scoped query type is expected");
 		m_AvailableQueries.resize(NumQueriesToReserve);
 		for (uint32 i = 0; i < NumQueriesToReserve; ++i)
 		{
 			m_pDevice->CreateQuery(queryDesc, &m_AvailableQueries[i]);
-			VERIFY(m_AvailableQueries[i], "Failed to create query");
+			ASSERT(m_AvailableQueries[i], "Failed to create query");
 		}
 	}
 

@@ -265,7 +265,7 @@ namespace shz
 
 		void SetCombinedSamplerSuffix(const char* Suffix)
 		{
-			VERIFY_EXPR(Suffix != nullptr);
+			ASSERT_EXPR(Suffix != nullptr);
 			if (m_Desc.UseCombinedTextureSamplers)
 			{
 				if (strcmp(m_Desc.CombinedSamplerSuffix, Suffix) != 0)
@@ -400,7 +400,7 @@ namespace shz
 			if (m_ShaderStages != SHADER_TYPE_UNKNOWN)
 			{
 				m_PipelineType = PipelineTypeFromShaderStages(m_ShaderStages);
-				DEV_CHECK_ERR(m_PipelineType != PIPELINE_TYPE_INVALID, "Failed to deduce pipeline type from shader stages");
+				ASSERT(m_PipelineType != PIPELINE_TYPE_INVALID, "Failed to deduce pipeline type from shader stages");
 			}
 
 			{
@@ -411,7 +411,7 @@ namespace shz
 					const int32       ShaderTypeInd = GetShaderTypePipelineIndex(StageBit, m_PipelineType);
 					m_StaticResStageIndex[ShaderTypeInd] = static_cast<int8>(StaticVarStageIdx);
 				}
-				VERIFY_EXPR(StaticVarStageIdx == GetNumStaticResStages());
+				ASSERT_EXPR(StaticVarStageIdx == GetNumStaticResStages());
 			}
 		}
 
@@ -439,7 +439,7 @@ namespace shz
 
 		~PipelineResourceSignatureBase()
 		{
-			VERIFY(m_IsDestructed, "This object must be explicitly destructed with Destruct()");
+			ASSERT(m_IsDestructed, "This object must be explicitly destructed with Destruct()");
 		}
 
 		IMPLEMENT_QUERY_INTERFACE_IN_PLACE(IID_PipelineResourceSignature, TDeviceObjectBase);
@@ -459,7 +459,7 @@ namespace shz
 			if (VarMngrInd < 0)
 				return 0;
 
-			VERIFY_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
+			ASSERT_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
 			return m_StaticVarsMgrs[VarMngrInd].GetVariableCount();
 		}
 
@@ -478,7 +478,7 @@ namespace shz
 			if (VarMngrInd < 0)
 				return nullptr;
 
-			VERIFY_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
+			ASSERT_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
 			return m_StaticVarsMgrs[VarMngrInd].GetVariable(Name);
 		}
 
@@ -497,7 +497,7 @@ namespace shz
 			if (VarMngrInd < 0)
 				return nullptr;
 
-			VERIFY_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
+			ASSERT_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
 			return m_StaticVarsMgrs[VarMngrInd].GetVariable(Index);
 		}
 
@@ -513,7 +513,7 @@ namespace shz
 				const int VarMngrInd = m_StaticResStageIndex[ShaderInd];
 				if (VarMngrInd >= 0)
 				{
-					VERIFY_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
+					ASSERT_EXPR(static_cast<uint32>(VarMngrInd) < GetNumStaticResStages());
 					// ShaderInd is the shader type pipeline index here
 					const SHADER_TYPE ShaderType = GetShaderTypeFromPipelineIndex(ShaderInd, PipelineType);
 					if (ShaderStages & ShaderType)
@@ -529,10 +529,10 @@ namespace shz
 		{
 			if (ppShaderResourceBinding == nullptr)
 			{
-				DEV_ERROR("ppShaderResourceBinding must not be null");
+				ASSERT(false, "ppShaderResourceBinding must not be null");
 				return;
 			}
-			DEV_CHECK_ERR(*ppShaderResourceBinding == nullptr, "Overwriting existing shader resource binding pointer may cause memory leaks.");
+			ASSERT(*ppShaderResourceBinding == nullptr, "Overwriting existing shader resource binding pointer may cause memory leaks.");
 
 			PipelineResourceSignatureImplType* pThisImpl{ static_cast<PipelineResourceSignatureImplType*>(this) };
 			FixedBlockMemoryAllocator& SRBAllocator{ pThisImpl->GetDevice()->GetSRBAllocator() };
@@ -545,7 +545,7 @@ namespace shz
 		// Implementation of IPipelineResourceSignature::InitializeStaticSRBResources.
 		virtual void SHZ_CALL_TYPE InitializeStaticSRBResources(IShaderResourceBinding* pSRB) const override final
 		{
-			DEV_CHECK_ERR(pSRB != nullptr, "SRB must not be null");
+			ASSERT(pSRB != nullptr, "SRB must not be null");
 
 			ShaderResourceBindingImplType* const pSRBImpl = ClassPtrCast<ShaderResourceBindingImplType>(pSRB);
 			if (pSRBImpl->StaticResourcesInitialized())
@@ -558,7 +558,7 @@ namespace shz
 #ifdef SHZ_DEBUG
 			{
 				const IPipelineResourceSignature* pSRBSignature = pSRBImpl->GetPipelineResourceSignature();
-				DEV_CHECK_ERR(pSRBSignature->IsCompatibleWith(pThisImpl), "Shader resource binding is not compatible with resource signature '", pThisImpl->m_Desc.Name, "'.");
+				ASSERT(pSRBSignature->IsCompatibleWith(pThisImpl), "Shader resource binding is not compatible with resource signature '", pThisImpl->m_Desc.Name, "'.");
 			}
 #endif
 
@@ -573,13 +573,13 @@ namespace shz
 		{
 			if (pDstSignature == nullptr)
 			{
-				DEV_ERROR("Destination signature must not be null");
+				ASSERT(false, "Destination signature must not be null");
 				return;
 			}
 
 			if (pDstSignature == this)
 			{
-				DEV_ERROR("Source and destination signatures must be different");
+				ASSERT(false, "Source and destination signatures must be different");
 				return;
 			}
 
@@ -614,7 +614,7 @@ namespace shz
 				return false;
 
 			const uint32 ResCount = This.GetTotalResourceCount();
-			VERIFY_EXPR(ResCount == Other.GetTotalResourceCount());
+			ASSERT_EXPR(ResCount == Other.GetTotalResourceCount());
 			for (uint32 r = 0; r < ResCount; ++r)
 			{
 				const PipelineResourceAttribsType& Res = This.GetResourceAttribs(r);
@@ -663,7 +663,7 @@ namespace shz
 		// Returns the type of the active shader stage with the given index.
 		SHADER_TYPE GetActiveShaderStageType(uint32 StageIndex) const
 		{
-			VERIFY_EXPR(StageIndex < GetNumActiveShaderStages());
+			ASSERT_EXPR(StageIndex < GetNumActiveShaderStages());
 
 			SHADER_TYPE Stages = m_ShaderStages;
 			for (uint32 Index = 0; Stages != SHADER_TYPE_UNKNOWN; ++Index)
@@ -674,7 +674,7 @@ namespace shz
 					return StageBit;
 			}
 
-			UNEXPECTED("Index is out of range");
+			ASSERT(false, "Index is out of range");
 			return SHADER_TYPE_UNKNOWN;
 		}
 
@@ -695,25 +695,25 @@ namespace shz
 
 		const PipelineResourceDesc& GetResourceDesc(uint32 ResIndex) const
 		{
-			VERIFY_EXPR(ResIndex < this->m_Desc.NumResources);
+			ASSERT_EXPR(ResIndex < this->m_Desc.NumResources);
 			return this->m_Desc.Resources[ResIndex];
 		}
 
 		const ImmutableSamplerDesc& GetImmutableSamplerDesc(uint32 SampIndex) const
 		{
-			VERIFY_EXPR(SampIndex < this->m_Desc.NumImmutableSamplers);
+			ASSERT_EXPR(SampIndex < this->m_Desc.NumImmutableSamplers);
 			return this->m_Desc.ImmutableSamplers[SampIndex];
 		}
 
 		const PipelineResourceAttribsType& GetResourceAttribs(uint32 ResIndex) const
 		{
-			VERIFY_EXPR(ResIndex < this->m_Desc.NumResources);
+			ASSERT_EXPR(ResIndex < this->m_Desc.NumResources);
 			return m_pResourceAttribs[ResIndex];
 		}
 
 		const ImmutableSamplerAttribsType& GetImmutableSamplerAttribs(uint32 SampIndex) const
 		{
-			VERIFY_EXPR(SampIndex < this->m_Desc.NumImmutableSamplers);
+			ASSERT_EXPR(SampIndex < this->m_Desc.NumImmutableSamplers);
 			return m_pImmutableSamplerAttribs[SampIndex];
 		}
 
@@ -731,7 +731,7 @@ namespace shz
 			if (IsNull0 != IsNull1)
 				return false;
 
-			VERIFY_EXPR(pSign0 != nullptr && pSign1 != nullptr);
+			ASSERT_EXPR(pSign0 != nullptr && pSign1 != nullptr);
 			return pSign0->IsCompatibleWith(pSign1);
 		}
 
@@ -758,7 +758,7 @@ namespace shz
 				for (uint32 ResIdx = IdxRange.first; ResIdx < IdxRange.second; ++ResIdx)
 				{
 					const PipelineResourceDesc& ResDesc = GetResourceDesc(ResIdx);
-					VERIFY_EXPR(AllowedVarTypes == nullptr || ResDesc.VarType == AllowedVarTypes[TypeIdx]);
+					ASSERT_EXPR(AllowedVarTypes == nullptr || ResDesc.VarType == AllowedVarTypes[TypeIdx]);
 
 					if ((ResDesc.ShaderStages & AllowedStages) != 0)
 					{
@@ -829,12 +829,12 @@ namespace shz
 			CopyPipelineResourceSignatureDesc(Allocator, Desc, this->m_Desc, m_ResourceOffsets);
 
 #ifdef SHZ_DEBUG
-			VERIFY_EXPR(m_ResourceOffsets[SHADER_RESOURCE_VARIABLE_TYPE_NUM_TYPES] == this->m_Desc.NumResources);
+			ASSERT_EXPR(m_ResourceOffsets[SHADER_RESOURCE_VARIABLE_TYPE_NUM_TYPES] == this->m_Desc.NumResources);
 			for (uint32 VarType = 0; VarType < SHADER_RESOURCE_VARIABLE_TYPE_NUM_TYPES; ++VarType)
 			{
 				const auto IdxRange = GetResourceIndexRange(static_cast<SHADER_RESOURCE_VARIABLE_TYPE>(VarType));
 				for (uint32 idx = IdxRange.first; idx < IdxRange.second; ++idx)
-					VERIFY(this->m_Desc.Resources[idx].VarType == VarType, "Unexpected resource var type");
+					ASSERT(this->m_Desc.Resources[idx].VarType == VarType, "Unexpected resource var type");
 			}
 #endif
 
@@ -864,7 +864,7 @@ namespace shz
 						const ImmutableSamplerDesc& ImtblSamDesc = Desc.ImmutableSamplers[s];
 						RefCntAutoPtr<SamplerImplType>& pSampler = m_pImmutableSamplers[s];
 						pDevice->CreateSampler(ImtblSamDesc.Desc, pSampler.template RawDblPtr<ISampler>());
-						VERIFY_EXPR(pSampler);
+						ASSERT_EXPR(pSampler);
 					}
 				}
 			}
@@ -881,7 +881,7 @@ namespace shz
 					int8 Idx = m_StaticResStageIndex[i];
 					if (Idx >= 0)
 					{
-						VERIFY_EXPR(static_cast<uint32>(Idx) < NumStaticResStages);
+						ASSERT_EXPR(static_cast<uint32>(Idx) < NumStaticResStages);
 						const SHADER_TYPE ShaderType = GetShaderTypeFromPipelineIndex(i, GetPipelineType());
 						m_StaticVarsMgrs[Idx].Initialize(*pThisImpl, RawAllocator, AllowedVarTypes, _countof(AllowedVarTypes), ShaderType);
 					}
@@ -914,7 +914,7 @@ namespace shz
 			const std::function<void()>& InitResourceLayout,
 			const std::function<size_t()>& GetRequiredResourceCacheMemorySize) noexcept(false)
 		{
-			VERIFY_EXPR(Desc.NumResources == Serialized.NumResources);
+			ASSERT_EXPR(Desc.NumResources == Serialized.NumResources);
 
 			Initialize(
 				RawAllocator, Desc, CreateImmutableSamplers, InitResourceLayout, GetRequiredResourceCacheMemorySize,
@@ -940,9 +940,9 @@ namespace shz
 				if ((Res.Flags & PIPELINE_RESOURCE_FLAG_COMBINED_SAMPLER) == 0)
 					continue;
 
-				VERIFY(Res.ResourceType == SHADER_RESOURCE_TYPE_TEXTURE_SRV,
+				ASSERT(Res.ResourceType == SHADER_RESOURCE_TYPE_TEXTURE_SRV,
 					"COMBINED_SAMPLER flag is only valid for texture SRVs. This error should've been caught by ValidatePipelineResourceSignatureDesc().");
-				VERIFY(Desc.UseCombinedTextureSamplers && Desc.CombinedSamplerSuffix != nullptr,
+				ASSERT(Desc.UseCombinedTextureSamplers && Desc.CombinedSamplerSuffix != nullptr,
 					"UseCombinedTextureSamplers must be true and CombinedSamplerSuffix must not be null when COMBINED_SAMPLER flag is used. "
 					"This error should've been caught by ValidatePipelineResourceSignatureDesc().");
 
@@ -973,7 +973,7 @@ namespace shz
 	protected:
 		void Destruct()
 		{
-			VERIFY(!m_IsDestructed, "This object has already been destructed");
+			ASSERT(!m_IsDestructed, "This object has already been destructed");
 
 			this->m_Desc.Resources = nullptr;
 			this->m_Desc.ImmutableSamplers = nullptr;
@@ -1025,7 +1025,7 @@ namespace shz
 		// no such sampler, or if combined samplers are not used.
 		uint32 FindAssignedSampler(const PipelineResourceDesc& Tex, uint32 InvalidSamplerValue) const
 		{
-			VERIFY_EXPR(Tex.ResourceType == SHADER_RESOURCE_TYPE_TEXTURE_SRV);
+			ASSERT_EXPR(Tex.ResourceType == SHADER_RESOURCE_TYPE_TEXTURE_SRV);
 			uint32 SamplerInd = InvalidSamplerValue;
 			if (IsUsingCombinedSamplers())
 			{
@@ -1034,13 +1034,13 @@ namespace shz
 				for (uint32 i = IdxRange.first; i < IdxRange.second; ++i)
 				{
 					const PipelineResourceDesc& Res = this->m_Desc.Resources[i];
-					VERIFY_EXPR(Tex.VarType == Res.VarType);
+					ASSERT_EXPR(Tex.VarType == Res.VarType);
 
 					if (Res.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER &&
 						(Tex.ShaderStages & Res.ShaderStages) != 0 &&
 						StreqSuff(Res.Name, Tex.Name, GetCombinedSamplerSuffix()))
 					{
-						VERIFY_EXPR((Res.ShaderStages & Tex.ShaderStages) == Tex.ShaderStages);
+						ASSERT_EXPR((Res.ShaderStages & Tex.ShaderStages) == Tex.ShaderStages);
 						SamplerInd = i;
 						break;
 					}

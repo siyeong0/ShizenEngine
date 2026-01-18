@@ -43,7 +43,7 @@ namespace shz
 
 		bool VerifySparseTextureCompatibility(IRenderDevice* pDevice, const TextureDesc& Desc)
 		{
-			VERIFY_EXPR(pDevice != nullptr);
+			ASSERT_EXPR(pDevice != nullptr);
 
 			const DeviceFeatures& DeviceInfo = pDevice->GetDeviceInfo().Features;
 			if (!DeviceInfo.SparseResources)
@@ -104,9 +104,9 @@ namespace shz
 
 	void DynamicTextureArray::CreateSparseTexture(IRenderDevice* pDevice)
 	{
-		VERIFY_EXPR(!m_pTexture && !m_pMemory);
-		VERIFY_EXPR(pDevice != nullptr);
-		VERIFY_EXPR(m_Desc.Usage == USAGE_SPARSE);
+		ASSERT_EXPR(!m_pTexture && !m_pMemory);
+		ASSERT_EXPR(pDevice != nullptr);
+		ASSERT_EXPR(m_Desc.Usage == USAGE_SPARSE);
 
 		if (!VerifySparseTextureCompatibility(pDevice, m_Desc))
 		{
@@ -141,7 +141,7 @@ namespace shz
 				MemCI.InitialSize = uint64{ 512 } << uint64{ 20 };
 
 				pDevice->CreateDeviceMemory(MemCI, &m_pMemory);
-				DEV_CHECK_ERR(m_pMemory, "Failed to create device memory");
+				ASSERT(m_pMemory, "Failed to create device memory");
 
 				CreateSparseTextureMtl(pDevice, TmpDesc, m_pMemory, &m_pTexture);
 			}
@@ -151,7 +151,7 @@ namespace shz
 			}
 			if (!m_pTexture)
 			{
-				DEV_ERROR("Failed to create sparse texture");
+				ASSERT(false, "Failed to create sparse texture");
 				return;
 			}
 			// No slices are currently committed
@@ -199,11 +199,11 @@ namespace shz
 			MemCI.NumResources = _countof(pCompatibleRes);
 
 			pDevice->CreateDeviceMemory(MemCI, &m_pMemory);
-			DEV_CHECK_ERR(m_pMemory, "Failed to create device memory");
+			ASSERT(m_pMemory, "Failed to create device memory");
 		}
 		else
 		{
-			VERIFY_EXPR(DeviceInfo.IsMetalDevice());
+			ASSERT_EXPR(DeviceInfo.IsMetalDevice());
 			m_pMemory->Resize(m_MemoryPageSize);
 		}
 
@@ -223,9 +223,9 @@ namespace shz
 
 	void DynamicTextureArray::CreateResources(IRenderDevice* pDevice)
 	{
-		VERIFY_EXPR(pDevice != nullptr);
-		VERIFY(!m_pTexture, "The texture has already been initialized");
-		VERIFY(!m_pMemory, "Memory has already been initialized");
+		ASSERT_EXPR(pDevice != nullptr);
+		ASSERT(!m_pTexture, "The texture has already been initialized");
+		ASSERT(!m_pMemory, "Memory has already been initialized");
 
 		if (m_Desc.Usage == USAGE_SPARSE)
 		{
@@ -244,7 +244,7 @@ namespace shz
 				m_Desc.ArraySize = m_PendingSize;
 			}
 		}
-		DEV_CHECK_ERR(m_pTexture, "Failed to create texture for a dynamic texture array");
+		ASSERT(m_pTexture, "Failed to create texture for a dynamic texture array");
 
 		m_Version.fetch_add(1);
 	}
@@ -252,8 +252,8 @@ namespace shz
 
 	void DynamicTextureArray::ResizeSparseTexture(IDeviceContext* pContext)
 	{
-		VERIFY_EXPR(m_PendingSize != m_Desc.ArraySize);
-		VERIFY_EXPR(m_pTexture && m_pMemory);
+		ASSERT_EXPR(m_PendingSize != m_Desc.ArraySize);
+		ASSERT_EXPR(m_pTexture && m_pMemory);
 
 		m_PendingSize = AlignUp(m_PendingSize, m_NumSlicesInPage);
 
@@ -341,8 +341,8 @@ namespace shz
 				TexBinds.push_back(MipTailBindInfo);
 			}
 		}
-		VERIFY_EXPR(range_it == MipRanges.end());
-		VERIFY_EXPR(CurrMemOffset == RequiredMemSize);
+		ASSERT_EXPR(range_it == MipRanges.end());
+		ASSERT_EXPR(CurrMemOffset == RequiredMemSize);
 
 		BindSparseResourceMemoryAttribs BindMemAttribs;
 		BindMemAttribs.NumTextureBinds = StaticCast<uint32>(TexBinds.size());
@@ -382,11 +382,11 @@ namespace shz
 
 	void DynamicTextureArray::ResizeDefaultTexture(IDeviceContext* pContext)
 	{
-		VERIFY_EXPR(m_PendingSize != m_Desc.ArraySize);
-		VERIFY_EXPR(m_pTexture && m_pStaleTexture);
+		ASSERT_EXPR(m_PendingSize != m_Desc.ArraySize);
+		ASSERT_EXPR(m_pTexture && m_pStaleTexture);
 		const TextureDesc& SrcTexDesc = m_pStaleTexture->GetDesc();
 		const TextureDesc& DstTexDesc = m_pTexture->GetDesc();
-		VERIFY_EXPR(SrcTexDesc.MipLevels == DstTexDesc.MipLevels);
+		ASSERT_EXPR(SrcTexDesc.MipLevels == DstTexDesc.MipLevels);
 
 		CopyTextureAttribs CopyAttribs;
 		CopyAttribs.pSrcTexture = m_pStaleTexture;
@@ -416,7 +416,7 @@ namespace shz
 			if (pDevice != nullptr)
 				CreateResources(pDevice);
 			else
-				DEV_CHECK_ERR(AllowNull, "Dynamic texture array must be initialized, but pDevice is null");
+				ASSERT(AllowNull, "Dynamic texture array must be initialized, but pDevice is null");
 		}
 
 		if (m_pTexture && m_Desc.ArraySize != m_PendingSize)
@@ -437,7 +437,7 @@ namespace shz
 			}
 			else
 			{
-				DEV_CHECK_ERR(AllowNull, "Dynamic texture must be resized, but pContext is null. Use PendingUpdate() to check if the Texture must be updated.");
+				ASSERT(AllowNull, "Dynamic texture must be resized, but pContext is null. Use PendingUpdate() to check if the Texture must be updated.");
 			}
 		}
 	}
@@ -458,7 +458,7 @@ namespace shz
 					m_pStaleTexture = std::move(m_pTexture);
 				else
 				{
-					DEV_CHECK_ERR(!m_pTexture || NewArraySize == 0,
+					ASSERT(!m_pTexture || NewArraySize == 0,
 						"There is a non-null stale Texture. This likely indicates that "
 						"Resize() has been called multiple times with different sizes, "
 						"but copy has not been committed by providing non-null device "
@@ -488,8 +488,8 @@ namespace shz
 
 		if (m_LastAfterResizeFenceValue + 1 < m_NextAfterResizeFenceValue)
 		{
-			DEV_CHECK_ERR(pContext != nullptr, "Device context is null, but waiting for the fence is required");
-			VERIFY_EXPR(m_pAfterResizeFence);
+			ASSERT(pContext != nullptr, "Device context is null, but waiting for the fence is required");
+			ASSERT_EXPR(m_pAfterResizeFence);
 			m_LastAfterResizeFenceValue = m_NextAfterResizeFenceValue - 1;
 			pContext->DeviceWaitForFence(m_pAfterResizeFence, m_LastAfterResizeFenceValue);
 		}

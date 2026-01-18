@@ -34,7 +34,7 @@
 #include "Engine/RHI/Interface/IDeviceContext.h"
 #include "Engine/RHI/Interface/ISwapChain.h"
 #include "Engine/Core/Common/Public/ObjectBase.hpp"
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 namespace shz
@@ -69,8 +69,8 @@ namespace shz
 			, m_DesiredPreTransform{ SCDesc.PreTransform }
 
 		{
-			DEV_CHECK_ERR(pDeviceContext, "Device context must not be null");
-			DEV_CHECK_ERR(!pDeviceContext->GetDesc().IsDeferred, "Deferred contexts can't be used for presenting");
+			ASSERT(pDeviceContext, "Device context must not be null");
+			ASSERT(!pDeviceContext->GetDesc().IsDeferred, "Deferred contexts can't be used for presenting");
 		}
 
 

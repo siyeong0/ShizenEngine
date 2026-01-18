@@ -78,10 +78,10 @@ namespace shz
 		m_d3d12DispatchDesc.CallableShaderTable.SizeInBytes = CallableShaderTable.Size;
 		m_d3d12DispatchDesc.CallableShaderTable.StrideInBytes = CallableShaderTable.Stride;
 
-		VERIFY_EXPR(m_d3d12DispatchDesc.RayGenerationShaderRecord.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
-		VERIFY_EXPR(m_d3d12DispatchDesc.MissShaderTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
-		VERIFY_EXPR(m_d3d12DispatchDesc.HitGroupTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
-		VERIFY_EXPR(m_d3d12DispatchDesc.CallableShaderTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
+		ASSERT_EXPR(m_d3d12DispatchDesc.RayGenerationShaderRecord.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
+		ASSERT_EXPR(m_d3d12DispatchDesc.MissShaderTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
+		ASSERT_EXPR(m_d3d12DispatchDesc.HitGroupTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
+		ASSERT_EXPR(m_d3d12DispatchDesc.CallableShaderTable.StartAddress % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0);
 	}
 
 } // namespace shz

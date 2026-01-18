@@ -73,10 +73,10 @@ namespace shz
 		// Implementation of IBuffer::GetNativeHandle().
 		virtual uint64 SHZ_CALL_TYPE GetNativeHandle() override final
 		{
-			VERIFY(GetD3D12Resource() != nullptr, "The buffer is dynamic and has no pointer to D3D12 resource");
+			ASSERT(GetD3D12Resource() != nullptr, "The buffer is dynamic and has no pointer to D3D12 resource");
 			uint64          DataStartByteOffset = 0;
 			ID3D12Resource* pd3d12Buffer = GetD3D12Buffer(DataStartByteOffset, 0);
-			VERIFY(DataStartByteOffset == 0, "0 offset expected");
+			ASSERT(DataStartByteOffset == 0, "0 offset expected");
 			return BitCast<uint64>(pd3d12Buffer);
 		}
 
@@ -91,7 +91,7 @@ namespace shz
 
 		__forceinline D3D12_GPU_VIRTUAL_ADDRESS GetGPUAddress()
 		{
-			VERIFY_EXPR(m_Desc.Usage != USAGE_DYNAMIC);
+			ASSERT_EXPR(m_Desc.Usage != USAGE_DYNAMIC);
 			return GetD3D12Resource()->GetGPUVirtualAddress();
 		}
 

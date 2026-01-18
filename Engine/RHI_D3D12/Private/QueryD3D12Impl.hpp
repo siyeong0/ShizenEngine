@@ -64,7 +64,7 @@ namespace shz
 		// Implementation of IQueryD3D12::GetQueryHeapIndex().
 		virtual uint32 SHZ_CALL_TYPE GetQueryHeapIndex(uint32 QueryId) const override final
 		{
-			VERIFY_EXPR(QueryId == 0 || m_Desc.Type == QUERY_TYPE_DURATION && QueryId == 1);
+			ASSERT_EXPR(QueryId == 0 || m_Desc.Type == QUERY_TYPE_DURATION && QueryId == 1);
 			return m_QueryHeapIndex[QueryId];
 		}
 

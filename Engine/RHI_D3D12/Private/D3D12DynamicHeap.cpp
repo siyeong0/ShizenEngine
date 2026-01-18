@@ -100,7 +100,7 @@ namespace shz
 		auto PageIt = m_AvailablePages.lower_bound(SizeInBytes); // Returns an iterator pointing to the first element that is not less than key
 		if (PageIt != m_AvailablePages.end())
 		{
-			VERIFY_EXPR(PageIt->first >= SizeInBytes);
+			ASSERT_EXPR(PageIt->first >= SizeInBytes);
 			D3D12DynamicPage Page(std::move(PageIt->second));
 			m_AvailablePages.erase(PageIt);
 			return Page;
@@ -158,7 +158,7 @@ namespace shz
 
 	void D3D12DynamicMemoryManager::Destroy()
 	{
-		DEV_CHECK_ERR(m_AllocatedPageCounter == 0, m_AllocatedPageCounter, " page(s) have not been returned to the manager.");
+		ASSERT(m_AllocatedPageCounter == 0, m_AllocatedPageCounter, " page(s) have not been returned to the manager.");
 		uint64 TotalAllocatedSize = 0;
 		for (const auto& Page : m_AvailablePages)
 			TotalAllocatedSize += Page.second.GetSize();
@@ -172,14 +172,14 @@ namespace shz
 
 	D3D12DynamicMemoryManager::~D3D12DynamicMemoryManager()
 	{
-		DEV_CHECK_ERR(m_AllocatedPageCounter == 0, m_AllocatedPageCounter, " page(s) have not been released. If there are outstanding references to the pages in release queues, the app will crash when the page is returned to the manager.");
-		VERIFY(m_AvailablePages.empty(), "Not all pages are destroyed. Dynamic memory manager must be explicitly destroyed with Destroy() method");
+		ASSERT(m_AllocatedPageCounter == 0, m_AllocatedPageCounter, " page(s) have not been released. If there are outstanding references to the pages in release queues, the app will crash when the page is returned to the manager.");
+		ASSERT(m_AvailablePages.empty(), "Not all pages are destroyed. Dynamic memory manager must be explicitly destroyed with Destroy() method");
 	}
 
 
 	D3D12DynamicHeap::~D3D12DynamicHeap()
 	{
-		VERIFY(m_AllocatedPages.empty(), "Allocated pages have not been released which indicates FinishFrame() has not been called");
+		ASSERT(m_AllocatedPages.empty(), "Allocated pages have not been released which indicates FinishFrame() has not been called");
 
 		uint64 PeakAllocatedPages = m_PeakAllocatedSize / m_PageSize;
 		LOG_INFO_MESSAGE(m_HeapName,
@@ -195,8 +195,8 @@ namespace shz
 
 	D3D12DynamicAllocation D3D12DynamicHeap::Allocate(uint64 SizeInBytes, uint64 Alignment, uint64 DvpCtxFrameNumber)
 	{
-		VERIFY_EXPR(Alignment > 0);
-		VERIFY(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
+		ASSERT_EXPR(Alignment > 0);
+		ASSERT(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
 
 		if (m_CurrOffset == InvalidOffset || SizeInBytes + (AlignUp(m_CurrOffset, Alignment) - m_CurrOffset) > m_AvailableSize)
 		{
@@ -221,7 +221,7 @@ namespace shz
 		{
 			uint64 AlignedOffset = AlignUp(m_CurrOffset, Alignment);
 			uint64 AdjustedSize = SizeInBytes + (AlignedOffset - m_CurrOffset);
-			VERIFY_EXPR(AdjustedSize <= m_AvailableSize);
+			ASSERT_EXPR(AdjustedSize <= m_AvailableSize);
 			m_AvailableSize -= AdjustedSize;
 			m_CurrOffset += AdjustedSize;
 

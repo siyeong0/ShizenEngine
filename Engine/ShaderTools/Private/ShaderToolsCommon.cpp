@@ -78,10 +78,10 @@ namespace shz
 		case SHADER_TYPE_CALLABLE:         return SHADER_MACROS_ARRAY(RCMacros);
 
 		case SHADER_TYPE_TILE:
-			UNEXPECTED("Unsupported shader type");
+			ASSERT(false, "Unsupported shader type");
 			return ShaderMacroArray{};
 		default:
-			UNEXPECTED("Unexpected shader type");
+			ASSERT(false, "Unexpected shader type");
 			return ShaderMacroArray{};
 		}
 	}
@@ -215,7 +215,7 @@ namespace shz
 		ShaderSourceFileData SourceData;
 		if (SourceCode != nullptr)
 		{
-			VERIFY(FilePath == nullptr, "FilePath must be null when SourceCode is not null");
+			ASSERT(FilePath == nullptr, "FilePath must be null when SourceCode is not null");
 			SourceData.Source = SourceCode;
 			SourceData.SourceLength = StaticCast<uint32>(SourceLength != 0 ? SourceLength : strlen(SourceCode));
 		}
@@ -237,12 +237,12 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("FilePath is null");
+					ASSERT(false, "FilePath is null");
 				}
 			}
 			else
 			{
-				UNEXPECTED("Input stream factory is null");
+				ASSERT(false, "Input stream factory is null");
 			}
 		}
 
@@ -263,7 +263,7 @@ namespace shz
 
 	void AppendShaderSourceCode(std::string& Source, const ShaderCreateInfo& ShaderCI) noexcept(false)
 	{
-		VERIFY_EXPR(ShaderCI.ByteCode == nullptr);
+		ASSERT_EXPR(ShaderCI.ByteCode == nullptr);
 		const ShaderSourceFileData SourceData = ReadShaderSourceFile(ShaderCI);
 		Source.append(SourceData.Source, SourceData.SourceLength);
 	}
@@ -542,7 +542,7 @@ namespace shz
 				case SHADER_CODE_BASIC_TYPE_BOOL:  BasicTypeStr = "bvec"; break;
 
 				default:
-					UNEXPECTED("Unexpected vector basic type");
+					ASSERT(false, "Unexpected vector basic type");
 				}
 			}
 			else

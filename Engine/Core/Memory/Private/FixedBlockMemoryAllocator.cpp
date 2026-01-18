@@ -47,7 +47,7 @@ namespace shz
 		, m_pOwnerAllocator(&OwnerAllocator)
 	{
 		const size_t PageSize = OwnerAllocator.m_BlockSize * OwnerAllocator.m_NumBlocksInPage;
-		VERIFY_EXPR(PageSize > 0);
+		ASSERT_EXPR(PageSize > 0);
 		m_pPageStart = reinterpret_cast<uint8*>(
 			OwnerAllocator.m_RawMemoryAllocator.Allocate(PageSize, "FixedBlockMemoryAllocator page", __FILE__, __LINE__));
 		m_pNextFreeBlock = m_pPageStart;
@@ -76,8 +76,8 @@ namespace shz
 
 	void* FixedBlockMemoryAllocator::MemoryPage::GetBlockStartAddress(uint32 BlockIndex) const
 	{
-		VERIFY_EXPR(m_pOwnerAllocator != nullptr);
-		VERIFY(BlockIndex < m_pOwnerAllocator->m_NumBlocksInPage, "Invalid block index");
+		ASSERT_EXPR(m_pOwnerAllocator != nullptr);
+		ASSERT(BlockIndex < m_pOwnerAllocator->m_NumBlocksInPage, "Invalid block index");
 		return reinterpret_cast<uint8*>(m_pPageStart) + BlockIndex * m_pOwnerAllocator->m_BlockSize;
 	}
 
@@ -85,9 +85,9 @@ namespace shz
 	void FixedBlockMemoryAllocator::MemoryPage::dbgVerifyAddress(const void* pBlockAddr) const
 	{
 		size_t Delta = reinterpret_cast<const uint8*>(pBlockAddr) - reinterpret_cast<uint8*>(m_pPageStart);
-		VERIFY(Delta % m_pOwnerAllocator->m_BlockSize == 0, "Invalid address");
+		ASSERT(Delta % m_pOwnerAllocator->m_BlockSize == 0, "Invalid address");
 		uint32 BlockIndex = static_cast<uint32>(Delta / m_pOwnerAllocator->m_BlockSize);
-		VERIFY(BlockIndex < m_pOwnerAllocator->m_NumBlocksInPage, "Invalid block index");
+		ASSERT(BlockIndex < m_pOwnerAllocator->m_NumBlocksInPage, "Invalid block index");
 	}
 #else
 #    define dbgVerifyAddress(...)
@@ -95,11 +95,11 @@ namespace shz
 
 	void* FixedBlockMemoryAllocator::MemoryPage::Allocate()
 	{
-		VERIFY_EXPR(m_pOwnerAllocator != nullptr);
+		ASSERT_EXPR(m_pOwnerAllocator != nullptr);
 
 		if (m_NumFreeBlocks == 0)
 		{
-			VERIFY_EXPR(m_NumInitializedBlocks == m_pOwnerAllocator->m_NumBlocksInPage);
+			ASSERT_EXPR(m_NumInitializedBlocks == m_pOwnerAllocator->m_NumBlocksInPage);
 			return nullptr;
 		}
 
@@ -140,7 +140,7 @@ namespace shz
 		if (m_NumFreeBlocks != 0)
 			dbgVerifyAddress(m_pNextFreeBlock);
 		else
-			VERIFY_EXPR(m_pNextFreeBlock == nullptr);
+			ASSERT_EXPR(m_pNextFreeBlock == nullptr);
 
 		FillWithDebugPattern(res, AllocatedBlockMemPattern, m_pOwnerAllocator->m_BlockSize);
 		return res;
@@ -148,7 +148,7 @@ namespace shz
 
 	void FixedBlockMemoryAllocator::MemoryPage::DeAllocate(void* p)
 	{
-		VERIFY_EXPR(m_pOwnerAllocator != nullptr);
+		ASSERT_EXPR(m_pOwnerAllocator != nullptr);
 
 		dbgVerifyAddress(p);
 		FillWithDebugPattern(p, DeallocatedBlockMemPattern, m_pOwnerAllocator->m_BlockSize);
@@ -184,15 +184,15 @@ namespace shz
 #ifdef SHZ_DEBUG
 		for (size_t p = 0; p < m_PagePool.size(); ++p)
 		{
-			VERIFY(!m_PagePool[p].HasAllocations(), "Memory leak detected: memory page has allocated block");
-			VERIFY(m_AvailablePages.find(p) != m_AvailablePages.end(), "Memory page is not in the available page pool");
+			ASSERT(!m_PagePool[p].HasAllocations(), "Memory leak detected: memory page has allocated block");
+			ASSERT(m_AvailablePages.find(p) != m_AvailablePages.end(), "Memory page is not in the available page pool");
 		}
 #endif
 	}
 
 	void FixedBlockMemoryAllocator::CreateNewPage()
 	{
-		VERIFY_EXPR(m_BlockSize > 0);
+		ASSERT_EXPR(m_BlockSize > 0);
 		m_PagePool.emplace_back(*this);
 		m_AvailablePages.insert(m_PagePool.size() - 1);
 		m_AddrToPageId.reserve(m_PagePool.size() * m_NumBlocksInPage);
@@ -200,10 +200,10 @@ namespace shz
 
 	void* FixedBlockMemoryAllocator::Allocate(size_t Size, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY_EXPR(Size > 0);
+		ASSERT_EXPR(Size > 0);
 
 		Size = AdjustBlockSize(Size);
-		VERIFY(m_BlockSize == Size, "Requested size (", Size, ") does not match the block size (", m_BlockSize, ")");
+		ASSERT(m_BlockSize == Size, "Requested size (", Size, ") does not match the block size (", m_BlockSize, ")");
 
 		std::lock_guard<std::mutex> LockGuard(m_Mutex);
 
@@ -231,7 +231,7 @@ namespace shz
 		if (PageIdIt != m_AddrToPageId.end())
 		{
 			size_t PageId = PageIdIt->second;
-			VERIFY_EXPR(PageId < m_PagePool.size());
+			ASSERT_EXPR(PageId < m_PagePool.size());
 			m_PagePool[PageId].DeAllocate(Ptr);
 			m_AvailablePages.insert(PageId);
 			m_AddrToPageId.erase(PageIdIt);
@@ -246,13 +246,13 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("Address not found in the allocations list - double freeing memory?");
+			ASSERT(false, "Address not found in the allocations list - double freeing memory?");
 		}
 	}
 
 	void* FixedBlockMemoryAllocator::AllocateAligned(size_t Size, size_t Alignment, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY(Alignment <= sizeof(void*), "Alignment (", Alignment, ") exceeds the default alignment (", sizeof(void*), ")");
+		ASSERT(Alignment <= sizeof(void*), "Alignment (", Alignment, ") exceeds the default alignment (", sizeof(void*), ")");
 		return Allocate(Size, dbgDescription, dbgFileName, dbgLineNumber);
 	}
 

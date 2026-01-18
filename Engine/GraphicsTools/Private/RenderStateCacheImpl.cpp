@@ -86,7 +86,7 @@ namespace shz
 
 	bool RenderStateCacheImpl::WriteToStream(uint32 ContentVersion, IFileStream* pStream)
 	{
-		DEV_CHECK_ERR(pStream != nullptr, "pStream must not be null");
+		ASSERT(pStream != nullptr, "pStream must not be null");
 		if (pStream == nullptr)
 			return false;
 
@@ -223,7 +223,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unknown device type");
+			ASSERT(false, "Unknown device type");
 		}
 
 		CreateInfo.pArchiverFactory->CreateSerializationDevice(SerializationDeviceCI, &m_pSerializationDevice);
@@ -255,10 +255,10 @@ namespace shz
 	{
 		if (ppShader == nullptr)
 		{
-			DEV_ERROR("ppShader must not be null");
+			ASSERT(false, "ppShader must not be null");
 			return false;
 		}
-		DEV_CHECK_ERR(*ppShader == nullptr, "Overwriting reference to existing shader may cause memory leaks");
+		ASSERT(*ppShader == nullptr, "Overwriting reference to existing shader may cause memory leaks");
 
 		*ppShader = nullptr;
 
@@ -338,7 +338,7 @@ namespace shz
 
 	bool RenderStateCacheImpl::CreateShaderInternal(const ShaderCreateInfo& ShaderCI, IShader** ppShader)
 	{
-		VERIFY_EXPR(ppShader != nullptr && *ppShader == nullptr);
+		ASSERT_EXPR(ppShader != nullptr && *ppShader == nullptr);
 
 		XXH128State Hasher;
 #ifdef SHZ_DEBUG
@@ -357,7 +357,7 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("Unexpected file hash mode");
+			ASSERT(false, "Unexpected file hash mode");
 		}
 		Hasher.Update(IsDebug);
 		const XXH128Hash Hash = Hasher.Digest();
@@ -463,7 +463,7 @@ namespace shz
 		if (pArchivedShader)
 		{
 			RefCntAutoPtr<ISerializedShader> pSerializedShader{ pArchivedShader, IID_SerializedShader };
-			VERIFY(pSerializedShader, "Shader object is not a serialized shader");
+			ASSERT(pSerializedShader, "Shader object is not a serialized shader");
 			if (pSerializedShader)
 			{
 				if (RefCntAutoPtr<IShader> pShader{ pSerializedShader->GetDeviceShader(m_DeviceType) })
@@ -482,7 +482,7 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("Device shader must not be null");
+					ASSERT(false, "Device shader must not be null");
 				}
 			}
 		}
@@ -541,7 +541,7 @@ namespace shz
 
 		void SetName(const char* Name)
 		{
-			VERIFY_EXPR(Name != nullptr);
+			ASSERT_EXPR(Name != nullptr);
 			CI.PSODesc.Name = Name;
 		}
 
@@ -735,10 +735,10 @@ namespace shz
 	{
 		if (ppPipelineState == nullptr)
 		{
-			DEV_ERROR("ppPipelineState must not be null");
+			ASSERT(false, "ppPipelineState must not be null");
 			return false;
 		}
-		DEV_CHECK_ERR(*ppPipelineState == nullptr, "Overwriting reference to existing pipeline state may cause memory leaks");
+		ASSERT(*ppPipelineState == nullptr, "Overwriting reference to existing pipeline state may cause memory leaks");
 
 		*ppPipelineState = nullptr;
 
@@ -782,10 +782,10 @@ namespace shz
 	template <typename CreateInfoType>
 	bool RenderStateCacheImpl::CreatePipelineStateInternal(const CreateInfoType& PSOCreateInfo, IPipelineState** ppPipelineState)
 	{
-		VERIFY_EXPR(ppPipelineState != nullptr && *ppPipelineState == nullptr);
+		ASSERT_EXPR(ppPipelineState != nullptr && *ppPipelineState == nullptr);
 
 		const SHADER_STATUS ShadersStatus = GetPipelineStateCreateInfoShadersStatus<CreateInfoType>(PSOCreateInfo);
-		VERIFY(ShadersStatus != SHADER_STATUS_UNINITIALIZED, "Unexpected shader status");
+		ASSERT(ShadersStatus != SHADER_STATUS_UNINITIALIZED, "Unexpected shader status");
 		if (ShadersStatus == SHADER_STATUS_FAILED)
 		{
 			LOG_ERROR_MESSAGE("Failed to create pipeline state '", (PSOCreateInfo.PSODesc.Name ? PSOCreateInfo.PSODesc.Name : "<unnamed>"), "': one or more shaders failed to compile.");
@@ -873,7 +873,7 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("Unexpected pipeline state status ", GetPipelineStateStatusString(Status));
+					ASSERT(false, "Unexpected pipeline state status ", GetPipelineStateStatusString(Status));
 				}
 			}
 		}
@@ -929,7 +929,7 @@ namespace shz
 	{
 		if (!m_CI.EnableHotReload)
 		{
-			DEV_ERROR("This render state cache was not created with hot reload enabled. Set EnableHotReload to true.");
+			ASSERT(false, "This render state cache was not created with hot reload enabled. Set EnableHotReload to true.");
 			return 0;
 		}
 
@@ -950,7 +950,7 @@ namespace shz
 					}
 					else
 					{
-						UNEXPECTED("Shader object is not a ReloadableShader");
+						ASSERT(false, "Shader object is not a ReloadableShader");
 					}
 				}
 			}
@@ -973,7 +973,7 @@ namespace shz
 					}
 					else
 					{
-						UNEXPECTED("Pipeline state object is not a ReloadablePipelineState");
+						ASSERT(false, "Pipeline state object is not a ReloadablePipelineState");
 					}
 				}
 			}
@@ -990,7 +990,7 @@ namespace shz
 	{
 		if (CacheLocation == nullptr)
 		{
-			UNEXPECTED("Cache location is null");
+			ASSERT(false, "Cache location is null");
 			return "";
 		}
 

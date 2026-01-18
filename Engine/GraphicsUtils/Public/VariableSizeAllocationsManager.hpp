@@ -125,15 +125,15 @@ namespace shz
 #ifdef SHZ_DEBUG
 			if (!m_FreeBlocksByOffset.empty() || !m_FreeBlocksBySize.empty())
 			{
-				VERIFY(m_FreeBlocksByOffset.size() == 1, "Single free block is expected");
-				VERIFY(m_FreeBlocksByOffset.begin()->first == 0, "Head chunk offset is expected to be 0");
-				VERIFY(m_FreeBlocksByOffset.begin()->second.Size == m_MaxSize, "Head chunk size is expected to be ", m_MaxSize);
-				VERIFY_EXPR(m_FreeBlocksByOffset.begin()->second.OrderBySizeIt == m_FreeBlocksBySize.begin());
-				VERIFY(m_FreeBlocksBySize.size() == m_FreeBlocksByOffset.size(), "Sizes of the two maps must be equal");
+				ASSERT(m_FreeBlocksByOffset.size() == 1, "Single free block is expected");
+				ASSERT(m_FreeBlocksByOffset.begin()->first == 0, "Head chunk offset is expected to be 0");
+				ASSERT(m_FreeBlocksByOffset.begin()->second.Size == m_MaxSize, "Head chunk size is expected to be ", m_MaxSize);
+				ASSERT_EXPR(m_FreeBlocksByOffset.begin()->second.OrderBySizeIt == m_FreeBlocksBySize.begin());
+				ASSERT(m_FreeBlocksBySize.size() == m_FreeBlocksByOffset.size(), "Sizes of the two maps must be equal");
 
-				VERIFY(m_FreeBlocksBySize.size() == 1, "Single free block is expected");
-				VERIFY(m_FreeBlocksBySize.begin()->first == m_MaxSize, "Head chunk size is expected to be ", m_MaxSize);
-				VERIFY(m_FreeBlocksBySize.begin()->second == m_FreeBlocksByOffset.begin(), "Incorrect first block");
+				ASSERT(m_FreeBlocksBySize.size() == 1, "Single free block is expected");
+				ASSERT(m_FreeBlocksBySize.begin()->first == m_MaxSize, "Head chunk size is expected to be ", m_MaxSize);
+				ASSERT(m_FreeBlocksBySize.begin()->second == m_FreeBlocksByOffset.begin(), "Incorrect first block");
 			}
 #endif
 		}
@@ -200,8 +200,8 @@ namespace shz
 
 		Allocation Allocate(OffsetType Size, OffsetType Alignment)
 		{
-			VERIFY_EXPR(Size > 0);
-			VERIFY(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
+			ASSERT_EXPR(Size > 0);
+			ASSERT(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
 			Size = AlignUp(Size, Alignment);
 			if (m_FreeSize < Size)
 				return Allocation::InvalidAllocation();
@@ -215,8 +215,8 @@ namespace shz
 				return Allocation::InvalidAllocation();
 
 			auto SmallestBlockIt = SmallestBlockItIt->second;
-			VERIFY_EXPR(Size + AlignmentReserve <= SmallestBlockIt->second.Size);
-			VERIFY_EXPR(SmallestBlockIt->second.Size == SmallestBlockItIt->first);
+			ASSERT_EXPR(Size + AlignmentReserve <= SmallestBlockIt->second.Size);
+			ASSERT_EXPR(SmallestBlockIt->second.Size == SmallestBlockItIt->first);
 
 			//     SmallestBlockIt.Offset
 			//        |                                  |
@@ -226,13 +226,13 @@ namespace shz
 			//      Offset              NewOffset
 			//
 			OffsetType Offset = SmallestBlockIt->first;
-			VERIFY_EXPR(Offset % m_CurrAlignment == 0);
+			ASSERT_EXPR(Offset % m_CurrAlignment == 0);
 			OffsetType AlignedOffset = AlignUp(Offset, Alignment);
 			OffsetType AdjustedSize = Size + (AlignedOffset - Offset);
-			VERIFY_EXPR(AdjustedSize <= Size + AlignmentReserve);
+			ASSERT_EXPR(AdjustedSize <= Size + AlignmentReserve);
 			OffsetType NewOffset = Offset + AdjustedSize;
 			OffsetType NewSize = SmallestBlockIt->second.Size - AdjustedSize;
-			VERIFY_EXPR(SmallestBlockItIt == SmallestBlockIt->second.OrderBySizeIt);
+			ASSERT_EXPR(SmallestBlockItIt == SmallestBlockIt->second.OrderBySizeIt);
 			m_FreeBlocksBySize.erase(SmallestBlockItIt);
 			m_FreeBlocksByOffset.erase(SmallestBlockIt);
 			if (NewSize > 0)
@@ -246,7 +246,7 @@ namespace shz
 			{
 				if (IsPowerOfTwo(Size))
 				{
-					VERIFY_EXPR(Size >= Alignment && Size < m_CurrAlignment);
+					ASSERT_EXPR(Size >= Alignment && Size < m_CurrAlignment);
 					m_CurrAlignment = Size;
 				}
 				else
@@ -256,7 +256,7 @@ namespace shz
 			}
 
 #ifdef SHZ_DEBUG
-			VERIFY_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
+			ASSERT_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
 			if (!m_DbgDisableDebugValidation)
 				DbgVerifyList();
 #endif
@@ -265,14 +265,14 @@ namespace shz
 
 		void Free(Allocation&& allocation)
 		{
-			VERIFY_EXPR(allocation.IsValid());
+			ASSERT_EXPR(allocation.IsValid());
 			Free(allocation.UnalignedOffset, allocation.Size);
 			allocation = Allocation{};
 		}
 
 		void Free(OffsetType Offset, OffsetType Size)
 		{
-			VERIFY_EXPR(Offset != Allocation::InvalidOffset && Offset + Size <= m_MaxSize);
+			ASSERT_EXPR(Offset != Allocation::InvalidOffset && Offset + Size <= m_MaxSize);
 
 			// Find the first element whose offset is greater than the specified offset.
 			// upper_bound() returns an iterator pointing to the first element in the
@@ -282,17 +282,17 @@ namespace shz
 			{
 				auto LowBnd = m_FreeBlocksByOffset.lower_bound(Offset); // First element whose offset is  >=
 				// Since zero-size allocations are not allowed, lower bound must always be equal to the upper bound
-				VERIFY_EXPR(LowBnd == NextBlockIt);
+				ASSERT_EXPR(LowBnd == NextBlockIt);
 			}
 #endif
 			// Block being deallocated must not overlap with the next block
-			VERIFY_EXPR(NextBlockIt == m_FreeBlocksByOffset.end() || Offset + Size <= NextBlockIt->first);
+			ASSERT_EXPR(NextBlockIt == m_FreeBlocksByOffset.end() || Offset + Size <= NextBlockIt->first);
 			auto PrevBlockIt = NextBlockIt;
 			if (PrevBlockIt != m_FreeBlocksByOffset.begin())
 			{
 				--PrevBlockIt;
 				// Block being deallocated must not overlap with the previous block
-				VERIFY_EXPR(Offset >= PrevBlockIt->first + PrevBlockIt->second.Size);
+				ASSERT_EXPR(Offset >= PrevBlockIt->first + PrevBlockIt->second.Size);
 			}
 			else
 				PrevBlockIt = m_FreeBlocksByOffset.end();
@@ -357,12 +357,12 @@ namespace shz
 			if (IsEmpty())
 			{
 				// Reset current alignment
-				VERIFY_EXPR(GetNumFreeBlocks() == 1);
+				ASSERT_EXPR(GetNumFreeBlocks() == 1);
 				ResetCurrAlignment();
 			}
 
 #ifdef SHZ_DEBUG
-			VERIFY_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
+			ASSERT_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
 			if (!m_DbgDisableDebugValidation)
 				DbgVerifyList();
 #endif
@@ -404,7 +404,7 @@ namespace shz
 					NewBlockOffset = LastBlockOffset;
 					NewBlockSize += LastBlockSize;
 
-					VERIFY_EXPR(LastBlockIt->second.OrderBySizeIt->first == LastBlockSize &&
+					ASSERT_EXPR(LastBlockIt->second.OrderBySizeIt->first == LastBlockSize &&
 						LastBlockIt->second.OrderBySizeIt->second == LastBlockIt);
 					m_FreeBlocksBySize.erase(LastBlockIt->second.OrderBySizeIt);
 					m_FreeBlocksByOffset.erase(LastBlockIt);
@@ -417,7 +417,7 @@ namespace shz
 			m_FreeSize += ExtraSize;
 
 #ifdef SHZ_DEBUG
-			VERIFY_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
+			ASSERT_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
 			if (!m_DbgDisableDebugValidation)
 				DbgVerifyList();
 #endif
@@ -427,7 +427,7 @@ namespace shz
 		void AddNewBlock(OffsetType Offset, OffsetType Size)
 		{
 			auto NewBlockIt = m_FreeBlocksByOffset.emplace(Offset, Size);
-			VERIFY_EXPR(NewBlockIt.second);
+			ASSERT_EXPR(NewBlockIt.second);
 			auto OrderIt = m_FreeBlocksBySize.emplace(Size, NewBlockIt.first);
 			NewBlockIt.first->second.OrderBySizeIt = OrderIt;
 		}
@@ -444,23 +444,23 @@ namespace shz
 		{
 			OffsetType TotalFreeSize = 0;
 
-			VERIFY_EXPR(IsPowerOfTwo(m_CurrAlignment));
+			ASSERT_EXPR(IsPowerOfTwo(m_CurrAlignment));
 			auto BlockIt = m_FreeBlocksByOffset.begin();
 			auto PrevBlockIt = m_FreeBlocksByOffset.end();
-			VERIFY_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
+			ASSERT_EXPR(m_FreeBlocksByOffset.size() == m_FreeBlocksBySize.size());
 			while (BlockIt != m_FreeBlocksByOffset.end())
 			{
-				VERIFY_EXPR(BlockIt->first >= 0 && BlockIt->first + BlockIt->second.Size <= m_MaxSize);
-				VERIFY((BlockIt->first & (m_CurrAlignment - 1)) == 0, "Block offset (", BlockIt->first, ") is not ", m_CurrAlignment, "-aligned");
+				ASSERT_EXPR(BlockIt->first >= 0 && BlockIt->first + BlockIt->second.Size <= m_MaxSize);
+				ASSERT((BlockIt->first & (m_CurrAlignment - 1)) == 0, "Block offset (", BlockIt->first, ") is not ", m_CurrAlignment, "-aligned");
 				if (BlockIt->first + BlockIt->second.Size < m_MaxSize)
-					VERIFY((BlockIt->second.Size & (m_CurrAlignment - 1)) == 0, "All block sizes except for the last one must be ", m_CurrAlignment, "-aligned");
-				VERIFY_EXPR(BlockIt == BlockIt->second.OrderBySizeIt->second);
-				VERIFY_EXPR(BlockIt->second.Size == BlockIt->second.OrderBySizeIt->first);
+					ASSERT((BlockIt->second.Size & (m_CurrAlignment - 1)) == 0, "All block sizes except for the last one must be ", m_CurrAlignment, "-aligned");
+				ASSERT_EXPR(BlockIt == BlockIt->second.OrderBySizeIt->second);
+				ASSERT_EXPR(BlockIt->second.Size == BlockIt->second.OrderBySizeIt->first);
 				//   PrevBlock.Offset                   BlockIt.first
 				//     |                                  |
 				// ~ ~ |<-----PrevBlock.Size----->| ~ ~ ~ |<------Size-------->| ~ ~ ~
 				//
-				VERIFY(PrevBlockIt == m_FreeBlocksByOffset.end() || BlockIt->first > PrevBlockIt->first + PrevBlockIt->second.Size, "Unmerged adjacent or overlapping blocks detected");
+				ASSERT(PrevBlockIt == m_FreeBlocksByOffset.end() || BlockIt->first > PrevBlockIt->first + PrevBlockIt->second.Size, "Unmerged adjacent or overlapping blocks detected");
 				TotalFreeSize += BlockIt->second.Size;
 
 				PrevBlockIt = BlockIt;
@@ -470,11 +470,11 @@ namespace shz
 			auto OrderIt = m_FreeBlocksBySize.begin();
 			while (OrderIt != m_FreeBlocksBySize.end())
 			{
-				VERIFY_EXPR(OrderIt->first == OrderIt->second->second.Size);
+				ASSERT_EXPR(OrderIt->first == OrderIt->second->second.Size);
 				++OrderIt;
 			}
 
-			VERIFY_EXPR(TotalFreeSize == m_FreeSize);
+			ASSERT_EXPR(TotalFreeSize == m_FreeSize);
 		}
 #endif
 

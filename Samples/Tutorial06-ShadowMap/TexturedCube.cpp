@@ -56,7 +56,7 @@ namespace shz
                 &pVertices,
                 nullptr,
                 &CubePrimInfo);
-            VERIFY_EXPR(CubePrimInfo.NumVertices == 24 && CubePrimInfo.NumIndices == 36);
+            ASSERT_EXPR(CubePrimInfo.NumVertices == 24 && CubePrimInfo.NumIndices == 36);
             return pVertices;
         }
 
@@ -75,7 +75,7 @@ namespace shz
                 nullptr,
                 &pIndices,
                 &CubePrimInfo);
-            VERIFY_EXPR(CubePrimInfo.NumVertices == 24 && CubePrimInfo.NumIndices == 36);
+            ASSERT_EXPR(CubePrimInfo.NumVertices == 24 && CubePrimInfo.NumIndices == 36);
             return pIndices;
         }
 

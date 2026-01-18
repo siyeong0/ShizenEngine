@@ -30,8 +30,8 @@
 #include <cstring>
 
 #include "Primitives/DataBlob.h"
-#include "Primitives/Errors.hpp"
 #include "Platforms/Common/PlatformMisc.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {
@@ -60,7 +60,7 @@ namespace shz
 	// http://paulbourke.net/dataformats/sgirgb/sgiversion.html
 	bool LoadSGI(const void* pSGIData, size_t DataSize, IDataBlob* pDstPixels, ImageDesc* pDstImgDesc)
 	{
-		VERIFY_EXPR(pSGIData != nullptr && pDstImgDesc != nullptr);
+		ASSERT_EXPR(pSGIData != nullptr && pDstImgDesc != nullptr);
 		const uint8* pDataStart = static_cast<const uint8*>(pSGIData);
 		const uint8* pDataEnd = pDataStart + DataSize;
 		const uint8* pSrcPtr = pDataStart;
@@ -104,7 +104,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED(BytesPerChannel, " is not a supported byte count");
+			ASSERT(false, BytesPerChannel, " is not a supported byte count");
 			return false;
 		}
 
@@ -163,13 +163,13 @@ namespace shz
 			if (pSrcPtr > pDataEnd)
 				return false;
 
-			//VERIFY(Header.Compression, "Only RLE compressed files are currently supported");
-			VERIFY(BytesPerChannel == 1, "Only 8-bit images are currently supported");
+			//ASSERT(Header.Compression, "Only RLE compressed files are currently supported");
+			ASSERT(BytesPerChannel == 1, "Only 8-bit images are currently supported");
 
 			const auto ReadLine = [Width, BytesPerChannel, NumChannels](auto* pDst, const auto* pLineDataStart, const auto* pLineDataEnd) //
 				{
-					VERIFY_EXPR(sizeof(*pDst) == BytesPerChannel);
-					VERIFY_EXPR(sizeof(*pLineDataStart) == BytesPerChannel);
+					ASSERT_EXPR(sizeof(*pDst) == BytesPerChannel);
+					ASSERT_EXPR(sizeof(*pLineDataStart) == BytesPerChannel);
 					(void)BytesPerChannel;
 
 					const auto* pSrc = pLineDataStart;

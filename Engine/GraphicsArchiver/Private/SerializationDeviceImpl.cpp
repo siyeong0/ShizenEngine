@@ -282,7 +282,7 @@ namespace shz
 	{
 		if (pDevice == nullptr)
 		{
-			DEV_ERROR("pDevice must not be null");
+			ASSERT(false, "pDevice must not be null");
 			return;
 		}
 

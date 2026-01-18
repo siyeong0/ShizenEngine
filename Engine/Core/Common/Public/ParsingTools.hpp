@@ -38,8 +38,9 @@
 #include "Primitives/BasicTypes.h"
 #include "Primitives/FlagEnum.h"
 #include "Primitives/DebugUtilities.hpp"
+
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Common/Public/StringTools.h"
-#include "Primitives/Errors.hpp"
 
 namespace shz
 {
@@ -176,7 +177,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(*Pos == '*');
+				ASSERT_EXPR(*Pos == '*');
 				++Pos;
 				//  /* Comment
 				//    ^
@@ -487,7 +488,7 @@ namespace shz
 				auto OrigPos = Pos;
 				if (!Handler(DelimStart, Pos))
 					break;
-				VERIFY(Pos == End || OrigPos != Pos, "Position has not been updated by the handler.");
+				ASSERT(Pos == End || OrigPos != Pos, "Position has not been updated by the handler.");
 			}
 		}
 
@@ -529,7 +530,7 @@ namespace shz
 				size_t LineAbove = 0;
 				while (LineAbove < NumLines && CtxStart > Start)
 				{
-					VERIFY_EXPR(IsNewLine(CtxStart[-1]));
+					ASSERT_EXPR(IsNewLine(CtxStart[-1]));
 					if (CtxStart[-1] == '\n' && CtxStart > Start + 1 && CtxStart[-2] == '\r')
 						--CtxStart;
 					if (CtxStart > Start)
@@ -538,7 +539,7 @@ namespace shz
 						--CtxStart;
 					++LineAbove;
 				}
-				VERIFY_EXPR(CtxStart == Start || IsNewLine(CtxStart[-1]));
+				ASSERT_EXPR(CtxStart == Start || IsNewLine(CtxStart[-1]));
 				Ctx.write(&*CtxStart, Pos - CtxStart);
 			}
 
@@ -850,7 +851,7 @@ namespace shz
 		{
 			if (Name == nullptr || *Name == '\0')
 			{
-				UNEXPECTED("Name must not be null");
+				ASSERT(false, "Name must not be null");
 				return End;
 			}
 
@@ -967,7 +968,7 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("One of the bracket types is expected");
+				ASSERT(false, "One of the bracket types is expected");
 				return Pos;
 			}
 

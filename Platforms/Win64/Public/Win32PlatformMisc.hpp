@@ -43,7 +43,7 @@ namespace shz
 
 			unsigned long MSB = 32;
 			_BitScanReverse(&MSB, Val);
-			VERIFY_EXPR(MSB == BasicPlatformMisc::GetMSB(Val));
+			ASSERT_EXPR(MSB == BasicPlatformMisc::GetMSB(Val));
 
 			return MSB;
 		}
@@ -64,11 +64,11 @@ namespace shz
 			else
 			{
 				uint32 low = static_cast<uint32>(Val & 0xFFFFFFFF);
-				VERIFY_EXPR(low != 0);
+				ASSERT_EXPR(low != 0);
 				MSB = GetMSB(low);
 			}
 #endif
-			VERIFY_EXPR(MSB == BasicPlatformMisc::GetMSB(Val));
+			ASSERT_EXPR(MSB == BasicPlatformMisc::GetMSB(Val));
 
 			return MSB;
 		}
@@ -79,7 +79,7 @@ namespace shz
 
 			unsigned long LSB = 32;
 			_BitScanForward(&LSB, Val);
-			VERIFY_EXPR(LSB == BasicPlatformMisc::GetLSB(Val));
+			ASSERT_EXPR(LSB == BasicPlatformMisc::GetLSB(Val));
 
 			return LSB;
 		}
@@ -100,12 +100,12 @@ namespace shz
 			else
 			{
 				uint32 high = static_cast<uint32>((Val >> 32) & 0xFFFFFFFF);
-				VERIFY_EXPR(high != 0);
+				ASSERT_EXPR(high != 0);
 				LSB = 32 + GetLSB(high);
 			}
 #endif
 
-			VERIFY_EXPR(LSB == BasicPlatformMisc::GetLSB(Val));
+			ASSERT_EXPR(LSB == BasicPlatformMisc::GetLSB(Val));
 			return LSB;
 		}
 
@@ -120,7 +120,7 @@ namespace shz
 #else
 			auto Bits = __popcnt(Val);
 #endif
-			VERIFY_EXPR(Bits == BasicPlatformMisc::CountOneBits(Val));
+			ASSERT_EXPR(Bits == BasicPlatformMisc::CountOneBits(Val));
 			return Bits;
 		}
 
@@ -138,7 +138,7 @@ namespace shz
 				CountOneBits(static_cast<uint32>((Val >> 0) & 0xFFFFFFFF)) +
 				CountOneBits(static_cast<uint32>((Val >> 32) & 0xFFFFFFFF));
 #endif
-			VERIFY_EXPR(Bits == BasicPlatformMisc::CountOneBits(Val));
+			ASSERT_EXPR(Bits == BasicPlatformMisc::CountOneBits(Val));
 			return static_cast<uint32>(Bits);
 		}
 

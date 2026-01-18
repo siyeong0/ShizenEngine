@@ -25,9 +25,9 @@
  */
 
 #include "pch.h"
-#include "Engine/Core/Common/Public/ThreadPool.hpp"
-
 #include "Platforms/Common/PlatformMisc.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/ThreadPool.hpp"
 
 namespace shz
 {
@@ -132,7 +132,7 @@ namespace shz
 					//     it is guaranteed that the task is not executed by any thread.
 					TaskInfo.pTask->SetStatus(ReturnStatus);
 					TaskFinished = TaskInfo.pTask->IsFinished();
-					DEV_CHECK_ERR((TaskFinished || TaskInfo.pTask->GetStatus() == ASYNC_TASK_STATUS_NOT_STARTED),
+					ASSERT((TaskFinished || TaskInfo.pTask->GetStatus() == ASYNC_TASK_STATUS_NOT_STARTED),
 						"Finished tasks must be in COMPLETE, CANCELLED or NOT_STARTED state");
 				}
 
@@ -171,13 +171,13 @@ namespace shz
 			IAsyncTask** ppPrerequisites,
 			uint32       NumPrerequisites) override final
 		{
-			VERIFY_EXPR(pTask != nullptr);
+			ASSERT_EXPR(pTask != nullptr);
 			if (pTask == nullptr)
 				return;
 
 			{
 				std::unique_lock<std::mutex> lock{ m_TasksQueueMtx };
-				DEV_CHECK_ERR(!m_Stop, "Enqueue on a stopped ThreadPool");
+				ASSERT(!m_Stop, "Enqueue on a stopped ThreadPool");
 
 				QueuedTaskInfo TaskInfo;
 				TaskInfo.pTask = pTask;
@@ -317,8 +317,8 @@ namespace shz
 		~ThreadPoolImpl()
 		{
 			StopThreads();
-			VERIFY_EXPR(m_TasksQueue.empty());
-			VERIFY_EXPR(m_NumRunningTasks.load() == 0);
+			ASSERT_EXPR(m_TasksQueue.empty());
+			ASSERT_EXPR(m_NumRunningTasks.load() == 0);
 		}
 
 	private:
@@ -373,14 +373,14 @@ namespace shz
 
 		for (uint32 bit = 0; bit < CoreBitInd; ++bit)
 		{
-			VERIFY_EXPR(AffinityMask != 0);
+			ASSERT_EXPR(AffinityMask != 0);
 			uint64 LSB = PlatformMisc::GetLSB(AffinityMask);
 			AffinityMask &= ~(uint64{ 1 } << LSB);
 		}
 
-		VERIFY_EXPR(AffinityMask != 0);
+		ASSERT_EXPR(AffinityMask != 0);
 		uint32 WorkerCore = PlatformMisc::GetLSB(AffinityMask);
-		VERIFY_EXPR(WorkerCore < NumCores);
+		ASSERT_EXPR(WorkerCore < NumCores);
 		uint64 PrevMask = PlatformMisc::SetCurrentThreadAffinity(uint64{ 1 } << WorkerCore) != 0;
 		if (PrevMask == 0)
 		{

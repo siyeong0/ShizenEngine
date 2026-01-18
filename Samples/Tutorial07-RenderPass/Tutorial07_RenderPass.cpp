@@ -261,7 +261,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Cube VS";
 			ShaderCI.FilePath = "cube.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		// Create cube pixel shader
@@ -272,7 +272,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Cube PS";
 			ShaderCI.FilePath = "cube.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		const LayoutElement LayoutElems[] =
@@ -311,12 +311,12 @@ namespace shz
 		PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pCubePSO);
-		VERIFY_EXPR(m_pCubePSO != nullptr);
+		ASSERT_EXPR(m_pCubePSO != nullptr);
 
 		m_pCubePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "ShaderConstants")->Set(m_pShaderConstantsCB);
 
 		m_pCubePSO->CreateShaderResourceBinding(&m_pCubeSRB, true);
-		VERIFY_EXPR(m_pCubeSRB != nullptr);
+		ASSERT_EXPR(m_pCubeSRB != nullptr);
 		m_pCubeSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Texture")->Set(m_CubeTextureSRV);
 	}
 
@@ -367,7 +367,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Light volume VS";
 			ShaderCI.FilePath = "light_volume.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		// Create a pixel shader
@@ -379,7 +379,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Light volume PS";
 			ShaderCI.FilePath = "light_volume.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		const LayoutElement LayoutElems[] =
@@ -408,7 +408,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pLightVolumePSO);
-		VERIFY_EXPR(m_pLightVolumePSO != nullptr);
+		ASSERT_EXPR(m_pLightVolumePSO != nullptr);
 
 		m_pLightVolumePSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "ShaderConstants")->Set(m_pShaderConstantsCB);
 		m_pLightVolumePSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "ShaderConstants")->Set(m_pShaderConstantsCB);
@@ -449,7 +449,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Ambient light VS";
 			ShaderCI.FilePath = "ambient_light.vsh";
 			m_pDevice->CreateShader(ShaderCI, &pVS);
-			VERIFY_EXPR(pVS != nullptr);
+			ASSERT_EXPR(pVS != nullptr);
 		}
 
 		// Create a pixel shader
@@ -461,7 +461,7 @@ namespace shz
 			ShaderCI.Desc.Name = "Ambient light PS";
 			ShaderCI.FilePath = "ambient_light.psh";
 			m_pDevice->CreateShader(ShaderCI, &pPS);
-			VERIFY_EXPR(pPS != nullptr);
+			ASSERT_EXPR(pPS != nullptr);
 		}
 
 		PSOCreateInfo.pVS = pVS;
@@ -480,7 +480,7 @@ namespace shz
 		PSODesc.ResourceLayout.NumVariables = _countof(Vars);
 
 		m_pDevice->CreateGraphicsPipelineState(PSOCreateInfo, &m_pAmbientLightPSO);
-		VERIFY_EXPR(m_pAmbientLightPSO != nullptr);
+		ASSERT_EXPR(m_pAmbientLightPSO != nullptr);
 	}
 
 
@@ -592,7 +592,7 @@ namespace shz
 		RPDesc.pDependencies = Dependencies;
 
 		m_pDevice->CreateRenderPass(RPDesc, &m_pRenderPass);
-		VERIFY_EXPR(m_pRenderPass != nullptr);
+		ASSERT_EXPR(m_pRenderPass != nullptr);
 	}
 
 	RefCntAutoPtr<IFramebuffer> Tutorial07_RenderPass::createFramebuffer(ITextureView* pDstRenderTarget)
@@ -674,7 +674,7 @@ namespace shz
 
 		RefCntAutoPtr<IFramebuffer> pFramebuffer;
 		m_pDevice->CreateFramebuffer(FBDesc, &pFramebuffer);
-		VERIFY_EXPR(pFramebuffer != nullptr);
+		ASSERT_EXPR(pFramebuffer != nullptr);
 
 
 		// Create SRBs that reference the framebuffer textures
@@ -853,7 +853,7 @@ namespace shz
 		else
 		{
 			auto it = m_FramebufferCache.emplace(pCurrentBackBufferRTV, createFramebuffer(pCurrentBackBufferRTV));
-			VERIFY_EXPR(it.second);
+			ASSERT_EXPR(it.second);
 			return it.first->second;
 		}
 	}

@@ -153,7 +153,7 @@ namespace shz
 			break;
 
 		default:
-			UNSUPPORTED("Unsupported component type");
+			ASSERT(false, "Unsupported component type");
 			return;
 		}
 	}
@@ -304,7 +304,7 @@ namespace shz
 		case 2: return c2;
 		case 3: return c3;
 		default:
-			UNEXPECTED("Unexpected index");
+			ASSERT(false, "Unexpected index");
 			return c0;
 		}
 	}
@@ -312,13 +312,13 @@ namespace shz
 	template <typename ChannelType, typename FilterType>
 	void FilterMipLevel(const ComputeMipLevelAttribs& Attribs, uint32 NumChannels, FilterType Filter)
 	{
-		VERIFY_EXPR(Attribs.FineMipWidth > 0 && Attribs.FineMipHeight > 0);
-		DEV_CHECK_ERR(Attribs.FineMipHeight == 1 || Attribs.FineMipStride >= Attribs.FineMipWidth * sizeof(ChannelType) * NumChannels, "Fine mip level stride is too small");
+		ASSERT_EXPR(Attribs.FineMipWidth > 0 && Attribs.FineMipHeight > 0);
+		ASSERT(Attribs.FineMipHeight == 1 || Attribs.FineMipStride >= Attribs.FineMipWidth * sizeof(ChannelType) * NumChannels, "Fine mip level stride is too small");
 
 		const uint32 CoarseMipWidth = std::max(Attribs.FineMipWidth / uint32{ 2 }, uint32{ 1 });
 		const uint32 CoarseMipHeight = std::max(Attribs.FineMipHeight / uint32{ 2 }, uint32{ 1 });
 
-		VERIFY(CoarseMipHeight == 1 || Attribs.CoarseMipStride >= CoarseMipWidth * sizeof(ChannelType) * NumChannels, "Coarse mip level stride is too small");
+		ASSERT(CoarseMipHeight == 1 || Attribs.CoarseMipStride >= CoarseMipWidth * sizeof(ChannelType) * NumChannels, "Coarse mip level stride is too small");
 
 		for (uint32 row = 0; row < CoarseMipHeight; ++row)
 		{
@@ -390,22 +390,22 @@ namespace shz
 
 	void ComputeMipLevel(const ComputeMipLevelAttribs& Attribs)
 	{
-		DEV_CHECK_ERR(Attribs.Format != TEX_FORMAT_UNKNOWN, "Format must not be unknown");
-		DEV_CHECK_ERR(Attribs.FineMipWidth != 0, "Fine mip width must not be zero");
-		DEV_CHECK_ERR(Attribs.FineMipHeight != 0, "Fine mip height must not be zero");
-		DEV_CHECK_ERR(Attribs.pFineMipData != nullptr, "Fine level data must not be null");
-		DEV_CHECK_ERR(Attribs.pCoarseMipData != nullptr, "Coarse level data must not be null");
+		ASSERT(Attribs.Format != TEX_FORMAT_UNKNOWN, "Format must not be unknown");
+		ASSERT(Attribs.FineMipWidth != 0, "Fine mip width must not be zero");
+		ASSERT(Attribs.FineMipHeight != 0, "Fine mip height must not be zero");
+		ASSERT(Attribs.pFineMipData != nullptr, "Fine level data must not be null");
+		ASSERT(Attribs.pCoarseMipData != nullptr, "Coarse level data must not be null");
 
 		const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Attribs.Format);
 
-		VERIFY_EXPR(Attribs.AlphaCutoff >= 0 && Attribs.AlphaCutoff <= 1);
-		VERIFY(Attribs.AlphaCutoff == 0 || FmtAttribs.NumComponents == 4 && FmtAttribs.ComponentSize == 1,
+		ASSERT_EXPR(Attribs.AlphaCutoff >= 0 && Attribs.AlphaCutoff <= 1);
+		ASSERT(Attribs.AlphaCutoff == 0 || FmtAttribs.NumComponents == 4 && FmtAttribs.ComponentSize == 1,
 			"Alpha remapping is only supported for 4-channel 8-bit textures");
 
 		switch (FmtAttribs.ComponentType)
 		{
 		case COMPONENT_TYPE_UNORM_SRGB:
-			VERIFY(FmtAttribs.ComponentSize == 1, "Only 8-bit sRGB formats are expected");
+			ASSERT(FmtAttribs.ComponentSize == 1, "Only 8-bit sRGB formats are expected");
 			FilterMipLevel<uint8>(Attribs, FmtAttribs.NumComponents,
 				Attribs.FilterType == MIP_FILTER_TYPE_MOST_FREQUENT ?
 				MostFrequentSelector<uint8> :
@@ -437,7 +437,7 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("Unexpected component size (", FmtAttribs.ComponentSize, ") for UNORM/UINT texture format");
+				ASSERT(false, "Unexpected component size (", FmtAttribs.ComponentSize, ") for UNORM/UINT texture format");
 			}
 			break;
 
@@ -458,17 +458,17 @@ namespace shz
 				break;
 
 			default:
-				UNEXPECTED("Unexpected component size (", FmtAttribs.ComponentSize, ") for UINT/SINT texture format");
+				ASSERT(false, "Unexpected component size (", FmtAttribs.ComponentSize, ") for UINT/SINT texture format");
 			}
 			break;
 
 		case COMPONENT_TYPE_FLOAT:
-			VERIFY(FmtAttribs.ComponentSize == 4, "Only 32-bit float formats are currently supported");
+			ASSERT(FmtAttribs.ComponentSize == 4, "Only 32-bit float formats are currently supported");
 			ComputeMipLevelInternal<float32>(Attribs, FmtAttribs);
 			break;
 
 		default:
-			UNEXPECTED("Unsupported component type");
+			ASSERT(false, "Unsupported component type");
 		}
 	}
 
@@ -524,37 +524,37 @@ namespace shz
 
 	ITextureView* GetTextureDefaultSRV(IObject* pTexture)
 	{
-		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		ASSERT(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
 		return GetDefaultSRV(static_cast<ITexture*>(pTexture));
 	}
 
 	ITextureView* GetTextureDefaultRTV(IObject* pTexture)
 	{
-		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		ASSERT(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
 		return GetDefaultRTV(static_cast<ITexture*>(pTexture));
 	}
 
 	ITextureView* GetTextureDefaultDSV(IObject* pTexture)
 	{
-		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		ASSERT(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
 		return GetDefaultDSV(static_cast<ITexture*>(pTexture));
 	}
 
 	ITextureView* GetTextureDefaultUAV(IObject* pTexture)
 	{
-		DEV_CHECK_ERR(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
+		ASSERT(pTexture == nullptr || RefCntAutoPtr<ITexture>(pTexture, IID_Texture), "Resource is not a texture");
 		return GetDefaultUAV(static_cast<ITexture*>(pTexture));
 	}
 
 	IBufferView* GetBufferDefaultSRV(IObject* pBuffer)
 	{
-		DEV_CHECK_ERR(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
+		ASSERT(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
 		return GetDefaultSRV(static_cast<IBuffer*>(pBuffer));
 	}
 
 	IBufferView* GetBufferDefaultUAV(IObject* pBuffer)
 	{
-		DEV_CHECK_ERR(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
+		ASSERT(pBuffer == nullptr || RefCntAutoPtr<IBuffer>(pBuffer, IID_Buffer), "Resource is not a buffer");
 		return GetDefaultUAV(static_cast<IBuffer*>(pBuffer));
 	}
 
@@ -577,7 +577,7 @@ namespace shz
 #endif
 
 		default:
-			UNSUPPORTED("Unsupported device type");
+			ASSERT(false, "Unsupported device type");
 			return 0;
 		}
 	}
@@ -593,7 +593,7 @@ namespace shz
 #endif
 
 		default:
-			UNSUPPORTED("Unsupported device type");
+			ASSERT(false, "Unsupported device type");
 			return TEX_FORMAT_UNKNOWN;
 		}
 	}
@@ -625,7 +625,7 @@ namespace shz
 		{
 		case GEOMETRY_PRIMITIVE_TYPE_CUBE: PrimTypeStr = "Cube"; break;
 		case GEOMETRY_PRIMITIVE_TYPE_SPHERE: PrimTypeStr = "Sphere"; break;
-		default: UNEXPECTED("Unexpected primitive type");
+		default: ASSERT(false, "Unexpected primitive type");
 		}
 
 		static std::atomic<int> PrimCounter{ 0 };
@@ -690,7 +690,7 @@ namespace shz
 #endif
 
 		default:
-			UNSUPPORTED("Unsupported device type");
+			ASSERT(false, "Unsupported device type");
 			return nullptr;
 		}
 	}

@@ -343,7 +343,7 @@ namespace shz
 			if (!m_PruningRequired)
 				return;
 
-			VERIFY_EXPR(m_Args.size() == m_ParamNames.size());
+			ASSERT_EXPR(m_Args.size() == m_ParamNames.size());
 			size_t i = 0;
 			while (i < m_Args.size())
 			{
@@ -361,7 +361,7 @@ namespace shz
 					++i;
 				}
 			}
-			VERIFY_EXPR(m_Args.size() == m_ParamNames.size());
+			ASSERT_EXPR(m_Args.size() == m_ParamNames.size());
 
 			m_PruningRequired = false;
 		}

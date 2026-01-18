@@ -70,7 +70,7 @@ namespace shz
 		virtual ITextureViewD3D12* SHZ_CALL_TYPE GetCurrentBackBufferRTV() override final
 		{
 			auto CurrentBackBufferIndex = m_pSwapChain->GetCurrentBackBufferIndex();
-			VERIFY_EXPR(CurrentBackBufferIndex >= 0 && CurrentBackBufferIndex < m_SwapChainDesc.BufferCount);
+			ASSERT_EXPR(CurrentBackBufferIndex >= 0 && CurrentBackBufferIndex < m_SwapChainDesc.BufferCount);
 			return m_pBackBufferRTV[CurrentBackBufferIndex];
 		}
 

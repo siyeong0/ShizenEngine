@@ -53,7 +53,7 @@ namespace shz
 			return ResourceType::TilePipeline;
 
 		default:
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 			return ResourceType::Undefined;
 		}
 	}
@@ -70,7 +70,7 @@ namespace shz
 
 	bool ArchiverImpl::SerializeToBlob(uint32 ContentVersion, IDataBlob** ppBlob)
 	{
-		DEV_CHECK_ERR(ppBlob != nullptr, "ppBlob must not be null");
+		ASSERT(ppBlob != nullptr, "ppBlob must not be null");
 		if (ppBlob == nullptr)
 			return false;
 
@@ -108,8 +108,8 @@ namespace shz
 			}
 
 			const SerializedPipelineStateImpl::Data& SrcData = SrcPSO.GetData();
-			VERIFY_EXPR(SafeStrEqual(Name, SrcPSO.GetDesc().Name));
-			VERIFY_EXPR(ResType == PipelineTypeToArchiveResourceType(SrcPSO.GetDesc().PipelineType));
+			ASSERT_EXPR(SafeStrEqual(Name, SrcPSO.GetDesc().Name));
+			ASSERT_EXPR(ResType == PipelineTypeToArchiveResourceType(SrcPSO.GetDesc().PipelineType));
 
 			ResourceData& DstData = Archive.GetResourceData(ResType, Name);
 			// Add PSO common data
@@ -129,7 +129,7 @@ namespace shz
 				ShaderIndices.reserve(SrcShaders.size());
 				for (const SerializedPipelineStateImpl::Data::ShaderInfo& SrcShader : SrcShaders)
 				{
-					VERIFY_EXPR(SrcShader.Data);
+					ASSERT_EXPR(SrcShader.Data);
 
 					auto it_inserted = BytecodeHashToIdx[device_type].emplace(SrcShader.Hash, StaticCast<uint32>(DstShaders.size()));
 					if (it_inserted.second)
@@ -151,7 +151,7 @@ namespace shz
 
 				Serializer<SerializerMode::Write> Ser{ SerializedIndices };
 				PSOSerializer<SerializerMode::Write>::SerializeShaderIndices(Ser, Indices, nullptr);
-				VERIFY_EXPR(Ser.IsEnded());
+				ASSERT_EXPR(Ser.IsEnded());
 			}
 		}
 
@@ -160,7 +160,7 @@ namespace shz
 		{
 			const char* Name = sign_it.first.GetStr();
 			const SerializedResourceSignatureImpl& SrcSign = *sign_it.second;
-			VERIFY_EXPR(SafeStrEqual(Name, SrcSign.GetDesc().Name));
+			ASSERT_EXPR(SafeStrEqual(Name, SrcSign.GetDesc().Name));
 			const SerializedData& SrcCommonData = SrcSign.GetCommonData();
 
 			ResourceData& DstData = Archive.GetResourceData(ResourceType::ResourceSignature, Name);
@@ -179,7 +179,7 @@ namespace shz
 		{
 			const char* Name = rp_it.first.GetStr();
 			const SerializedRenderPassImpl& SrcRP = *rp_it.second;
-			VERIFY_EXPR(SafeStrEqual(Name, SrcRP.GetDesc().Name));
+			ASSERT_EXPR(SafeStrEqual(Name, SrcRP.GetDesc().Name));
 			const SerializedData& SrcData = SrcRP.GetCommonData();
 
 			ResourceData& DstData = Archive.GetResourceData(ResourceType::RenderPass, Name);
@@ -201,7 +201,7 @@ namespace shz
 					continue;
 				}
 			}
-			VERIFY_EXPR(SafeStrEqual(Name, SrcShader.GetDesc().Name));
+			ASSERT_EXPR(SafeStrEqual(Name, SrcShader.GetDesc().Name));
 
 			ResourceData& DstData = Archive.GetResourceData(ResourceType::StandaloneShader, Name);
 			DstData.Common = SrcShader.GetCommonData();
@@ -230,7 +230,7 @@ namespace shz
 
 				Serializer<SerializerMode::Write> Ser{ SerializedIndex };
 				Ser(Index);
-				VERIFY_EXPR(Ser.IsEnded());
+				ASSERT_EXPR(Ser.IsEnded());
 			}
 		}
 
@@ -242,7 +242,7 @@ namespace shz
 
 	bool ArchiverImpl::SerializeToStream(uint32 ContentVersion, IFileStream* pStream)
 	{
-		DEV_CHECK_ERR(pStream != nullptr, "pStream must not be null");
+		ASSERT(pStream != nullptr, "pStream must not be null");
 		if (pStream == nullptr)
 			return false;
 
@@ -261,14 +261,14 @@ namespace shz
 		std::mutex& Mtx,
 		std::unordered_map<HashMapStringKey, RefCntAutoPtr<ObjectImplType>>& Objects)
 	{
-		DEV_CHECK_ERR(pObject != nullptr, ObjectTypeStr, " must not be null");
+		ASSERT(pObject != nullptr, ObjectTypeStr, " must not be null");
 		if (pObject == nullptr)
 			return false;
 
 		RefCntAutoPtr<ObjectImplType> pSerializedObj{ pObject, SerializedObjIID };
 		if (!pSerializedObj)
 		{
-			UNEXPECTED(ObjectTypeStr, " '", pObject->GetDesc().Name, "' was not created by a serialization device.");
+			ASSERT(false, ObjectTypeStr, " '", pObject->GetDesc().Name, "' was not created by a serialization device.");
 			return false;
 		}
 		const char* Name = pSerializedObj->GetDesc().Name;
@@ -320,7 +320,7 @@ namespace shz
 		RefCntAutoPtr<SerializedPipelineStateImpl> pSerializedPSO{ pPSO, IID_SerializedPipelineState };
 		if (!pSerializedPSO)
 		{
-			UNEXPECTED("Pipeline state '", pPSO->GetDesc().Name, "' was not created by a serialization device.");
+			ASSERT(false, "Pipeline state '", pPSO->GetDesc().Name, "' was not created by a serialization device.");
 			return false;
 		}
 
@@ -414,7 +414,7 @@ namespace shz
 		const ResourceType ResType = PiplineTypeToArchiveResourceType(PSOType);
 		if (ResType == ResourceType::Undefined)
 		{
-			UNEXPECTED("Unexpected pipeline type");
+			ASSERT(false, "Unexpected pipeline type");
 			return nullptr;
 		}
 

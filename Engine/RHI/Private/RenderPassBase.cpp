@@ -422,7 +422,7 @@ void ValidateRenderPassDesc(const RenderPassDesc&      Desc,
 
             if (*Subpass.pShadingRateAttachment != *pShadingRateAttachment)
             {
-                VERIFY_EXPR(subpass > 0);
+                ASSERT_EXPR(subpass > 0);
                 LOG_RENDER_PASS_ERROR_AND_THROW("shading rate attachment in subpass ", subpass,
                                                 " does not match the shading rate attachment used by previous subpasses. "
                                                 "A device with SHADING_RATE_CAP_FLAG_SAME_TEXTURE_FOR_WHOLE_RENDERPASS capability "

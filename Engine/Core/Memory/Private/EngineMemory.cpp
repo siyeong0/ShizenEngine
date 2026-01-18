@@ -26,10 +26,10 @@
  */
 
 #include "pch.h"
+#include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Memory/Public/EngineMemory.h"
 #include "Engine/Core/Memory/Public/DefaultRawMemoryAllocator.hpp"
-#include "Primitives/Errors.hpp"
-#include "Primitives/DebugUtilities.hpp"
 
 namespace shz
 {
@@ -44,7 +44,7 @@ namespace shz
 			pRawAllocator = &DefaultRawMemoryAllocator::GetAllocator();
 		}
 
-		DEV_CHECK_ERR(g_pRawAllocator == nullptr || g_pRawAllocator == pRawAllocator,
+		ASSERT(g_pRawAllocator == nullptr || g_pRawAllocator == pRawAllocator,
 			"User-defined allocator has already been provided and does not match the new allocator. "
 			"This may result in undefined behavior.");
 

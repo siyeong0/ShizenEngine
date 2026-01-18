@@ -64,7 +64,7 @@ namespace shz
 		size_t BytesLeft = m_DataBlob->GetSize() - m_CurrentOffset;
 		pData->Resize(BytesLeft);
 		bool res = Read(pData->GetDataPtr(), pData->GetSize());
-		VERIFY_EXPR(res);
+		ASSERT_EXPR(res);
 		(void)res;
 	}
 

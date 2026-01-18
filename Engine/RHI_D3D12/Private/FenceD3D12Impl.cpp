@@ -54,7 +54,7 @@ namespace shz
 						NULL)  // object name
 		}
 	{
-		VERIFY(m_FenceCompleteEvent != NULL, "Failed to create fence complete event");
+		ASSERT(m_FenceCompleteEvent != NULL, "Failed to create fence complete event");
 
 		const D3D12_FENCE_FLAGS Flags = (m_Desc.Type == FENCE_TYPE_GENERAL && pDevice->GetNumImmediateContexts() > 1) ? D3D12_FENCE_FLAG_SHARED : D3D12_FENCE_FLAG_NONE;
 		ID3D12Device* const     pd3d12Device = pDevice->GetD3D12Device();
@@ -77,14 +77,14 @@ namespace shz
 	uint64 FenceD3D12Impl::GetCompletedValue()
 	{
 		uint64 Result = m_pd3d12Fence->GetCompletedValue();
-		VERIFY(Result != UINT64_MAX, "If the device has been removed, the return value will be UINT64_MAX");
+		ASSERT(Result != UINT64_MAX, "If the device has been removed, the return value will be UINT64_MAX");
 		return Result;
 	}
 
 	void FenceD3D12Impl::Signal(uint64 Value)
 	{
-		DEV_CHECK_ERR(m_Desc.Type == FENCE_TYPE_GENERAL, "Fence must be created with FENCE_TYPE_GENERAL");
-		DEV_CHECK_ERR(GetDevice()->GetFeatures().NativeFence, "CPU side fence signal requires NativeFence feature");
+		ASSERT(m_Desc.Type == FENCE_TYPE_GENERAL, "Fence must be created with FENCE_TYPE_GENERAL");
+		ASSERT(GetDevice()->GetFeatures().NativeFence, "CPU side fence signal requires NativeFence feature");
 		DvpSignal(Value);
 
 		m_pd3d12Fence->Signal(Value);

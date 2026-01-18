@@ -51,7 +51,7 @@ namespace shz
 			, m_pDeferredCtx(pDeferredCtx)
 			, m_pCmdContext(std::move(pCmdContext))
 		{
-			VERIFY_EXPR(m_pCmdContext);
+			ASSERT_EXPR(m_pCmdContext);
 		}
 
 		~CommandListD3D12Impl()
@@ -63,7 +63,7 @@ namespace shz
 			}
 			else
 			{
-				VERIFY_EXPR(m_pDeferredCtx == nullptr);
+				ASSERT_EXPR(m_pDeferredCtx == nullptr);
 			}
 		}
 

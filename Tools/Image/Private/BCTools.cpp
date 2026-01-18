@@ -33,7 +33,7 @@ namespace shz
 
 	inline void DecompressColorBlock(const uint8* Bits, uint8* DstBuffer, uint32 DstChannels)
 	{
-		VERIFY_EXPR(DstChannels >= 3);
+		ASSERT_EXPR(DstChannels >= 3);
 		const uint32 RGB[2] =
 		{
 			uint32{Bits[0]} | ((uint32{Bits[1]}) << 8),
@@ -115,7 +115,7 @@ namespace shz
 
 	void DecompressBC1Block(const uint8* Bits, uint8* DstBuffer, uint32 DstChannels)
 	{
-		VERIFY_EXPR(DstChannels >= 3);
+		ASSERT_EXPR(DstChannels >= 3);
 		DecompressColorBlock(Bits, DstBuffer, DstChannels);
 	}
 
@@ -127,13 +127,13 @@ namespace shz
 
 	void DecompressBC4Block(const uint8* Bits, uint8* DstBuffer, uint32 DstChannels)
 	{
-		VERIFY_EXPR(DstChannels >= 1);
+		ASSERT_EXPR(DstChannels >= 1);
 		DecompressAlphaBlock(Bits, DstBuffer, DstChannels);
 	}
 
 	void DecompressBC5lock(const uint8* Bits, uint8* DstBuffer, uint32 DstChannels)
 	{
-		VERIFY_EXPR(DstChannels >= 2);
+		ASSERT_EXPR(DstChannels >= 2);
 		DecompressAlphaBlock(Bits, DstBuffer, DstChannels);
 		DecompressAlphaBlock(Bits + 8, DstBuffer + 1, DstChannels);
 	}

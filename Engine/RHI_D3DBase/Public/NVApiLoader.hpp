@@ -55,7 +55,7 @@ public:
             m_NVApiLoaded = false;
         }
 #else
-        VERIFY_EXPR(!m_NVApiLoaded);
+        ASSERT_EXPR(!m_NVApiLoaded);
 #endif
     }
 

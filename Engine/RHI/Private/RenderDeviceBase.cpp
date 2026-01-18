@@ -54,7 +54,7 @@ static DEVICE_FEATURE_STATE GetFeatureState(DEVICE_FEATURE_STATE RequestedState,
                 DEVICE_FEATURE_STATE_DISABLED;
 
         default:
-            UNEXPECTED("Unexpected feature state");
+            ASSERT(false, "Unexpected feature state");
             return DEVICE_FEATURE_STATE_DISABLED;
     }
 };
@@ -159,7 +159,7 @@ COMPONENT_TYPE CheckSparseTextureFormatSupport(TEXTURE_FORMAT                  T
             static_assert(SPARSE_RESOURCE_CAP_FLAG_TEXTURE_4_SAMPLES == SPARSE_RESOURCE_CAP_FLAG_TEXTURE_2_SAMPLES * 2, "Unexpected enum values");
             static_assert(SPARSE_RESOURCE_CAP_FLAG_TEXTURE_8_SAMPLES == SPARSE_RESOURCE_CAP_FLAG_TEXTURE_2_SAMPLES * 4, "Unexpected enum values");
             static_assert(SPARSE_RESOURCE_CAP_FLAG_TEXTURE_16_SAMPLES == SPARSE_RESOURCE_CAP_FLAG_TEXTURE_2_SAMPLES * 8, "Unexpected enum values");
-            VERIFY_EXPR(IsPowerOfTwo(SampleCount));
+            ASSERT_EXPR(IsPowerOfTwo(SampleCount));
             if (SampleCount >= 2 && (SparseRes.CapFlags & (SPARSE_RESOURCE_CAP_FLAG_TEXTURE_2_SAMPLES * (SampleCount >> 1))) == 0)
                 return COMPONENT_TYPE_UNDEFINED;
 
@@ -172,7 +172,7 @@ COMPONENT_TYPE CheckSparseTextureFormatSupport(TEXTURE_FORMAT                  T
             break;
 
         case RESOURCE_DIM_TEX_3D:
-            DEV_CHECK_ERR(SampleCount == 1, "Multisampled texture 3D is not supported");
+            ASSERT(SampleCount == 1, "Multisampled texture 3D is not supported");
             if ((SparseRes.CapFlags & SPARSE_RESOURCE_CAP_FLAG_TEXTURE_3D) == 0)
                 return COMPONENT_TYPE_UNDEFINED;
             break;
@@ -180,11 +180,11 @@ COMPONENT_TYPE CheckSparseTextureFormatSupport(TEXTURE_FORMAT                  T
         case RESOURCE_DIM_BUFFER:
         case RESOURCE_DIM_TEX_1D:
         case RESOURCE_DIM_TEX_1D_ARRAY:
-            DEV_ERROR("Invalid sparse texture resource dimension");
+            ASSERT(false, "Invalid sparse texture resource dimension");
             return COMPONENT_TYPE_UNDEFINED;
 
         default:
-            DEV_ERROR("Unexpected resource dimension");
+            ASSERT(false, "Unexpected resource dimension");
             return COMPONENT_TYPE_UNDEFINED;
     }
 

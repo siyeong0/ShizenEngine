@@ -45,7 +45,7 @@ namespace shz
 			const float* pColor = nullptr) noexcept 
 			: m_pContext{ pContext }
 		{
-			VERIFY_EXPR(pContext != nullptr && Name != nullptr);
+			ASSERT_EXPR(pContext != nullptr && Name != nullptr);
 			pContext->BeginDebugGroup(Name, pColor);
 		}
 

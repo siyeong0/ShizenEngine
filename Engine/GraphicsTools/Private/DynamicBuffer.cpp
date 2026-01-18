@@ -28,6 +28,8 @@
 #include "pch.h"
 #include "DynamicBuffer.hpp"
 
+#include "Engine/Core/Common/Public/Errors.hpp"
+
 namespace shz
 {
 
@@ -36,7 +38,7 @@ namespace
 
 bool VerifySparseBufferCompatibility(IRenderDevice* pDevice)
 {
-    VERIFY_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(pDevice != nullptr);
 
     const DeviceFeatures& Features = pDevice->GetDeviceInfo().Features;
     if (!Features.SparseResources)
@@ -63,7 +65,7 @@ DynamicBuffer::DynamicBuffer(IRenderDevice* pDevice, const DynamicBufferCreateIn
     , m_VirtualSize{CI.Desc.Usage == USAGE_SPARSE ? CI.VirtualSize : 0}
     , m_MemoryPageSize{AlignUp(CI.MemoryPageSize, 65536u)}
 {
-    DEV_CHECK_ERR(CI.Desc.Usage != USAGE_SPARSE || CI.VirtualSize > 0, "Virtual size must not be 0 for sparse buffers");
+    ASSERT(CI.Desc.Usage != USAGE_SPARSE || CI.VirtualSize > 0, "Virtual size must not be 0 for sparse buffers");
 
     m_Desc.Name   = m_Name.c_str();
     m_PendingSize = m_Desc.Size;
@@ -76,9 +78,9 @@ DynamicBuffer::DynamicBuffer(IRenderDevice* pDevice, const DynamicBufferCreateIn
 
 void DynamicBuffer::CreateSparseBuffer(IRenderDevice* pDevice)
 {
-    VERIFY_EXPR(pDevice != nullptr);
-    VERIFY_EXPR(!m_pBuffer && !m_pMemory);
-    VERIFY_EXPR(m_Desc.Usage == USAGE_SPARSE);
+    ASSERT_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(!m_pBuffer && !m_pMemory);
+    ASSERT_EXPR(m_Desc.Usage == USAGE_SPARSE);
 
     if (!VerifySparseBufferCompatibility(pDevice))
     {
@@ -99,7 +101,7 @@ void DynamicBuffer::CreateSparseBuffer(IRenderDevice* pDevice)
         uint64 MaxSize = AlignDownNonPw2(SparseResources.ResourceSpaceSize, m_MemoryPageSize);
         if (m_Desc.BindFlags & (BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS))
         {
-            VERIFY_EXPR(m_Desc.ElementByteStride != 0);
+            ASSERT_EXPR(m_Desc.ElementByteStride != 0);
             // Buffer size must be a multiple of the element stride
             Desc.Size = AlignUpNonPw2(Desc.Size, m_Desc.ElementByteStride);
             MaxSize   = AlignDownNonPw2(MaxSize, m_Desc.ElementByteStride);
@@ -107,7 +109,7 @@ void DynamicBuffer::CreateSparseBuffer(IRenderDevice* pDevice)
         Desc.Size = std::min(Desc.Size, MaxSize);
 
         pDevice->CreateBuffer(Desc, nullptr, &m_pBuffer);
-        DEV_CHECK_ERR(m_pBuffer, "Failed to create sparse buffer");
+        ASSERT(m_pBuffer, "Failed to create sparse buffer");
         if (!m_pBuffer)
             return;
 
@@ -128,7 +130,7 @@ void DynamicBuffer::CreateSparseBuffer(IRenderDevice* pDevice)
         MemCI.NumResources          = _countof(pCompatibleRes);
 
         pDevice->CreateDeviceMemory(MemCI, &m_pMemory);
-        DEV_CHECK_ERR(m_pMemory, "Failed to create device memory");
+        ASSERT(m_pMemory, "Failed to create device memory");
     }
 
     // Note: D3D11 does not support general fences
@@ -146,8 +148,8 @@ void DynamicBuffer::CreateSparseBuffer(IRenderDevice* pDevice)
 
 void DynamicBuffer::InitBuffer(IRenderDevice* pDevice)
 {
-    VERIFY_EXPR(pDevice != nullptr);
-    VERIFY_EXPR(!m_pBuffer && !m_pMemory);
+    ASSERT_EXPR(pDevice != nullptr);
+    ASSERT_EXPR(!m_pBuffer && !m_pMemory);
 
     if (m_Desc.Usage == USAGE_SPARSE)
     {
@@ -166,16 +168,16 @@ void DynamicBuffer::InitBuffer(IRenderDevice* pDevice)
             m_Desc.Size = m_PendingSize;
         }
     }
-    DEV_CHECK_ERR(m_pBuffer, "Failed to create buffer for a dynamic buffer");
+    ASSERT(m_pBuffer, "Failed to create buffer for a dynamic buffer");
 
     m_Version.fetch_add(1);
 }
 
 void DynamicBuffer::ResizeSparseBuffer(IDeviceContext* pContext)
 {
-    VERIFY_EXPR(m_pBuffer && m_pMemory);
-    VERIFY_EXPR(m_PendingSize % m_MemoryPageSize == 0);
-    DEV_CHECK_ERR(m_PendingSize <= m_pBuffer->GetDesc().Size,
+    ASSERT_EXPR(m_pBuffer && m_pMemory);
+    ASSERT_EXPR(m_PendingSize % m_MemoryPageSize == 0);
+    ASSERT(m_PendingSize <= m_pBuffer->GetDesc().Size,
                   "New size (", m_PendingSize, ") exceeds the buffer virtual size (", m_pBuffer->GetDesc().Size, ").");
 
     if (m_pMemory->GetCapacity() < m_PendingSize)
@@ -188,7 +190,7 @@ void DynamicBuffer::ResizeSparseBuffer(IDeviceContext* pContext)
     uint64 EndOffset   = m_PendingSize;
     if (StartOffset > EndOffset)
         std::swap(StartOffset, EndOffset);
-    VERIFY_EXPR((EndOffset - StartOffset) % m_MemoryPageSize == 0);
+    ASSERT_EXPR((EndOffset - StartOffset) % m_MemoryPageSize == 0);
     const uint32 NumPages = StaticCast<uint32>((EndOffset - StartOffset) / m_MemoryPageSize);
 
     std::vector<SparseBufferMemoryBindRange> Ranges;
@@ -247,7 +249,7 @@ void DynamicBuffer::ResizeDefaultBuffer(IDeviceContext* pContext)
     if (!m_pStaleBuffer)
         return;
 
-    VERIFY_EXPR(m_pBuffer);
+    ASSERT_EXPR(m_pBuffer);
     uint64 CopySize = std::min(m_pBuffer->GetDesc().Size, m_pStaleBuffer->GetDesc().Size);
     pContext->CopyBuffer(m_pStaleBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
                          m_pBuffer, 0, CopySize, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -263,7 +265,7 @@ void DynamicBuffer::CommitResize(IRenderDevice*  pDevice,
         if (pDevice != nullptr)
             InitBuffer(pDevice);
         else
-            DEV_CHECK_ERR(AllowNull, "Dynamic buffer must be initialized, but pDevice is null");
+            ASSERT(AllowNull, "Dynamic buffer must be initialized, but pDevice is null");
     }
 
     if (m_pBuffer && m_Desc.Size != m_PendingSize)
@@ -283,7 +285,7 @@ void DynamicBuffer::CommitResize(IRenderDevice*  pDevice,
         }
         else
         {
-            DEV_CHECK_ERR(AllowNull, "Dynamic buffer must be resized, but pContext is null. Use PendingUpdate() to check if the buffer must be updated.");
+            ASSERT(AllowNull, "Dynamic buffer must be resized, but pContext is null. Use PendingUpdate() to check if the buffer must be updated.");
         }
     }
 }
@@ -295,7 +297,7 @@ IBuffer* DynamicBuffer::Resize(IRenderDevice*  pDevice,
 {
     if (m_Desc.Usage == USAGE_SPARSE)
     {
-        DEV_CHECK_ERR(NewSize <= m_VirtualSize, "New size (", NewSize, ") exceeds the buffer virtual size (", m_VirtualSize, ").");
+        ASSERT(NewSize <= m_VirtualSize, "New size (", NewSize, ") exceeds the buffer virtual size (", m_VirtualSize, ").");
         NewSize = AlignUpNonPw2(NewSize, m_MemoryPageSize);
     }
 
@@ -309,7 +311,7 @@ IBuffer* DynamicBuffer::Resize(IRenderDevice*  pDevice,
                 m_pStaleBuffer = std::move(m_pBuffer);
             else
             {
-                DEV_CHECK_ERR(!m_pBuffer || NewSize == 0,
+                ASSERT(!m_pBuffer || NewSize == 0,
                               "There is a non-null stale buffer. This likely indicates that "
                               "Resize() has been called multiple times with different sizes, "
                               "but copy has not been committed by providing non-null device "
@@ -340,8 +342,8 @@ IBuffer* DynamicBuffer::Update(IRenderDevice*  pDevice,
 
     if (m_LastAfterResizeFenceValue + 1 < m_NextAfterResizeFenceValue)
     {
-        DEV_CHECK_ERR(pContext != nullptr, "Device context is null, but waiting for the fence is required");
-        VERIFY_EXPR(m_pAfterResizeFence);
+        ASSERT(pContext != nullptr, "Device context is null, but waiting for the fence is required");
+        ASSERT_EXPR(m_pAfterResizeFence);
         m_LastAfterResizeFenceValue = m_NextAfterResizeFenceValue - 1;
         pContext->DeviceWaitForFence(m_pAfterResizeFence, m_LastAfterResizeFenceValue);
     }

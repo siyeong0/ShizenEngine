@@ -198,7 +198,7 @@ namespace shz
 
 		virtual void TestTextureFormat(TEXTURE_FORMAT TexFormat) override final
 		{
-			UNSUPPORTED("TestTextureFormat is not supported by serialization device");
+			ASSERT(false, "TestTextureFormat is not supported by serialization device");
 		}
 
 		ARCHIVE_DEVICE_DATA_FLAGS m_ValidDeviceFlags = ARCHIVE_DEVICE_DATA_FLAG_NONE;

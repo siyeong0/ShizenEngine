@@ -68,7 +68,7 @@ const Char* GetValueTypeString(VALUE_TYPE Val)
             }
             else
             {
-                UNEXPECTED("Incorrect value type (", static_cast<uint32>(Val), ")");
+                ASSERT(false, "Incorrect value type (", static_cast<uint32>(Val), ")");
                 return "unknown value type";
             }
         }
@@ -235,8 +235,8 @@ public:
 
     TEXTURE_FORMAT GetViewFormat(TEXTURE_FORMAT Format, TEXTURE_VIEW_TYPE ViewType, uint32 BindFlags)
     {
-        VERIFY(ViewType > TEXTURE_VIEW_UNDEFINED && ViewType < TEXTURE_VIEW_NUM_VIEWS, "Unexpected texture view type");
-        VERIFY(Format >= TEX_FORMAT_UNKNOWN && Format < TEX_FORMAT_NUM_FORMATS, "Unknown texture format");
+        ASSERT(ViewType > TEXTURE_VIEW_UNDEFINED && ViewType < TEXTURE_VIEW_NUM_VIEWS, "Unexpected texture view type");
+        ASSERT(Format >= TEX_FORMAT_UNKNOWN && Format < TEX_FORMAT_NUM_FORMATS, "Unknown texture format");
         switch (Format)
         {
             case TEX_FORMAT_R16_TYPELESS:
@@ -258,7 +258,7 @@ public:
                             return TEX_FORMAT_UNKNOWN;
 
                         default:
-                            UNEXPECTED("Unexpected texture view type");
+                            ASSERT(false, "Unexpected texture view type");
                             return TEX_FORMAT_UNKNOWN;
                     }
                     static_assert(TEXTURE_VIEW_NUM_VIEWS == 7, "Please handle the new view type in the switch above, if necessary");
@@ -422,7 +422,7 @@ const TextureFormatAttribs& GetTextureFormatAttribs(TEXTURE_FORMAT Format)
 
 #ifdef SHZ_DEBUG
             for (uint32 Fmt = TEX_FORMAT_UNKNOWN; Fmt < TEX_FORMAT_NUM_FORMATS; ++Fmt)
-                VERIFY(FmtAttribs[Fmt].Format == static_cast<TEXTURE_FORMAT>(Fmt), "Uninitialized format");
+                ASSERT(FmtAttribs[Fmt].Format == static_cast<TEXTURE_FORMAT>(Fmt), "Uninitialized format");
 #endif
         }
 
@@ -431,12 +431,12 @@ const TextureFormatAttribs& GetTextureFormatAttribs(TEXTURE_FORMAT Format)
             if (Format >= TEX_FORMAT_UNKNOWN && Format < TEX_FORMAT_NUM_FORMATS)
             {
                 const TextureFormatAttribs& Attribs = FmtAttribs[Format];
-                VERIFY(Attribs.Format == Format, "Unexpected format");
+                ASSERT(Attribs.Format == Format, "Unexpected format");
                 return Attribs;
             }
             else
             {
-                UNEXPECTED("Texture format (", int{Format}, ") is out of allowed range [0, ", int{TEX_FORMAT_NUM_FORMATS} - 1, "]");
+                ASSERT(false, "Texture format (", int{Format}, ") is out of allowed range [0, ", int{TEX_FORMAT_NUM_FORMATS} - 1, "]");
                 return FmtAttribs[0];
             }
         }
@@ -478,7 +478,7 @@ COMPONENT_TYPE ValueTypeToComponentType(VALUE_TYPE ValType, bool IsNormalized, b
             return COMPONENT_TYPE_FLOAT;
 
         default:
-            UNEXPECTED("Unknown value type");
+            ASSERT(false, "Unknown value type");
             return COMPONENT_TYPE_UNDEFINED;
     }
 }
@@ -724,7 +724,7 @@ const Char* GetTexViewTypeLiteralName(TEXTURE_VIEW_TYPE ViewType)
             }
             else
             {
-                UNEXPECTED("Texture view type (", static_cast<uint32>(ViewType), ") is out of allowed range [0, ", static_cast<uint32>(TEXTURE_VIEW_NUM_VIEWS) - 1, "]");
+                ASSERT(false, "Texture view type (", static_cast<uint32>(ViewType), ") is out of allowed range [0, ", static_cast<uint32>(TEXTURE_VIEW_NUM_VIEWS) - 1, "]");
                 return "<Unknown texture view type>";
             }
         }
@@ -761,7 +761,7 @@ const Char* GetBufferViewTypeLiteralName(BUFFER_VIEW_TYPE ViewType)
             }
             else
             {
-                UNEXPECTED("Buffer view type (", static_cast<uint32>(ViewType), ") is out of allowed range [0, ", static_cast<uint32>(BUFFER_VIEW_NUM_VIEWS) - 1, "]");
+                ASSERT(false, "Buffer view type (", static_cast<uint32>(ViewType), ") is out of allowed range [0, ", static_cast<uint32>(BUFFER_VIEW_NUM_VIEWS) - 1, "]");
                 return "<Unknown buffer view type>";
             }
         }
@@ -802,7 +802,7 @@ const Char* GetShaderTypeLiteralName(SHADER_TYPE ShaderType)
 #undef  RETURN_SHADER_TYPE_NAME
             
 
-        default: UNEXPECTED("Unknown shader type constant ", uint32{ShaderType}); return "<Unknown shader type>";
+        default: ASSERT(false, "Unknown shader type constant ", uint32{ShaderType}); return "<Unknown shader type>";
     }
 }
 
@@ -819,7 +819,7 @@ String GetShaderStagesString(SHADER_TYPE ShaderStages)
             ShaderStages &= ~static_cast<SHADER_TYPE>(Stage);
         }
     }
-    VERIFY_EXPR(ShaderStages == 0);
+    ASSERT_EXPR(ShaderStages == 0);
     return StagesStr;
 }
 
@@ -845,7 +845,7 @@ const Char* GetShaderVariableTypeLiteralName(SHADER_RESOURCE_VARIABLE_TYPE VarTy
                 return (bGetFullName ? FullVarTypeNameStrings : ShortVarTypeNameStrings)[VarType];
             else
             {
-                UNEXPECTED("Unknown shader variable type");
+                ASSERT(false, "Unknown shader variable type");
                 return "unknown";
             }
         }
@@ -877,7 +877,7 @@ const Char* GetShaderResourceTypeLiteralName(SHADER_RESOURCE_TYPE ResourceType, 
         case SHADER_RESOURCE_TYPE_ACCEL_STRUCT:     return bGetFullName ?  "SHADER_RESOURCE_TYPE_ACCEL_STRUCT"     : "acceleration structure";
         
         default:
-            UNEXPECTED("Unexpected resource type (", uint32{ResourceType}, ")");
+            ASSERT(false, "Unexpected resource type (", uint32{ResourceType}, ")");
             return "UNKNOWN";
     }
 }
@@ -903,7 +903,7 @@ const Char* GetFilterTypeLiteralName(FILTER_TYPE FilterType, bool bGetFullName)
         case FILTER_TYPE_MAXIMUM_ANISOTROPIC:    return bGetFullName ? "FILTER_TYPE_MAXIMUM_ANISOTROPIC"    : "maximum anisotropic";
         
         default:
-            UNEXPECTED("Unexpected filter type (", uint32{FilterType}, ")");
+            ASSERT(false, "Unexpected filter type (", uint32{FilterType}, ")");
             return "UNKNOWN";
     }
 }
@@ -922,7 +922,7 @@ const Char* GetTextureAddressModeLiteralName(TEXTURE_ADDRESS_MODE AddressMode, b
         case TEXTURE_ADDRESS_MIRROR_ONCE: return bGetFullName ? "TEXTURE_ADDRESS_MIRROR_ONCE" : "mirror once";
         
         default:
-            UNEXPECTED("Unexpected texture address mode (", uint32{AddressMode}, ")");
+            ASSERT(false, "Unexpected texture address mode (", uint32{AddressMode}, ")");
             return "UNKNOWN";
     }
 }
@@ -944,7 +944,7 @@ const Char* GetComparisonFunctionLiteralName(COMPARISON_FUNCTION ComparisonFunc,
         case COMPARISON_FUNC_ALWAYS:        return bGetFullName ? "COMPARISON_FUNC_ALWAYS"       : "always";
         
         default:
-            UNEXPECTED("Unexpected comparison function (", uint32{ComparisonFunc}, ")");
+            ASSERT(false, "Unexpected comparison function (", uint32{ComparisonFunc}, ")");
             return "UNKNOWN";
     }
 }
@@ -968,7 +968,7 @@ const Char* GetStencilOpLiteralName(STENCIL_OP StencilOp)
         STENCIL_OP_TO_STR(STENCIL_OP_DECR_WRAP);
 
         default:
-            UNEXPECTED("Unexpected stencil operation (", static_cast<uint32>(StencilOp), ")");
+            ASSERT(false, "Unexpected stencil operation (", static_cast<uint32>(StencilOp), ")");
             return "UNKNOWN";
     }
 #undef STENCIL_OP_TO_STR
@@ -1002,7 +1002,7 @@ const Char* GetBlendFactorLiteralName(BLEND_FACTOR BlendFactor)
         BLEND_FACTOR_TO_STR(BLEND_FACTOR_INV_SRC1_ALPHA);
 
         default:
-            UNEXPECTED("Unexpected blend factor (", static_cast<int>(BlendFactor), ")");
+            ASSERT(false, "Unexpected blend factor (", static_cast<int>(BlendFactor), ")");
             return "UNKNOWN";
     }
 #undef BLEND_FACTOR_TO_STR
@@ -1024,7 +1024,7 @@ const Char* GetBlendOperationLiteralName(BLEND_OPERATION BlendOp)
         BLEND_OP_TO_STR(BLEND_OPERATION_MAX);
 
         default:
-            UNEXPECTED("Unexpected blend operation (", static_cast<int>(BlendOp), ")");
+            ASSERT(false, "Unexpected blend operation (", static_cast<int>(BlendOp), ")");
             return "UNKNOWN";
     }
 #undef BLEND_OP_TO_STR
@@ -1043,7 +1043,7 @@ const Char* GetFillModeLiteralName(FILL_MODE FillMode)
         FILL_MODE_TO_STR(FILL_MODE_SOLID);
 
         default:
-            UNEXPECTED("Unexpected fill mode (", static_cast<int>(FillMode), ")");
+            ASSERT(false, "Unexpected fill mode (", static_cast<int>(FillMode), ")");
             return "UNKNOWN";
     }
 #undef FILL_MODE_TO_STR
@@ -1061,7 +1061,7 @@ const Char* GetCullModeLiteralName(CULL_MODE CullMode, bool GetEnumString)
         case CULL_MODE_BACK:      return GetEnumString ? "CULL_MODE_BACK"      : "back";
         
         default:
-            UNEXPECTED("Unexpected cull mode (", static_cast<int>(CullMode), ")");
+            ASSERT(false, "Unexpected cull mode (", static_cast<int>(CullMode), ")");
             return "UNKNOWN";
     }
 }
@@ -1075,7 +1075,7 @@ const Char* GetMapTypeString(MAP_TYPE MapType)
         case MAP_READ_WRITE: return "MAP_READ_WRITE";
 
         default:
-            UNEXPECTED("Unexpected map type");
+            ASSERT(false, "Unexpected map type");
             return "Unknown map type";
     }
 }
@@ -1104,7 +1104,7 @@ const Char* GetUsageString(USAGE Usage)
                 return UsageStrings[Usage];
             else
             {
-                UNEXPECTED("Unknown usage");
+                ASSERT(false, "Unknown usage");
                 return "Unknown usage";
             }
         }
@@ -1141,7 +1141,7 @@ const Char* GetResourceDimString(RESOURCE_DIMENSION TexType)
                 return TexTypeStrings[TexType];
             else
             {
-                UNEXPECTED("Unknown texture type");
+                ASSERT(false, "Unknown texture type");
                 return "Unknown texture type";
             }
         }
@@ -1156,7 +1156,7 @@ const Char* GetResourceDimString(RESOURCE_DIMENSION TexType)
 
 const Char* GetBindFlagString(uint32 BindFlag)
 {
-    VERIFY(BindFlag == BIND_NONE || IsPowerOfTwo(BindFlag), "More than one bind flag is specified");
+    ASSERT(BindFlag == BIND_NONE || IsPowerOfTwo(BindFlag), "More than one bind flag is specified");
 
     static_assert(BIND_FLAG_LAST == 0x800L, "Please handle the new bind flag in the switch below");
     switch (BindFlag)
@@ -1177,7 +1177,7 @@ const Char* GetBindFlagString(uint32 BindFlag)
         BIND_FLAG_STR_CASE(BIND_RAY_TRACING)
         BIND_FLAG_STR_CASE(BIND_SHADING_RATE)
 #undef BIND_FLAG_STR_CASE
-        default: UNEXPECTED("Unexpected bind flag ", BindFlag); return "";
+        default: ASSERT(false, "Unexpected bind flag ", BindFlag); return "";
     }
 }
 
@@ -1196,14 +1196,14 @@ String GetBindFlagsString(uint32 BindFlags, const char* Delimiter)
             BindFlags &= ~Flag;
         }
     }
-    VERIFY(BindFlags == 0, "Unknown bind flags left");
+    ASSERT(BindFlags == 0, "Unknown bind flags left");
     return Str;
 }
 
 
 static const Char* GetSingleCPUAccessFlagString(uint32 CPUAccessFlag)
 {
-    VERIFY(CPUAccessFlag == CPU_ACCESS_NONE || IsPowerOfTwo(CPUAccessFlag), "More than one access flag is specified");
+    ASSERT(CPUAccessFlag == CPU_ACCESS_NONE || IsPowerOfTwo(CPUAccessFlag), "More than one access flag is specified");
     switch (CPUAccessFlag)
     {
         
@@ -1213,7 +1213,7 @@ static const Char* GetSingleCPUAccessFlagString(uint32 CPUAccessFlag)
         CPU_ACCESS_FLAG_STR_CASE(CPU_ACCESS_WRITE)
 #undef  CPU_ACCESS_FLAG_STR_CASE
         
-        default: UNEXPECTED("Unexpected CPU access flag ", CPUAccessFlag); return "";
+        default: ASSERT(false, "Unexpected CPU access flag ", CPUAccessFlag); return "";
     }
 }
 
@@ -1232,7 +1232,7 @@ String GetCPUAccessFlagsString(uint32 CpuAccessFlags)
             CpuAccessFlags &= ~Flag;
         }
     }
-    VERIFY(CpuAccessFlags == 0, "Unknown CPU access flags left");
+    ASSERT(CpuAccessFlags == 0, "Unknown CPU access flags left");
     return Str;
 }
 
@@ -1314,7 +1314,7 @@ const Char* GetBufferModeString(BUFFER_MODE Mode)
                 return BufferModeStrings[Mode];
             else
             {
-                UNEXPECTED("Unknown buffer mode");
+                ASSERT(false, "Unknown buffer mode");
                 return "Unknown buffer mode";
             }
         }
@@ -1400,7 +1400,7 @@ String GetShaderDescString(const ShaderDesc& Desc)
 
 const Char* GetResourceStateFlagString(RESOURCE_STATE State)
 {
-    VERIFY(State == RESOURCE_STATE_UNKNOWN || IsPowerOfTwo(State), "Single state is expected");
+    ASSERT(State == RESOURCE_STATE_UNKNOWN || IsPowerOfTwo(State), "Single state is expected");
     static_assert(RESOURCE_STATE_MAX_BIT == (1u << 21), "Please update this function to handle the new resource state");
     switch (State)
     {
@@ -1430,7 +1430,7 @@ const Char* GetResourceStateFlagString(RESOURCE_STATE State)
         case RESOURCE_STATE_SHADING_RATE:      return "SHADING_RATE";
         
         default:
-            UNEXPECTED("Unknown resource state");
+            ASSERT(false, "Unknown resource state");
             return "UNKNOWN";
     }
 }
@@ -1469,7 +1469,7 @@ const char* GetQueryTypeString(QUERY_TYPE QueryType)
         case QUERY_TYPE_DURATION:            return "QUERY_TYPE_DURATION";
         
         default:
-            UNEXPECTED("Unexpected query type");
+            ASSERT(false, "Unexpected query type");
             return "Unknown";
     }
 }
@@ -1494,7 +1494,7 @@ const char* GetSurfaceTransformString(SURFACE_TRANSFORM SrfTransform)
 #undef SRF_TRANSFORM_CASE
 
         default:
-            UNEXPECTED("Unexpected surface transform");
+            ASSERT(false, "Unexpected surface transform");
             return "UNKNOWN";
     }
     
@@ -1513,7 +1513,7 @@ const char* GetPipelineTypeString(PIPELINE_TYPE PipelineType)
         case PIPELINE_TYPE_TILE:        return "tile";
         
         default:
-            UNEXPECTED("Unexpected pipeline type");
+            ASSERT(false, "Unexpected pipeline type");
             return "unknown";
     }
 }
@@ -1530,7 +1530,7 @@ const char* GetShaderCompilerTypeString(SHADER_COMPILER Compiler)
         case SHADER_COMPILER_FXC:     return "FXC";
         
         default:
-            UNEXPECTED("Unexpected shader compiler");
+            ASSERT(false, "Unexpected shader compiler");
             return "UNKNOWN";
     }
 }
@@ -1552,7 +1552,7 @@ const char* GetArchiveDeviceDataFlagString(ARCHIVE_DEVICE_DATA_FLAGS Flag, bool 
         case ARCHIVE_DEVICE_DATA_FLAG_WEBGPU:      return bGetFullName ? "ARCHIVE_DEVICE_DATA_FLAG_WEBGPU"      : "WebGPU";
         
         default:
-            UNEXPECTED("Unexpected device data flag (", uint32{Flag}, ")");
+            ASSERT(false, "Unexpected device data flag (", uint32{Flag}, ")");
             return "UNKNOWN";
     }
 }
@@ -1567,7 +1567,7 @@ const char* GetDeviceFeatureStateString(DEVICE_FEATURE_STATE State, bool bGetFul
         case DEVICE_FEATURE_STATE_ENABLED:  return bGetFullName ? "DEVICE_FEATURE_STATE_ENABLED"  : "Enabled";
         
         default:
-            UNEXPECTED("Unexpected device feature state (", uint32{State}, ")");
+            ASSERT(false, "Unexpected device feature state (", uint32{State}, ")");
             return "UNKNOWN";
     }
 }
@@ -1587,7 +1587,7 @@ const char* GetRenderDeviceTypeString(RENDER_DEVICE_TYPE DeviceType, bool bGetEn
         case RENDER_DEVICE_TYPE_METAL:     return bGetEnumString ? "RENDER_DEVICE_TYPE_METAL"     : "Metal";      break;
         case RENDER_DEVICE_TYPE_WEBGPU:    return bGetEnumString ? "RENDER_DEVICE_TYPE_WEBGPU"    : "WebGPU";     break;
         
-        default: UNEXPECTED("Unknown/unsupported device type"); return "UNKNOWN";
+        default: ASSERT(false, "Unknown/unsupported device type"); return "UNKNOWN";
     }
 }
 
@@ -1606,7 +1606,7 @@ const char* GetRenderDeviceTypeShortString(RENDER_DEVICE_TYPE DeviceType, bool C
         case RENDER_DEVICE_TYPE_METAL:     return Capital ? "MTL"       : "mtl";       break;
         case RENDER_DEVICE_TYPE_WEBGPU:    return Capital ? "WGPU"      : "wgpu";      break;
         
-        default: UNEXPECTED("Unknown/unsupported device type"); return "UNKNOWN";
+        default: ASSERT(false, "Unknown/unsupported device type"); return "UNKNOWN";
     }
 }
 
@@ -1621,7 +1621,7 @@ const char* GetAdapterTypeString(ADAPTER_TYPE AdapterType, bool bGetEnumString)
         case ADAPTER_TYPE_INTEGRATED: return bGetEnumString ? "ADAPTER_TYPE_INTEGRATED" : "Integrated"; break;
         case ADAPTER_TYPE_DISCRETE:   return bGetEnumString ? "ADAPTER_TYPE_DISCRETE"   : "Discrete";   break;
         
-        default: UNEXPECTED("Unknown/unsupported adapter type"); return "UNKNOWN";
+        default: ASSERT(false, "Unknown/unsupported adapter type"); return "UNKNOWN";
     }
 }
 
@@ -1661,7 +1661,7 @@ String GetPipelineResourceFlagsString(PIPELINE_RESOURCE_FLAGS Flags, bool GetFul
                 break;
 
             default:
-                UNEXPECTED("Unexpected pipeline resource flag");
+                ASSERT(false, "Unexpected pipeline resource flag");
         }
     }
     return Str;
@@ -1680,7 +1680,7 @@ const char* GetShaderCodeVariableClassString(SHADER_CODE_VARIABLE_CLASS Class)
         case SHADER_CODE_VARIABLE_CLASS_MATRIX_COLUMNS: return "matrix-columns";
         case SHADER_CODE_VARIABLE_CLASS_STRUCT:         return "struct";
         
-        default: UNEXPECTED("Unknown/unsupported variable class"); return "UNKNOWN";
+        default: ASSERT(false, "Unknown/unsupported variable class"); return "UNKNOWN";
     }
 }
 
@@ -1712,7 +1712,7 @@ const char* GetShaderCodeBasicTypeString(SHADER_CODE_BASIC_TYPE Type)
         case SHADER_CODE_BASIC_TYPE_MIN16UINT:  return "min16uint";
         case SHADER_CODE_BASIC_TYPE_STRING:     return "string";
         
-        default: UNEXPECTED("Unknown/unsupported variable class"); return "UNKNOWN";
+        default: ASSERT(false, "Unknown/unsupported variable class"); return "UNKNOWN";
     }
 }
 
@@ -1781,7 +1781,7 @@ const char* GetInputElementFrequencyString(INPUT_ELEMENT_FREQUENCY Frequency)
         case INPUT_ELEMENT_FREQUENCY_PER_INSTANCE: return "per-instance";
 
         default:
-            UNEXPECTED("Unknown/unsupported input element frequency");
+            ASSERT(false, "Unknown/unsupported input element frequency");
             return "UNKNOWN";
     }
 }
@@ -1832,7 +1832,7 @@ PIPELINE_RESOURCE_FLAGS GetValidPipelineResourceFlags(SHADER_RESOURCE_TYPE Resou
             return PIPELINE_RESOURCE_FLAG_RUNTIME_ARRAY;
 
         default:
-            UNEXPECTED("Unexpected resource type");
+            ASSERT(false, "Unexpected resource type");
             return PIPELINE_RESOURCE_FLAG_NONE;
     }
 }
@@ -1856,7 +1856,7 @@ PIPELINE_RESOURCE_FLAGS ShaderVariableFlagsToPipelineResourceFlags(SHADER_VARIAB
             return PIPELINE_RESOURCE_FLAG_NONE;
 
         default:
-            UNEXPECTED("Unexpected shader variable flag");
+            ASSERT(false, "Unexpected shader variable flag");
             return PIPELINE_RESOURCE_FLAG_NONE;
     }
 }
@@ -1887,7 +1887,7 @@ BIND_FLAGS SwapChainUsageFlagsToBindFlags(SWAP_CHAIN_USAGE_FLAGS SwapChainUsage)
                 break;
 
             default:
-                UNEXPECTED("Unexpected swap chain usage flag");
+                ASSERT(false, "Unexpected swap chain usage flag");
         }
     }
     return BindFlags;
@@ -1919,7 +1919,7 @@ ARCHIVE_DEVICE_DATA_FLAGS RenderDeviceTypeToArchiveDataFlag(RENDER_DEVICE_TYPE D
 #elif PLATFORM_IOS
             return ARCHIVE_DEVICE_DATA_FLAG_METAL_IOS;
 #else
-            UNEXPECTED("Metal is not supported on this platform");
+            ASSERT(false, "Metal is not supported on this platform");
             return ARCHIVE_DEVICE_DATA_FLAG_NONE;
 #endif
 
@@ -1927,14 +1927,14 @@ ARCHIVE_DEVICE_DATA_FLAGS RenderDeviceTypeToArchiveDataFlag(RENDER_DEVICE_TYPE D
             return ARCHIVE_DEVICE_DATA_FLAG_WEBGPU;
 
         default:
-            UNEXPECTED("Unexpected device type");
+            ASSERT(false, "Unexpected device type");
             return ARCHIVE_DEVICE_DATA_FLAG_NONE;
     }
 }
 
 RENDER_DEVICE_TYPE ArchiveDataFlagToRenderDeviceType(ARCHIVE_DEVICE_DATA_FLAGS Flag)
 {
-    VERIFY(IsPowerOfTwo(Flag), "Exactly one flag is expected");
+    ASSERT(IsPowerOfTwo(Flag), "Exactly one flag is expected");
     switch (Flag)
     {
         case ARCHIVE_DEVICE_DATA_FLAG_D3D11:
@@ -1960,7 +1960,7 @@ RENDER_DEVICE_TYPE ArchiveDataFlagToRenderDeviceType(ARCHIVE_DEVICE_DATA_FLAGS F
             return RENDER_DEVICE_TYPE_WEBGPU;
 
         default:
-            UNEXPECTED("Unexpected archive device data flag");
+            ASSERT(false, "Unexpected archive device data flag");
             return RENDER_DEVICE_TYPE_UNDEFINED;
     }
 }
@@ -1973,7 +1973,7 @@ uint32 ComputeMipLevelsCount(uint32 Width)
     uint32 MipLevels = 0;
     while ((Width >> MipLevels) > 0)
         ++MipLevels;
-    VERIFY(Width >= (1U << (MipLevels - 1)) && Width < (1U << MipLevels), "Incorrect number of Mip levels");
+    ASSERT(Width >= (1U << (MipLevels - 1)) && Width < (1U << MipLevels), "Incorrect number of Mip levels");
     return MipLevels;
 }
 
@@ -2065,9 +2065,9 @@ MipLevelProperties GetMipLevelProperties(const TextureDesc& TexDesc, uint32 MipL
     MipProps.Depth         = std::max(TexDesc.GetDepth() >> MipLevel, 1u);
     if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
     {
-        VERIFY_EXPR(FmtAttribs.BlockWidth > 1 && FmtAttribs.BlockHeight > 1);
-        VERIFY((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0, "Compressed block width is expected to be power of 2");
-        VERIFY((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0, "Compressed block height is expected to be power of 2");
+        ASSERT_EXPR(FmtAttribs.BlockWidth > 1 && FmtAttribs.BlockHeight > 1);
+        ASSERT((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0, "Compressed block width is expected to be power of 2");
+        ASSERT((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0, "Compressed block height is expected to be power of 2");
         // For block-compression formats, all parameters are still specified in texels rather than compressed texel blocks (18.4.1)
         MipProps.StorageWidth   = AlignUp(MipProps.LogicalWidth, uint32{FmtAttribs.BlockWidth});
         MipProps.StorageHeight  = AlignUp(MipProps.LogicalHeight, uint32{FmtAttribs.BlockHeight});
@@ -2189,16 +2189,16 @@ bool IsConsistentShaderType(SHADER_TYPE ShaderType, PIPELINE_TYPE PipelineType)
             return ShaderType == SHADER_TYPE_TILE;
 
         default:
-            UNEXPECTED("Unexpected pipeline type");
+            ASSERT(false, "Unexpected pipeline type");
             return false;
     }
 }
 
 int32 GetShaderTypePipelineIndex(SHADER_TYPE ShaderType, PIPELINE_TYPE PipelineType)
 {
-    VERIFY(IsConsistentShaderType(ShaderType, PipelineType), "Shader type ", GetShaderTypeLiteralName(ShaderType),
+    ASSERT(IsConsistentShaderType(ShaderType, PipelineType), "Shader type ", GetShaderTypeLiteralName(ShaderType),
            " is inconsistent with pipeline type ", GetPipelineTypeString(PipelineType));
-    VERIFY(ShaderType == SHADER_TYPE_UNKNOWN || IsPowerOfTwo(ShaderType), "More than one shader type is specified");
+    ASSERT(ShaderType == SHADER_TYPE_UNKNOWN || IsPowerOfTwo(ShaderType), "More than one shader type is specified");
 
     static_assert(SHADER_TYPE_LAST == 0x4000, "Please update the switch below to handle the new shader type");
     switch (ShaderType)
@@ -2234,7 +2234,7 @@ int32 GetShaderTypePipelineIndex(SHADER_TYPE ShaderType, PIPELINE_TYPE PipelineT
             return 5;
 
         default:
-            UNEXPECTED("Unexpected shader type (", ShaderType, ")");
+            ASSERT(false, "Unexpected shader type (", ShaderType, ")");
             return -1;
     }
 }
@@ -2255,7 +2255,7 @@ SHADER_TYPE GetShaderTypeFromPipelineIndex(int32 Index, PIPELINE_TYPE PipelineTy
                 case 4: return SHADER_TYPE_PIXEL;
 
                 default:
-                    UNEXPECTED("Index ", Index, " is not a valid graphics pipeline shader index");
+                    ASSERT(false, "Index ", Index, " is not a valid graphics pipeline shader index");
                     return SHADER_TYPE_UNKNOWN;
             }
 
@@ -2265,7 +2265,7 @@ SHADER_TYPE GetShaderTypeFromPipelineIndex(int32 Index, PIPELINE_TYPE PipelineTy
                 case 0: return SHADER_TYPE_COMPUTE;
 
                 default:
-                    UNEXPECTED("Index ", Index, " is not a valid compute pipeline shader index");
+                    ASSERT(false, "Index ", Index, " is not a valid compute pipeline shader index");
                     return SHADER_TYPE_UNKNOWN;
             }
 
@@ -2277,7 +2277,7 @@ SHADER_TYPE GetShaderTypeFromPipelineIndex(int32 Index, PIPELINE_TYPE PipelineTy
                 case 4: return SHADER_TYPE_PIXEL;
 
                 default:
-                    UNEXPECTED("Index ", Index, " is not a valid mesh pipeline shader index");
+                    ASSERT(false, "Index ", Index, " is not a valid mesh pipeline shader index");
                     return SHADER_TYPE_UNKNOWN;
             }
 
@@ -2292,7 +2292,7 @@ SHADER_TYPE GetShaderTypeFromPipelineIndex(int32 Index, PIPELINE_TYPE PipelineTy
                 case 5: return SHADER_TYPE_CALLABLE;
 
                 default:
-                    UNEXPECTED("Index ", Index, " is not a valid ray tracing pipeline shader index");
+                    ASSERT(false, "Index ", Index, " is not a valid ray tracing pipeline shader index");
                     return SHADER_TYPE_UNKNOWN;
             }
 
@@ -2302,12 +2302,12 @@ SHADER_TYPE GetShaderTypeFromPipelineIndex(int32 Index, PIPELINE_TYPE PipelineTy
                 case 0: return SHADER_TYPE_TILE;
 
                 default:
-                    UNEXPECTED("Index ", Index, " is not a valid tile pipeline shader index");
+                    ASSERT(false, "Index ", Index, " is not a valid tile pipeline shader index");
                     return SHADER_TYPE_UNKNOWN;
             }
 
         default:
-            UNEXPECTED("Unexpected pipeline type");
+            ASSERT(false, "Unexpected pipeline type");
             return SHADER_TYPE_UNKNOWN;
     }
 }
@@ -2319,36 +2319,36 @@ PIPELINE_TYPE PipelineTypeFromShaderStages(SHADER_TYPE ShaderStages)
 
     if (ShaderStages & (SHADER_TYPE_AMPLIFICATION | SHADER_TYPE_MESH))
     {
-        VERIFY((ShaderStages & SHADER_TYPE_ALL_MESH) == ShaderStages,
+        ASSERT((ShaderStages & SHADER_TYPE_ALL_MESH) == ShaderStages,
                "Mesh shading pipeline stages can't be combined with other shader stages");
         return PIPELINE_TYPE_MESH;
     }
     if (ShaderStages & SHADER_TYPE_ALL_GRAPHICS)
     {
-        VERIFY((ShaderStages & SHADER_TYPE_ALL_GRAPHICS) == ShaderStages,
+        ASSERT((ShaderStages & SHADER_TYPE_ALL_GRAPHICS) == ShaderStages,
                "Graphics pipeline stages can't be combined with other shader stages");
         return PIPELINE_TYPE_GRAPHICS;
     }
     if (ShaderStages & SHADER_TYPE_COMPUTE)
     {
-        VERIFY((ShaderStages & SHADER_TYPE_COMPUTE) == ShaderStages,
+        ASSERT((ShaderStages & SHADER_TYPE_COMPUTE) == ShaderStages,
                "Compute stage can't be combined with any other shader stage");
         return PIPELINE_TYPE_COMPUTE;
     }
     if (ShaderStages & SHADER_TYPE_TILE)
     {
-        VERIFY((ShaderStages & SHADER_TYPE_TILE) == ShaderStages,
+        ASSERT((ShaderStages & SHADER_TYPE_TILE) == ShaderStages,
                "Tile stage can't be combined with any other shader stage");
         return PIPELINE_TYPE_TILE;
     }
     if (ShaderStages & SHADER_TYPE_ALL_RAY_TRACING)
     {
-        VERIFY((ShaderStages & SHADER_TYPE_ALL_RAY_TRACING) == ShaderStages,
+        ASSERT((ShaderStages & SHADER_TYPE_ALL_RAY_TRACING) == ShaderStages,
                "Ray tracing pipeline stages can't be combined with other shader stages");
         return PIPELINE_TYPE_RAY_TRACING;
     }
 
-    UNEXPECTED("Unknown shader stage");
+    ASSERT(false, "Unknown shader stage");
     return PIPELINE_TYPE_INVALID;
 }
 
@@ -2360,8 +2360,8 @@ uint64 GetStagingTextureLocationOffset(const TextureDesc& TexDesc,
                                        uint32             LocationY,
                                        uint32             LocationZ)
 {
-    VERIFY_EXPR(TexDesc.MipLevels > 0 && TexDesc.GetArraySize() > 0 && TexDesc.Width > 0 && TexDesc.Height > 0 && TexDesc.Format != TEX_FORMAT_UNKNOWN);
-    VERIFY_EXPR(ArraySlice < TexDesc.GetArraySize() && MipLevel < TexDesc.MipLevels || ArraySlice == TexDesc.GetArraySize() && MipLevel == 0);
+    ASSERT_EXPR(TexDesc.MipLevels > 0 && TexDesc.GetArraySize() > 0 && TexDesc.Width > 0 && TexDesc.Height > 0 && TexDesc.Format != TEX_FORMAT_UNKNOWN);
+    ASSERT_EXPR(ArraySlice < TexDesc.GetArraySize() && MipLevel < TexDesc.MipLevels || ArraySlice == TexDesc.GetArraySize() && MipLevel == 0);
 
     uint64 Offset = 0;
     if (ArraySlice > 0)
@@ -2386,18 +2386,18 @@ uint64 GetStagingTextureLocationOffset(const TextureDesc& TexDesc,
 
     if (ArraySlice == TexDesc.GetArraySize())
     {
-        VERIFY(LocationX == 0 && LocationY == 0 && LocationZ == 0,
+        ASSERT(LocationX == 0 && LocationY == 0 && LocationZ == 0,
                "Staging buffer size is requested: location must be (0,0,0).");
     }
     else if (LocationX != 0 || LocationY != 0 || LocationZ != 0)
     {
         const MipLevelProperties&   MipLevelAttribs = GetMipLevelProperties(TexDesc, MipLevel);
         const TextureFormatAttribs& FmtAttribs      = GetTextureFormatAttribs(TexDesc.Format);
-        VERIFY(LocationX < MipLevelAttribs.LogicalWidth && LocationY < MipLevelAttribs.LogicalHeight && LocationZ < MipLevelAttribs.Depth,
+        ASSERT(LocationX < MipLevelAttribs.LogicalWidth && LocationY < MipLevelAttribs.LogicalHeight && LocationZ < MipLevelAttribs.Depth,
                "Specified location is out of bounds");
         if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
         {
-            VERIFY((LocationX % FmtAttribs.BlockWidth) == 0 && (LocationY % FmtAttribs.BlockHeight) == 0,
+            ASSERT((LocationX % FmtAttribs.BlockWidth) == 0 && (LocationY % FmtAttribs.BlockHeight) == 0,
                    "For compressed texture formats, location must be a multiple of compressed block size.");
         }
 
@@ -2423,15 +2423,15 @@ BufferToTextureCopyInfo GetBufferToTextureCopyInfo(TEXTURE_FORMAT Format,
     BufferToTextureCopyInfo CopyInfo;
 
     const TextureFormatAttribs& FmtAttribs = GetTextureFormatAttribs(Format);
-    VERIFY_EXPR(Region.IsValid());
+    ASSERT_EXPR(Region.IsValid());
     const uint32 UpdateRegionWidth  = Region.Width();
     const uint32 UpdateRegionHeight = Region.Height();
     const uint32 UpdateRegionDepth  = Region.Depth();
     if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
     {
         // Align update region size by the block size
-        VERIFY_EXPR(IsPowerOfTwo(FmtAttribs.BlockWidth));
-        VERIFY_EXPR(IsPowerOfTwo(FmtAttribs.BlockHeight));
+        ASSERT_EXPR(IsPowerOfTwo(FmtAttribs.BlockWidth));
+        ASSERT_EXPR(IsPowerOfTwo(FmtAttribs.BlockHeight));
         const uint32 BlockAlignedRegionWidth  = AlignUp(UpdateRegionWidth, uint32{FmtAttribs.BlockWidth});
         const uint32 BlockAlignedRegionHeight = AlignUp(UpdateRegionHeight, uint32{FmtAttribs.BlockHeight});
 
@@ -2444,7 +2444,7 @@ BufferToTextureCopyInfo GetBufferToTextureCopyInfo(TEXTURE_FORMAT Format,
         CopyInfo.RowCount = UpdateRegionHeight;
     }
 
-    VERIFY_EXPR(IsPowerOfTwo(RowStrideAlignment));
+    ASSERT_EXPR(IsPowerOfTwo(RowStrideAlignment));
     CopyInfo.RowStride = AlignUp(CopyInfo.RowSize, RowStrideAlignment);
     if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
     {
@@ -2469,10 +2469,10 @@ void CopyTextureSubresource(const TextureSubResData& SrcSubres,
                             uint64                   DstRowStride,
                             uint64                   DstDepthStride)
 {
-    VERIFY_EXPR(SrcSubres.pSrcBuffer == nullptr && SrcSubres.pData != nullptr);
-    VERIFY_EXPR(pDstData != nullptr);
-    VERIFY(SrcSubres.Stride >= RowSize, "Source data row stride (", SrcSubres.Stride, ") is smaller than the row size (", RowSize, ")");
-    VERIFY(DstRowStride >= RowSize, "Dst data row stride (", DstRowStride, ") is smaller than the row size (", RowSize, ")");
+    ASSERT_EXPR(SrcSubres.pSrcBuffer == nullptr && SrcSubres.pData != nullptr);
+    ASSERT_EXPR(pDstData != nullptr);
+    ASSERT(SrcSubres.Stride >= RowSize, "Source data row stride (", SrcSubres.Stride, ") is smaller than the row size (", RowSize, ")");
+    ASSERT(DstRowStride >= RowSize, "Dst data row stride (", DstRowStride, ") is smaller than the row size (", RowSize, ")");
     for (uint32 z = 0; z < NumDepthSlices; ++z)
     {
         const uint8* pSrcSlice = reinterpret_cast<const uint8*>(SrcSubres.pData) + SrcSubres.DepthStride * z;
@@ -2503,7 +2503,7 @@ String GetCommandQueueTypeString(COMMAND_QUEUE_TYPE Type)
         Result = "TRANSFER";
     else
     {
-        UNEXPECTED("Unexpected context type");
+        ASSERT(false, "Unexpected context type");
         Result = "UNKNOWN";
     }
 
@@ -2523,7 +2523,7 @@ const Char* GetFenceTypeString(FENCE_TYPE Type)
         case FENCE_TYPE_GENERAL:       return "GENERAL";
         
         default:
-            UNEXPECTED("Unexpected fence type");
+            ASSERT(false, "Unexpected fence type");
             return "Unknown";
     }
 }
@@ -2539,7 +2539,7 @@ const Char* GetShaderStatusString(SHADER_STATUS ShaderStatus, bool GetEnumString
         case SHADER_STATUS_FAILED: 	      return GetEnumString ? "SHADER_STATUS_FAILED"        : "Failed";
         
         default:
-            UNEXPECTED("Unexpected shader status");
+            ASSERT(false, "Unexpected shader status");
             return "Unknown";
     }
 }
@@ -2555,7 +2555,7 @@ const Char* GetPipelineStateStatusString(PIPELINE_STATE_STATUS PipelineStatus, b
         case PIPELINE_STATE_STATUS_FAILED: 	      return GetEnumString ? "PIPELINE_STATE_STATUS_FAILED"        : "Failed";
         
         default:
-            UNEXPECTED("Unexpected pipeline state status");
+            ASSERT(false, "Unexpected pipeline state status");
             return "Unknown";
     }
 }
@@ -2804,7 +2804,7 @@ String GetPipelineShadingRateFlagsString(PIPELINE_SHADING_RATE_FLAGS Flags)
             case PIPELINE_SHADING_RATE_FLAG_TEXTURE_BASED: Result += "TEXTURE_BASED"; break;
             
             default:
-                UNEXPECTED("Unexpected pipeline shading rate");
+                ASSERT(false, "Unexpected pipeline shading rate");
                 Result += "Unknown";
         }
     }
@@ -2865,17 +2865,17 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
     constexpr uint32            SparseBlockSize = 64 << 10;
     const TextureFormatAttribs& FmtAttribs      = GetTextureFormatAttribs(TexDesc.Format);
     const uint32                TexelSize       = FmtAttribs.GetElementSize();
-    VERIFY_EXPR(IsPowerOfTwo(TexelSize));
-    VERIFY_EXPR(TexelSize >= 1 && TexelSize <= 16);
-    VERIFY_EXPR(TexDesc.Is2D() || TexDesc.Is3D());
-    VERIFY(TexDesc.MipLevels > 0, "Number of mipmap calculation is not supported");
-    VERIFY(TexDesc.SampleCount == 1 || TexDesc.MipLevels == 1, "Multisampled textures must have 1 mip level");
+    ASSERT_EXPR(IsPowerOfTwo(TexelSize));
+    ASSERT_EXPR(TexelSize >= 1 && TexelSize <= 16);
+    ASSERT_EXPR(TexDesc.Is2D() || TexDesc.Is3D());
+    ASSERT(TexDesc.MipLevels > 0, "Number of mipmap calculation is not supported");
+    ASSERT(TexDesc.SampleCount == 1 || TexDesc.MipLevels == 1, "Multisampled textures must have 1 mip level");
 
     SparseTextureProperties Props;
 
     if (TexDesc.Is3D())
     {
-        DEV_CHECK_ERR(FmtAttribs.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed sparse 3D textures are currently not supported");
+        ASSERT(FmtAttribs.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed sparse 3D textures are currently not supported");
 
         //  | Texel size  |    Tile shape   |
         //  |-------------|-----------------|
@@ -2896,7 +2896,7 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
     }
     else if (TexDesc.SampleCount > 1)
     {
-        VERIFY_EXPR(FmtAttribs.ComponentType != COMPONENT_TYPE_COMPRESSED);
+        ASSERT_EXPR(FmtAttribs.ComponentType != COMPONENT_TYPE_COMPRESSED);
 
         //  | Texel size  |   Tile shape 2x  |   Tile shape 4x  |   Tile shape 8x  |   Tile shape 16x  |
         //  |-------------|------------------|------------------|------------------|-------------------|
@@ -2905,7 +2905,7 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
         //  |    32-Bit   |    64 x 128 x 1  |    64 x  64 x 1  |   32 x  64 x 1   |    32 x 32 x 1    |
         //  |    64-Bit   |    64 x  64 x 1  |    64 x  32 x 1  |   32 x  32 x 1   |    32 x 16 x 1    |
         //  |   128-Bit   |    32 x  64 x 1  |    32 x  32 x 1  |   16 x  32 x 1   |    16 x 16 x 1    |
-        VERIFY_EXPR(IsPowerOfTwo(TexDesc.SampleCount));
+        ASSERT_EXPR(IsPowerOfTwo(TexDesc.SampleCount));
         Props.TileSize[0] = 128 >> (TexDesc.SampleCount >= 8 ? 1 : 0);
         Props.TileSize[1] = 256 >> (TexDesc.SampleCount >= 4 ? (TexDesc.SampleCount >= 16 ? 2 : 1) : 0);
         Props.TileSize[2] = 1;
@@ -2949,7 +2949,7 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
         (Props.TileSize[0] / FmtAttribs.BlockWidth) *
         (Props.TileSize[1] / FmtAttribs.BlockHeight) *
         Props.TileSize[2] * TexDesc.SampleCount * TexelSize;
-    VERIFY_EXPR(BytesPerTile == SparseBlockSize);
+    ASSERT_EXPR(BytesPerTile == SparseBlockSize);
 
     uint64 SliceSize     = 0;
     Props.FirstMipInTail = ~0u;
@@ -2992,9 +2992,9 @@ SparseTextureProperties GetStandardSparseTextureProperties(const TextureDesc& Te
     Props.BlockSize        = SparseBlockSize;
     Props.Flags            = SPARSE_TEXTURE_FLAG_NONE;
 
-    VERIFY_EXPR(Props.MipTailSize % SparseBlockSize == 0);
-    VERIFY_EXPR(Props.MipTailStride % SparseBlockSize == 0);
-    VERIFY_EXPR(Props.AddressSpaceSize % SparseBlockSize == 0);
+    ASSERT_EXPR(Props.MipTailSize % SparseBlockSize == 0);
+    ASSERT_EXPR(Props.MipTailStride % SparseBlockSize == 0);
+    ASSERT_EXPR(Props.AddressSpaceSize % SparseBlockSize == 0);
 
     return Props;
 }

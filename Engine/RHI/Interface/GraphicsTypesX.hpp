@@ -62,7 +62,7 @@ namespace shz
 			auto CopyAttachments = [](auto*& pAttachments, uint32 Count, auto& Attachments) {
 				if (Count != 0)
 				{
-					VERIFY_EXPR(pAttachments != nullptr);
+					ASSERT_EXPR(pAttachments != nullptr);
 					Attachments.assign(pAttachments, pAttachments + Count);
 					pAttachments = Attachments.data();
 				}
@@ -112,11 +112,11 @@ namespace shz
 
 			if (pResolve != nullptr)
 			{
-				VERIFY_EXPR(Resolves.size() < RenderTargets.size());
+				ASSERT_EXPR(Resolves.size() < RenderTargets.size());
 				while (Resolves.size() + 1 < RenderTargets.size())
 					Resolves.push_back(AttachmentReference{ ATTACHMENT_UNUSED, RESOURCE_STATE_UNKNOWN });
 				Resolves.push_back(*pResolve);
-				VERIFY_EXPR(Resolves.size() == RenderTargets.size());
+				ASSERT_EXPR(Resolves.size() == RenderTargets.size());
 				Desc.pResolveAttachments = Resolves.data();
 			}
 
@@ -454,7 +454,7 @@ namespace shz
 
 		InputLayoutDescX& Remove(uint32 ElemIndex)
 		{
-			VERIFY_EXPR(ElemIndex < Desc.NumElements);
+			ASSERT_EXPR(ElemIndex < Desc.NumElements);
 			Elements.erase(Elements.begin() + ElemIndex);
 			SyncDesc();
 			return *this;
@@ -511,7 +511,7 @@ namespace shz
 
 		std::vector<uint32> ResolveAutoOffsetsAndStrides()
 		{
-			VERIFY_EXPR(Desc.NumElements == Elements.size());
+			ASSERT_EXPR(Desc.NumElements == Elements.size());
 			return ResolveInputLayoutAutoOffsetsAndStrides(Elements.data(), Desc.NumElements);
 		}
 
@@ -782,7 +782,7 @@ namespace shz
 
 		PipelineResourceSignatureDescX& RemoveResource(const char* ResName, SHADER_TYPE Stages = SHADER_TYPE_ALL)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(ResName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(ResName));
 			for (auto it = ResCopy.begin(); it != ResCopy.end();)
 			{
 				if (SafeStrEqual(it->Name, ResName) && (it->ShaderStages & Stages) != 0)
@@ -795,14 +795,14 @@ namespace shz
 
 		PipelineResourceSignatureDescX& RemoveResource(size_t Idx)
 		{
-			VERIFY_EXPR(Idx < ResCopy.size());
+			ASSERT_EXPR(Idx < ResCopy.size());
 			ResCopy.erase(ResCopy.begin() + Idx);
 			return SyncDesc();
 		}
 
 		PipelineResourceSignatureDescX& RemoveImmutableSampler(const char* SamName, SHADER_TYPE Stages = SHADER_TYPE_ALL)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(SamName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(SamName));
 			for (auto it = ImtblSamCopy.begin(); it != ImtblSamCopy.end();)
 			{
 				if (SafeStrEqual(it->SamplerOrTextureName, SamName) && (it->ShaderStages & Stages) != 0)
@@ -815,7 +815,7 @@ namespace shz
 
 		PipelineResourceSignatureDescX& RemoveImmutableSampler(size_t Idx)
 		{
-			VERIFY_EXPR(Idx < ImtblSamCopy.size());
+			ASSERT_EXPR(Idx < ImtblSamCopy.size());
 			ImtblSamCopy.erase(ImtblSamCopy.begin() + Idx);
 			return SyncDesc();
 		}
@@ -984,7 +984,7 @@ namespace shz
 
 		PipelineResourceLayoutDescX& RemoveVariable(const char* VarName, SHADER_TYPE Stages = SHADER_TYPE_ALL)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(VarName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(VarName));
 			for (auto it = VarCopy.begin(); it != VarCopy.end();)
 			{
 				if (SafeStrEqual(it->Name, VarName) && (it->ShaderStages & Stages) != 0)
@@ -997,7 +997,7 @@ namespace shz
 
 		PipelineResourceLayoutDescX& RemoveImmutableSampler(const char* SamName, SHADER_TYPE Stages = SHADER_TYPE_ALL)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(SamName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(SamName));
 			for (auto it = ImtblSamCopy.begin(); it != ImtblSamCopy.end();)
 			{
 				if (SafeStrEqual(it->SamplerOrTextureName, SamName) && (it->ShaderStages & Stages) != 0)
@@ -1212,7 +1212,7 @@ namespace shz
 		template <typename BLASType>
 		BottomLevelASDescX& RemoveGeometry(const char* GeoName, std::vector<BLASType>& Geometries)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(GeoName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(GeoName));
 			for (auto it = Geometries.begin(); it != Geometries.end();)
 			{
 				if (SafeStrEqual(it->GeometryName, GeoName))
@@ -1312,14 +1312,14 @@ namespace shz
 		{
 			if (pSignature == nullptr)
 			{
-				UNEXPECTED("Signature must not be null");
+				ASSERT(false, "Signature must not be null");
 				return static_cast<DerivedType&>(*this);
 			}
 
 			Signatures.emplace_back(pSignature);
 			this->ppResourceSignatures = Signatures.data();
 			this->ResourceSignaturesCount = static_cast<uint32>(Signatures.size());
-			VERIFY_EXPR(this->ResourceSignaturesCount <= MAX_RESOURCE_SIGNATURES);
+			ASSERT_EXPR(this->ResourceSignaturesCount <= MAX_RESOURCE_SIGNATURES);
 			Objects.emplace_back(pSignature);
 
 			return static_cast<DerivedType&>(*this);
@@ -1329,7 +1329,7 @@ namespace shz
 		{
 			if (pSignature == nullptr)
 			{
-				UNEXPECTED("Signature must not be null");
+				ASSERT(false, "Signature must not be null");
 				return static_cast<DerivedType&>(*this);
 			}
 
@@ -1458,7 +1458,7 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 			switch (pShader->GetDesc().ShaderType)
@@ -1472,7 +1472,7 @@ namespace shz
 			case SHADER_TYPE_AMPLIFICATION: return SetShader(pAS, pShader);
 			case SHADER_TYPE_MESH:          return SetShader(pMS, pShader);
 
-			default: UNEXPECTED("Unexpected shader type"); return *this;
+			default: ASSERT(false, "Unexpected shader type"); return *this;
 			}
 		}
 
@@ -1480,7 +1480,7 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 
@@ -1573,7 +1573,7 @@ namespace shz
 
 		GraphicsPipelineStateCreateInfoX& AddRenderTarget(TEXTURE_FORMAT RTVFormat) noexcept
 		{
-			VERIFY_EXPR(GraphicsPipeline.NumRenderTargets < MAX_RENDER_TARGETS);
+			ASSERT_EXPR(GraphicsPipeline.NumRenderTargets < MAX_RENDER_TARGETS);
 			GraphicsPipeline.RTVFormats[GraphicsPipeline.NumRenderTargets++] = RTVFormat;
 			return *this;
 		}
@@ -1600,7 +1600,7 @@ namespace shz
 
 		GraphicsPipelineStateCreateInfoX& SetRenderPass(IRenderPass* pRenderPass)
 		{
-			VERIFY_EXPR(pRenderPass != nullptr);
+			ASSERT_EXPR(pRenderPass != nullptr);
 			if (GraphicsPipeline.pRenderPass != nullptr)
 				RemoveObject(GraphicsPipeline.pRenderPass);
 			GraphicsPipeline.pRenderPass = pRenderPass;
@@ -1667,13 +1667,13 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 			if (pShader->GetDesc().ShaderType == SHADER_TYPE_COMPUTE)
 				return SetShader(pCS, pShader);
 
-			UNEXPECTED("Unexpected shader type");
+			ASSERT(false, "Unexpected shader type");
 			return *this;
 		}
 
@@ -1681,7 +1681,7 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 
@@ -1746,13 +1746,13 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 			if (pShader->GetDesc().ShaderType == SHADER_TYPE_TILE)
 				return SetShader(pTS, pShader);
 
-			UNEXPECTED("Unexpected shader type");
+			ASSERT(false, "Unexpected shader type");
 			return *this;
 		}
 
@@ -1760,7 +1760,7 @@ namespace shz
 		{
 			if (pShader == nullptr)
 			{
-				UNEXPECTED("Shader must not be null");
+				ASSERT(false, "Shader must not be null");
 				return *this;
 			}
 
@@ -1771,7 +1771,7 @@ namespace shz
 
 		TilePipelineStateCreateInfoX& AddRenderTarget(TEXTURE_FORMAT RTVFormat) noexcept
 		{
-			VERIFY_EXPR(TilePipeline.NumRenderTargets < MAX_RENDER_TARGETS);
+			ASSERT_EXPR(TilePipeline.NumRenderTargets < MAX_RENDER_TARGETS);
 			TilePipeline.RTVFormats[TilePipeline.NumRenderTargets++] = RTVFormat;
 			return *this;
 		}
@@ -2010,7 +2010,7 @@ namespace shz
 		template <typename ShaderGroupType>
 		RayTracingPipelineStateCreateInfoX& RemoveShader(const char* ShaderName, std::vector<ShaderGroupType>& Shaders)
 		{
-			VERIFY_EXPR(!IsNullOrEmptyStr(ShaderName));
+			ASSERT_EXPR(!IsNullOrEmptyStr(ShaderName));
 			for (auto it = Shaders.begin(); it != Shaders.end();)
 			{
 				if (SafeStrEqual(it->Name, ShaderName))
@@ -2066,13 +2066,13 @@ namespace shz
 		RenderDeviceX(IRenderDevice* pDevice) noexcept
 			: m_pDevice{ pDevice }
 		{
-			DEV_CHECK_ERR(pDevice, "Device must not be null");
+			ASSERT(pDevice, "Device must not be null");
 		}
 
 		RenderDeviceX(const RefCntAutoPtr<IRenderDevice>& pDevice) noexcept
 			: m_pDevice{ pDevice }
 		{
-			DEV_CHECK_ERR(pDevice, "Device must not be null");
+			ASSERT(pDevice, "Device must not be null");
 		}
 
 

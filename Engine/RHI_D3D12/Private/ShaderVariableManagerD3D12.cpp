@@ -95,7 +95,7 @@ namespace shz
 		uint32                                    NumAllowedTypes,
 		SHADER_TYPE                               ShaderType)
 	{
-		VERIFY_EXPR(m_NumVariables == 0);
+		ASSERT_EXPR(m_NumVariables == 0);
 		const size_t MemSize = GetRequiredMemorySize(Signature, AllowedVarTypes, NumAllowedTypes, ShaderType, &m_NumVariables);
 
 		if (m_NumVariables == 0)
@@ -110,7 +110,7 @@ namespace shz
 				::new (m_pVariables + VarInd) ShaderVariableD3D12Impl{ *this, ResIndex };
 				++VarInd;
 			});
-		VERIFY_EXPR(VarInd == m_NumVariables);
+		ASSERT_EXPR(VarInd == m_NumVariables);
 	}
 
 	void ShaderVariableManagerD3D12::Destroy(IMemoryAllocator& Allocator)
@@ -125,13 +125,13 @@ namespace shz
 
 	const PipelineResourceDesc& ShaderVariableManagerD3D12::GetResourceDesc(uint32 Index) const
 	{
-		VERIFY_EXPR(m_pSignature != nullptr);
+		ASSERT_EXPR(m_pSignature != nullptr);
 		return m_pSignature->GetResourceDesc(Index);
 	}
 
 	const ShaderVariableManagerD3D12::ResourceAttribs& ShaderVariableManagerD3D12::GetResourceAttribs(uint32 Index) const
 	{
-		VERIFY_EXPR(m_pSignature != nullptr);
+		ASSERT_EXPR(m_pSignature != nullptr);
 		return m_pSignature->GetResourceAttribs(Index);
 	}
 
@@ -168,7 +168,7 @@ namespace shz
 		}
 
 		const ptrdiff_t Offset = reinterpret_cast<const uint8*>(&Variable) - reinterpret_cast<uint8*>(m_pVariables);
-		DEV_CHECK_ERR(Offset % sizeof(ShaderVariableD3D12Impl) == 0, "Offset is not multiple of ShaderVariableD3D12Impl class size");
+		ASSERT(Offset % sizeof(ShaderVariableD3D12Impl) == 0, "Offset is not multiple of ShaderVariableD3D12Impl class size");
 		uint32 Index = static_cast<uint32>(Offset / sizeof(ShaderVariableD3D12Impl));
 		if (Index < m_NumVariables)
 			return Index;
@@ -227,8 +227,8 @@ namespace shz
 			{
 				if (m_DstTableCPUDescriptorHandle.ptr != 0)
 				{
-					VERIFY(CPUDescriptorHandle.ptr != 0, "CPU descriptor handle must not be null for resources allocated in descriptor tables");
-					DEV_CHECK_ERR(m_DstRes.pObject == nullptr || m_AllowOverwrite,
+					ASSERT(CPUDescriptorHandle.ptr != 0, "CPU descriptor handle must not be null for resources allocated in descriptor tables");
+					ASSERT(m_DstRes.pObject == nullptr || m_AllowOverwrite,
 						"Static and mutable resource descriptors should only be copied once unless ALLOW_OVERWRITE flag is set.");
 					const D3D12_DESCRIPTOR_HEAP_TYPE d3d12HeapType = m_ResDesc.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER ?
 						D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER :
@@ -281,7 +281,7 @@ namespace shz
 			, m_AllowOverwrite{ m_ResDesc.VarType == SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC || (Flags & SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE) != 0 }
 			, m_DstRes{ const_cast<const ShaderResourceCacheD3D12&>(ResourceCache).GetRootTable(m_RootIndex).GetResource(m_OffsetFromTableStart) }
 		{
-			VERIFY(ArrayIndex < m_ResDesc.ArraySize, "Array index is out of range, but it should've been corrected by ShaderVariableBase::SetArray()");
+			ASSERT(ArrayIndex < m_ResDesc.ArraySize, "Array index is out of range, but it should've been corrected by ShaderVariableBase::SetArray()");
 
 			if (m_CacheType != ResourceCacheContentType::Signature && !m_Attribs.IsRootView())
 			{
@@ -297,34 +297,34 @@ namespace shz
 #ifdef SHZ_DEBUG
 			if (m_CacheType == ResourceCacheContentType::Signature)
 			{
-				VERIFY(m_DstTableCPUDescriptorHandle.ptr == 0, "Static shader resource cache should never be assigned descriptor space.");
+				ASSERT(m_DstTableCPUDescriptorHandle.ptr == 0, "Static shader resource cache should never be assigned descriptor space.");
 			}
 			else if (m_CacheType == ResourceCacheContentType::SRB)
 			{
 				if (m_Attribs.GetD3D12RootParamType() == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
 				{
-					VERIFY(m_DstTableCPUDescriptorHandle.ptr != 0, "Shader resources allocated in descriptor tables must be assigned descriptor space.");
+					ASSERT(m_DstTableCPUDescriptorHandle.ptr != 0, "Shader resources allocated in descriptor tables must be assigned descriptor space.");
 				}
 				else
 				{
-					VERIFY_EXPR(m_Attribs.IsRootView());
-					VERIFY((m_ResDesc.ResourceType == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER ||
+					ASSERT_EXPR(m_Attribs.IsRootView());
+					ASSERT((m_ResDesc.ResourceType == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER ||
 						m_ResDesc.ResourceType == SHADER_RESOURCE_TYPE_BUFFER_SRV ||
 						m_ResDesc.ResourceType == SHADER_RESOURCE_TYPE_BUFFER_UAV),
 						"Only constant buffers and dynamic buffer views can be allocated as root views");
-					VERIFY(m_DstTableCPUDescriptorHandle.ptr == 0, "Resources allocated as root views should never be assigned descriptor space.");
+					ASSERT(m_DstTableCPUDescriptorHandle.ptr == 0, "Resources allocated as root views should never be assigned descriptor space.");
 				}
 			}
 			else
 			{
-				UNEXPECTED("Unknown content type");
+				ASSERT(false, "Unknown content type");
 			}
 #endif
 		}
 
 		void BindResourceHelper::CacheCB(const BindResourceInfo& BindInfo) const
 		{
-			VERIFY(BindInfo.pObject != nullptr, "Setting buffer to null is handled by BindResourceHelper::operator()");
+			ASSERT(BindInfo.pObject != nullptr, "Setting buffer to null is handled by BindResourceHelper::operator()");
 
 			// We cannot use ClassPtrCast<> here as the resource can be of wrong type
 			RefCntAutoPtr<BufferD3D12Impl> pBuffD3D12{ BindInfo.pObject, IID_BufferD3D12 };
@@ -347,10 +347,10 @@ namespace shz
 				}
 
 				D3D12_CPU_DESCRIPTOR_HANDLE CPUDescriptorHandle = pBuffD3D12->GetCBVHandle();
-				VERIFY(CPUDescriptorHandle.ptr != 0 || pBuffD3D12->GetDesc().Usage == USAGE_DYNAMIC,
+				ASSERT(CPUDescriptorHandle.ptr != 0 || pBuffD3D12->GetDesc().Usage == USAGE_DYNAMIC,
 					"Only dynamic constant buffers may have null CPU descriptor");
 				if (m_DstTableCPUDescriptorHandle.ptr != 0)
-					VERIFY(CPUDescriptorHandle.ptr != 0, "CPU descriptor handle must not be null for resources allocated in descriptor tables");
+					ASSERT(CPUDescriptorHandle.ptr != 0, "CPU descriptor handle must not be null for resources allocated in descriptor tables");
 
 				const BufferDesc& BuffDesc = pBuffD3D12->GetDesc();
 				const uint64      RangeSize = BindInfo.BufferRangeSize == 0 ? BuffDesc.Size - BindInfo.BufferBaseOffset : BindInfo.BufferRangeSize;
@@ -365,7 +365,7 @@ namespace shz
 
 				if (m_DstTableCPUDescriptorHandle.ptr != 0)
 				{
-					DEV_CHECK_ERR(m_DstRes.pObject == nullptr || m_AllowOverwrite,
+					ASSERT(m_DstRes.pObject == nullptr || m_AllowOverwrite,
 						"Static and mutable resource descriptors should only be copied once unless ALLOW_OVERWRITE flag is set.");
 					if (RangeSize == BuffDesc.Size)
 					{
@@ -391,7 +391,7 @@ namespace shz
 
 		void BindResourceHelper::CacheSampler(const BindResourceInfo& BindInfo) const
 		{
-			VERIFY(BindInfo.pObject != nullptr, "Setting sampler to null is handled by BindResourceHelper::operator()");
+			ASSERT(BindInfo.pObject != nullptr, "Setting sampler to null is handled by BindResourceHelper::operator()");
 
 			RefCntAutoPtr<ISamplerD3D12> pSamplerD3D12{ BindInfo.pObject, IID_SamplerD3D12 };
 #ifdef SHZ_DEBUG
@@ -407,8 +407,8 @@ namespace shz
 				}
 
 				const D3D12_CPU_DESCRIPTOR_HANDLE CPUDescriptorHandle = pSamplerD3D12->GetCPUDescriptorHandle();
-				VERIFY(CPUDescriptorHandle.ptr != 0, "Samplers must always have valid CPU descriptors");
-				VERIFY(m_CacheType == ResourceCacheContentType::Signature || m_DstTableCPUDescriptorHandle.ptr != 0,
+				ASSERT(CPUDescriptorHandle.ptr != 0, "Samplers must always have valid CPU descriptors");
+				ASSERT(m_CacheType == ResourceCacheContentType::Signature || m_DstTableCPUDescriptorHandle.ptr != 0,
 					"Samplers in SRB cache must always be allocated in root tables and thus assigned descriptor in the table");
 
 				SetResource(CPUDescriptorHandle, std::move(pSamplerD3D12));
@@ -418,7 +418,7 @@ namespace shz
 
 		void BindResourceHelper::CacheAccelStruct(const BindResourceInfo& BindInfo) const
 		{
-			VERIFY(BindInfo.pObject != nullptr, "Setting TLAS to null is handled by BindResourceHelper::operator()");
+			ASSERT(BindInfo.pObject != nullptr, "Setting TLAS to null is handled by BindResourceHelper::operator()");
 
 			RefCntAutoPtr<ITopLevelASD3D12> pTLASD3D12{ BindInfo.pObject, IID_TopLevelASD3D12 };
 #ifdef SHZ_DEBUG
@@ -434,8 +434,8 @@ namespace shz
 				}
 
 				const D3D12_CPU_DESCRIPTOR_HANDLE CPUDescriptorHandle = pTLASD3D12->GetCPUDescriptorHandle();
-				VERIFY(CPUDescriptorHandle.ptr != 0, "Acceleration structures must always have valid CPU descriptor handles");
-				VERIFY(m_CacheType == ResourceCacheContentType::Signature || m_DstTableCPUDescriptorHandle.ptr != 0,
+				ASSERT(CPUDescriptorHandle.ptr != 0, "Acceleration structures must always have valid CPU descriptor handles");
+				ASSERT(m_CacheType == ResourceCacheContentType::Signature || m_DstTableCPUDescriptorHandle.ptr != 0,
 					"Acceleration structures in SRB cache are always allocated in root tables and thus must have a descriptor");
 
 				SetResource(CPUDescriptorHandle, std::move(pTLASD3D12));
@@ -494,7 +494,7 @@ namespace shz
 		void BindResourceHelper::CacheResourceView(const BindResourceInfo& BindInfo,
 			TViewTypeEnum           dbgExpectedViewType) const
 		{
-			VERIFY(BindInfo.pObject != nullptr, "Setting resource view to null is handled by BindResourceHelper::operator()");
+			ASSERT(BindInfo.pObject != nullptr, "Setting resource view to null is handled by BindResourceHelper::operator()");
 
 			// We cannot use ClassPtrCast<> here as the resource can be of wrong type
 			RefCntAutoPtr<TResourceViewType> pViewD3D12{ BindInfo.pObject, ResourceViewTraits<TResourceViewType>::IID };
@@ -518,7 +518,7 @@ namespace shz
 
 				const D3D12_CPU_DESCRIPTOR_HANDLE CPUDescriptorHandle = pViewD3D12->GetCPUDescriptorHandle();
 				// Note that for dynamic structured buffers we still create SRV even though we don't really use it.
-				VERIFY(CPUDescriptorHandle.ptr != 0, "Texture/buffer views should always have valid CPU descriptor handles");
+				ASSERT(CPUDescriptorHandle.ptr != 0, "Texture/buffer views should always have valid CPU descriptor handles");
 
 				BindCombinedSampler(pViewD3D12, BindInfo.ArrayIndex, BindInfo.Flags);
 
@@ -529,11 +529,11 @@ namespace shz
 
 		void BindResourceHelper::BindCombinedSampler(TextureViewD3D12Impl* pTexView, uint32 ArrayIndex, SET_SHADER_RESOURCE_FLAGS Flags) const
 		{
-			VERIFY_EXPR(pTexView != nullptr);
+			ASSERT_EXPR(pTexView != nullptr);
 
 			if (m_ResDesc.ResourceType != SHADER_RESOURCE_TYPE_TEXTURE_SRV)
 			{
-				VERIFY(!m_Attribs.IsCombinedWithSampler(), "Only texture SRVs can be combined with sampler");
+				ASSERT(!m_Attribs.IsCombinedWithSampler(), "Only texture SRVs can be combined with sampler");
 				return;
 			}
 
@@ -542,15 +542,15 @@ namespace shz
 
 			const PipelineResourceDesc& SamplerResDesc = m_Signature.GetResourceDesc(m_Attribs.SamplerInd);
 			const ResourceAttribs& SamplerAttribs = m_Signature.GetResourceAttribs(m_Attribs.SamplerInd);
-			VERIFY_EXPR(SamplerResDesc.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER);
+			ASSERT_EXPR(SamplerResDesc.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER);
 
 			if (SamplerAttribs.IsImmutableSamplerAssigned())
 			{
 				// Immutable samplers should not be assigned cache space
-				VERIFY_EXPR(SamplerAttribs.RootIndex(ResourceCacheContentType::Signature) == ResourceAttribs::InvalidSigRootIndex);
-				VERIFY_EXPR(SamplerAttribs.RootIndex(ResourceCacheContentType::SRB) == ResourceAttribs::InvalidSRBRootIndex);
-				VERIFY_EXPR(SamplerAttribs.SigOffsetFromTableStart == ResourceAttribs::InvalidOffset);
-				VERIFY_EXPR(SamplerAttribs.SRBOffsetFromTableStart == ResourceAttribs::InvalidOffset);
+				ASSERT_EXPR(SamplerAttribs.RootIndex(ResourceCacheContentType::Signature) == ResourceAttribs::InvalidSigRootIndex);
+				ASSERT_EXPR(SamplerAttribs.RootIndex(ResourceCacheContentType::SRB) == ResourceAttribs::InvalidSRBRootIndex);
+				ASSERT_EXPR(SamplerAttribs.SigOffsetFromTableStart == ResourceAttribs::InvalidOffset);
+				ASSERT_EXPR(SamplerAttribs.SRBOffsetFromTableStart == ResourceAttribs::InvalidOffset);
 				return;
 			}
 
@@ -561,7 +561,7 @@ namespace shz
 				return;
 			}
 
-			VERIFY_EXPR(m_ResDesc.ArraySize == SamplerResDesc.ArraySize || SamplerResDesc.ArraySize == 1);
+			ASSERT_EXPR(m_ResDesc.ArraySize == SamplerResDesc.ArraySize || SamplerResDesc.ArraySize == 1);
 			const uint32 SamplerArrInd = SamplerResDesc.ArraySize > 1 ? ArrayIndex : 0;
 
 			BindResourceHelper BindSampler{ m_Signature, m_ResourceCache, m_Attribs.SamplerInd, SamplerArrInd, Flags };
@@ -570,7 +570,7 @@ namespace shz
 
 		void BindResourceHelper::operator()(const BindResourceInfo& BindInfo) const
 		{
-			VERIFY_EXPR(m_ArrayIndex == BindInfo.ArrayIndex);
+			ASSERT_EXPR(m_ArrayIndex == BindInfo.ArrayIndex);
 			if (BindInfo.pObject != nullptr)
 			{
 				static_assert(SHADER_RESOURCE_TYPE_LAST == 8, "Please update this function to handle the new resource type");
@@ -605,12 +605,12 @@ namespace shz
 					CacheAccelStruct(BindInfo);
 					break;
 
-				default: UNEXPECTED("Unknown resource type ", static_cast<int32>(m_ResDesc.ResourceType));
+				default: ASSERT(false, "Unknown resource type ", static_cast<int32>(m_ResDesc.ResourceType));
 				}
 			}
 			else
 			{
-				DEV_CHECK_ERR(m_DstRes.pObject == nullptr || m_AllowOverwrite,
+				ASSERT(m_DstRes.pObject == nullptr || m_AllowOverwrite,
 					"Shader variable '", m_ResDesc.Name, "' is not dynamic, but is being reset to null. This is an error and may cause unpredicted behavior. ",
 					"If this is intended and you ensured proper synchronization, use the SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE flag. "
 					"Otherwise, use another shader resource binding instance or label the variable as dynamic.");
@@ -620,7 +620,7 @@ namespace shz
 				{
 					const PipelineResourceDesc& SamplerResDesc = m_Signature.GetResourceDesc(m_Attribs.SamplerInd);
 					const ResourceAttribs& SamplerAttribs = m_Signature.GetResourceAttribs(m_Attribs.SamplerInd);
-					VERIFY_EXPR(SamplerResDesc.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER);
+					ASSERT_EXPR(SamplerResDesc.ResourceType == SHADER_RESOURCE_TYPE_SAMPLER);
 
 					if (!SamplerAttribs.IsImmutableSamplerAssigned())
 					{
@@ -631,7 +631,7 @@ namespace shz
 						const ShaderResourceCacheD3D12::Resource& DstSam =
 							const_cast<const ShaderResourceCacheD3D12&>(m_ResourceCache).GetRootTable(SamRootIndex).GetResource(SamOffsetFromTableStart);
 
-						DEV_CHECK_ERR(DstSam.pObject == nullptr || m_AllowOverwrite,
+						ASSERT(DstSam.pObject == nullptr || m_AllowOverwrite,
 							"Sampler variable '", SamplerResDesc.Name, "' is not dynamic, but is being reset to null. This is an error and may cause unpredicted behavior. ",
 							"Use another shader resource binding instance or label the variable as dynamic if you need to bind another sampler.");
 
@@ -646,7 +646,7 @@ namespace shz
 
 	void ShaderVariableManagerD3D12::BindResource(uint32 ResIndex, const BindResourceInfo& BindInfo)
 	{
-		VERIFY(m_pSignature->IsUsingSeparateSamplers() || GetResourceDesc(ResIndex).ResourceType != SHADER_RESOURCE_TYPE_SAMPLER,
+		ASSERT(m_pSignature->IsUsingSeparateSamplers() || GetResourceDesc(ResIndex).ResourceType != SHADER_RESOURCE_TYPE_SAMPLER,
 			"Samplers should not be set directly when using combined texture samplers");
 		BindResourceHelper BindResHelper{ *m_pSignature, m_ResourceCache, ResIndex, BindInfo.ArrayIndex, BindInfo.Flags };
 		BindResHelper(BindInfo);
@@ -681,7 +681,7 @@ namespace shz
 		const uint32                   RootIndex = Attribs.RootIndex(CacheType);
 		const uint32                   OffsetFromTableStart = Attribs.OffsetFromTableStart(CacheType) + ArrayIndex;
 
-		VERIFY_EXPR(ArrayIndex < ResDesc.ArraySize);
+		ASSERT_EXPR(ArrayIndex < ResDesc.ArraySize);
 
 		if (RootIndex < m_ResourceCache.GetNumRootTables())
 		{

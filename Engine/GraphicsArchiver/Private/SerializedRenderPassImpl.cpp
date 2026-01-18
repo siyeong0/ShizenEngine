@@ -50,7 +50,7 @@ namespace shz
 
 		Serializer<SerializerMode::Write> Ser{ m_CommonData };
 		RPSerializer<SerializerMode::Write>::SerializeDesc(Ser, m_Desc, nullptr);
-		VERIFY_EXPR(Ser.IsEnded());
+		ASSERT_EXPR(Ser.IsEnded());
 	}
 
 	SerializedRenderPassImpl::~SerializedRenderPassImpl()

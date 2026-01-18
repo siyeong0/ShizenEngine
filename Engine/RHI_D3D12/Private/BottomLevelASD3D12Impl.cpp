@@ -77,12 +77,12 @@ namespace shz
 					dst.Triangles.VertexBuffer.StrideInBytes = 0;
 					dst.Triangles.VertexCount = src.MaxVertexCount;
 					dst.Triangles.VertexFormat = TypeToRayTracingVertexFormat(src.VertexValueType, src.VertexComponentCount);
-					VERIFY(dst.Triangles.VertexFormat != DXGI_FORMAT_UNKNOWN, "Unsupported combination of vertex value type and component count");
+					ASSERT(dst.Triangles.VertexFormat != DXGI_FORMAT_UNKNOWN, "Unsupported combination of vertex value type and component count");
 
 					MaxPrimitiveCount += src.MaxPrimitiveCount;
 				}
 				(void)MaxPrimitiveCount; // Suppress warning
-				DEV_CHECK_ERR(MaxPrimitiveCount <= RTProps.MaxPrimitivesPerBLAS,
+				ASSERT(MaxPrimitiveCount <= RTProps.MaxPrimitivesPerBLAS,
 					"Max primitive count (", MaxPrimitiveCount, ") exceeds device limit (", RTProps.MaxPrimitivesPerBLAS, ")");
 			}
 			else if (m_Desc.pBoxes != nullptr)
@@ -103,15 +103,15 @@ namespace shz
 					MaxBoxCount += src.MaxBoxCount;
 				}
 				(void)MaxBoxCount; // Suppress warning
-				DEV_CHECK_ERR(MaxBoxCount <= RTProps.MaxPrimitivesPerBLAS,
+				ASSERT(MaxBoxCount <= RTProps.MaxPrimitivesPerBLAS,
 					"Max box count (", MaxBoxCount, ") exceeds device limit (", RTProps.MaxPrimitivesPerBLAS, ")");
 			}
 			else
 			{
-				UNEXPECTED("Either pTriangles or pBoxes must not be null");
+				ASSERT(false, "Either pTriangles or pBoxes must not be null");
 			}
 
-			DEV_CHECK_ERR(d3d12Geometries.size() <= RTProps.MaxGeometriesPerBLAS,
+			ASSERT(d3d12Geometries.size() <= RTProps.MaxGeometriesPerBLAS,
 				"The number of geometries (", d3d12Geometries.size(), ") exceeds device limit (", RTProps.MaxGeometriesPerBLAS, ")");
 
 			d3d12BottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
@@ -160,7 +160,7 @@ namespace shz
 		if (m_Desc.Name != nullptr && *m_Desc.Name != '\0')
 			m_pd3d12Resource->SetName(WidenString(m_Desc.Name).c_str());
 
-		VERIFY_EXPR(GetGPUAddress() % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0);
+		ASSERT_EXPR(GetGPUAddress() % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0);
 
 		SetState(RESOURCE_STATE_BUILD_AS_READ);
 	}

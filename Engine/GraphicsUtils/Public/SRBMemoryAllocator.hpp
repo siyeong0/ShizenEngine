@@ -53,13 +53,13 @@ namespace shz
 
 		IMemoryAllocator& GetShaderVariableDataAllocator(uint32 Ind)
 		{
-			VERIFY_EXPR(m_DataAllocators == nullptr || Ind < m_ShaderVariableDataAllocatorCount);
+			ASSERT_EXPR(m_DataAllocators == nullptr || Ind < m_ShaderVariableDataAllocatorCount);
 			return m_DataAllocators != nullptr ? m_DataAllocators[Ind] : m_RawMemAllocator;
 		}
 
 		IMemoryAllocator& GetResourceCacheDataAllocator(uint32 Ind)
 		{
-			VERIFY_EXPR(m_DataAllocators == nullptr || Ind < m_ResourceCacheDataAllocatorCount);
+			ASSERT_EXPR(m_DataAllocators == nullptr || Ind < m_ResourceCacheDataAllocatorCount);
 			return m_DataAllocators != nullptr ? m_DataAllocators[m_ShaderVariableDataAllocatorCount + Ind] : m_RawMemAllocator;
 		}
 

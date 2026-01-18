@@ -256,7 +256,7 @@ namespace shz
 
 		GPUDescriptorHeap& GetGPUDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE Type)
 		{
-			VERIFY_EXPR(Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || Type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+			ASSERT_EXPR(Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || Type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 			return m_GPUDescriptorHeaps[Type];
 		}
 
@@ -267,7 +267,7 @@ namespace shz
 #define GET_D3D12_DEVICE(Version)                                                  \
     ID3D12Device##Version* GetD3D12Device##Version()                               \
     {                                                                              \
-        DEV_CHECK_ERR(m_MaxD3D12DeviceVersion >= Version, "ID3D12Device", Version, \
+        ASSERT(m_MaxD3D12DeviceVersion >= Version, "ID3D12Device", Version, \
                       " is not supported. Maximum supported version: ",            \
                       m_MaxD3D12DeviceVersion);                                    \
         return static_cast<ID3D12Device##Version*>(m_pd3d12Device.p);              \

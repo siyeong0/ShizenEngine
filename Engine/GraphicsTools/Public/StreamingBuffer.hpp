@@ -31,13 +31,14 @@
 #include <vector>
 #include <string>
 
-#include "Primitives/Errors.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"
 #include "Engine/RHI/Interface/IBuffer.h"
-#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
-#include "MapHelper.hpp"
+
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
 namespace shz
 {
@@ -64,10 +65,10 @@ namespace shz
 			, m_OnBufferResizeCallback{ CI.OnBufferResizeCallback }
 			, m_MapInfo(CI.NumContexts)
 		{
-			VERIFY_EXPR(CI.pDevice != nullptr);
-			VERIFY_EXPR(CI.BuffDesc.Usage == USAGE_DYNAMIC);
+			ASSERT_EXPR(CI.pDevice != nullptr);
+			ASSERT_EXPR(CI.BuffDesc.Usage == USAGE_DYNAMIC);
 			CI.pDevice->CreateBuffer(CI.BuffDesc, nullptr, &m_pBuffer);
-			VERIFY_EXPR(m_pBuffer);
+			ASSERT_EXPR(m_pBuffer);
 			if (m_OnBufferResizeCallback)
 				m_OnBufferResizeCallback(m_pBuffer);
 		}
@@ -82,14 +83,14 @@ namespace shz
 		{
 			for (const auto& mapInfo : m_MapInfo)
 			{
-				VERIFY(!mapInfo.m_MappedData, "Destroying streaming buffer that is still mapped");
+				ASSERT(!mapInfo.m_MappedData, "Destroying streaming buffer that is still mapped");
 			}
 		}
 
 		// Returns offset of the allocated region
 		uint32 Map(IDeviceContext* pCtx, IRenderDevice* pDevice, uint32 Size, size_t CtxNum = 0)
 		{
-			VERIFY_EXPR(Size > 0);
+			ASSERT_EXPR(Size > 0);
 
 			auto& MapInfo = m_MapInfo[CtxNum];
 			// Check if there is enough space in the buffer
@@ -97,7 +98,7 @@ namespace shz
 			{
 				// Unmap the buffer
 				Flush(CtxNum);
-				VERIFY_EXPR(MapInfo.m_CurrOffset == 0);
+				ASSERT_EXPR(MapInfo.m_CurrOffset == 0);
 
 				if (Size > m_BufferSize)
 				{
@@ -121,7 +122,7 @@ namespace shz
 
 			if (!m_UsePersistentMap)
 			{
-				VERIFY(MapInfo.m_MappedData == nullptr, "Streaming buffer must be unmapped before it can be mapped next time when persistent mapping is not used");
+				ASSERT(MapInfo.m_MappedData == nullptr, "Streaming buffer must be unmapped before it can be mapped next time when persistent mapping is not used");
 			}
 
 			if (MapInfo.m_MappedData == nullptr)
@@ -129,7 +130,7 @@ namespace shz
 				// If current offset is zero, we are mapping the buffer for the first time after it has been Reset. Use MAP_FLAG_DISCARD flag.
 				// Otherwise use MAP_FLAG_NO_OVERWRITE flag.
 				MapInfo.m_MappedData.Map(pCtx, m_pBuffer, MAP_WRITE, MapInfo.m_CurrOffset == 0 ? MAP_FLAG_DISCARD : MAP_FLAG_NO_OVERWRITE);
-				VERIFY_EXPR(MapInfo.m_MappedData);
+				ASSERT_EXPR(MapInfo.m_MappedData);
 			}
 
 			auto Offset = MapInfo.m_CurrOffset;
@@ -140,7 +141,7 @@ namespace shz
 
 		uint32 Update(IDeviceContext* pCtx, IRenderDevice* pDevice, const void* pData, uint32 Size, size_t CtxNum = 0)
 		{
-			VERIFY_EXPR(pData != nullptr);
+			ASSERT_EXPR(pData != nullptr);
 			auto  Offset = Map(pCtx, pDevice, Size, CtxNum);
 			auto* pCPUAddress = reinterpret_cast<uint8*>(GetMappedCPUAddress(CtxNum)) + Offset;
 			memcpy(pCPUAddress, pData, Size);

@@ -110,13 +110,13 @@ namespace shz
 
 		~RingBuffer()
 		{
-			VERIFY(m_UsedSize == 0, "All space in the ring buffer must be released");
+			ASSERT(m_UsedSize == 0, "All space in the ring buffer must be released");
 		}
 
 		OffsetType Allocate(OffsetType Size, OffsetType Alignment)
 		{
-			VERIFY_EXPR(Size > 0);
-			VERIFY(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
+			ASSERT_EXPR(Size > 0);
+			ASSERT(IsPowerOfTwo(Alignment), "Alignment (", Alignment, ") must be power of 2");
 			Size = AlignUp(Size, Alignment);
 
 			if (m_UsedSize + Size > m_MaxSize)
@@ -183,7 +183,7 @@ namespace shz
 		{
 #ifdef SHZ_DEBUG
 			if (!m_CompletedFrameHeads.empty())
-				VERIFY(FenceValue >= m_CompletedFrameHeads.back().FenceValue, "Current frame fence value (", FenceValue, ") is lower than the fence value of the previous frame (", m_CompletedFrameHeads.back().FenceValue, ")");
+				ASSERT(FenceValue >= m_CompletedFrameHeads.back().FenceValue, "Current frame fence value (", FenceValue, ") is lower than the fence value of the previous frame (", m_CompletedFrameHeads.back().FenceValue, ")");
 #endif
 			// Ignore zero-size frames
 			if (m_CurrFrameSize != 0)
@@ -201,7 +201,7 @@ namespace shz
 			while (!m_CompletedFrameHeads.empty() && m_CompletedFrameHeads.front().FenceValue <= CompletedFenceValue)
 			{
 				const FrameHeadAttribs& OldestFrameHead = m_CompletedFrameHeads.front();
-				VERIFY_EXPR(OldestFrameHead.Size <= m_UsedSize);
+				ASSERT_EXPR(OldestFrameHead.Size <= m_UsedSize);
 				m_UsedSize -= OldestFrameHead.Size;
 				m_Tail = OldestFrameHead.Offset;
 				m_CompletedFrameHeads.pop_front();
@@ -210,9 +210,9 @@ namespace shz
 			if (IsEmpty())
 			{
 #ifdef SHZ_DEBUG
-				VERIFY(m_CompletedFrameHeads.empty(), "Zero-size heads are not added to the list, and since the buffer is empty, there must be no heads in the list");
+				ASSERT(m_CompletedFrameHeads.empty(), "Zero-size heads are not added to the list, and since the buffer is empty, there must be no heads in the list");
 				for (const FrameHeadAttribs& head : m_CompletedFrameHeads)
-					VERIFY(head.Size == 0, "Non zero-size head found");
+					ASSERT(head.Size == 0, "Non zero-size head found");
 #endif
 				m_CompletedFrameHeads.clear();
 

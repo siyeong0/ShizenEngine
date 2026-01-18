@@ -191,7 +191,7 @@ namespace shz
 			bool WaitUntilShadersReady,
 			SHADER_TYPE& ActiveShaderStages)
 		{
-			VERIFY_EXPR(CreateInfo.PSODesc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(CreateInfo.PSODesc.IsAnyGraphicsPipeline());
 
 			ShaderStages.clear();
 			ActiveShaderStages = SHADER_TYPE_UNKNOWN;
@@ -200,16 +200,16 @@ namespace shz
 				if (pShader != nullptr)
 				{
 					RefCntAutoPtr<ShaderImplType> pShaderImpl{ pShader, ShaderImplType::IID_InternalImpl };
-					VERIFY(pShaderImpl, "Unexpected shader object implementation");
+					ASSERT(pShaderImpl, "Unexpected shader object implementation");
 					WaitUntilShaderReadyIfRequested(pShaderImpl, WaitUntilShadersReady);
 					ShaderStages.emplace_back(pShaderImpl);
 					const SHADER_TYPE ShaderType = pShader->GetDesc().ShaderType;
-					VERIFY((ActiveShaderStages & ShaderType) == 0,
+					ASSERT((ActiveShaderStages & ShaderType) == 0,
 						"Shader stage ", GetShaderTypeLiteralName(ShaderType), " has already been initialized in PSO.");
 					ActiveShaderStages |= ShaderType;
 #ifdef SHZ_DEBUG
 					for (size_t i = 0; i + 1 < ShaderStages.size(); ++i)
-						VERIFY_EXPR(GetShaderStageType(ShaderStages[i]) != ShaderType);
+						ASSERT_EXPR(GetShaderStageType(ShaderStages[i]) != ShaderType);
 #endif
 				}
 				};
@@ -223,7 +223,7 @@ namespace shz
 				AddShaderStage(CreateInfo.pDS);
 				AddShaderStage(CreateInfo.pGS);
 				AddShaderStage(CreateInfo.pPS);
-				VERIFY(CreateInfo.pVS != nullptr, "Vertex shader must not be null");
+				ASSERT(CreateInfo.pVS != nullptr, "Vertex shader must not be null");
 				break;
 			}
 
@@ -232,15 +232,15 @@ namespace shz
 				AddShaderStage(CreateInfo.pAS);
 				AddShaderStage(CreateInfo.pMS);
 				AddShaderStage(CreateInfo.pPS);
-				VERIFY(CreateInfo.pMS != nullptr, "Mesh shader must not be null");
+				ASSERT(CreateInfo.pMS != nullptr, "Mesh shader must not be null");
 				break;
 			}
 
 			default:
-				UNEXPECTED("unknown pipeline type");
+				ASSERT(false, "unknown pipeline type");
 			}
 
-			VERIFY_EXPR(!ShaderStages.empty());
+			ASSERT_EXPR(!ShaderStages.empty());
 		}
 
 		template <typename ShaderImplType, typename TShaderStages>
@@ -250,21 +250,21 @@ namespace shz
 			bool WaitUntilShadersReady,
 			SHADER_TYPE& ActiveShaderStages)
 		{
-			VERIFY_EXPR(CreateInfo.PSODesc.IsComputePipeline());
+			ASSERT_EXPR(CreateInfo.PSODesc.IsComputePipeline());
 
 			ShaderStages.clear();
 
-			VERIFY_EXPR(CreateInfo.PSODesc.PipelineType == PIPELINE_TYPE_COMPUTE);
-			VERIFY_EXPR(CreateInfo.pCS != nullptr);
-			VERIFY_EXPR(CreateInfo.pCS->GetDesc().ShaderType == SHADER_TYPE_COMPUTE);
+			ASSERT_EXPR(CreateInfo.PSODesc.PipelineType == PIPELINE_TYPE_COMPUTE);
+			ASSERT_EXPR(CreateInfo.pCS != nullptr);
+			ASSERT_EXPR(CreateInfo.pCS->GetDesc().ShaderType == SHADER_TYPE_COMPUTE);
 
 			RefCntAutoPtr<ShaderImplType> pShaderImpl{ CreateInfo.pCS, ShaderImplType::IID_InternalImpl };
-			VERIFY(pShaderImpl, "Unexpected shader object implementation");
+			ASSERT(pShaderImpl, "Unexpected shader object implementation");
 			WaitUntilShaderReadyIfRequested(pShaderImpl, WaitUntilShadersReady);
 			ShaderStages.emplace_back(pShaderImpl);
 			ActiveShaderStages = SHADER_TYPE_COMPUTE;
 
-			VERIFY_EXPR(!ShaderStages.empty());
+			ASSERT_EXPR(!ShaderStages.empty());
 		}
 
 		template <typename ShaderImplType, typename TShaderStages>
@@ -274,7 +274,7 @@ namespace shz
 			bool WaitUntilShadersReady,
 			SHADER_TYPE& ActiveShaderStages)
 		{
-			VERIFY_EXPR(CreateInfo.PSODesc.IsRayTracingPipeline());
+			ASSERT_EXPR(CreateInfo.PSODesc.IsRayTracingPipeline());
 
 			std::unordered_set<IShader*> UniqueShaders;
 
@@ -289,7 +289,7 @@ namespace shz
 					auto& Stage = ShaderStages[StageInd];
 					ActiveShaderStages |= ShaderType;
 					RefCntAutoPtr<ShaderImplType> pShaderImpl{ pShader, ShaderImplType::IID_InternalImpl };
-					VERIFY(pShaderImpl, "Unexpected shader object implementation");
+					ASSERT(pShaderImpl, "Unexpected shader object implementation");
 					WaitUntilShaderReadyIfRequested(pShaderImpl, WaitUntilShadersReady);
 					Stage.Append(pShaderImpl);
 				}
@@ -331,7 +331,7 @@ namespace shz
 				}
 			}
 
-			VERIFY_EXPR(!ShaderStages.empty());
+			ASSERT_EXPR(!ShaderStages.empty());
 		}
 
 		template <typename ShaderImplType, typename TShaderStages>
@@ -341,21 +341,21 @@ namespace shz
 			bool WaitUntilShadersReady,
 			SHADER_TYPE& ActiveShaderStages)
 		{
-			VERIFY_EXPR(CreateInfo.PSODesc.IsTilePipeline());
+			ASSERT_EXPR(CreateInfo.PSODesc.IsTilePipeline());
 
 			ShaderStages.clear();
 
-			VERIFY_EXPR(CreateInfo.PSODesc.PipelineType == PIPELINE_TYPE_TILE);
-			VERIFY_EXPR(CreateInfo.pTS != nullptr);
-			VERIFY_EXPR(CreateInfo.pTS->GetDesc().ShaderType == SHADER_TYPE_TILE);
+			ASSERT_EXPR(CreateInfo.PSODesc.PipelineType == PIPELINE_TYPE_TILE);
+			ASSERT_EXPR(CreateInfo.pTS != nullptr);
+			ASSERT_EXPR(CreateInfo.pTS->GetDesc().ShaderType == SHADER_TYPE_TILE);
 
 			RefCntAutoPtr<ShaderImplType> pShaderImpl{ CreateInfo.pTS, ShaderImplType::IID_InternalImpl };
-			VERIFY(pShaderImpl, "Unexpected shader object implementation");
+			ASSERT(pShaderImpl, "Unexpected shader object implementation");
 			WaitUntilShaderReadyIfRequested(pShaderImpl, WaitUntilShadersReady);
 			ShaderStages.emplace_back(pShaderImpl);
 			ActiveShaderStages = SHADER_TYPE_TILE;
 
-			VERIFY_EXPR(!ShaderStages.empty());
+			ASSERT_EXPR(!ShaderStages.empty());
 		}
 
 		uint32 GetRenderTargetMask(const GraphicsPipelineDesc& GraphicsPipeline) noexcept;
@@ -412,7 +412,7 @@ namespace shz
 				ValidatePSOCreateInfo(this->GetDevice(), CreateInfo);
 
 				uint64 DeviceQueuesMask = this->GetDevice()->GetCommandQueueMask();
-				DEV_CHECK_ERR((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
+				ASSERT((this->m_Desc.ImmediateContextMask & DeviceQueuesMask) != 0,
 					"No bits in the immediate mask (0x", std::hex, this->m_Desc.ImmediateContextMask,
 					") correspond to one of ", this->GetDevice()->GetCommandQueueCount(), " available software command queues.");
 				this->m_Desc.ImmediateContextMask &= DeviceQueuesMask;
@@ -427,7 +427,7 @@ namespace shz
 
 		~PipelineStateBase()
 		{
-			VERIFY(!AsyncInitializer::GetAsyncTask(m_AsyncInitializer), "Initialize task is still running. This may result in a crash if the task accesses resources owned by the pipeline state object.");
+			ASSERT(!AsyncInitializer::GetAsyncTask(m_AsyncInitializer), "Initialize task is still running. This may result in a crash if the task accesses resources owned by the pipeline state object.");
 
 			/*
 			// \note Destructor cannot directly remove the object from the registry as this may cause a
@@ -446,12 +446,12 @@ namespace shz
 			RasterizerStateRegistry.ReportDeletedObject();
 			DSSRegistry.ReportDeletedObject();
 			*/
-			VERIFY(m_IsDestructed, "This object must be explicitly destructed with Destruct()");
+			ASSERT(m_IsDestructed, "This object must be explicitly destructed with Destruct()");
 		}
 
 		void Destruct()
 		{
-			VERIFY(!m_IsDestructed, "This object has already been destructed");
+			ASSERT(!m_IsDestructed, "This object has already been destructed");
 
 			if (this->m_Desc.IsAnyGraphicsPipeline() && m_pGraphicsPipelineData != nullptr)
 			{
@@ -494,60 +494,60 @@ namespace shz
 		uint32 GetBufferStride(uint32 BufferSlot) const
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
 			return BufferSlot < m_pGraphicsPipelineData->BufferSlotsUsed ? m_pGraphicsPipelineData->pStrides[BufferSlot] : 0;
 		}
 
 		uint32 GetNumBufferSlotsUsed() const
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
 			return m_pGraphicsPipelineData->BufferSlotsUsed;
 		}
 
 		RefCntAutoPtr<IRenderPass> const& GetRenderPassPtr() const
 		{
-			VERIFY_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
 			return m_pGraphicsPipelineData->pRenderPass;
 		}
 
 		RefCntAutoPtr<IRenderPass>& GetRenderPassPtr()
 		{
-			VERIFY_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
 			return m_pGraphicsPipelineData->pRenderPass;
 		}
 
 		virtual const GraphicsPipelineDesc& SHZ_CALL_TYPE GetGraphicsPipelineDesc() const override final
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
-			VERIFY_EXPR(m_pGraphicsPipelineData != nullptr);
+			ASSERT_EXPR(this->m_Desc.IsAnyGraphicsPipeline());
+			ASSERT_EXPR(m_pGraphicsPipelineData != nullptr);
 			return m_pGraphicsPipelineData->Desc;
 		}
 
 		virtual const RayTracingPipelineDesc& SHZ_CALL_TYPE GetRayTracingPipelineDesc() const override final
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(this->m_Desc.IsRayTracingPipeline());
-			VERIFY_EXPR(m_pRayTracingPipelineData != nullptr);
+			ASSERT_EXPR(this->m_Desc.IsRayTracingPipeline());
+			ASSERT_EXPR(m_pRayTracingPipelineData != nullptr);
 			return m_pRayTracingPipelineData->Desc;
 		}
 
 		virtual const TilePipelineDesc& SHZ_CALL_TYPE GetTilePipelineDesc() const override final
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(this->m_Desc.IsTilePipeline());
-			VERIFY_EXPR(m_pTilePipelineData != nullptr);
+			ASSERT_EXPR(this->m_Desc.IsTilePipeline());
+			ASSERT_EXPR(m_pTilePipelineData != nullptr);
 			return m_pTilePipelineData->Desc;
 		}
 
 		inline void CopyShaderHandle(const char* Name, void* pData, size_t DataSize) const
 		{
-			VERIFY_EXPR(this->m_Desc.IsRayTracingPipeline());
-			VERIFY_EXPR(m_pRayTracingPipelineData != nullptr);
+			ASSERT_EXPR(this->m_Desc.IsRayTracingPipeline());
+			ASSERT_EXPR(m_pRayTracingPipelineData != nullptr);
 
 			const uint32 ShaderHandleSize = m_pRayTracingPipelineData->ShaderHandleSize;
-			VERIFY(ShaderHandleSize <= DataSize, "DataSize (", DataSize, ") must be at least as large as the shader handle size (", ShaderHandleSize, ").");
+			ASSERT(ShaderHandleSize <= DataSize, "DataSize (", DataSize, ") must be at least as large as the shader handle size (", ShaderHandleSize, ").");
 
 			if (Name == nullptr || Name[0] == '\0')
 			{
@@ -559,11 +559,11 @@ namespace shz
 			auto iter = m_pRayTracingPipelineData->NameToGroupIndex.find(Name);
 			if (iter != m_pRayTracingPipelineData->NameToGroupIndex.end())
 			{
-				VERIFY_EXPR(ShaderHandleSize * (iter->second + 1) <= m_pRayTracingPipelineData->ShaderDataSize);
+				ASSERT_EXPR(ShaderHandleSize * (iter->second + 1) <= m_pRayTracingPipelineData->ShaderDataSize);
 				std::memcpy(pData, &m_pRayTracingPipelineData->ShaderHandles[ShaderHandleSize * iter->second], ShaderHandleSize);
 				return;
 			}
-			UNEXPECTED("Can't find shader group '", Name, "'.");
+			ASSERT(false, "Can't find shader group '", Name, "'.");
 		}
 
 		virtual void SHZ_CALL_TYPE CreateShaderResourceBinding(IShaderResourceBinding** ppShaderResourceBinding,
@@ -571,10 +571,10 @@ namespace shz
 		{
 			if (ppShaderResourceBinding == nullptr)
 			{
-				DEV_ERROR("ppShaderResourceBinding must not be null");
+				ASSERT(false, "ppShaderResourceBinding must not be null");
 				return;
 			}
-			DEV_CHECK_ERR(*ppShaderResourceBinding == nullptr, "Overwriting existing shader resource binding pointer may cause a memory leak.");
+			ASSERT(*ppShaderResourceBinding == nullptr, "Overwriting existing shader resource binding pointer may cause a memory leak.");
 
 			CheckPipelineReady();
 
@@ -691,13 +691,13 @@ namespace shz
 
 			if (pDstPipeline == nullptr)
 			{
-				DEV_ERROR("Destination pipeline must not be null");
+				ASSERT(false, "Destination pipeline must not be null");
 				return;
 			}
 
 			if (pDstPipeline == this)
 			{
-				DEV_ERROR("Source and destination pipelines must be different");
+				ASSERT(false, "Source and destination pipelines must be different");
 				return;
 			}
 
@@ -723,7 +723,7 @@ namespace shz
 		virtual PipelineResourceSignatureImplType* SHZ_CALL_TYPE GetResourceSignature(uint32 Index) const override final
 		{
 			CheckPipelineReady();
-			VERIFY_EXPR(Index < m_SignatureCount);
+			ASSERT_EXPR(Index < m_SignatureCount);
 			return m_Signatures[Index];
 		}
 
@@ -731,13 +731,13 @@ namespace shz
 		virtual bool SHZ_CALL_TYPE IsCompatibleWith(const IPipelineState* pPSO) const override // May be overridden
 		{
 			CheckPipelineReady();
-			DEV_CHECK_ERR(pPSO != nullptr, "pPSO must not be null");
+			ASSERT(pPSO != nullptr, "pPSO must not be null");
 
 			if (pPSO == this)
 				return true;
 
 			RefCntAutoPtr<PipelineStateImplType> pPSOImpl{ const_cast<IPipelineState*>(pPSO), PipelineStateImplType::IID_InternalImpl };
-			VERIFY(pPSOImpl, "Unknown PSO implementation type");
+			ASSERT(pPSOImpl, "Unknown PSO implementation type");
 
 			const PipelineStateImplType& lhs = *static_cast<const PipelineStateImplType*>(this);
 			const PipelineStateImplType& rhs = *pPSOImpl;
@@ -759,11 +759,11 @@ namespace shz
 
 		virtual PIPELINE_STATE_STATUS SHZ_CALL_TYPE GetStatus(bool WaitForCompletion = false) override
 		{
-			VERIFY_EXPR(m_Status.load() != PIPELINE_STATE_STATUS_UNINITIALIZED);
+			ASSERT_EXPR(m_Status.load() != PIPELINE_STATE_STATUS_UNINITIALIZED);
 			ASYNC_TASK_STATUS InitTaskStatus = AsyncInitializer::Update(m_AsyncInitializer, WaitForCompletion);
 			if (InitTaskStatus == ASYNC_TASK_STATUS_COMPLETE)
 			{
-				VERIFY(m_Status.load() > PIPELINE_STATE_STATUS_COMPILING, "Pipeline state status must be atomically set by the initialization task before it finishes");
+				ASSERT(m_Status.load() > PIPELINE_STATE_STATUS_COMPILING, "Pipeline state status must be atomically set by the initialization task before it finishes");
 			}
 			return m_Status.load();
 		}
@@ -896,7 +896,7 @@ namespace shz
 #ifdef SHZ_DEBUG
 						for (const ShaderImplType* pShader : Shaders)
 						{
-							VERIFY(!pShader->IsCompiling(), "All shader compile tasks must have been completed since we used them as "
+							ASSERT(!pShader->IsCompiling(), "All shader compile tasks must have been completed since we used them as "
 								"prerequisites for the pipeline initialization task. This appears to be a bug.");
 						}
 #endif
@@ -932,7 +932,7 @@ namespace shz
 		template <typename ShaderImplType, typename PSOCreateInfoType, typename TShaderStages>
 		void ExtractShaders(const PSOCreateInfoType& PSOCreateInfo, TShaderStages& ShaderStages, bool WaitUntilShadersReady = false)
 		{
-			VERIFY_EXPR(this->m_Desc.PipelineType == PSOCreateInfo.PSODesc.PipelineType);
+			ASSERT_EXPR(this->m_Desc.PipelineType == PSOCreateInfo.PSODesc.PipelineType);
 			PipelineStateUtils::ExtractShaders<ShaderImplType>(PSOCreateInfo, ShaderStages, WaitUntilShadersReady, m_ActiveShaderStages);
 		}
 
@@ -940,7 +940,7 @@ namespace shz
 		{
 			this->m_pGraphicsPipelineData = MemPool.Construct<GraphicsPipelineData>();
 			void* Ptr = MemPool.ReleaseOwnership();
-			VERIFY_EXPR(Ptr == m_pPipelineDataRawMem);
+			ASSERT_EXPR(Ptr == m_pPipelineDataRawMem);
 
 			GraphicsPipelineDesc& GraphicsPipeline = this->m_pGraphicsPipelineData->Desc;
 			RefCntAutoPtr<IRenderPass>& pRenderPass = this->m_pGraphicsPipelineData->pRenderPass;
@@ -957,7 +957,7 @@ namespace shz
 			if (pRenderPass)
 			{
 				const RenderPassDesc& RPDesc = pRenderPass->GetDesc();
-				VERIFY_EXPR(GraphicsPipeline.SubpassIndex < RPDesc.SubpassCount);
+				ASSERT_EXPR(GraphicsPipeline.SubpassIndex < RPDesc.SubpassCount);
 				const SubpassDesc& Subpass = pRenderPass.template RawPtr<RenderPassImplType>()->GetSubpass(GraphicsPipeline.SubpassIndex);
 
 				GraphicsPipeline.NumRenderTargets = static_cast<uint8>(Subpass.RenderTargetAttachmentCount);
@@ -966,7 +966,7 @@ namespace shz
 					const AttachmentReference& RTAttachmentRef = Subpass.pRenderTargetAttachments[rt];
 					if (RTAttachmentRef.AttachmentIndex != ATTACHMENT_UNUSED)
 					{
-						VERIFY_EXPR(RTAttachmentRef.AttachmentIndex < RPDesc.AttachmentCount);
+						ASSERT_EXPR(RTAttachmentRef.AttachmentIndex < RPDesc.AttachmentCount);
 						GraphicsPipeline.RTVFormats[rt] = RPDesc.pAttachments[RTAttachmentRef.AttachmentIndex].Format;
 					}
 				}
@@ -976,7 +976,7 @@ namespace shz
 					const AttachmentReference& DSAttachmentRef = *Subpass.pDepthStencilAttachment;
 					if (DSAttachmentRef.AttachmentIndex != ATTACHMENT_UNUSED)
 					{
-						VERIFY_EXPR(DSAttachmentRef.AttachmentIndex < RPDesc.AttachmentCount);
+						ASSERT_EXPR(DSAttachmentRef.AttachmentIndex < RPDesc.AttachmentCount);
 						GraphicsPipeline.DSVFormat = RPDesc.pAttachments[DSAttachmentRef.AttachmentIndex].Format;
 					}
 				}
@@ -991,7 +991,7 @@ namespace shz
 				{
 					const LayoutElement& SrcElem = InputLayout.LayoutElements[Elem];
 					pLayoutElements[Elem] = SrcElem;
-					VERIFY_EXPR(SrcElem.HLSLSemantic != nullptr);
+					ASSERT_EXPR(SrcElem.HLSLSemantic != nullptr);
 					pLayoutElements[Elem].HLSLSemantic = MemPool.CopyString(SrcElem.HLSLSemantic);
 				}
 
@@ -1034,7 +1034,7 @@ namespace shz
 			this->m_pRayTracingPipelineData->ShaderDataSize = ShaderDataSize;
 
 			void* Ptr = MemPool.ReleaseOwnership();
-			VERIFY_EXPR(Ptr == m_pPipelineDataRawMem);
+			ASSERT_EXPR(Ptr == m_pPipelineDataRawMem);
 
 			TNameToGroupIndexMap& NameToGroupIndex = this->m_pRayTracingPipelineData->NameToGroupIndex;
 			CopyRTShaderGroupNames(NameToGroupIndex, CreateInfo, MemPool);
@@ -1047,7 +1047,7 @@ namespace shz
 		{
 			this->m_pTilePipelineData = MemPool.Construct<TilePipelineData>();
 			void* Ptr = MemPool.ReleaseOwnership();
-			VERIFY_EXPR(Ptr == m_pPipelineDataRawMem);
+			ASSERT_EXPR(Ptr == m_pPipelineDataRawMem);
 
 			this->m_pTilePipelineData->Desc = CreateInfo.TilePipeline;
 
@@ -1079,8 +1079,8 @@ namespace shz
 				, ResourceIndex{ _ResourceIndex }
 				, ImmutableSamplerIndex{ _ImmutableSamplerIndex }
 			{
-				VERIFY_EXPR(pSignature == nullptr || pSignature->GetDesc().BindingIndex == SignatureIndex);
-				VERIFY_EXPR((ResourceIndex == InvalidResourceIndex) || (ImmutableSamplerIndex == InvalidSamplerIndex));
+				ASSERT_EXPR(pSignature == nullptr || pSignature->GetDesc().BindingIndex == SignatureIndex);
+				ASSERT_EXPR((ResourceIndex == InvalidResourceIndex) || (ImmutableSamplerIndex == InvalidSamplerIndex));
 			}
 
 			explicit operator bool() const
@@ -1102,7 +1102,7 @@ namespace shz
 			const PipelineResourceSignatureImplPtrType pSignatures[],
 			uint32 SignCount)
 		{
-			VERIFY_EXPR(Name != nullptr && Name[0] != '\0');
+			ASSERT_EXPR(Name != nullptr && Name[0] != '\0');
 			for (uint32 sign = 0; sign < SignCount; ++sign)
 			{
 				const PipelineResourceSignatureImplType* const pSignature = pSignatures[sign];
@@ -1131,7 +1131,7 @@ namespace shz
 		template <typename... ExtraArgsType>
 		void InitDefaultSignature(const PipelineResourceSignatureDesc& SignDesc, const ExtraArgsType&... ExtraArgs)
 		{
-			VERIFY_EXPR(m_SignatureCount == 1 && m_UsingImplicitSignature);
+			ASSERT_EXPR(m_SignatureCount == 1 && m_UsingImplicitSignature);
 
 			RefCntAutoPtr<PipelineResourceSignatureImplType> pImplicitSignature;
 			this->GetDevice()->CreatePipelineResourceSignature(SignDesc, pImplicitSignature.template DblPtr<IPipelineResourceSignature>(), ExtraArgs...);
@@ -1139,8 +1139,8 @@ namespace shz
 			if (!pImplicitSignature)
 				LOG_ERROR_AND_THROW("Failed to create implicit resource signature for pipeline state '", this->m_Desc.Name, "'.");
 
-			VERIFY_EXPR(pImplicitSignature->GetDesc().BindingIndex == 0);
-			VERIFY(!m_Signatures[0], "Signature 0 has already been initialized.");
+			ASSERT_EXPR(pImplicitSignature->GetDesc().BindingIndex == 0);
+			ASSERT(!m_Signatures[0], "Signature 0 has already been initialized.");
 			m_Signatures[0] = std::move(pImplicitSignature);
 		}
 
@@ -1154,7 +1154,7 @@ namespace shz
 		void CheckPipelineReady() const
 		{
 			// It is OK to use m_Desc.Name as it is initialized by DeviceObjectBase
-			DEV_CHECK_ERR(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", this->m_Desc.Name,
+			ASSERT(m_Status.load() == PIPELINE_STATE_STATUS_READY, "Pipeline state '", this->m_Desc.Name,
 				"' is expected to be Ready, but its actual status is ", GetPipelineStateStatusString(m_Status.load()),
 				". Use GetStatus() to check the pipeline state status.");
 		}
@@ -1166,7 +1166,7 @@ namespace shz
 				MemPool.AddSpace<ShaderResourceVariableDesc>(SrcLayout.NumVariables);
 				for (uint32 i = 0; i < SrcLayout.NumVariables; ++i)
 				{
-					VERIFY(SrcLayout.Variables[i].Name != nullptr, "Variable name can't be null");
+					ASSERT(SrcLayout.Variables[i].Name != nullptr, "Variable name can't be null");
 					MemPool.AddSpaceForString(SrcLayout.Variables[i].Name);
 				}
 			}
@@ -1176,7 +1176,7 @@ namespace shz
 				MemPool.AddSpace<ImmutableSamplerDesc>(SrcLayout.NumImmutableSamplers);
 				for (uint32 i = 0; i < SrcLayout.NumImmutableSamplers; ++i)
 				{
-					VERIFY(SrcLayout.ImmutableSamplers[i].SamplerOrTextureName != nullptr, "Immutable sampler or texture name can't be null");
+					ASSERT(SrcLayout.ImmutableSamplers[i].SamplerOrTextureName != nullptr, "Immutable sampler or texture name can't be null");
 					MemPool.AddSpaceForString(SrcLayout.ImmutableSamplers[i].SamplerOrTextureName);
 				}
 			}
@@ -1230,28 +1230,28 @@ namespace shz
 		{
 			if (m_UsingImplicitSignature && (GetInternalCreateFlags(CreateInfo) & PSO_CREATE_INTERNAL_FLAG_IMPLICIT_SIGNATURE0) == 0)
 			{
-				VERIFY_EXPR(CreateInfo.ResourceSignaturesCount == 0 || CreateInfo.ppResourceSignatures == nullptr);
+				ASSERT_EXPR(CreateInfo.ResourceSignaturesCount == 0 || CreateInfo.ppResourceSignatures == nullptr);
 				m_SignatureCount = 1;
 			}
 			else
 			{
-				VERIFY_EXPR(CreateInfo.ResourceSignaturesCount > 0 && CreateInfo.ppResourceSignatures != nullptr);
+				ASSERT_EXPR(CreateInfo.ResourceSignaturesCount > 0 && CreateInfo.ppResourceSignatures != nullptr);
 				uint32 MaxSignatureBindingIndex = 0;
 				for (uint32 i = 0; i < CreateInfo.ResourceSignaturesCount; ++i)
 				{
 					const PipelineResourceSignatureImplType* pSignature = ClassPtrCast<PipelineResourceSignatureImplType>(CreateInfo.ppResourceSignatures[i]);
-					VERIFY(pSignature != nullptr, "Pipeline resource signature at index ", i, " is null. This error should've been caught by ValidatePipelineResourceSignatures.");
+					ASSERT(pSignature != nullptr, "Pipeline resource signature at index ", i, " is null. This error should've been caught by ValidatePipelineResourceSignatures.");
 
 					uint32 Index = pSignature->GetDesc().BindingIndex;
-					VERIFY(Index < MAX_RESOURCE_SIGNATURES,
+					ASSERT(Index < MAX_RESOURCE_SIGNATURES,
 						"Pipeline resource signature specifies binding index ", uint32{ Index }, " that exceeds the limit (", MAX_RESOURCE_SIGNATURES - 1,
 						"). This error should've been caught by ValidatePipelineResourceSignatureDesc.");
 
 					MaxSignatureBindingIndex = std::max(MaxSignatureBindingIndex, uint32{ Index });
 				}
-				VERIFY_EXPR(MaxSignatureBindingIndex < MAX_RESOURCE_SIGNATURES);
+				ASSERT_EXPR(MaxSignatureBindingIndex < MAX_RESOURCE_SIGNATURES);
 				m_SignatureCount = static_cast<decltype(m_SignatureCount)>(MaxSignatureBindingIndex + 1);
-				VERIFY_EXPR(m_SignatureCount == MaxSignatureBindingIndex + 1);
+				ASSERT_EXPR(m_SignatureCount == MaxSignatureBindingIndex + 1);
 			}
 
 			MemPool.AddSpace<SignatureAutoPtrType>(m_SignatureCount);
@@ -1262,18 +1262,18 @@ namespace shz
 			m_Signatures = MemPool.ConstructArray<SignatureAutoPtrType>(m_SignatureCount);
 			if (!m_UsingImplicitSignature || (GetInternalCreateFlags(CreateInfo) & PSO_CREATE_INTERNAL_FLAG_IMPLICIT_SIGNATURE0) != 0)
 			{
-				VERIFY_EXPR(CreateInfo.ResourceSignaturesCount != 0 && CreateInfo.ppResourceSignatures != nullptr);
+				ASSERT_EXPR(CreateInfo.ResourceSignaturesCount != 0 && CreateInfo.ppResourceSignatures != nullptr);
 				for (uint32 i = 0; i < CreateInfo.ResourceSignaturesCount; ++i)
 				{
 					PipelineResourceSignatureImplType* pSignature = ClassPtrCast<PipelineResourceSignatureImplType>(CreateInfo.ppResourceSignatures[i]);
-					VERIFY_EXPR(pSignature != nullptr);
+					ASSERT_EXPR(pSignature != nullptr);
 
 					const uint32 Index = pSignature->GetDesc().BindingIndex;
 
 #ifdef SHZ_DEBUG
-					VERIFY_EXPR(Index < m_SignatureCount);
+					ASSERT_EXPR(Index < m_SignatureCount);
 
-					VERIFY(m_Signatures[Index] == nullptr,
+					ASSERT(m_Signatures[Index] == nullptr,
 						"Pipeline resource signature '", pSignature->GetDesc().Name, "' at index ", uint32{ Index },
 						" conflicts with another resource signature '", m_Signatures[Index]->GetDesc().Name,
 						"' that uses the same index. This error should've been caught by ValidatePipelineResourceSignatures.");
@@ -1281,7 +1281,7 @@ namespace shz
 					for (uint32 s = 0, StageCount = pSignature->GetNumActiveShaderStages(); s < StageCount; ++s)
 					{
 						const SHADER_TYPE ShaderType = pSignature->GetActiveShaderStageType(s);
-						VERIFY(IsConsistentShaderType(ShaderType, CreateInfo.PSODesc.PipelineType),
+						ASSERT(IsConsistentShaderType(ShaderType, CreateInfo.PSODesc.PipelineType),
 							"Pipeline resource signature '", pSignature->GetDesc().Name, "' at index ", uint32{ Index },
 							" has shader stage '", GetShaderTypeLiteralName(ShaderType), "' that is not compatible with pipeline type '",
 							GetPipelineTypeString(CreateInfo.PSODesc.PipelineType), "'.");

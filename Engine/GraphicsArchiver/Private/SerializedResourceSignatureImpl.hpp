@@ -96,7 +96,7 @@ namespace shz
 
 		const SerializedData* GetDeviceData(DeviceType Type) const
 		{
-			VERIFY_EXPR(static_cast<uint32>(Type) < DeviceCount);
+			ASSERT_EXPR(static_cast<uint32>(Type) < DeviceCount);
 			const auto& Wrpr = m_pDeviceSignatures[static_cast<size_t>(Type)];
 			return Wrpr ? &Wrpr->Data : nullptr;
 		}
@@ -108,7 +108,7 @@ namespace shz
 		SignatureType* GetDeviceSignature(DeviceType Type) const
 		{
 			constexpr DeviceType TraitsType = SignatureTraits<SignatureType>::Type;
-			VERIFY_EXPR(Type == TraitsType || (Type == DeviceType::Metal_iOS && TraitsType == DeviceType::Metal_MacOS));
+			ASSERT_EXPR(Type == TraitsType || (Type == DeviceType::Metal_iOS && TraitsType == DeviceType::Metal_MacOS));
 
 			return ClassPtrCast<SignatureType>(GetDeviceSignature(Type));
 		}
@@ -124,7 +124,7 @@ namespace shz
 	private:
 		IPipelineResourceSignature* GetDeviceSignature(DeviceType Type) const
 		{
-			VERIFY_EXPR(static_cast<uint32>(Type) < DeviceCount);
+			ASSERT_EXPR(static_cast<uint32>(Type) < DeviceCount);
 			const auto& Wrpr = m_pDeviceSignatures[static_cast<size_t>(Type)];
 			return Wrpr ? Wrpr->GetPRS() : nullptr;
 		}

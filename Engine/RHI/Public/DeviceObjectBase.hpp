@@ -67,7 +67,7 @@ namespace shz
 			if (!m_bIsDeviceInternal)
 			{
 				// Device can be null if object is used for serialization
-				VERIFY_EXPR(m_pDevice != nullptr);
+				ASSERT_EXPR(m_pDevice != nullptr);
 				m_pDevice->AddRef();
 			}
 
@@ -157,7 +157,7 @@ namespace shz
 		//      Objects created from different devices may have the same unique ID.
 		virtual int32 SHZ_CALL_TYPE GetUniqueID() const override final
 		{
-			VERIFY(m_UniqueID != 0, "Unique ID is not initialized. This indicates that this device object has been created without a device");
+			ASSERT(m_UniqueID != 0, "Unique ID is not initialized. This indicates that this device object has been created without a device");
 			return m_UniqueID;
 		}
 
@@ -184,7 +184,7 @@ namespace shz
 
 		RenderDeviceImplType* GetDevice() const
 		{
-			VERIFY_EXPR(m_pDevice);
+			ASSERT_EXPR(m_pDevice);
 			return m_pDevice;
 		}
 

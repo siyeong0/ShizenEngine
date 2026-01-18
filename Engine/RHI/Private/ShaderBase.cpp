@@ -96,7 +96,7 @@ namespace shz
 		}
 		else
 		{
-			VERIFY_EXPR(ShaderCI.FilePath != nullptr && ShaderCI.pShaderSourceStreamFactory != nullptr);
+			ASSERT_EXPR(ShaderCI.FilePath != nullptr && ShaderCI.pShaderSourceStreamFactory != nullptr);
 			m_CreateInfo.FilePath = Allocator.CopyString(ShaderCI.FilePath);
 		}
 

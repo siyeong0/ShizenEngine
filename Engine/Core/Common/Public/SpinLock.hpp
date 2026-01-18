@@ -77,7 +77,7 @@ public:
 
     void unlock() noexcept
     {
-        VERIFY(is_locked(), "Attempting to unlock a spin lock that is not locked. This is a strong indication of a flawed logic.");
+        ASSERT(is_locked(), "Attempting to unlock a spin lock that is not locked. This is a strong indication of a flawed logic.");
         m_IsLocked.store(false, std::memory_order_release);
     }
 

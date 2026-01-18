@@ -511,7 +511,7 @@ namespace
 
 		DXGI_FORMAT operator()(TEXTURE_FORMAT Fmt)const
 		{
-			VERIFY_EXPR(Fmt < FmtMap.size());
+			ASSERT_EXPR(Fmt < FmtMap.size());
 			return Fmt < FmtMap.size() ? FmtMap[Fmt] : DXGI_FORMAT_UNKNOWN;
 		}
 
@@ -843,7 +843,7 @@ namespace
 		_In_ const uint8* bitData,
 		_Out_ TextureSubResData* initData)
 	{
-		VERIFY_EXPR(bitData != nullptr && initData != nullptr);
+		ASSERT_EXPR(bitData != nullptr && initData != nullptr);
 
 		const uint8* pSrcBits = bitData;
 		const uint8* pEndBits = bitData + bitSize;
@@ -864,7 +864,7 @@ namespace
 
 				if (mip < dstMipCount)
 				{
-					VERIFY_EXPR(index < size_t{ dstMipCount } *size_t{ arraySize });
+					ASSERT_EXPR(index < size_t{ dstMipCount } *size_t{ arraySize });
 					initData[index].pData = reinterpret_cast<const void*>(pSrcBits);
 					initData[index].Stride = static_cast<uint32>(RowBytes);
 					initData[index].DepthStride = static_cast<uint32>(NumBytes);
@@ -1063,7 +1063,7 @@ namespace shz
 				d3d11ResDim = D3D11_RESOURCE_DIMENSION_TEXTURE2D;
 			}
 
-			VERIFY_EXPR(BitsPerPixel(dxgiFormat) != 0);
+			ASSERT_EXPR(BitsPerPixel(dxgiFormat) != 0);
 		}
 
 		// Bound sizes (for security purposes we don't trust DDS file metadata larger than the D3D 11.x hardware requirements)
@@ -1130,7 +1130,7 @@ namespace shz
 	{
 		if (pFileStream == nullptr)
 		{
-			DEV_ERROR("Output file stream must not be null");
+			ASSERT(false, "Output file stream must not be null");
 			return false;
 		}
 
@@ -1141,8 +1141,8 @@ namespace shz
 		}
 
 		const uint32 ArraySize = Desc.GetArraySize();
-		VERIFY(TexData.NumSubresources == Desc.MipLevels * ArraySize, "Incorrect number of subresources");
-		VERIFY_EXPR(TexData.pSubResources != nullptr);
+		ASSERT(TexData.NumSubresources == Desc.MipLevels * ArraySize, "Incorrect number of subresources");
+		ASSERT_EXPR(TexData.pSubResources != nullptr);
 
 		uint32 Magic = MAKEFOURCC('D', 'D', 'S', ' ');
 
@@ -1178,7 +1178,7 @@ namespace shz
 			break;
 
 		default:
-			UNEXPECTED("Unexpected texture dimension");
+			ASSERT(false, "Unexpected texture dimension");
 			return false;
 		}
 
@@ -1198,10 +1198,10 @@ namespace shz
 			{
 				const MipLevelProperties MipProps = GetMipLevelProperties(Desc, Mip);
 				const TextureSubResData& SubRes = TexData.pSubResources[Slice * Desc.MipLevels + Mip];
-				VERIFY_EXPR(SubRes.pData != nullptr);
+				ASSERT_EXPR(SubRes.pData != nullptr);
 				const uint8* pData = static_cast<const uint8*>(SubRes.pData);
 				const uint64 Stride = SubRes.Stride;
-				VERIFY(Stride >= MipProps.RowSize, "Row stride is too small");
+				ASSERT(Stride >= MipProps.RowSize, "Row stride is too small");
 				for (uint32 row = 0; row < MipProps.StorageHeight / FmtAttribs.BlockHeight; ++row)
 				{
 					const void* pRowData = pData + Stride * row;

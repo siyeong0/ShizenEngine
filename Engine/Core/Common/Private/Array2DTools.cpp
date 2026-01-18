@@ -137,9 +137,9 @@ namespace shz
 		if (Width == 0 || Height == 0)
 			return;
 
-		DEV_CHECK_ERR(pData != nullptr, "Data pointer must not be null");
-		DEV_CHECK_ERR(Height == 1 || StrideInFloats >= Width, "Row stride (", StrideInFloats, ") must be at least ", Width);
-		DEV_CHECK_ERR(AlignDown(pData, alignof(float)) == pData, "Data pointer is not naturally aligned");
+		ASSERT(pData != nullptr, "Data pointer must not be null");
+		ASSERT(Height == 1 || StrideInFloats >= Width, "Row stride (", StrideInFloats, ") must be at least ", Width);
+		ASSERT(AlignDown(pData, alignof(float)) == pData, "Data pointer is not naturally aligned");
 
 		MinValue = MaxValue = pData[0];
 #if SHZAVX2_ENABLED

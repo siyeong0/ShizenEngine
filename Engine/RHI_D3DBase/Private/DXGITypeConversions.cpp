@@ -40,52 +40,52 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
     {
         case VT_FLOAT16:
         {
-            VERIFY(!bIsNormalized, "Floating point formats cannot be normalized");
+            ASSERT(!bIsNormalized, "Floating point formats cannot be normalized");
             switch (NumComponents)
             {
                 case 1: return DXGI_FORMAT_R16_FLOAT;
                 case 2: return DXGI_FORMAT_R16G16_FLOAT;
                 case 4: return DXGI_FORMAT_R16G16B16A16_FLOAT;
-                default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
             }
         }
 
         case VT_FLOAT32:
         {
-            VERIFY(!bIsNormalized, "Floating point formats cannot be normalized");
+            ASSERT(!bIsNormalized, "Floating point formats cannot be normalized");
             switch (NumComponents)
             {
                 case 1: return DXGI_FORMAT_R32_FLOAT;
                 case 2: return DXGI_FORMAT_R32G32_FLOAT;
                 case 3: return DXGI_FORMAT_R32G32B32_FLOAT;
                 case 4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
-                default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
             }
         }
 
         case VT_INT32:
         {
-            VERIFY(!bIsNormalized, "32-bit UNORM formats are not supported. Use R32_FLOAT instead");
+            ASSERT(!bIsNormalized, "32-bit UNORM formats are not supported. Use R32_FLOAT instead");
             switch (NumComponents)
             {
                 case 1: return DXGI_FORMAT_R32_SINT;
                 case 2: return DXGI_FORMAT_R32G32_SINT;
                 case 3: return DXGI_FORMAT_R32G32B32_SINT;
                 case 4: return DXGI_FORMAT_R32G32B32A32_SINT;
-                default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
             }
         }
 
         case VT_UINT32:
         {
-            VERIFY(!bIsNormalized, "32-bit UNORM formats are not supported. Use R32_FLOAT instead");
+            ASSERT(!bIsNormalized, "32-bit UNORM formats are not supported. Use R32_FLOAT instead");
             switch (NumComponents)
             {
                 case 1: return DXGI_FORMAT_R32_UINT;
                 case 2: return DXGI_FORMAT_R32G32_UINT;
                 case 3: return DXGI_FORMAT_R32G32B32_UINT;
                 case 4: return DXGI_FORMAT_R32G32B32A32_UINT;
-                default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
             }
         }
 
@@ -98,7 +98,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R16_SNORM;
                     case 2: return DXGI_FORMAT_R16G16_SNORM;
                     case 4: return DXGI_FORMAT_R16G16B16A16_SNORM;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
             else
@@ -108,7 +108,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R16_SINT;
                     case 2: return DXGI_FORMAT_R16G16_SINT;
                     case 4: return DXGI_FORMAT_R16G16B16A16_SINT;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
         }
@@ -122,7 +122,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R16_UNORM;
                     case 2: return DXGI_FORMAT_R16G16_UNORM;
                     case 4: return DXGI_FORMAT_R16G16B16A16_UNORM;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
             else
@@ -132,7 +132,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R16_UINT;
                     case 2: return DXGI_FORMAT_R16G16_UINT;
                     case 4: return DXGI_FORMAT_R16G16B16A16_UINT;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
         }
@@ -146,7 +146,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R8_SNORM;
                     case 2: return DXGI_FORMAT_R8G8_SNORM;
                     case 4: return DXGI_FORMAT_R8G8B8A8_SNORM;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
             else
@@ -156,7 +156,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R8_SINT;
                     case 2: return DXGI_FORMAT_R8G8_SINT;
                     case 4: return DXGI_FORMAT_R8G8B8A8_SINT;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
         }
@@ -170,7 +170,7 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R8_UNORM;
                     case 2: return DXGI_FORMAT_R8G8_UNORM;
                     case 4: return DXGI_FORMAT_R8G8B8A8_UNORM;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
             else
@@ -180,12 +180,12 @@ DXGI_FORMAT TypeToDXGI_Format(VALUE_TYPE ValType, uint32 NumComponents, bool bIs
                     case 1: return DXGI_FORMAT_R8_UINT;
                     case 2: return DXGI_FORMAT_R8G8_UINT;
                     case 4: return DXGI_FORMAT_R8G8B8A8_UINT;
-                    default: UNEXPECTED("Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
+                    default: ASSERT(false, "Unsupported number of components"); return DXGI_FORMAT_UNKNOWN;
                 }
             }
         }
 
-        default: UNEXPECTED("Unsupported format"); return DXGI_FORMAT_UNKNOWN;
+        default: ASSERT(false, "Unsupported format"); return DXGI_FORMAT_UNKNOWN;
     }
 }
 
@@ -222,7 +222,7 @@ DXGI_FORMAT CorrectDXGIFormat(DXGI_FORMAT DXGIFormat, uint32 BindFlags)
                 break;
 
             default:
-                UNEXPECTED("Unsupported depth-stencil format");
+                ASSERT(false, "Unsupported depth-stencil format");
                 break;
         }
     }
@@ -426,14 +426,14 @@ DXGI_FORMAT TexFormatToDXGI_Format(TEXTURE_FORMAT TexFormat, uint32 BindFlags)
     if (TexFormat >= TEX_FORMAT_UNKNOWN && TexFormat < TEX_FORMAT_NUM_FORMATS)
     {
         DXGI_FORMAT DXGIFormat = FmtToDXGIFmtMap[TexFormat];
-        VERIFY(TexFormat == TEX_FORMAT_UNKNOWN || TexFormat > TEX_FORMAT_BC7_UNORM_SRGB || DXGIFormat != DXGI_FORMAT_UNKNOWN, "Unsupported texture format");
+        ASSERT(TexFormat == TEX_FORMAT_UNKNOWN || TexFormat > TEX_FORMAT_BC7_UNORM_SRGB || DXGIFormat != DXGI_FORMAT_UNKNOWN, "Unsupported texture format");
         if (BindFlags != 0)
             DXGIFormat = CorrectDXGIFormat(DXGIFormat, BindFlags);
         return DXGIFormat;
     }
     else
     {
-        UNEXPECTED("Texture format (", TexFormat, ") is out of allowed range [0, ", TEX_FORMAT_NUM_FORMATS - 1, "]");
+        ASSERT(false, "Texture format (", TexFormat, ") is out of allowed range [0, ", TEX_FORMAT_NUM_FORMATS - 1, "]");
         return DXGI_FORMAT_UNKNOWN;
     }
 }
@@ -446,7 +446,7 @@ public:
         for (TEXTURE_FORMAT fmt = TEX_FORMAT_UNKNOWN; fmt < TEX_FORMAT_NUM_FORMATS; fmt = static_cast<TEXTURE_FORMAT>(fmt + 1))
         {
             DXGI_FORMAT DXGIFmt = TexFormatToDXGI_Format(fmt);
-            VERIFY_EXPR(DXGIFmt <= DXGI_FORMAT_B4G4R4A4_UNORM);
+            ASSERT_EXPR(DXGIFmt <= DXGI_FORMAT_B4G4R4A4_UNORM);
             DXGIFmtToFmtMap[DXGIFmt] = fmt;
         }
     }
@@ -461,13 +461,13 @@ TEXTURE_FORMAT DXGI_FormatToTexFormat(DXGI_FORMAT DXGIFormat)
     if (DXGIFormat >= DXGI_FORMAT_UNKNOWN && DXGIFormat <= DXGI_FORMAT_BC7_UNORM_SRGB)
     {
         TEXTURE_FORMAT Format = DXGIFmtToFmtMap[DXGIFormat];
-        VERIFY(DXGIFormat == DXGI_FORMAT_UNKNOWN || Format != TEX_FORMAT_UNKNOWN, "Unsupported texture format");
-        VERIFY_EXPR(DXGIFormat == TexFormatToDXGI_Format(Format));
+        ASSERT(DXGIFormat == DXGI_FORMAT_UNKNOWN || Format != TEX_FORMAT_UNKNOWN, "Unsupported texture format");
+        ASSERT_EXPR(DXGIFormat == TexFormatToDXGI_Format(Format));
         return Format;
     }
     else
     {
-        UNEXPECTED("DXGI texture format (", DXGIFormat, ") is out of allowed range [0, ", DXGI_FORMAT_BC7_UNORM_SRGB, "]");
+        ASSERT(false, "DXGI texture format (", DXGIFormat, ") is out of allowed range [0, ", DXGI_FORMAT_BC7_UNORM_SRGB, "]");
         return TEX_FORMAT_UNKNOWN;
     }
 }

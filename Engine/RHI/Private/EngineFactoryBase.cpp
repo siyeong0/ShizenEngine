@@ -30,8 +30,8 @@
 #include <array>
 
 #include "PrivateConstants.h"
-#include "Primitives/Errors.hpp"
 #include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/RHI/Interface/IBuffer.h"
 #include "Engine/RHI/Interface/ITexture.h"
 

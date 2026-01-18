@@ -86,7 +86,7 @@ namespace shz
 		{
 			if (pDataBlob == nullptr)
 			{
-				DEV_ERROR("Data blob must not be null");
+				ASSERT(false, "Data blob must not be null");
 				return false;
 			}
 
@@ -121,8 +121,8 @@ namespace shz
 
 		virtual void SHZ_CALL_TYPE GetBytecode(const ShaderCreateInfo& ShaderCI, IDataBlob** ppByteCode) override final
 		{
-			DEV_CHECK_ERR(ppByteCode != nullptr, "ppByteCode must not be null.");
-			DEV_CHECK_ERR(*ppByteCode == nullptr, "*ppByteCode is not null. Make sure you are not overwriting reference to an existing object as this may result in memory leaks.");
+			ASSERT(ppByteCode != nullptr, "ppByteCode must not be null.");
+			ASSERT(*ppByteCode == nullptr, "*ppByteCode is not null. Make sure you are not overwriting reference to an existing object as this may result in memory leaks.");
 			const XXH128Hash Hash = ComputeHash(ShaderCI);
 
 			const auto Iter = m_HashMap.find(Hash);
@@ -135,7 +135,7 @@ namespace shz
 
 		virtual void SHZ_CALL_TYPE AddBytecode(const ShaderCreateInfo& ShaderCI, IDataBlob* pByteCode) override final
 		{
-			DEV_CHECK_ERR(pByteCode != nullptr, "pByteCode must not be null.");
+			ASSERT(pByteCode != nullptr, "pByteCode must not be null.");
 			const XXH128Hash Hash = ComputeHash(ShaderCI);
 
 			const auto Iter = m_HashMap.emplace(Hash, pByteCode);
@@ -151,8 +151,8 @@ namespace shz
 
 		virtual void SHZ_CALL_TYPE Store(IDataBlob** ppDataBlob) override final
 		{
-			DEV_CHECK_ERR(ppDataBlob != nullptr, "ppDataBlob must not be null.");
-			DEV_CHECK_ERR(*ppDataBlob == nullptr, "*ppDataBlob is not null. Make sure you are not overwriting reference to an existing object as this may result in memory leaks.");
+			ASSERT(ppDataBlob != nullptr, "ppDataBlob must not be null.");
+			ASSERT(*ppDataBlob == nullptr, "*ppDataBlob is not null. Make sure you are not overwriting reference to an existing object as this may result in memory leaks.");
 
 			auto WriteData = [&](auto& Stream) //
 				{
@@ -180,7 +180,7 @@ namespace shz
 
 			Serializer<SerializerMode::Write> WriteStream{ Memory };
 			WriteData(WriteStream);
-			VERIFY_EXPR(WriteStream.IsEnded());
+			ASSERT_EXPR(WriteStream.IsEnded());
 
 			*ppDataBlob = DataBlobImpl::Create(Memory.Size(), Memory.Ptr()).Detach();
 		}

@@ -139,12 +139,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Public\DebugOutput.h" />
+    <ClInclude Include="Common\Public\Errors.hpp" />
     <ClInclude Include="Math\AdvancedMath.h" />
     <ClInclude Include="Common\Public\Array2DTools.hpp" />
     <ClInclude Include="Common\Public\AsyncInitializer.hpp" />
     <ClInclude Include="Common\Public\BasicFileStream.hpp" />
     <ClInclude Include="Common\Public\BasicFileSystem.hpp" />
-    <ClInclude Include="Common\Public\BasicPlatformDebug.hpp" />
     <ClInclude Include="Common\Public\BasicPlatformMisc.hpp" />
     <ClInclude Include="Common\Public\CallbackWrapper.hpp" />
     <ClInclude Include="Common\Public\Cast.hpp" />
@@ -217,8 +218,8 @@
     <ClCompile Include="Common\Private\Array2DTools.cpp" />
     <ClCompile Include="Common\Private\BasicFileStream.cpp" />
     <ClCompile Include="Common\Private\BasicFileSystem.cpp" />
-    <ClCompile Include="Common\Private\BasicPlatformDebug.cpp" />
     <ClCompile Include="Common\Private\BasicPlatformMisc.cpp" />
+    <ClCompile Include="Common\Private\DebugOutput.cpp" />
     <ClCompile Include="Memory\Private\DataBlobImpl.cpp" />
     <ClCompile Include="Memory\Private\DefaultRawMemoryAllocator.cpp" />
     <ClCompile Include="Memory\Private\EngineMemory.cpp" />

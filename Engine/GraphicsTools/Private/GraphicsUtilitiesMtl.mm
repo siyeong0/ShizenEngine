@@ -48,11 +48,11 @@ void CreateSparseTextureMtl(IRenderDevice*     pDevice,
         
     if (pMemory == nullptr)
     {
-        UNEXPECTED("Device memory must not be null");
+        ASSERT(false, "Device memory must not be null");
         return;
     }
     
-    DEV_CHECK_ERR(TexDesc.Usage == USAGE_SPARSE, "This function should be used to create sparse textures.");
+    ASSERT(TexDesc.Usage == USAGE_SPARSE, "This function should be used to create sparse textures.");
     
     pDeviceMtl->CreateSparseTexture(TexDesc, pMemory, ppTexture);
 }

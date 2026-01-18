@@ -30,7 +30,7 @@
  // Defines shz::IArchiverFactory interface and related structures.
 
 #include "Primitives/Object.h"
-#include "Primitives/DebugOutput.h"
+#include "Engine/Core/Common/Public/DebugOutput.h"
 #include "SerializationDevice.h"
 
 namespace shz
@@ -294,11 +294,6 @@ namespace shz
 
 		// \param [in]     MessageCallback - Debug message callback function to use instead of the default one.
 		virtual void SetMessageCallback(DebugMessageCallbackType MessageCallback) const = 0;
-
-		// Sets whether to break program execution on assertion failure.
-
-		// \param [in]     BreakOnError - Whether to break on assertion failure.
-		virtual void SetBreakOnError(bool BreakOnError) const = 0;
 
 		// Sets the memory allocator to be used by the archiver.
 

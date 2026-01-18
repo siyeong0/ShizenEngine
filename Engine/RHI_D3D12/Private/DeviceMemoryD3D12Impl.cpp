@@ -130,7 +130,7 @@ namespace shz
 				}
 				else
 				{
-					UNEXPECTED("unsupported resource type");
+					ASSERT(false, "unsupported resource type");
 				}
 			}
 
@@ -267,14 +267,14 @@ namespace shz
 		DeviceMemoryRangeD3D12 Range{};
 		if (PageIdx >= m_Pages.size())
 		{
-			DEV_ERROR("DeviceMemoryD3D12Impl::GetRange(): Offset is out of bounds of allocated space");
+			ASSERT(false, "DeviceMemoryD3D12Impl::GetRange(): Offset is out of bounds of allocated space");
 			return Range;
 		}
 
 		const uint64 OffsetInPage = Offset % m_Desc.PageSize;
 		if (OffsetInPage + Size > m_Desc.PageSize)
 		{
-			DEV_ERROR("DeviceMemoryD3D12Impl::GetRange(): Offset and Size must be inside a single page");
+			ASSERT(false, "DeviceMemoryD3D12Impl::GetRange(): Offset and Size must be inside a single page");
 			return Range;
 		}
 

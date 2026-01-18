@@ -68,7 +68,7 @@ namespace shz
 		IndexWrapper& operator=(const T& Value)
 		{
 			m_Value = static_cast<IndexType>(Value);
-			VERIFY(static_cast<T>(m_Value) == Value, "Not enough bits to store value ", Value);
+			ASSERT(static_cast<T>(m_Value) == Value, "Not enough bits to store value ", Value);
 			return *this;
 		}
 

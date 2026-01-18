@@ -36,8 +36,8 @@
 #include <vector>
 #include <cstring>
 #include <memory>
-#include "Primitives/Errors.hpp"
 #include "Primitives/IMemoryAllocator.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Memory/Public/STDAllocator.hpp"
 
 namespace shz

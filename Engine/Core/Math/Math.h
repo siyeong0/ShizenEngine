@@ -92,7 +92,7 @@ namespace shz
 	template <typename T>
 	T WrapToRange(T Value, T Min, T Range)
 	{
-		VERIFY_EXPR(Range >= 0);
+		ASSERT_EXPR(Range >= 0);
 		if (Range <= 0)
 			return Min;
 

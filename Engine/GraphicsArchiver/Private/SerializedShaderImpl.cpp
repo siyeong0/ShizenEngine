@@ -87,7 +87,7 @@ namespace shz
 #endif
 
 			case ARCHIVE_DEVICE_DATA_FLAG_NONE:
-				UNEXPECTED("ARCHIVE_DEVICE_DATA_FLAG_NONE(0) should never occur");
+				ASSERT(false, "ARCHIVE_DEVICE_DATA_FLAG_NONE(0) should never occur");
 				break;
 
 			default:
@@ -136,7 +136,7 @@ namespace shz
 		{
 			Serializer<SerializerMode::Write> Ser{ ShaderData };
 			ShaderSerializer<SerializerMode::Write>::SerializeCI(Ser, CI);
-			VERIFY_EXPR(Ser.IsEnded());
+			ASSERT_EXPR(Ser.IsEnded());
 		}
 
 		return ShaderData;
@@ -144,7 +144,7 @@ namespace shz
 
 	SerializedData SerializedShaderImpl::GetDeviceData(DeviceType Type) const
 	{
-		DEV_CHECK_ERR(!IsCompiling(), "Device data is not available until compilation is complete. Use GetStatus() to check the shader status.");
+		ASSERT(!IsCompiling(), "Device data is not available until compilation is complete. Use GetStatus() to check the shader status.");
 
 		const std::unique_ptr<CompiledShader>& pCompiledShader = m_Shaders[static_cast<size_t>(Type)];
 		return pCompiledShader ? pCompiledShader->Serialize(GetCreateInfo()) : SerializedData{};
@@ -170,7 +170,7 @@ namespace shz
 			switch (Status)
 			{
 			case SHADER_STATUS_UNINITIALIZED:
-				UNEXPECTED("Shader status must not be uninitialized");
+				ASSERT(false, "Shader status must not be uninitialized");
 				break;
 
 			case SHADER_STATUS_COMPILING:
@@ -185,7 +185,7 @@ namespace shz
 				return SHADER_STATUS_FAILED;
 
 			default:
-				UNEXPECTED("Unexpected shader status");
+				ASSERT(false, "Unexpected shader status");
 				break;
 			}
 		}

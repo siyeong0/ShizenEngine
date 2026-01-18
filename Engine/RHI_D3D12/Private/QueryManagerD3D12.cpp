@@ -57,7 +57,7 @@ namespace shz
 			static_assert(QUERY_TYPE_NUM_TYPES == 6, "Not all QUERY_TYPE enum values are tested");
 
 		default:
-			UNEXPECTED("Unexpected query type");
+			ASSERT(false, "Unexpected query type");
 			return 0;
 		}
 		
@@ -68,7 +68,7 @@ namespace shz
 		QUERY_TYPE                   QueryType,
 		uint32& CurrResolveBufferOffset)
 	{
-		VERIFY_EXPR(!m_pd3d12QueryHeap);
+		ASSERT_EXPR(!m_pd3d12QueryHeap);
 
 		m_Type = QueryType;
 		m_QueryCount = d3d12HeapDesc.Count;
@@ -104,10 +104,10 @@ namespace shz
 
 	void QueryManagerD3D12::QueryHeapInfo::Release(uint32 Index)
 	{
-		VERIFY(Index < m_QueryCount, "Query index ", Index, " is out of range");
+		ASSERT(Index < m_QueryCount, "Query index ", Index, " is out of range");
 
 		std::lock_guard<std::mutex> Lock{ m_AvailableQueriesMtx };
-		VERIFY(std::find(m_AvailableQueries.begin(), m_AvailableQueries.end(), Index) == m_AvailableQueries.end(),
+		ASSERT(std::find(m_AvailableQueries.begin(), m_AvailableQueries.end(), Index) == m_AvailableQueries.end(),
 			"Index ", Index, " already present in available queries list");
 		m_AvailableQueries.push_back(Index);
 	}
@@ -172,7 +172,7 @@ namespace shz
 
 			QueryHeapInfo& HeapInfo = m_Heaps[QueryType];
 			HeapInfo.Init(pd3d12Device, d3d12HeapDesc, QueryType, ResolveBufferOffset);
-			VERIFY_EXPR(!HeapInfo.IsNull() && HeapInfo.GetType() == QueryType && HeapInfo.GetQueryCount() == d3d12HeapDesc.Count);
+			ASSERT_EXPR(!HeapInfo.IsNull() && HeapInfo.GetType() == QueryType && HeapInfo.GetQueryCount() == d3d12HeapDesc.Count);
 		}
 
 		if (ResolveBufferOffset > 0)
@@ -245,8 +245,8 @@ namespace shz
 	{
 		const D3D12_QUERY_TYPE d3d12QueryType = QueryTypeToD3D12QueryType(Type);
 		const QueryHeapInfo& HeapInfo = m_Heaps[Type];
-		VERIFY_EXPR(HeapInfo.GetType() == Type);
-		VERIFY(Index < HeapInfo.GetQueryCount(), "Query index ", Index, " is out of range");
+		ASSERT_EXPR(HeapInfo.GetType() == Type);
+		ASSERT(Index < HeapInfo.GetQueryCount(), "Query index ", Index, " is out of range");
 
 		Ctx.BeginQuery(HeapInfo.GetD3D12QueryHeap(), d3d12QueryType, Index);
 	}
@@ -255,9 +255,9 @@ namespace shz
 	{
 		const D3D12_QUERY_TYPE d3d12QueryType = QueryTypeToD3D12QueryType(Type);
 		const QueryHeapInfo& HeapInfo = m_Heaps[Type];
-		VERIFY_EXPR(HeapInfo.GetType() == Type);
+		ASSERT_EXPR(HeapInfo.GetType() == Type);
 
-		VERIFY(Index < HeapInfo.GetQueryCount(), "Query index ", Index, " is out of range");
+		ASSERT(Index < HeapInfo.GetQueryCount(), "Query index ", Index, " is out of range");
 		Ctx.EndQuery(HeapInfo.GetD3D12QueryHeap(), d3d12QueryType, Index);
 
 		// https://microsoft.github.io/DirectX-Specs/d3d/CountersAndQueries.html#resolvequerydata
@@ -267,9 +267,9 @@ namespace shz
 	void QueryManagerD3D12::ReadQueryData(QUERY_TYPE Type, uint32 Index, void* pDataPtr, uint32 DataSize) const
 	{
 		const QueryHeapInfo& HeapInfo = m_Heaps[Type];
-		VERIFY_EXPR(HeapInfo.GetType() == Type);
+		ASSERT_EXPR(HeapInfo.GetType() == Type);
 		const uint32 QueryDataSize = GetQueryDataSize(Type);
-		VERIFY_EXPR(QueryDataSize == DataSize);
+		ASSERT_EXPR(QueryDataSize == DataSize);
 		const uint32 Offset = HeapInfo.GetResolveBufferOffset(Index);
 		D3D12_RANGE  ReadRange;
 		ReadRange.Begin = Offset;

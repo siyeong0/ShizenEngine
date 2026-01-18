@@ -116,12 +116,12 @@ namespace shz
 		// \param MapFlags - Additional map flags, see shz::MAP_FLAGS.
 		void Map(IDeviceContext* pContext, IBuffer* pBuffer, MAP_TYPE MapType, MAP_FLAGS MapFlags)
 		{
-			VERIFY(!m_pBuffer && !m_pMappedData && !m_pContext, "Object already mapped");
+			ASSERT(!m_pBuffer && !m_pMappedData && !m_pContext, "Object already mapped");
 			Unmap();
 #ifdef SHZ_DEBUG
 			{
 				auto& BuffDesc = pBuffer->GetDesc();
-				VERIFY(sizeof(DataType) <= BuffDesc.Size, "Data type size exceeds buffer size");
+				ASSERT(sizeof(DataType) <= BuffDesc.Size, "Data type size exceeds buffer size");
 			}
 #endif
 			pContext->MapBuffer(pBuffer, MapType, MapFlags, (void*&)m_pMappedData);

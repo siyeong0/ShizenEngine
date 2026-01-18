@@ -120,7 +120,7 @@ void ValidateTextureDesc(const TextureDesc& Desc, const IRenderDevice* pDevice) 
             MaxDim = std::max(Desc.Width, Desc.Height);
         else if (Desc.Is3D())
             MaxDim = std::max(std::max(Desc.Width, Desc.Height), Desc.Depth);
-        DEV_CHECK_ERR(MaxDim >= (1U << (Desc.MipLevels - 1)), "Texture '", Desc.Name ? Desc.Name : "", "': Incorrect number of Mip levels (", Desc.MipLevels, ").");
+        ASSERT(MaxDim >= (1U << (Desc.MipLevels - 1)), "Texture '", Desc.Name ? Desc.Name : "", "': Incorrect number of Mip levels (", Desc.MipLevels, ").");
     }
 #endif
 
@@ -351,7 +351,7 @@ void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 S
     uint32 MipWidth = std::max(TexDesc.Width >> MipLevel, 1U);
     if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
     {
-        VERIFY_EXPR((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0);
+        ASSERT_EXPR((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0);
         uint32 BlockAlignedMipWidth = (MipWidth + (FmtAttribs.BlockWidth - 1)) & ~(FmtAttribs.BlockWidth - 1);
         VERIFY_TEX_PARAMS(Box.MaxX <= BlockAlignedMipWidth, "Region max X coordinate (", Box.MaxX, ") is out of allowed range [0, ", BlockAlignedMipWidth, "].");
         VERIFY_TEX_PARAMS((Box.MinX % FmtAttribs.BlockWidth) == 0, "For compressed formats, the region min X coordinate (", Box.MinX, ") must be a multiple of block width (", uint32{FmtAttribs.BlockWidth}, ").");
@@ -366,7 +366,7 @@ void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 S
         uint32 MipHeight = std::max(TexDesc.Height >> MipLevel, 1U);
         if (FmtAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED)
         {
-            VERIFY_EXPR((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0);
+            ASSERT_EXPR((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0);
             uint32 BlockAlignedMipHeight = (MipHeight + (FmtAttribs.BlockHeight - 1)) & ~(FmtAttribs.BlockHeight - 1);
             VERIFY_TEX_PARAMS(Box.MaxY <= BlockAlignedMipHeight, "Region max Y coordinate (", Box.MaxY, ") is out of allowed range [0, ", BlockAlignedMipHeight, "].");
             VERIFY_TEX_PARAMS((Box.MinY % FmtAttribs.BlockHeight) == 0, "For compressed formats, the region min Y coordinate (", Box.MinY, ") must be a multiple of block height (", uint32{FmtAttribs.BlockHeight}, ").");
@@ -391,7 +391,7 @@ void ValidateTextureRegion(const TextureDesc& TexDesc, uint32 MipLevel, uint32 S
 
 void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, uint32 Slice, const IBox& DstBox, const TextureSubResData& SubresData)
 {
-    VERIFY((SubresData.pData != nullptr) ^ (SubresData.pSrcBuffer != nullptr), "Either CPU data pointer (pData) or GPU buffer (pSrcBuffer) must not be null, but not both.");
+    ASSERT((SubresData.pData != nullptr) ^ (SubresData.pSrcBuffer != nullptr), "Either CPU data pointer (pData) or GPU buffer (pSrcBuffer) must not be null, but not both.");
     ValidateTextureRegion(TexDesc, MipLevel, Slice, DstBox);
 
 #ifdef SHZ_DEBUG
@@ -409,8 +409,8 @@ void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, ui
     {
         // Align update region size by the block size. This is only necessary when updating
         // coarse mip levels. Otherwise UpdateRegionWidth/Height should be multiples of block size
-        VERIFY_EXPR((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0);
-        VERIFY_EXPR((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0);
+        ASSERT_EXPR((FmtAttribs.BlockWidth & (FmtAttribs.BlockWidth - 1)) == 0);
+        ASSERT_EXPR((FmtAttribs.BlockHeight & (FmtAttribs.BlockHeight - 1)) == 0);
         UpdateRegionWidth  = (UpdateRegionWidth + (FmtAttribs.BlockWidth - 1)) & ~(FmtAttribs.BlockWidth - 1);
         UpdateRegionHeight = (UpdateRegionHeight + (FmtAttribs.BlockHeight - 1)) & ~(FmtAttribs.BlockHeight - 1);
         RowSize            = UpdateRegionWidth / uint32{FmtAttribs.BlockWidth} * uint32{FmtAttribs.ComponentSize};
@@ -421,15 +421,15 @@ void ValidateUpdateTextureParams(const TextureDesc& TexDesc, uint32 MipLevel, ui
         RowSize  = UpdateRegionWidth * uint32{FmtAttribs.ComponentSize} * uint32{FmtAttribs.NumComponents};
         RowCount = UpdateRegionHeight;
     }
-    DEV_CHECK_ERR(SubresData.Stride >= RowSize, "Source data stride (", SubresData.Stride, ") is below the image row size (", RowSize, ").");
+    ASSERT(SubresData.Stride >= RowSize, "Source data stride (", SubresData.Stride, ") is below the image row size (", RowSize, ").");
     const uint64 PlaneSize = SubresData.Stride * RowCount;
-    DEV_CHECK_ERR(UpdateRegionDepth == 1 || SubresData.DepthStride >= PlaneSize, "Source data depth stride (", SubresData.DepthStride, ") is below the image plane size (", PlaneSize, ").");
+    ASSERT(UpdateRegionDepth == 1 || SubresData.DepthStride >= PlaneSize, "Source data depth stride (", SubresData.DepthStride, ") is below the image plane size (", PlaneSize, ").");
 #endif
 }
 
 void ValidateCopyTextureParams(const CopyTextureAttribs& CopyAttribs)
 {
-    VERIFY_EXPR(CopyAttribs.pSrcTexture != nullptr && CopyAttribs.pDstTexture != nullptr);
+    ASSERT_EXPR(CopyAttribs.pSrcTexture != nullptr && CopyAttribs.pDstTexture != nullptr);
     IBox                SrcBox;
     const TextureDesc& SrcTexDesc = CopyAttribs.pSrcTexture->GetDesc();
     const TextureDesc& DstTexDesc = CopyAttribs.pDstTexture->GetDesc();
@@ -526,7 +526,7 @@ void ValidatedAndCorrectTextureViewDesc(const TextureDesc& TexDesc, TextureViewD
                     ViewDesc.TextureDim = RESOURCE_DIM_TEX_2D_ARRAY;
                     break;
 
-                default: UNEXPECTED("Unexpected view type");
+                default: ASSERT(false, "Unexpected view type");
             }
         }
         else
@@ -617,7 +617,7 @@ void ValidatedAndCorrectTextureViewDesc(const TextureDesc& TexDesc, TextureViewD
             break;
 
         default:
-            UNEXPECTED("Unexpected texture type");
+            ASSERT(false, "Unexpected texture type");
             break;
     }
 
@@ -656,7 +656,7 @@ void ValidatedAndCorrectTextureViewDesc(const TextureDesc& TexDesc, TextureViewD
         }
 
         default:
-            UNEXPECTED("Unexpected texture dimension");
+            ASSERT(false, "Unexpected texture dimension");
     }
 
     if (GetTextureFormatAttribs(ViewDesc.Format).IsTypeless)

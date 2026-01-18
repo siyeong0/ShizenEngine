@@ -142,8 +142,8 @@ namespace shz
 
 		void SHZ_CALL_TYPE BindRayGenShader(const char* pShaderGroupName, const void* pData, uint32 DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
 
 			this->m_RayGenShaderRecord.resize(this->m_ShaderRecordStride, uint8{EmptyElem});
 			this->m_pPSO->CopyShaderHandle(pShaderGroupName, this->m_RayGenShaderRecord.data(), this->m_ShaderRecordStride);
@@ -156,8 +156,8 @@ namespace shz
 
 		void SHZ_CALL_TYPE BindMissShader(const char* pShaderGroupName, uint32 MissIndex, const void* pData, uint32 DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
 
 			const uint32 GroupSize = this->GetDevice()->GetAdapterInfo().RayTracing.ShaderGroupHandleSize;
 			const size_t Stride = this->m_ShaderRecordStride;
@@ -176,8 +176,8 @@ namespace shz
 			const void* pData,
 			uint32      DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
 
 			const size_t Stride = this->m_ShaderRecordStride;
 			const uint32 GroupSize = this->GetDevice()->GetAdapterInfo().RayTracing.ShaderGroupHandleSize;
@@ -204,22 +204,22 @@ namespace shz
 			const void* pData,
 			uint32       DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
-			VERIFY_EXPR(pTLAS != nullptr);
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR(pTLAS != nullptr);
 
 			TopLevelASImplType* const pTLASImpl = ClassPtrCast<TopLevelASImplType>(pTLAS);
 			const TLASBuildInfo       Info = pTLASImpl->GetBuildInfo();
 			const TLASInstanceDesc    Desc = pTLASImpl->GetInstanceDesc(pInstanceName);
 
-			VERIFY_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY);
-			VERIFY_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
-			VERIFY_EXPR(Desc.ContributionToHitGroupIndex != ~0u);
-			VERIFY_EXPR(Desc.pBLAS != nullptr);
+			ASSERT_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY);
+			ASSERT_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
+			ASSERT_EXPR(Desc.ContributionToHitGroupIndex != ~0u);
+			ASSERT_EXPR(Desc.pBLAS != nullptr);
 
 			const uint32 InstanceOffset = Desc.ContributionToHitGroupIndex;
 			const uint32 GeometryIndex = Desc.pBLAS->GetGeometryIndex(pGeometryName);
-			VERIFY_EXPR(GeometryIndex != INVALID_INDEX);
+			ASSERT_EXPR(GeometryIndex != INVALID_INDEX);
 
 			const uint32 Index = InstanceOffset + GeometryIndex * Info.HitGroupStride + RayOffsetInHitGroupIndex;
 			const size_t Stride = this->m_ShaderRecordStride;
@@ -233,7 +233,7 @@ namespace shz
 			this->m_Changed = true;
 
 #ifdef SHZ_DEBUG
-			VERIFY_EXPR(Index >= Info.FirstContributionToHitGroupIndex && Index <= Info.LastContributionToHitGroupIndex);
+			ASSERT_EXPR(Index >= Info.FirstContributionToHitGroupIndex && Index <= Info.LastContributionToHitGroupIndex);
 			OnBindHitGroup(pTLASImpl, Index);
 #endif
 		}
@@ -247,19 +247,19 @@ namespace shz
 			const void* pData,
 			uint32       DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
-			VERIFY_EXPR(pTLAS != nullptr);
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR(pTLAS != nullptr);
 
 			TopLevelASImplType* const pTLASImpl = ClassPtrCast<TopLevelASImplType>(pTLAS);
 			const TLASBuildInfo       Info = pTLASImpl->GetBuildInfo();
 			const TLASInstanceDesc    Desc = pTLASImpl->GetInstanceDesc(pInstanceName);
 
-			VERIFY_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY ||
+			ASSERT_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY ||
 				Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_INSTANCE);
-			VERIFY_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
-			VERIFY_EXPR(Desc.ContributionToHitGroupIndex != INVALID_INDEX);
-			VERIFY_EXPR(Desc.pBLAS != nullptr);
+			ASSERT_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
+			ASSERT_EXPR(Desc.ContributionToHitGroupIndex != INVALID_INDEX);
+			ASSERT_EXPR(Desc.pBLAS != nullptr);
 
 			const uint32 InstanceOffset = Desc.ContributionToHitGroupIndex;
 			uint32       GeometryCount = 0;
@@ -269,7 +269,7 @@ namespace shz
 
 			case HIT_GROUP_BINDING_MODE_PER_GEOMETRY:     GeometryCount = Desc.pBLAS->GetActualGeometryCount(); break;
 			case HIT_GROUP_BINDING_MODE_PER_INSTANCE:     GeometryCount = 1;                                    break;
-			default:                                      UNEXPECTED("unknown binding mode");
+			default:                                      ASSERT(false, "unknown binding mode");
 
 			}
 
@@ -290,7 +290,7 @@ namespace shz
 				std::memcpy(this->m_HitGroupsRecord.data() + Offset + GroupSize, pData, DataSize);
 
 #ifdef SHZ_DEBUG
-				VERIFY_EXPR(Index >= Info.FirstContributionToHitGroupIndex && Index <= Info.LastContributionToHitGroupIndex);
+				ASSERT_EXPR(Index >= Info.FirstContributionToHitGroupIndex && Index <= Info.LastContributionToHitGroupIndex);
 				OnBindHitGroup(pTLASImpl, Index);
 #endif
 			}
@@ -304,16 +304,16 @@ namespace shz
 			const void* pData,
 			uint32       DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
-			VERIFY_EXPR(pTLAS != nullptr);
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR(pTLAS != nullptr);
 
 			TopLevelASImplType* pTLASImpl = ClassPtrCast<TopLevelASImplType>(pTLAS);
 			const TLASBuildInfo Info = pTLASImpl->GetBuildInfo();
-			VERIFY_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY ||
+			ASSERT_EXPR(Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_GEOMETRY ||
 				Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_INSTANCE ||
 				Info.BindingMode == HIT_GROUP_BINDING_MODE_PER_TLAS);
-			VERIFY_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
+			ASSERT_EXPR(RayOffsetInHitGroupIndex < Info.HitGroupStride);
 
 			const uint32 GroupSize = this->GetDevice()->GetAdapterInfo().RayTracing.ShaderGroupHandleSize;
 			const size_t Stride = this->m_ShaderRecordStride;
@@ -341,8 +341,8 @@ namespace shz
 			const void* pData,
 			uint32      DataSize) override final
 		{
-			VERIFY_EXPR((pData == nullptr) == (DataSize == 0));
-			VERIFY_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
+			ASSERT_EXPR((pData == nullptr) == (DataSize == 0));
+			ASSERT_EXPR((pData == nullptr) || (DataSize == this->m_ShaderRecordSize));
 
 			const uint32 GroupSize = this->GetDevice()->GetAdapterInfo().RayTracing.ShaderGroupHandleSize;
 			const size_t Offset = size_t{ CallableIndex } *size_t{ this->m_ShaderRecordStride };
@@ -481,7 +481,7 @@ namespace shz
 				BuffDesc.Size = BufSize;
 
 				this->GetDevice()->CreateBuffer(BuffDesc, nullptr, m_pBuffer.template DblPtr<IBuffer>());
-				VERIFY_EXPR(m_pBuffer != nullptr);
+				ASSERT_EXPR(m_pBuffer != nullptr);
 			}
 
 			if (m_pBuffer == nullptr)

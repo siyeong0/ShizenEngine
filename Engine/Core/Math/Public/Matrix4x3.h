@@ -114,8 +114,8 @@ namespace shz
 		static inline Matrix4x3 FromMatrix4x4(const Matrix4x4& M)
 		{
 			// Assumes affine (last column == [0,0,0,1]^T)
-			ASSERT(std::fabs(M._m03) < 1e-6f && std::fabs(M._m13) < 1e-6f && std::fabs(M._m23) < 1e-6f);
-			ASSERT(std::fabs(M._m33 - 1.0f) < 1e-6f);
+			ASSERT(std::fabs(M._m03) < 1e-6f && std::fabs(M._m13) < 1e-6f && std::fabs(M._m23) < 1e-6f, "Matrix is not affine.");
+			ASSERT(std::fabs(M._m33 - 1.0f) < 1e-6f, "Matrix is not affine.");
 
 			Matrix4x3 r{};
 			r._m00 = M._m00; r._m01 = M._m01; r._m02 = M._m02;

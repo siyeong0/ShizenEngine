@@ -25,8 +25,9 @@
  */
 
 #include "pch.h"
-#include "Engine/Core/Common/Public/BasicPlatformMisc.hpp"
 #include "Primitives/DebugUtilities.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
+#include "Engine/Core/Common/Public/BasicPlatformMisc.hpp"
 
 namespace shz
 {

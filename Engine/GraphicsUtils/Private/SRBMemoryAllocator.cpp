@@ -50,8 +50,8 @@ void SRBMemoryAllocator::Initialize(uint32              SRBAllocationGranularity
                                     uint32              ResourceCacheDataAllocatorCount,
                                     const size_t* const ResourceCacheDataSizes)
 {
-    VERIFY_EXPR(SRBAllocationGranularity > 1);
-    VERIFY(m_DataAllocators == nullptr && m_ShaderVariableDataAllocatorCount == 0 && m_ResourceCacheDataAllocatorCount == 0, "Allocator is already initialized");
+    ASSERT_EXPR(SRBAllocationGranularity > 1);
+    ASSERT(m_DataAllocators == nullptr && m_ShaderVariableDataAllocatorCount == 0 && m_ResourceCacheDataAllocatorCount == 0, "Allocator is already initialized");
 
     m_ShaderVariableDataAllocatorCount = ShaderVariableDataAllocatorCount;
     m_ResourceCacheDataAllocatorCount  = ResourceCacheDataAllocatorCount;

@@ -249,7 +249,7 @@ namespace shz
 
 			ULONG STDMETHODCALLTYPE Release(void) override
 			{
-				VERIFY(m_RefCount > 0, "Inconsistent call to Release()");
+				ASSERT(m_RefCount > 0, "Inconsistent call to Release()");
 				return m_RefCount.fetch_add(-1) - 1;
 			}
 
@@ -271,7 +271,7 @@ namespace shz
 
 			~DxcBlobWrapper()
 			{
-				VERIFY(m_RefCount.load() == 0, "Destroying object with outstanding references");
+				ASSERT(m_RefCount.load() == 0, "Destroying object with outstanding references");
 			}
 
 			virtual HRESULT STDMETHODCALLTYPE QueryInterface(const IID& riid, void** ppvObject) override final
@@ -341,13 +341,13 @@ namespace shz
 			if (CreateInstance == nullptr)
 				LOG_ERROR_AND_THROW("Failed to load DXCompiler");
 
-			DEV_CHECK_ERR(Attribs.Source != nullptr && Attribs.SourceLength > 0, "'Source' must not be null and 'SourceLength' must be greater than 0");
-			DEV_CHECK_ERR(Attribs.EntryPoint != nullptr, "'EntryPoint' must not be null");
-			DEV_CHECK_ERR(Attribs.Profile != nullptr, "'Profile' must not be null");
-			DEV_CHECK_ERR((Attribs.pDefines != nullptr) == (Attribs.DefinesCount > 0), "'DefinesCount' must be 0 if 'pDefines' is null");
-			DEV_CHECK_ERR((Attribs.pArgs != nullptr) == (Attribs.ArgsCount > 0), "'ArgsCount' must be 0 if 'pArgs' is null");
-			DEV_CHECK_ERR(Attribs.ppBlobOut != nullptr, "'ppBlobOut' must not be null");
-			DEV_CHECK_ERR(Attribs.ppCompilerOutput != nullptr, "'ppCompilerOutput' must not be null");
+			ASSERT(Attribs.Source != nullptr && Attribs.SourceLength > 0, "'Source' must not be null and 'SourceLength' must be greater than 0");
+			ASSERT(Attribs.EntryPoint != nullptr, "'EntryPoint' must not be null");
+			ASSERT(Attribs.Profile != nullptr, "'Profile' must not be null");
+			ASSERT((Attribs.pDefines != nullptr) == (Attribs.DefinesCount > 0), "'DefinesCount' must be 0 if 'pDefines' is null");
+			ASSERT((Attribs.pArgs != nullptr) == (Attribs.ArgsCount > 0), "'ArgsCount' must be 0 if 'pArgs' is null");
+			ASSERT(Attribs.ppBlobOut != nullptr, "'ppBlobOut' must not be null");
+			ASSERT(Attribs.ppCompilerOutput != nullptr, "'ppCompilerOutput' must not be null");
 
 			HRESULT hr;
 
@@ -475,7 +475,7 @@ namespace shz
 
 		ULONG STDMETHODCALLTYPE Release() override
 		{
-			VERIFY(m_RefCount > 0, "Inconsistent call to ReleaseStrongRef()");
+			ASSERT(m_RefCount > 0, "Inconsistent call to ReleaseStrongRef()");
 			long RefCount = m_RefCount.fetch_add(-1) - 1;
 			if (RefCount == 0)
 			{
@@ -550,19 +550,19 @@ namespace shz
 
 		HRESULT STDMETHODCALLTYPE GetInputParameterDesc(UINT ParameterIndex, D3D12_SIGNATURE_PARAMETER_DESC* pDesc) override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return E_FAIL;
 		}
 
 		HRESULT STDMETHODCALLTYPE GetOutputParameterDesc(UINT ParameterIndex, D3D12_SIGNATURE_PARAMETER_DESC* pDesc) override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return E_FAIL;
 		}
 
 		HRESULT STDMETHODCALLTYPE GetPatchConstantParameterDesc(UINT ParameterIndex, D3D12_SIGNATURE_PARAMETER_DESC* pDesc) override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return E_FAIL;
 		}
 
@@ -578,62 +578,62 @@ namespace shz
 
 		UINT STDMETHODCALLTYPE GetMovInstructionCount() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
 		UINT STDMETHODCALLTYPE GetMovcInstructionCount() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
 		UINT STDMETHODCALLTYPE GetConversionInstructionCount() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
 		UINT STDMETHODCALLTYPE GetBitwiseInstructionCount() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
 		D3D_PRIMITIVE STDMETHODCALLTYPE GetGSInputPrimitive() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return D3D_PRIMITIVE_UNDEFINED;
 		}
 
 		BOOL STDMETHODCALLTYPE IsSampleFrequencyShader() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return FALSE;
 		}
 
 		UINT STDMETHODCALLTYPE GetNumInterfaceSlots() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
 		HRESULT STDMETHODCALLTYPE GetMinFeatureLevel(D3D_FEATURE_LEVEL* pLevel) override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return E_FAIL;
 		}
 
 		UINT STDMETHODCALLTYPE GetThreadGroupSize(UINT* pSizeX, UINT* pSizeY, UINT* pSizeZ) override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			*pSizeX = *pSizeY = *pSizeZ = 0;
 			return 0;
 		}
 
 		UINT64 STDMETHODCALLTYPE GetRequiresFlags() override
 		{
-			UNEXPECTED("not supported");
+			ASSERT(false, "not supported");
 			return 0;
 		}
 
@@ -677,7 +677,7 @@ namespace shz
 			{
 				D3D12_LIBRARY_DESC Desc = {};
 				pd3d12LibRefl->GetDesc(&Desc);
-				DEV_CHECK_ERR(Desc.FunctionCount == 1, "Single-function library is expected");
+				ASSERT(Desc.FunctionCount == 1, "Single-function library is expected");
 			}
 #    endif
 
@@ -704,7 +704,7 @@ namespace shz
 	{
 		if (!IsLoaded())
 		{
-			UNEXPECTED("DX compiler is not loaded");
+			ASSERT(false, "DX compiler is not loaded");
 			return;
 		}
 
@@ -779,7 +779,7 @@ namespace shz
 		}
 		else
 		{
-			UNEXPECTED("Unknown compiler target");
+			ASSERT(false, "Unknown compiler target");
 		}
 		DxilArgs.push_back((ShaderCI.CompileFlags & SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR) != 0 ?
 			DXC_ARG_PACK_MATRIX_ROW_MAJOR :
@@ -879,7 +879,7 @@ namespace shz
 				case 14:                          ShaderType = SHADER_TYPE_AMPLIFICATION;    break;
 
 				default:
-					UNEXPECTED("Unknown shader type");
+					ASSERT(false, "Unknown shader type");
 				}
 			}
 
@@ -944,9 +944,9 @@ namespace shz
 						case SHADER_RESOURCE_TYPE_INPUT_ATTACHMENT: ExpectedResType = RES_TYPE_SRV;     break;
 						case SHADER_RESOURCE_TYPE_ACCEL_STRUCT:     ExpectedResType = RES_TYPE_SRV;     break;
 
-						default: UNEXPECTED("Unsupported shader resource type.");
+						default: ASSERT(false, "Unsupported shader resource type.");
 						}
-						DEV_CHECK_ERR(Ext.Type == ExpectedResType,
+						ASSERT(Ext.Type == ExpectedResType,
 							"There is a mismatch between the type of resource '", NameAndBinding.first.GetStr(),
 							"' expected by the client and the actual resource type.");
 					}
@@ -957,7 +957,7 @@ namespace shz
 					// produces BindCount == 0, but
 					//      ConstantBuffer<CBData> g_ConstantBuffers[]
 					// produces BindCount == UINT_MAX
-					VERIFY_EXPR((Ext.Type != RES_TYPE_CBV && ResDesc.BindCount == 0) ||
+					ASSERT_EXPR((Ext.Type != RES_TYPE_CBV && ResDesc.BindCount == 0) ||
 						(Ext.Type == RES_TYPE_CBV && ResDesc.BindCount == UINT_MAX) ||
 						NameAndBinding.second.ArraySize >= ResDesc.BindCount);
 				}
@@ -1103,7 +1103,7 @@ namespace shz
 
 				static const String i32 = "i32";
 			static const String i8 = "i8";
-			VERIFY_EXPR(Type == VT_INT32 || Type == VT_INT8);
+			ASSERT_EXPR(Type == VT_INT32 || Type == VT_INT8);
 			const String& TypeStr = Type == VT_INT32 ? i32 : i8;
 
 			// i32 -1
@@ -1245,7 +1245,7 @@ namespace shz
 			// !5 = !{i32 0,
 			//             ^
 
-			VERIFY_EXPR(Ext.RecordId == ~0u || Ext.RecordId == RecordId);
+			ASSERT_EXPR(Ext.RecordId == ~0u || Ext.RecordId == RecordId);
 			Ext.RecordId = RecordId;
 
 			// !"g_ColorBuffer", i32 -1, i32 -1,
@@ -1338,7 +1338,7 @@ namespace shz
 
 		const auto ReadResName = [&DXIL](size_t& pos, String& name) //
 			{
-				VERIFY_EXPR(pos > 0 && DXIL[pos - 1] == '"');
+				ASSERT_EXPR(pos > 0 && DXIL[pos - 1] == '"');
 				const size_t startPos = pos;
 				for (; pos < DXIL.size(); ++pos)
 				{
@@ -1527,7 +1527,7 @@ namespace shz
 						if (IsWordSymbol(c))
 							continue; // name is partially equal, continue searching
 
-						VERIFY_EXPR((c == '*' && ResInfo.first->second.ArraySize == 1) || (c == ']' && ResInfo.first->second.ArraySize >= 1));
+						ASSERT_EXPR((c == '*' && ResInfo.first->second.ArraySize == 1) || (c == ']' && ResInfo.first->second.ArraySize >= 1));
 
 						ResType = RES_TYPE_CBV;
 						break;
@@ -1577,8 +1577,8 @@ namespace shz
 			}
 			CHECK_PATCHING_ERROR(pResPair != nullptr && pExt != nullptr, "failed to find resource in ResourceMap");
 
-			VERIFY_EXPR(ResName.empty() || ResName == pResPair->first.GetStr());
-			VERIFY_EXPR(pExt->RecordId == ~0u || pExt->RecordId == RecordId);
+			ASSERT_EXPR(ResName.empty() || ResName == pResPair->first.GetStr());
+			ASSERT_EXPR(pExt->RecordId == ~0u || pExt->RecordId == RecordId);
 			pExt->RecordId = RecordId;
 
 			// Remap bindings.
@@ -1654,7 +1654,7 @@ namespace shz
 					if (ResInfo2.second.RecordId == RecordId &&
 						ResInfo2.second.Type == ResType)
 					{
-						VERIFY(&ResInfo2 == &ResInfo, "Multiple resources with the same RecordId (", RecordId, ") and type (", ResType, ") found");
+						ASSERT(&ResInfo2 == &ResInfo, "Multiple resources with the same RecordId (", RecordId, ") and type (", ResType, ") found");
 					}
 				}
 #endif
@@ -1681,7 +1681,7 @@ namespace shz
 						ResInfo2.second.SrcSpace == Space &&
 						ResInfo2.second.Type == ResType)
 					{
-						VERIFY(&ResInfo2 == &ResInfo, "Multiple resources with the same BindPoint (", BindPoint, "), register space (", Space, ") and type (", ResType, ") found");
+						ASSERT(&ResInfo2 == &ResInfo, "Multiple resources with the same BindPoint (", BindPoint, "), register space (", Space, ") and type (", ResType, ") found");
 					}
 				}
 #endif
@@ -1740,19 +1740,19 @@ namespace shz
 		const auto ReplaceBindPoint = [&DXIL](const ResourceExtendedInfo& ResInfo, const BindInfo& Bind, size_t IndexStartPos, size_t IndexEndPos) //
 			{
 				const String SrcIndexStr = DXIL.substr(IndexStartPos, IndexEndPos - IndexStartPos);
-				VERIFY_EXPR(IsNumber(SrcIndexStr.front()));
+				ASSERT_EXPR(IsNumber(SrcIndexStr.front()));
 
 				const uint32 SrcIndex = static_cast<uint32>(std::stoi(SrcIndexStr));
 
-				VERIFY_EXPR(ResInfo.SrcBindPoint != ~0u);
+				ASSERT_EXPR(ResInfo.SrcBindPoint != ~0u);
 
-				VERIFY(SrcIndex >= ResInfo.SrcBindPoint,
+				ASSERT(SrcIndex >= ResInfo.SrcBindPoint,
 					"Source index (", SrcIndex, ") can't be less than the source bind point. (", ResInfo.SrcBindPoint,
 					"). Either the byte code is corrupted or the source bind point is incorrect.");
 
 				// Texture2D              g_Textures[];        // SrcArraySize == 0
 				// ConstantBuffer<CBData> g_ConstantBuffers[]; // SrcArraySize == ~0u
-				VERIFY(ResInfo.SrcArraySize == ~0u || SrcIndex < ResInfo.SrcBindPoint + std::max(ResInfo.SrcArraySize, 1u),
+				ASSERT(ResInfo.SrcArraySize == ~0u || SrcIndex < ResInfo.SrcBindPoint + std::max(ResInfo.SrcArraySize, 1u),
 					"Source index (", SrcIndex, ") can't exceed the source bind point + array size. (", ResInfo.SrcBindPoint, " + ", ResInfo.SrcArraySize,
 					"). Either the byte code is corrupted or the source bind point is incorrect.");
 				// Texture2D g_Tex[4] : register(t8);
@@ -1855,7 +1855,7 @@ namespace shz
 			else
 			{
 				// first arg is a constant
-				VERIFY_EXPR(IsNumber(DXIL[pos]));
+				ASSERT_EXPR(IsNumber(DXIL[pos]));
 
 				ArgStart = pos;
 				for (; pos < DXIL.size(); ++pos)
@@ -1883,7 +1883,7 @@ namespace shz
 				if (DXIL[pos] == ' ' || DXIL[pos] == ',')
 					++IndexVarUsageCount;
 			}
-			DEV_CHECK_ERR(IndexVarUsageCount == 2, "Temp variable '", SrcIndexStr, "' with resource bind point is used more than 2 times, patching for this variable may lead to UB");
+			ASSERT(IndexVarUsageCount == 2, "Temp variable '", SrcIndexStr, "' with resource bind point is used more than 2 times, patching for this variable may lead to UB");
 #endif
 		}
 		else
@@ -1897,7 +1897,7 @@ namespace shz
 			pos += IndexLengthDelta;
 		else if (IndexLengthDelta < 0)
 			pos -= static_cast<size_t>(-IndexLengthDelta);
-		VERIFY_EXPR(DXIL[pos] == ',');
+		ASSERT_EXPR(DXIL[pos] == ',');
 
 #undef CHECK_PATCHING_ERROR
 	}
@@ -2121,9 +2121,9 @@ namespace shz
 			//  																		         ^                            ^
 			//                                                                              ResBindRecordStartPos            pos
 
-			VERIFY_EXPR(RangeMin >= 0 && (RangeMax == -1 || RangeMax >= RangeMin));
-			VERIFY_EXPR(Space >= 0);
-			VERIFY_EXPR(ResClass >= 0 && ResClass < 4);
+			ASSERT_EXPR(RangeMin >= 0 && (RangeMax == -1 || RangeMax >= RangeMin));
+			ASSERT_EXPR(Space >= 0);
+			ASSERT_EXPR(ResClass >= 0 && ResClass < 4);
 
 			// Register range and space are unique for each resource, so we can reliably find the resource by these values
 			const auto* pResInfo = FindResourceByBindPoint(ExtResMap, ResClass, static_cast<uint32>(RangeMin), static_cast<uint32>(Space));

@@ -38,7 +38,7 @@ namespace shz
 
 void DXCompilerLibrary::InitVersion()
 {
-    VERIFY_EXPR(m_DxcCreateInstance != nullptr);
+    ASSERT_EXPR(m_DxcCreateInstance != nullptr);
 
     CComPtr<IDxcValidator> pdxcValidator;
     if (SUCCEEDED(m_DxcCreateInstance(CLSID_DxcValidator, IID_PPV_ARGS(&pdxcValidator))))
@@ -53,12 +53,12 @@ void DXCompilerLibrary::InitVersion()
         }
         else
         {
-            UNEXPECTED("Failed to query IDxcVersionInfo interface from DXC validator");
+            ASSERT(false, "Failed to query IDxcVersionInfo interface from DXC validator");
         }
     }
     else
     {
-        UNEXPECTED("Failed to create DXC validator instance");
+        ASSERT(false, "Failed to create DXC validator instance");
     }
 }
 
@@ -75,7 +75,7 @@ void DXCompilerLibrary::InitVersion()
 
 void DXCompilerLibrary::DetectMaxShaderModel()
 {
-    VERIFY_EXPR(m_DxcCreateInstance != nullptr);
+    ASSERT_EXPR(m_DxcCreateInstance != nullptr);
     try
     {
         CComPtr<IDxcLibrary> pdxcLibrary;

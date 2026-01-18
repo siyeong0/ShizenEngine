@@ -72,7 +72,7 @@ namespace shz
 		// Sets the size of the internal data buffer
 		virtual void SHZ_CALL_TYPE Resize(size_t NewSize) override
 		{
-			UNEXPECTED("Resize is not supported by proxy data blob.");
+			ASSERT(false, "Resize is not supported by proxy data blob.");
 		}
 
 		// Returns the size of the internal data buffer
@@ -84,14 +84,14 @@ namespace shz
 		// Returns the pointer to the internal data buffer
 		virtual void* SHZ_CALL_TYPE GetDataPtr(size_t Offset = 0) override
 		{
-			VERIFY(Offset < m_Size, "Offset (", Offset, ") exceeds the data size (", m_Size, ")");
+			ASSERT(Offset < m_Size, "Offset (", Offset, ") exceeds the data size (", m_Size, ")");
 			return static_cast<uint8*>(m_pData) + Offset;
 		}
 
 		// Returns the pointer to the internal data buffer
 		virtual const void* SHZ_CALL_TYPE GetConstDataPtr(size_t Offset = 0) const override
 		{
-			VERIFY(Offset < m_Size, "Offset (", Offset, ") exceeds the data size (", m_Size, ")");
+			ASSERT(Offset < m_Size, "Offset (", Offset, ") exceeds the data size (", m_Size, ")");
 			return static_cast<const uint8*>(m_pConstData) + Offset;
 		}
 

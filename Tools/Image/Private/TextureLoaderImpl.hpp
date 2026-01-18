@@ -60,7 +60,7 @@ namespace shz
 		virtual const TextureSubResData& SHZ_CALL_TYPE GetSubresourceData(uint32 MipLevel, uint32 ArraySlice) const override final
 		{
 			const uint32 Subres = ArraySlice * m_TexDesc.MipLevels + MipLevel;
-			VERIFY_EXPR(Subres < m_SubResources.size());
+			ASSERT_EXPR(Subres < m_SubResources.size());
 			return m_SubResources[Subres];
 		}
 

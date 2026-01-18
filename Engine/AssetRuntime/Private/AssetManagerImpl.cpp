@@ -382,7 +382,7 @@ namespace shz
 				return;
 			}
 
-			ASSERT(obj != nullptr, "AssetManagerImpl::loadNow: loader returned ok but object is null.");
+			ASSERT(obj, "AssetManagerImpl::loadNow: loader returned ok but object is null.");
 			ASSERT(obj->GetTypeID() == record.TypeID, "AssetManagerImpl::loadNow: loaded object TypeID mismatch.");
 
 			record.Object = static_cast<std::unique_ptr<AssetObject>&&>(obj);

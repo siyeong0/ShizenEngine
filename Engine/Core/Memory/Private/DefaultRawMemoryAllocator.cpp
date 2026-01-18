@@ -54,7 +54,7 @@ namespace shz
 			void* AlignedPointer = AlignUp(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(Pointer) + PointerSize), AdjustedAlignment);
 
 			void** StoredPointer = reinterpret_cast<void**>(AlignedPointer) - 1;
-			VERIFY_EXPR(StoredPointer >= Pointer);
+			ASSERT_EXPR(StoredPointer >= Pointer);
 			*StoredPointer = Pointer;
 
 			return AlignedPointer;
@@ -77,7 +77,7 @@ namespace shz
 
 	void* DefaultRawMemoryAllocator::Allocate(size_t Size, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY_EXPR(Size > 0);
+		ASSERT_EXPR(Size > 0);
 #ifdef USE_CRT_MALLOC_DBG
 		return _malloc_dbg(Size, _NORMAL_BLOCK, dbgFileName, dbgLineNumber);
 #else
@@ -113,7 +113,7 @@ namespace shz
 
 	void* DefaultRawMemoryAllocator::AllocateAligned(size_t Size, size_t Alignment, const Char* dbgDescription, const char* dbgFileName, const int32 dbgLineNumber)
 	{
-		VERIFY_EXPR(Size > 0 && Alignment > 0);
+		ASSERT_EXPR(Size > 0 && Alignment > 0);
 		// Alignment must be a power of two and a multiple of sizeof(void*))
 		Alignment = std::max(Alignment, sizeof(void*));
 		// Size must be an integral multiple of alignment,

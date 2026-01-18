@@ -20,9 +20,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)Common.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)CommonDefinitions.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)DataBlob.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)DebugOutput.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)DebugUtilities.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)Errors.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FileStream.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FlagEnum.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FormatString.hpp" />

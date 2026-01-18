@@ -32,8 +32,8 @@
 #include <iostream>
 #include <cstdint>
 
-#include "DebugOutput.h"
-#include "FormatString.hpp"
+#include "Primitives/FormatString.hpp"
+#include "Engine/Core/Common/Public/DebugOutput.h"
 
 namespace shz
 {

@@ -1,5 +1,5 @@
 ﻿/*
- *  Copyright 2019-2025 Diligent Graphics LLC
+ *  Copyright 2019-2022 Diligent Graphics LLC
  *  Copyright 2015-2019 Egor Yusov
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,25 +27,52 @@
 
 #pragma once
 
-#include "PlatformDefinitions.h"
-
-#if PLATFORM_WIN32
-
-#    include "Platforms/Win64/Public/Win32Debug.hpp"
-
-#else
-#    error Unknown platform. Please define one of the following macros as 1:  PLATFORM_WIN32, PLATFORM_UNIVERSAL_WINDOWS, PLATFORM_ANDROID, PLATFORM_LINUX, PLATFORM_MACOS, PLATFORM_IOS.
-#endif
+#include "Primitives/BasicTypes.h"
 
 namespace shz
 {
 
-#if PLATFORM_WIN32
+	// Describes debug message severity
+	enum DEBUG_MESSAGE_SEVERITY
+	{
+		// Information message
+		DEBUG_MESSAGE_SEVERITY_INFO = 0,
 
-	using PlatformDebug = WindowsDebug;
+		// Warning message
+		DEBUG_MESSAGE_SEVERITY_WARNING,
 
-#else
-#    error Unknown platform. Please define one of the following macros as 1:  PLATFORM_WIN32, PLATFORM_UNIVERSAL_WINDOWS, PLATFORM_ANDROID, PLATFORM_LINUX, PLATFORM_MACOS, PLATFORM_IOS.
-#endif
+		// Error, with potential recovery
+		DEBUG_MESSAGE_SEVERITY_ERROR,
 
+		// Fatal error - recovery is not possible
+		DEBUG_MESSAGE_SEVERITY_FATAL_ERROR
+	};
+
+
+	// Type of the debug message callback function
+
+	// \param [in] Severity - Message severity
+	// \param [in] Message - Debug message
+	// \param [in] Function - Name of the function or nullptr
+	// \param [in] Function - File name or nullptr
+	// \param [in] Line - Line number
+	typedef void(SHZ_CALL_TYPE* DebugMessageCallbackType)(
+		enum DEBUG_MESSAGE_SEVERITY Severity,
+		const Char* Message,
+		const Char* Function,
+		const Char* File,
+		int Line);
+	extern DebugMessageCallbackType DebugMessageCallback;
+
+
+	// Sets the debug message callback function
+
+	// \note This function needs to be called for every executable module that
+	//       wants to use the callback.
+	inline void SetDebugMessageCallback(DebugMessageCallbackType DbgMessageCallback)
+	{
+		// DebugMessageCallback variable is defined in every platform-specific implementation file
+		// and initialized with the platform-specific callback
+		DebugMessageCallback = DbgMessageCallback;
+	}
 } // namespace shz

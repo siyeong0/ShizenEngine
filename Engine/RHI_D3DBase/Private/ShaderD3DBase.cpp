@@ -151,8 +151,8 @@ namespace shz
 	{
 		if (ShaderCI.Source != nullptr || (ShaderCI.FilePath != nullptr && ShaderCI.SourceLanguage != SHADER_SOURCE_LANGUAGE_BYTECODE))
 		{
-			DEV_CHECK_ERR(ShaderCI.ByteCode == nullptr, "'ByteCode' must be null when shader is created from the source code or a file");
-			DEV_CHECK_ERR(ShaderCI.EntryPoint != nullptr, "Entry point must not be null");
+			ASSERT(ShaderCI.ByteCode == nullptr, "'ByteCode' must be null when shader is created from the source code or a file");
+			ASSERT(ShaderCI.EntryPoint != nullptr, "Entry point must not be null");
 
 			bool UseDXC = false;
 
@@ -198,7 +198,7 @@ namespace shz
 		}
 		else if (ShaderCI.ByteCode != nullptr)
 		{
-			DEV_CHECK_ERR(ShaderCI.ByteCodeSize != 0, "ByteCode size must be greater than 0");
+			ASSERT(ShaderCI.ByteCodeSize != 0, "ByteCode size must be greater than 0");
 			return DataBlobImpl::Create(ShaderCI.ByteCodeSize, ShaderCI.ByteCode);
 		}
 		else if (ShaderCI.FilePath != nullptr && ShaderCI.SourceLanguage == SHADER_SOURCE_LANGUAGE_BYTECODE)
