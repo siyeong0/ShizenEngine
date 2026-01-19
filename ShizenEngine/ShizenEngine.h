@@ -51,11 +51,13 @@ namespace shz
 			float3 Scale = { 1, 1, 1 };
 
 			uint32 RotateAxis = 1;     // 0:X, 1:Y, 2:Z
-			float  RotateSpeed = 1.0f; // rad/sec
+			float  RotateSpeed = 0.0f; // rad/sec
 		};
 
 	private:
 		MaterialInstance CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset);
+
+		void LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bRotate = false);
 
 		void spawnMeshesOnXYGrid(
 			const std::vector<const char*>& meshPaths,
@@ -85,17 +87,12 @@ namespace shz
 		std::unique_ptr<Renderer> m_pRenderer = nullptr;
 		std::unique_ptr<RenderScene> m_pRenderScene = nullptr;
 
-		// New asset system
 		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
 		ViewFamily m_ViewFamily = {};
 		FirstPersonCamera m_Camera;
-
-		// Debug cube (renderer-owned)
-		Handle<StaticMeshRenderData> m_CubeHandle = {};
-		Handle<StaticMeshRenderData> m_FloorHandle = {};
 
 		// Loaded meshes (1 object per path)
 		std::vector<LoadedMesh> m_Loaded = {};

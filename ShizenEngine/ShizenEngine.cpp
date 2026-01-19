@@ -258,21 +258,21 @@ namespace shz
 		uint materialFlags = 0;
 
 		auto BindOrDefault = [&](MATERIAL_TEXTURE_SLOT texSlot, const char* shaderVar, const RefCntAutoPtr<ITexture>& defaultTex, uint flagBit)
+		{
+			if (matInstanceAsset.GetTexture(texSlot).IsValid())
 			{
-				if (matInstanceAsset.GetTexture(texSlot).IsValid())
+				const std::string texPath = matInstanceAsset.GetTexture(texSlot).GetSourcePath();
+				ITextureView* srv = getOrCreateTextureSRV(texPath);
+				if (srv)
 				{
-					const std::string texPath = matInstanceAsset.GetTexture(texSlot).GetSourcePath();
-					ITextureView* srv = getOrCreateTextureSRV(texPath);
-					if (srv)
-					{
-						materialInstance.SetTextureRuntimeView(shaderVar, srv);
-						materialFlags |= flagBit;
-						return;
-					}
+					materialInstance.SetTextureRuntimeView(shaderVar, srv);
+					materialFlags |= flagBit;
+					return;
 				}
+			}
 
-				materialInstance.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-			};
+			materialInstance.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+		};
 
 		BindOrDefault(MATERIAL_TEX_ALBEDO, "g_BaseColorTex", m_DefaultTextures.White, MAT_HAS_BASECOLOR);
 		BindOrDefault(MATERIAL_TEX_NORMAL, "g_NormalTex", m_DefaultTextures.Normal, MAT_HAS_NORMAL);
@@ -285,6 +285,61 @@ namespace shz
 		materialInstance.MarkAllDirty();
 
 		return materialInstance;
+	}
+
+	void ShizenEngine::LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bRotate)
+	{
+		LoadedMesh entry = {};
+		entry.Path = path;
+
+		// Register + load through new AssetManagerImpl
+		entry.MeshRef = registerStaticMeshPath(entry.Path);
+		entry.MeshID = makeAssetIDFromPath(AssetTypeTraits<StaticMeshAsset>::TypeID, entry.Path);
+		entry.MeshPtr = loadStaticMeshBlocking(entry.MeshRef);
+
+		const StaticMeshAsset* cpuMesh = entry.MeshPtr.Get();
+		if (!cpuMesh)
+		{
+			std::cout << "Load Failed: " << entry.Path << std::endl;
+			ASSERT(false, "");
+			return;
+		}
+
+		const Box& bounds = cpuMesh->GetBounds();
+		const float uniform = computeUniformScaleToFitUnitCube(bounds, 1.0f);
+		entry.Scale = float3(uniform, uniform, uniform);
+
+		// GPU mesh
+		entry.MeshHandle = m_pRenderer->CreateStaticMesh(*cpuMesh);
+		if (!entry.MeshHandle.IsValid())
+		{
+			std::cout << "CreateStaticMesh failed: " << entry.Path << std::endl;
+			ASSERT(false, "");
+			return;
+		}
+
+		entry.Position = position;
+		entry.BaseRotation = rotation;
+		entry.Scale = scale;
+
+		if (bRotate)
+		{
+			entry.RotateAxis = 1;
+			entry.RotateSpeed = 0.6f;
+		}
+
+		std::vector<MaterialInstance> materials;
+		for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh->GetMaterialSlots())
+		{
+			materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
+		}
+
+		entry.ObjectId = m_pRenderScene->AddObject(
+			entry.MeshHandle,
+			materials,
+			Matrix4x4::TRS(entry.Position, entry.BaseRotation, entry.Scale));
+
+		m_Loaded.push_back(std::move(entry));
 	}
 
 	// ------------------------------------------------------------
@@ -327,33 +382,33 @@ namespace shz
 		// Default 1x1 textures
 		// ------------------------------------------------------------
 		auto PackRGBA8 = [](uint8 r, uint8 g, uint8 b, uint8 a) -> uint32
-			{
-				return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
-			};
+		{
+			return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
+		};
 
 		auto Create1x1Texture = [&](const char* name, uint32 rgba, RefCntAutoPtr<ITexture>& outTex) -> bool
-			{
-				TextureDesc desc = {};
-				desc.Name = name;
-				desc.Type = RESOURCE_DIM_TEX_2D;
-				desc.Width = 1;
-				desc.Height = 1;
-				desc.MipLevels = 1;
-				desc.Format = TEX_FORMAT_RGBA8_UNORM;
-				desc.Usage = USAGE_IMMUTABLE;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
+		{
+			TextureDesc desc = {};
+			desc.Name = name;
+			desc.Type = RESOURCE_DIM_TEX_2D;
+			desc.Width = 1;
+			desc.Height = 1;
+			desc.MipLevels = 1;
+			desc.Format = TEX_FORMAT_RGBA8_UNORM;
+			desc.Usage = USAGE_IMMUTABLE;
+			desc.BindFlags = BIND_SHADER_RESOURCE;
 
-				TextureSubResData sub = {};
-				sub.pData = &rgba;
-				sub.Stride = sizeof(uint32);
+			TextureSubResData sub = {};
+			sub.pData = &rgba;
+			sub.Stride = sizeof(uint32);
 
-				TextureData data = {};
-				data.pSubResources = &sub;
-				data.NumSubresources = 1;
+			TextureData data = {};
+			data.pSubResources = &sub;
+			data.NumSubresources = 1;
 
-				m_pDevice->CreateTexture(desc, &data, &outTex);
-				return (outTex != nullptr);
-			};
+			m_pDevice->CreateTexture(desc, &data, &outTex);
+			return (outTex != nullptr);
+		};
 
 		Create1x1Texture("DefaultWhite1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
 		Create1x1Texture("DefaultBlack1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
@@ -382,55 +437,39 @@ namespace shz
 		m_ViewFamily.Views[0].Viewport = {};
 
 		// ------------------------------------------------------------
-		// Floor
+		// Models
 		// ------------------------------------------------------------
-		{
-			const std::string floorPath = "C:/Dev/ShizenEngine/ShizenEngine/Assets/floor/FbxFloor.fbx";
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx",
+			{ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
-			AssetRef<StaticMeshAsset> floorRef = registerStaticMeshPath(floorPath);
-			AssetPtr<StaticMeshAsset> floorPtr = loadStaticMeshBlocking(floorRef);
-
-			const StaticMeshAsset* cpuMesh = floorPtr.Get();
-			ASSERT(cpuMesh, "Floor mesh load failed.");
-
-			std::vector<MaterialInstance> materials;
-			for (const MaterialInstanceAsset& matInstanceAsset : cpuMesh->GetMaterialSlots())
-			{
-				materials.push_back(CreateMaterialInstanceFromAsset(matInstanceAsset));
-			}
-
-			m_FloorHandle = m_pRenderer->CreateStaticMesh(*cpuMesh);
-			ASSERT(m_FloorHandle.IsValid(), "CreateStaticMesh failed.");
-
-			(void)m_pRenderScene->AddObject(
-				m_FloorHandle,
-				materials,
-				Matrix4x4::TRS({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }));
-		}
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
+			{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
 
 		// ------------------------------------------------------------
 		// Load mesh paths + spawn as grid
 		// ------------------------------------------------------------
-		std::vector<const char*> meshPaths;
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
-		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+		//std::vector<const char*> meshPaths;
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
+		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
 
-		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
-		const float spacingX = 1.0f;
-		const float spacingY = 1.0f;
-		const float spacingZ = 2.0f;
+		//const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
+		//const float spacingX = 1.0f;
+		//const float spacingY = 1.0f;
+		//const float spacingZ = 2.0f;
 
-		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
+		//spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 	}
