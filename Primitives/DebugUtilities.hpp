@@ -41,21 +41,22 @@ namespace shz
 
 #ifdef SHZ_DEBUG
 
-#define ASSERTION_FAILED(Message, ...)                        \
-    do {                                                      \
-        auto msg = shz::FormatString(Message, ##__VA_ARGS__); \
-        std::fprintf(stderr,                                  \
-          "[ASSERT] %s:%d in %s\n  expr: %s\n",               \
-          __FILE__, __LINE__, __func__, msg.c_str());         \
-        std::fflush(stderr);                                  \
-        COREASSERT_DEBUG_BREAK();                             \
+#define ASSERTION_FAILED(Message, ...)                                      \
+    do {                                                                    \
+        auto msg = shz::FormatString((Message) __VA_OPT__(,) __VA_ARGS__);  \
+        std::fprintf(stderr,                                                \
+          "[ASSERT] %s:%d in %s\n  expr: %s\n",                             \
+          __FILE__, __LINE__, __func__, msg.c_str());                       \
+        std::fflush(stderr);                                                \
+        COREASSERT_DEBUG_BREAK();                                           \
     } while (false)
-#define ASSERT(expr, Message, ...)                        \
-        do {                                              \
-            if (!(expr)) {                                \
-                ASSERTION_FAILED(Message, ##__VA_ARGS__); \
-            }                                             \
-        } while (false)
+
+#define ASSERT(expr, Message, ...)                                          \
+    do {                                                                    \
+        if (!(expr)) {                                                      \
+            ASSERTION_FAILED((Message) __VA_OPT__(,) __VA_ARGS__);          \
+        }                                                                   \
+    } while (false)
 #else
 #define ASSERT(...)do{}while(false)
 #endif

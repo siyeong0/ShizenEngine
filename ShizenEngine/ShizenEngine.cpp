@@ -59,7 +59,7 @@ namespace shz
 
 	void ShizenEngine::registerAssetLoaders()
 	{
-		ASSERT(m_pAssetManager, "registerAssetLoaders: AssetManagerImpl is null.");
+		ASSERT(m_pAssetManager, "AssetManagerImpl is null.");
 
 		// StaticMeshAsset loader (Assimp)
 		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID,
@@ -71,7 +71,7 @@ namespace shz
 				StaticMeshAsset mesh = {};
 				if (!AssimpImporter::LoadStaticMeshAsset(meta.SourcePath.c_str(), &mesh))
 				{
-					outError = "AssimpImporter::LoadStaticMeshAsset failed.";
+					outError = "LoadStaticMeshAsset failed.";
 					return false;
 				}
 
@@ -219,8 +219,8 @@ namespace shz
 			ASSERT(ps, "Failed to create GBuffer PS.");
 		}
 
-		IShader* shaders[] = { vs, ps };
-		m_PBRMaterialTemplate.BuildFromShaders(shaders, 2);
+		std::vector<const IShader*> pShaders = { vs, ps };
+		m_PBRMaterialTemplate.BuildFromShaders(pShaders);
 
 		MaterialInstance materialInstance;
 		materialInstance.Initialize(&m_PBRMaterialTemplate);
