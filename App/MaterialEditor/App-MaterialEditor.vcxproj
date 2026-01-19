@@ -72,7 +72,7 @@
       <Project>{33e167c2-6555-4601-b556-df06e1328c1b}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">
-      <Project>{c754f36d-acdb-4092-a591-29998b76d79d}</Project>
+      <Project>{2ae4af76-99c4-4fe0-9759-7d19832fbff1}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Tools\Image\Tools-Image.vcxproj">
       <Project>{5b44506a-9b58-4488-a48f-52044bfd19c8}</Project>

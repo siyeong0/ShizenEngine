@@ -195,9 +195,6 @@
     <ProjectReference Include="..\..\Platforms\Win64\Platforms-Win64.vcxproj">
       <Project>{33e167c2-6555-4601-b556-df06e1328c1b}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">
-      <Project>{c754f36d-acdb-4092-a591-29998b76d79d}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\..\Tools\Image\Tools-Image.vcxproj">
       <Project>{5b44506a-9b58-4488-a48f-52044bfd19c8}</Project>
     </ProjectReference>

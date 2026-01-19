@@ -929,13 +929,13 @@ namespace shz
 		//	"C:/Dev/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
 		//	{ 0.0f, 0.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
 
-		//loadPreviewMesh(
-		//	"C:/Dev/ShizenEngine/Assets/Grass/grass-free-download/source/grass.fbx",
-		//	{ 0.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
-
 		loadPreviewMesh(
-			"C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf",
-			{ 0.0f, 1.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+			"C:/Dev/ShizenEngine/Assets/Grass/grass-free-download/source/grass.fbx",
+			{ 0.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+
+		//loadPreviewMesh(
+		//	"C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf",
+		//	{ 0.0f, 1.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 

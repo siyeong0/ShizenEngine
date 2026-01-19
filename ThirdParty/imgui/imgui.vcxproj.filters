@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="imstb_truetype.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="imconfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -31,6 +28,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="imstb_textedit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="imstb_truetype.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="backends\imgui_impl_dx12.h">
@@ -64,11 +64,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="LICENSE.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="LICENSE.txt" />
+    <Text Include="misc\README.txt" />
   </ItemGroup>
 </Project>

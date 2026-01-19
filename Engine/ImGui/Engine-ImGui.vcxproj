@@ -161,7 +161,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">
-      <Project>{c754f36d-acdb-4092-a591-29998b76d79d}</Project>
+      <Project>{2ae4af76-99c4-4fe0-9759-7d19832fbff1}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>

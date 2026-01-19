@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{c754f36d-acdb-4092-a591-29998b76d79d}</ProjectGuid>
+    <ProjectGuid>{2ae4af76-99c4-4fe0-9759-7d19832fbff1}</ProjectGuid>
     <RootNamespace>imgui</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -172,12 +172,13 @@
     <ClCompile Include="imgui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="LICENSE.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="LICENSE.txt" />
+    <Text Include="misc\README.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
