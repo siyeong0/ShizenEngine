@@ -20,7 +20,7 @@ namespace shz
 	{
 		std::string Name = {};
 
-		AssetRef<TextureAsset> TextureRef = {}; // NEW: replaces Handle<TextureAsset>
+		AssetRef<TextureAsset> TextureRef = {};
 
 		ITextureView* pRuntimeView = nullptr;
 		ISampler* pSamplerOverride = nullptr;
@@ -67,11 +67,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Resources
 		// ------------------------------------------------------------
-
-		// NEW: Set by AssetRef (new AssetManagerImpl path)
 		bool SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef);
-
-		// Runtime SRV override (editor/debug)
 		bool SetTextureRuntimeView(const char* textureName, ITextureView* pView);
 
 		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);

@@ -14,8 +14,7 @@ namespace shz
 		m_TextureBindings.clear();
 		m_bTextureDirties.clear();
 
-		if (!m_pTemplate)
-			return false;
+		ASSERT(pTemplate, "Material template is null.");
 
 		// Allocate CB blobs (usually 1: MATERIAL_CONSTANTS)
 		const uint32 cbCount = m_pTemplate->GetCBufferCount();
