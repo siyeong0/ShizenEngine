@@ -80,6 +80,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 	ProjectSection(SolutionItems) = preProject
 		Shaders\DeferredLighting.psh = Shaders\DeferredLighting.psh
 		Shaders\DeferredLighting.vsh = Shaders\DeferredLighting.vsh
+		Shaders\DiskSamples.hlsli = Shaders\DiskSamples.hlsli
 		Shaders\GBuffer.psh = Shaders\GBuffer.psh
 		Shaders\GBuffer.vsh = Shaders\GBuffer.vsh
 		Shaders\GBufferMasked.psh = Shaders\GBufferMasked.psh

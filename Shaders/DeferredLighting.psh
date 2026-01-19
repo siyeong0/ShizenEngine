@@ -1,5 +1,5 @@
-// DeferredLighting.psh
 #include "HLSL_Structures.hlsli"
+#include "DiskSamples.hlsli"
 
 cbuffer FRAME_CONSTANTS
 {
@@ -11,7 +11,7 @@ Texture2D<float4> g_GBuffer0; // Albedo.rgb, Opacity.a
 Texture2D<float4> g_GBuffer1; // Normal packed 0..1 (world)
 Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, Reserved
 Texture2D<float4> g_GBuffer3; // Emissive.rgb, unused
-Texture2D<float> g_GBufferDepth; // Depth (same as camera depth, D3D 0..1)
+Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 
 SamplerState g_LinearClampSampler;
 
@@ -19,12 +19,17 @@ SamplerState g_LinearClampSampler;
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
 
-
 struct PSInput
 {
     float4 Pos : SV_POSITION;
     float2 UV : TEXCOORD0;
 };
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+static const float PI = 3.14159265358979323846;
 
 static float Pow5(float x)
 {
@@ -37,11 +42,9 @@ static float3 UnpackNormal01(float3 n01)
     return normalize(n01 * 2.0 - 1.0);
 }
 
-// Reconstruct world position from depth + invViewProj.
-// Assumes D3D NDC: z in [0..1], xy in [-1..1]
 static float3 ReconstructWorldPos(float2 uv, float depth01)
 {
-    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0); // note Y flip if your UV is top-left origin
+    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
     float4 ndc = float4(ndcXY, depth01, 1.0);
 
     float4 ws = mul(ndc, g_FrameCB.InvViewProj);
@@ -49,7 +52,6 @@ static float3 ReconstructWorldPos(float2 uv, float depth01)
     return ws.xyz;
 }
 
-// Light-space UVZ (for shadow compare)
 static float3 WorldToShadowUVZ(float3 worldPos)
 {
     float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
@@ -61,13 +63,46 @@ static float3 WorldToShadowUVZ(float3 worldPos)
     return float3(uv, ls.z);
 }
 
+// ------------------------------------------------------------
+// PBR (GGX / Smith / Schlick Fresnel)
+// ------------------------------------------------------------
+
+static float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0 - F0) * Pow5(saturate(1.0 - cosTheta));
+}
+
+static float D_GGX(float NdotH, float roughness)
+{
+    float a = max(roughness, 0.04);
+    float a2 = a * a;
+    float a4 = a2 * a2;
+
+    float d = (NdotH * NdotH) * (a4 - 1.0) + 1.0;
+    return a4 / max(PI * d * d, 1e-7);
+}
+
+static float G_SchlickGGX(float NdotV, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / max(NdotV * (1.0 - k) + k, 1e-7);
+}
+
+static float G_Smith(float NdotV, float NdotL, float roughness)
+{
+    return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
+}
+
+// ------------------------------------------------------------
+// Shadow (PCF 3x3) - baseline
+// ------------------------------------------------------------
+
 static float SampleShadowPCF3x3(float3 shadowUVZ)
 {
-	// Outside light frustum => treat as lit
     if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
         return 1.0;
 
-	// If z outside [0..1], consider lit (or clamp)
     if (shadowUVZ.z <= 0.0)
         return 1.0;
     if (shadowUVZ.z >= 1.0)
@@ -77,85 +112,191 @@ static float SampleShadowPCF3x3(float3 shadowUVZ)
     g_ShadowMap.GetDimensions(w, h);
     float2 texel = 1.0 / float2(w, h);
 
-    float compareZ = shadowUVZ.z;
-
     float sum = 0.0;
-	[unroll]
+    [unroll]
     for (int y = -1; y <= 1; ++y)
     {
-		[unroll]
+        [unroll]
         for (int x = -1; x <= 1; ++x)
         {
             float2 uv = shadowUVZ.xy + float2(x, y) * texel;
-            sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, uv, compareZ);
+            sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, uv, shadowUVZ.z);
         }
     }
     return sum / 9.0;
 }
 
+// ------------------------------------------------------------
+// PCSS (stable NDC-depth version)
+// ------------------------------------------------------------
+static float FindBlockerAvgDepth_NDC(float2 uv, float receiverZ, float2 texel,
+                                     float searchRadiusTexels,
+                                     out float numBlockers)
+{
+    float blockerSum = 0.0;
+    numBlockers = 0.0;
+
+    float2 searchR = texel * searchRadiusTexels;
+
+    [unroll]
+    for (int i = 0; i < 64; ++i)
+    {
+        float2 suv = uv + diskSamples64[i] * searchR;
+
+        // keep it inside to avoid sampling border garbage
+        suv = saturate(suv);
+
+        float z = g_ShadowMap.SampleLevel(g_LinearClampSampler, suv, 0).r;
+
+        if (z < receiverZ)
+        {
+            blockerSum += z;
+            numBlockers += 1.0;
+        }
+    }
+
+    return (numBlockers > 0.0) ? (blockerSum / numBlockers) : 0.0;
+}
+
+static float PCF_Disk64(float2 uv, float receiverZ, float2 texel, float filterRadiusTexels)
+{
+    float2 r = texel * filterRadiusTexels;
+
+    float sum = 0.0;
+    [unroll]
+    for (int i = 0; i < 64; ++i)
+    {
+        float2 suv = uv + diskSamples64[i] * r;
+        suv = saturate(suv);
+        sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, suv, receiverZ);
+    }
+
+    return sum / 64.0;
+}
+
+static float SampleShadowPCSS(float3 shadowUVZ)
+{
+    // same guard as PCF baseline
+    if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
+        return 1.0;
+
+    float receiverZ = shadowUVZ.z;
+
+    if (receiverZ <= 0.0)
+        return 1.0;
+    if (receiverZ >= 1.0)
+        return 1.0;
+
+    uint w = 1, h = 1;
+    g_ShadowMap.GetDimensions(w, h);
+    float2 texel = 1.0 / float2(w, h);
+
+    // ----------------------------
+    // 1) blocker search
+    // ----------------------------
+    float depthScale = saturate((receiverZ - 0.2) / 0.8); // 0..1
+    float searchRadiusTexels = lerp(6.0, 18.0, depthScale);
+
+    float numBlockers = 0.0;
+    float avgBlockerZ = FindBlockerAvgDepth_NDC(shadowUVZ.xy, receiverZ, texel, searchRadiusTexels, numBlockers);
+
+    // no blockers => lit
+    if (numBlockers < 1.0)
+        return 1.0;
+
+    // ----------------------------
+    // 2) penumbra size (approx)
+    // ----------------------------
+    // classic ratio, but in NDC space (approx)
+    float penumbra = (receiverZ - avgBlockerZ) / max(avgBlockerZ, 1e-5);
+
+    // ----------------------------
+    // 3) filter radius
+    // ----------------------------
+    float lightRadiusTexels = lerp(10.0, 40.0, depthScale);
+
+    float filterRadiusTexels = penumbra * lightRadiusTexels;
+
+    // clamp to keep stable
+    filterRadiusTexels = clamp(filterRadiusTexels, 0.5, 64.0);
+
+    // ----------------------------
+    // 4) PCF with disk samples
+    // ----------------------------
+    return PCF_Disk64(shadowUVZ.xy, receiverZ, texel, filterRadiusTexels);
+}
+
+// ------------------------------------------------------------
+// Main
+// ------------------------------------------------------------
+
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
-    
-	// Fetch GBuffer
+
     float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
     float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
-    
+
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
-    
+
     float3 N = UnpackNormal01(gb1.xyz);
-    
+
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
     float ao = saturate(gb2.z);
 
     float3 emissive = gb3.rgb;
 
-	// World pos reconstruct (required for shadows)
     float3 worldPos = ReconstructWorldPos(uv, depth01);
-	
-	// View vector (now correct)
+
     float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
+    float3 L = normalize(-g_FrameCB.LightDirWS);
 
-	// Light
-    float3 L = normalize(-g_FrameCB.LightDirWS); // surface->light
     float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
 
-	// Shadow factor
-	// Bias: constant + slope based (reduce acne)
-    float biasConst = 0.008; // Æ©´× ÇÊ¿ä (shadow map res/scene scale¿¡ µû¶ó)
-    float biasSlope = 0.0025 * (1.0 - NdotL);
-    float3 shadowUVZ = WorldToShadowUVZ(worldPos);
-    shadowUVZ.z -= (biasConst + biasSlope);
-	
-    float shadow = SampleShadowPCF3x3(shadowUVZ);
+    // Shadow
+    float shadow = 1.0;
+    {
+        float biasConst = 0.008;
+        float biasSlope = 0.0025 * (1.0 - NdotL);
 
-	// ------------------------------------------------------------
-	// Cheap PBR-ish shading
-	// ------------------------------------------------------------
-    float3 diffuse = baseColor * NdotL;
+        float3 shadowUVZ = WorldToShadowUVZ(worldPos);
+        shadowUVZ.z -= (biasConst + biasSlope);
 
-    float shininess = lerp(256.0, 8.0, roughness);
-    float3 H = normalize(L + V);
-    float specTerm = pow(saturate(dot(N, H)), shininess);
+        shadow = SampleShadowPCSS(shadowUVZ);
+    }
 
+    // ------------------------------------------------------------
+    // PBR shading (direct)
+    // ------------------------------------------------------------
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
+
+    float3 H = normalize(V + L);
+
+    float NdotH = saturate(dot(N, H));
     float VdotH = saturate(dot(V, H));
-    float3 F = F0 + (1.0 - F0) * Pow5(1.0 - VdotH);
 
-    float3 specular = F * specTerm;
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+    float3 F = FresnelSchlick(F0, VdotH);
 
-    float3 ambient = baseColor * 0.03;
+    float3 kd = (1.0 - F) * (1.0 - metallic);
+    float3 diffuseBRDF = kd * baseColor / PI;
 
-	// Apply shadow ONLY to direct lighting (diffuse+spec)
-    float3 direct = (diffuse + specular) * g_FrameCB.LightColor * g_FrameCB.LightIntensity;
+    float3 specBRDF = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-5);
+
+    float3 radiance = g_FrameCB.LightColor * g_FrameCB.LightIntensity;
+
+    float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
     direct *= shadow;
 
-    float3 lit = (ambient + direct) * ao + emissive;
+    float3 ambient = (baseColor / PI) * 0.03;
+    float3 lit = ambient * ao + direct + emissive;
 
     OutColor = float4(lit, opacity);
 }
