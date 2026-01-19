@@ -20,6 +20,8 @@ namespace shz
 			Handle<StaticMeshRenderData> MeshHandle = {};
 			std::vector<MaterialInstance> Materials = {};
 			Matrix4x4 Transform = {};
+
+			bool bMaterialDirty = true; // TODO:
 		};
 
 		struct LightObject final
@@ -45,7 +47,10 @@ namespace shz
 
 		void Reset();
 
-		Handle<RenderObject> AddObject(Handle<StaticMeshRenderData> meshHandle, const std::vector<MaterialInstance>& materials, const Matrix4x4& transform);
+		Handle<RenderObject> AddObject(
+			Handle<StaticMeshRenderData> meshHandle, 
+			std::vector<MaterialInstance>&& materials, 
+			const Matrix4x4& transform);
 		void RemoveObject(Handle<RenderObject> h);
 		void UpdateObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
 		void UpdateObjectMaterial(Handle<RenderObject> h, uint32 materialSlot, const MaterialInstance& material);
@@ -60,6 +65,7 @@ namespace shz
 		uint32 GetLightCount()  const noexcept { return static_cast<uint32>(m_Lights.size()); }
 
 		// Dense arrays for fast per-frame iteration
+		std::vector<RenderObject>& GetObjects() noexcept { return m_Objects; }
 		const std::vector<RenderObject>& GetObjects() const noexcept { return m_Objects; }
 		const std::vector<LightObject>& GetLights()  const noexcept { return m_Lights; }
 

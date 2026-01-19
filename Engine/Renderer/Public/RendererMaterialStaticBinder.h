@@ -26,12 +26,14 @@ namespace shz
 
 		void SetFrameConstants(IBuffer* pFrameCB) noexcept { m_pFrameCB = pFrameCB; }
 		void SetObjectTableSRV(IBufferView* pObjectTableSRV) noexcept { m_pObjectTableSRV = pObjectTableSRV; }
+		void SetLinearWrapSampler(ISampler* pSampler) noexcept { m_pLinearWrapSampler = pSampler; }
 
 		bool BindStatics(IPipelineState* pPSO) override;
 
 	private:
 		RefCntAutoPtr<IBuffer>     m_pFrameCB = {};
 		RefCntAutoPtr<IBufferView> m_pObjectTableSRV = {};
+		RefCntAutoPtr<ISampler>    m_pLinearWrapSampler = {};
 	};
 
 } // namespace shz

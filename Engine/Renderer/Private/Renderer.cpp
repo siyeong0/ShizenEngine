@@ -145,7 +145,7 @@ namespace shz
 		buildPostFramebufferForCurrentBackBuffer();
 	}
 
-	void Renderer::Render(const RenderScene& scene, const ViewFamily& viewFamily)
+	void Renderer::Render(RenderScene& scene, const ViewFamily& viewFamily)
 	{
 		IDeviceContext* ctx = m_CreateInfo.pImmediateContext.RawPtr();
 		ISwapChain* sc = m_CreateInfo.pSwapChain.RawPtr();
@@ -287,7 +287,7 @@ namespace shz
 		pushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(m_pObjectIndexVB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 
-		for (const auto& obj : scene.GetObjects())
+		for (RenderScene::RenderObject& obj : scene.GetObjects())
 		{
 			const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 			if (!mesh || !mesh->IsValid())
@@ -301,7 +301,7 @@ namespace shz
 				if (sec.IndexCount == 0)
 					continue;
 
-				const MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
+				MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
 				if (!inst)
 					continue;
 
@@ -338,7 +338,7 @@ namespace shz
 			if (!rd)
 				continue;
 
-			const MaterialInstance* inst = reinterpret_cast<const MaterialInstance*>(key);
+			MaterialInstance* inst = reinterpret_cast<MaterialInstance*>(key);
 			if (!inst)
 				continue;
 

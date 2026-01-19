@@ -408,7 +408,7 @@ namespace shz
 	// MaterialRenderData (instance-based caching)
 	// ------------------------------------------------------------
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
-		const MaterialInstance* pInstance,
+		MaterialInstance* pInstance,
 		IDeviceContext* pCtx,
 		IMaterialStaticBinder* pStaticBinder)
 	{
@@ -428,15 +428,32 @@ namespace shz
 
 			if (FindSlot<MaterialRenderData>(cached, m_MaterialRDSlots) != nullptr)
 			{
-				return cached;
-			}
+				// Rebuild if instance dirties require it.
+				if (!pInstance->IsPsoDirty() && !pInstance->IsLayoutDirty())
+				{
+					return cached;
+				}
 
-			// Stale handle -> remove mapping and recreate
-			m_MaterialInstToRD.erase(it);
+				// Destroy cached
+				const uint32 idx = cached.GetIndex();
+				if (idx < static_cast<uint32>(m_MaterialRDSlots.size()))
+				{
+					auto& slot = m_MaterialRDSlots[idx];
+					slot.Value.reset();
+					slot.Owner.Reset();
+				}
+
+				m_MaterialInstToRD.erase(key);
+			}
+			else
+			{
+				// Stale handle -> remove mapping and recreate
+				m_MaterialInstToRD.erase(it);
+			}
 		}
 
 		// ------------------------------------------------------------
-		// Cache miss: create new MaterialRenderData
+		// Cache miss / rebuild: create new MaterialRenderData
 		// ------------------------------------------------------------
 		MaterialRenderData rd = {};
 		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder))
@@ -457,8 +474,15 @@ namespace shz
 		slot.Value.emplace(std::move(rd));
 
 		m_MaterialInstToRD.emplace(key, hRD);
+
+		// IMPORTANT:
+		// We just rebuilt PSO/SRB layout from this instance state.
+		pInstance->ClearPsoDirty();
+		pInstance->ClearLayoutDirty();
+
 		return hRD;
 	}
+
 
 	const MaterialRenderData* RenderResourceCache::TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept
 	{

@@ -13,21 +13,15 @@
 #include "Engine/Core/Common/Public/StringTools.hpp"
 #include "Engine/Core/Common/Public/Timer.hpp"
 
-#include <windows.h>
-#include <cstdio>
-
 static void OpenConsole()
 {
-	// If already attached to a console, do nothing
 	if (GetConsoleWindow() != nullptr)
 	{
 		return;
 	}
 
-	// Attach to parent console (cmd / PowerShell)
 	if (!AttachConsole(ATTACH_PARENT_PROCESS))
 	{
-		// Fallback: create a new console
 		AllocConsole();
 	}
 
@@ -39,7 +33,7 @@ static void OpenConsole()
 	SetConsoleOutputCP(CP_UTF8);
 	SetConsoleCP(CP_UTF8);
 
-	SetConsoleTitleW(L"ShizenEngine Console");
+	SetConsoleTitleW(L"MaterialEditor Console");
 }
 
 static void WaitConsoleOnExit()
@@ -52,7 +46,7 @@ using namespace shz;
 std::unique_ptr<NativeAppBase> g_pEngine;
 
 LRESULT CALLBACK MessageProc(HWND, UINT, WPARAM, LPARAM);
-// Main
+
 int WINAPI WinMain(
 	_In_ HINSTANCE     hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -74,13 +68,13 @@ int WINAPI WinMain(
 	{
 		ArgsV[i] = Args[i].c_str();
 	}
+
 	AppBase::CommandLineStatus CmdLineStatus = g_pEngine->ProcessCommandLine(static_cast<int>(ArgsV.size()), ArgsV.data());
 	if (CmdLineStatus == AppBase::CommandLineStatus::Error) return -1;
 
 	const char* AppTitle = g_pEngine->GetAppTitle();
-	LPCWSTR WindowClassName = L"Shizen Engine";
+	LPCWSTR WindowClassName = L"MaterialEditor";
 
-	// Register our window class
 	WNDCLASSEX wcex = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, MessageProc, 0L, 0L, hInstance, NULL, NULL, NULL, NULL, WindowClassName, NULL };
 	RegisterClassEx(&wcex);
 
@@ -88,12 +82,14 @@ int WINAPI WinMain(
 	int desiredHeight = 0;
 	g_pEngine->GetDesiredInitialWindowSize(desiredWidth, desiredHeight);
 
-	// Create a window
 	LONG windowWidth = desiredWidth > 0 ? desiredWidth : 1280;
 	LONG windowHeight = desiredHeight > 0 ? desiredHeight : 1024;
 	RECT rc = { 0, 0, windowWidth, windowHeight };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	HWND wnd = CreateWindowA("Shizen Engine", AppTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, NULL, NULL, hInstance, NULL);
+
+	HWND wnd = CreateWindowA("MaterialEditor", AppTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+		rc.right - rc.left, rc.bottom - rc.top, NULL, NULL, hInstance, NULL);
+
 	if (!wnd)
 	{
 		std::cerr << "Failed to create a window";
@@ -115,7 +111,6 @@ int WINAPI WinMain(
 	double prevTime = timer.GetElapsedTime();
 	double filteredFrameTime = 0.0;
 
-	// Main message loop
 	MSG msg = { 0 };
 	while (WM_QUIT != msg.message)
 	{
@@ -133,13 +128,12 @@ int WINAPI WinMain(
 			if (g_pEngine->IsReady())
 			{
 				g_pEngine->Update(CurrTime, ElapsedTime);
-
 				g_pEngine->Render();
-
 				g_pEngine->Present();
 
 				double filterScale = 0.2;
 				filteredFrameTime = filteredFrameTime * (1.0 - filterScale) + filterScale * ElapsedTime;
+
 				std::stringstream fpsCounterSS;
 				fpsCounterSS << AppTitle << " - " << std::fixed << std::setprecision(1) << filteredFrameTime * 1000;
 				fpsCounterSS << " ms (" << 1.0 / filteredFrameTime << " fps)";
@@ -149,11 +143,9 @@ int WINAPI WinMain(
 	}
 
 	g_pEngine.reset();
-
 	return (int)msg.wParam;
 }
 
-// Called every time the NativeNativeAppBase receives a message
 LRESULT CALLBACK MessageProc(HWND wnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if (g_pEngine)
@@ -171,7 +163,7 @@ LRESULT CALLBACK MessageProc(HWND wnd, UINT message, WPARAM wParam, LPARAM lPara
 		EndPaint(wnd, &ps);
 		return 0;
 	}
-	case WM_SIZE: // Window size has been changed
+	case WM_SIZE:
 		if (g_pEngine)
 		{
 			g_pEngine->WindowResize(LOWORD(lParam), HIWORD(lParam));

@@ -9,6 +9,7 @@ namespace shz
 		ASSERT(pPSO, "PSO is null.");
 		ASSERT(m_pFrameCB, "Frame constant buffer is not set.");
 		ASSERT(m_pObjectTableSRV, "Object table srv is not set.");
+		//ASSERT(m_pLinearWrapSampler, "Linear wrap sampler is not set.");
 
 		// FRAME_CONSTANTS is typically referenced in VS/PS.
 		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
@@ -31,6 +32,14 @@ namespace shz
 		{
 			var->Set(m_pObjectTableSRV);
 		}
+
+
+		//// Typically referenced in PS; bind both stages just in case.
+		//if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_LinearWrapSampler"))
+		//	var->Set(m_pLinearWrapSampler);
+
+		//if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_LinearWrapSampler"))
+		//	var->Set(m_pLinearWrapSampler);
 
 		return true;
 	}

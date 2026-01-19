@@ -37,7 +37,7 @@ namespace shz
 			IRenderDevice* pDevice,
 			RenderResourceCache* pCache,
 			IDeviceContext* pCtx,
-			const MaterialInstance& inst,
+			MaterialInstance& inst,
 			IMaterialStaticBinder* pStaticBinder = nullptr);
 
 		bool IsValid() const noexcept
@@ -64,14 +64,14 @@ namespace shz
 		}
 
 		// Re-apply per-instance values/resources (e.g., after SetFloat/SetTexture changes).
-		bool Apply(RenderResourceCache* pCache, const MaterialInstance& inst, IDeviceContext* pCtx);
+		bool Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx);
 
 	private:
 		bool createPso(IRenderDevice* pDevice, const MaterialInstance& inst, IMaterialStaticBinder* pStaticBinder);
 		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst);
 
-		bool bindAllTextures(RenderResourceCache* pCache, const MaterialInstance& inst);
-		bool updateMaterialConstants(const MaterialInstance& inst, IDeviceContext* pCtx);
+		bool bindAllTextures(RenderResourceCache* pCache, MaterialInstance& inst);
+		bool updateMaterialConstants(MaterialInstance& inst, IDeviceContext* pCtx);
 
 		IShaderResourceVariable* findVarAnyStage(const char* name, const MaterialInstance& inst) const;
 
@@ -85,5 +85,8 @@ namespace shz
 
 		const MaterialTemplate* m_pTemplate = nullptr;
 		uint32 m_MaterialCBufferIndex = 0;
+
+		uint64 m_LastConstantsUpdateFrame = 0xFFFFFFFFFFFFFFFFull;
+
 	};
 } // namespace shz

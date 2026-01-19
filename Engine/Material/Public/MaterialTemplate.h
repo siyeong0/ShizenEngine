@@ -8,7 +8,7 @@
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/IShader.h"
-#include "Engine/RHI/Interface/IShaderResourceVariable.h"
+#include "Engine/RHI/Interface/IRenderDevice.h"
 
 namespace shz
 {
@@ -55,14 +55,43 @@ namespace shz
 	};
 	DEFINE_FLAG_ENUM_OPERATORS(MaterialParamFlags);
 
+	enum MATERIAL_PIPELINE_TYPE : uint8
+	{
+		MATERIAL_PIPELINE_TYPE_UNKNOWN = 0,
+		MATERIAL_PIPELINE_TYPE_GRAPHICS,
+		MATERIAL_PIPELINE_TYPE_COMPUTE,
+	};
+
+	struct MaterialShaderStageDesc final
+	{
+		SHADER_TYPE ShaderType = SHADER_TYPE_UNKNOWN;
+
+		std::string DebugName = {};
+		std::string FilePath = {};
+		std::string EntryPoint = "main";
+
+		SHADER_SOURCE_LANGUAGE SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+		SHADER_COMPILE_FLAGS   CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+
+		bool UseCombinedTextureSamplers = false;
+	};
+
+	struct MaterialTemplateCreateInfo final
+	{
+		MATERIAL_PIPELINE_TYPE PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;
+
+		std::string TemplateName = {};
+		std::vector<MaterialShaderStageDesc> ShaderStages = {};
+	};
+
 	struct MaterialValueParamDesc final
 	{
 		std::string Name = {};
 		MATERIAL_VALUE_TYPE Type = MATERIAL_VALUE_TYPE_UNKNOWN;
 
-		uint16 CBufferIndex = 0;
-		uint16 ByteOffset = 0;
-		uint16 ByteSize = 0;
+		uint32 CBufferIndex = 0;
+		uint32 ByteOffset = 0;
+		uint32 ByteSize = 0;
 
 		MaterialParamFlags Flags = MaterialParamFlags_None;
 	};
@@ -88,20 +117,21 @@ namespace shz
 		MaterialTemplate() = default;
 		~MaterialTemplate() = default;
 
-		MaterialTemplate(const MaterialTemplate&) = default; // TODO: Must delete
-		MaterialTemplate& operator=(const MaterialTemplate&) = default; // TODO: Must delete
+		MaterialTemplate(const MaterialTemplate&) = delete;
+		MaterialTemplate& operator=(const MaterialTemplate&) = delete;
 
 		MaterialTemplate(MaterialTemplate&&) noexcept = default;
 		MaterialTemplate& operator=(MaterialTemplate&&) noexcept = default;
 
-		// Build from shader reflection.
-		// Policy:
-		// - Only one constant buffer is reflected: "MATERIAL_CONSTANTS"
-		// - Value param names are "Var" (no "CB.Var" prefix)
-		bool BuildFromShaders(const std::vector<const IShader*>& pShaders);
+		// Creates shaders, builds reflection template.
+		bool Initialize(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const MaterialTemplateCreateInfo& ci);
 
 		const std::string& GetName() const { return m_Name; }
-		void SetName(const std::string& name) { m_Name = name; }
+		MATERIAL_PIPELINE_TYPE GetPipelineType() const { return m_PipelineType; }
+
+		uint32 GetShaderCount() const { return static_cast<uint32>(m_Shaders.size()); }
+		IShader* GetShader(uint32 index) const { return m_Shaders[index].RawPtr(); }
+		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const { return m_Shaders; }
 
 		// Value params
 		uint32 GetValueParamCount() const { return static_cast<uint32>(m_ValueParams.size()); }
@@ -125,8 +155,14 @@ namespace shz
 		static constexpr const char* MATERIAL_CBUFFER_NAME = "MATERIAL_CONSTANTS";
 
 	private:
+		bool buildShaders(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const std::vector<MaterialShaderStageDesc>& stages);
+		bool buildReflectionFromShaders();
+
+	private:
+		MATERIAL_PIPELINE_TYPE m_PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;
 		std::string m_Name = {};
-		std::vector<const IShader*> m_pShaders = {};
+
+		std::vector<RefCntAutoPtr<IShader>> m_Shaders = {};
 
 		std::unordered_map<std::string, uint32> m_ValueParamLut = {};
 		std::unordered_map<std::string, uint32> m_ResourceLut = {};

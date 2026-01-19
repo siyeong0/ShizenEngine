@@ -89,7 +89,9 @@
 	<!-- Additional linker dependencies for **Samples** projects   -->
 	<!-- ========================================================= -->
 	<ItemDefinitionGroup
-	  Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\')) Or '$(MSBuildProjectName)' == 'ShizenEngine'">
+	  Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\Samples\')) Or
+             $([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('\App\')) Or
+             '$(MSBuildProjectName)' == 'ShizenEngine'">
 		<Link>
 			<AdditionalDependencies>
 				Engine-Core.lib;

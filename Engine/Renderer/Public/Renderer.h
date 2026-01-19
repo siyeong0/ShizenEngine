@@ -62,7 +62,7 @@ namespace shz
 		void Cleanup();
 
 		void BeginFrame();
-		void Render(const RenderScene& scene, const ViewFamily& viewFamily);
+		void Render(RenderScene& scene, const ViewFamily& viewFamily);
 		void EndFrame();
 
 		void ReleaseSwapChainBuffers();
@@ -71,7 +71,16 @@ namespace shz
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
-		IRenderPass* GetGBufferRenderPass() const { return m_RenderPassGBuffer; }
+		IRenderPass* GetRenderPassOrNull(const std::string& passName) const
+		{
+			// TODO: unordered map
+			if (passName == "GBuffer")
+			{
+				return m_RenderPassGBuffer;
+			}
+			
+			return nullptr;
+		}
 
 	private:
 		bool createShadowTargets();

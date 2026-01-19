@@ -1,65 +1,128 @@
-// ============================================================================
-// Engine/Material/Private/MaterialInstance.cpp
-// ============================================================================
 #include "pch.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 
 #include <cstring>
-#include <algorithm>
 
 namespace shz
 {
-	static inline const char* toPsoNameStorage(const std::string& s)
+	const std::vector<RefCntAutoPtr<IShader>>& MaterialInstance::GetShaders() const
 	{
-		return s.empty() ? "" : s.c_str();
+		static const std::vector<RefCntAutoPtr<IShader>> kEmpty = {};
+		return m_pTemplate ? m_pTemplate->GetShaders() : kEmpty;
 	}
 
-	bool MaterialInstance::Initialize(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const MaterialInstanceCreateInfo& ci)
+	bool MaterialInstance::Initialize(const MaterialTemplate* pTemplate, const std::string& instanceName)
 	{
-		ASSERT(pDevice, "Device is null.");
-		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
+		ASSERT(pTemplate, "Template is null.");
+		ASSERT(pTemplate->GetPipelineType() != MATERIAL_PIPELINE_TYPE_UNKNOWN, "Invalid pipeline type.");
 
-		m_PipelineType = ci.PipelineType;
-		m_ResourceLayout = ci.ResourceLayout;
-		m_GraphicsPso = ci.Graphics;
-		m_ComputePso = ci.Compute;
+		m_pTemplate = pTemplate;
+		m_InstanceName = instanceName;
 
-		m_Shaders.clear();
+		m_Variables.clear();
+		m_ImmutableSamplers.clear();
 		m_CBufferBlobs.clear();
 		m_bCBufferDirties.clear();
 		m_TextureBindings.clear();
 		m_bTextureDirties.clear();
 
-		ASSERT(m_PipelineType != MATERIAL_PIPELINE_TYPE_UNKNOWN, "Invalid pipeline type.");
-		ASSERT(!ci.ShaderStages.empty(), "No shader stages were provided.");
+		// Defaults (reasonable for editor)
+		m_pRenderPass = nullptr;
+		m_SubpassIndex = 0;
 
-		if (!buildShaders(pDevice, pShaderSourceFactory, ci.ShaderStages))
+		m_CullMode = CULL_MODE_BACK;
+		m_FrontCCW = true;
+
+		m_DepthEnable = true;
+		m_DepthWriteEnable = true;
+		m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+		m_TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
+
+		m_LinearWrapSamplerName = "g_LinearWrapSampler";
+		m_LinearWrapSamplerDesc =
 		{
+			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+		};
+
+		// ------------------------------------------------------------
+		// PSO desc (RenderPass-driven formats policy)
+		// ------------------------------------------------------------
+		m_PSODesc = {};
+		m_GraphicsPipeline = {};
+
+		if (m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+			// RenderPass can be null: editor can set it later.
+			m_GraphicsPipeline.pRenderPass = m_pRenderPass;
+			m_GraphicsPipeline.SubpassIndex = m_SubpassIndex;
+
+			// Policy: formats come from RenderPass/subpass.
+			m_GraphicsPipeline.NumRenderTargets = 0;
+			for (uint32 i = 0; i < _countof(m_GraphicsPipeline.RTVFormats); ++i)
+				m_GraphicsPipeline.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
+			m_GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+			m_GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+			m_GraphicsPipeline.RasterizerDesc.CullMode = m_CullMode;
+			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_FrontCCW;
+
+			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_DepthEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_DepthWriteEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_DepthFunc;
+
+			buildFixedInputLayout();
+		}
+		else if (m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_COMPUTE)
+		{
+			m_PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+		}
+		else
+		{
+			ASSERT(false, "Unsupported pipeline type.");
 			return false;
 		}
 
-		if (!buildTemplateFromShaders(ci.TemplateName))
+		// Debug name
 		{
-			return false;
+			if (!m_InstanceName.empty())
+				m_PSODesc.Name = m_InstanceName.c_str();
+			else if (!m_pTemplate->GetName().empty())
+				m_PSODesc.Name = m_pTemplate->GetName().c_str();
+			else
+				m_PSODesc.Name = "Material PSO";
 		}
 
-		buildDefaultResourceLayoutIfEmpty();
+		// ------------------------------------------------------------
+		// Auto resource layout from template
+		// ------------------------------------------------------------
+		buildAutoResourceLayout();
 
-		// Allocate CB blobs (usually 1: MATERIAL_CONSTANTS)
-		const uint32 cbCount = m_Template.GetCBufferCount();
+		// ------------------------------------------------------------
+		// Allocate CB blobs
+		// ------------------------------------------------------------
+		const uint32 cbCount = m_pTemplate->GetCBufferCount();
 		m_CBufferBlobs.resize(cbCount);
 		m_bCBufferDirties.resize(cbCount);
 
 		for (uint32 i = 0; i < cbCount; ++i)
 		{
-			const auto& CB = m_Template.GetCBuffer(i);
+			const auto& CB = m_pTemplate->GetCBuffer(i);
+
 			m_CBufferBlobs[i].resize(CB.ByteSize);
 			std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
+
 			m_bCBufferDirties[i] = 1;
 		}
 
-		// Allocate bindings aligned with template resources
-		const uint32 resCount = m_Template.GetResourceCount();
+		// ------------------------------------------------------------
+		// Allocate resource bindings aligned with template resources
+		// ------------------------------------------------------------
+		const uint32 resCount = m_pTemplate->GetResourceCount();
 		m_TextureBindings.resize(resCount);
 		m_bTextureDirties.resize(resCount);
 
@@ -69,115 +132,207 @@ namespace shz
 			m_bTextureDirties[i] = 1;
 		}
 
+		m_bPsoDirty = 1;
+		m_bLayoutDirty = 1;
+
 		MarkAllDirty();
 		return true;
 	}
 
-	bool MaterialInstance::buildShaders(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const std::vector<MaterialShaderStageDesc>& stages)
+	// --------------------------------------------------------------------
+	// Setters (mark dirty)
+	// --------------------------------------------------------------------
+
+	void MaterialInstance::SetRenderPass(IRenderPass* pRenderPass, uint32 subpassIndex)
 	{
-		ASSERT(pDevice, "Device is null.");
-		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
-
-		m_Shaders.clear();
-		m_Shaders.reserve(stages.size());
-
-		ShaderCreateInfo sci = {};
-		sci.pShaderSourceStreamFactory = pShaderSourceFactory;
-
-		for (const MaterialShaderStageDesc& s : stages)
-		{
-			ASSERT(s.ShaderType != SHADER_TYPE_UNKNOWN, "Invalid shader stage type.");
-			ASSERT(!s.FilePath.empty(), "Shader file path is empty.");
-
-			sci.SourceLanguage = s.SourceLanguage;
-			sci.EntryPoint = s.EntryPoint.c_str();
-			sci.CompileFlags = s.CompileFlags;
-			sci.LoadConstantBufferReflection = true;
-
-			sci.Desc = {};
-			sci.Desc.Name = s.DebugName.empty() ? "Material Shader" : s.DebugName.c_str();
-			sci.Desc.ShaderType = s.ShaderType;
-			sci.Desc.UseCombinedTextureSamplers = s.UseCombinedTextureSamplers;
-			sci.FilePath = s.FilePath.c_str();
-
-			RefCntAutoPtr<IShader> pShader;
-			pDevice->CreateShader(sci, &pShader);
-
-			if (!pShader)
-			{
-				ASSERT(false, "Failed to create shader: %s", s.FilePath.c_str());
-				return false;
-			}
-
-			m_Shaders.push_back(pShader);
-		}
-
-		return true;
-	}
-
-	bool MaterialInstance::buildTemplateFromShaders(const std::string& templateName)
-	{
-		std::vector<const IShader*> ptrs = {};
-		ptrs.reserve(m_Shaders.size());
-
-		for (const RefCntAutoPtr<IShader>& s : m_Shaders)
-		{
-			ptrs.push_back(s.RawPtr());
-		}
-
-		m_Template = {};
-		m_Template.SetName(templateName.empty() ? "MaterialTemplate" : templateName);
-
-		if (!m_Template.BuildFromShaders(ptrs))
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	void MaterialInstance::buildDefaultResourceLayoutIfEmpty()
-	{
-		if (!m_ResourceLayout.Variables.empty() || !m_ResourceLayout.ImmutableSamplers.empty())
-		{
+		if (m_pRenderPass == pRenderPass && m_SubpassIndex == subpassIndex)
 			return;
+
+		m_pRenderPass = pRenderPass;
+		m_SubpassIndex = subpassIndex;
+
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.pRenderPass = m_pRenderPass;
+			m_GraphicsPipeline.SubpassIndex = m_SubpassIndex;
+			markPsoDirty();
 		}
+	}
 
-		// Default policy:
-		// - MATERIAL_CONSTANTS : DYNAMIC
-		// - texture SRVs       : MUTABLE
-		// - everything else    : STATIC (via DefaultVariableType)
-		m_ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+	void MaterialInstance::SetCullMode(CULL_MODE mode)
+	{
+		if (m_CullMode == mode)
+			return;
 
-		std::vector<ShaderResourceVariableDesc> vars = {};
+		m_CullMode = mode;
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.RasterizerDesc.CullMode = m_CullMode;
+			markPsoDirty();
+		}
+	}
 
-		// MATERIAL_CONSTANTS is expected in PS/VS commonly.
-		// We add for all stages by default to be safe (Diligent ignores missing ones).
+	void MaterialInstance::SetFrontCounterClockwise(bool v)
+	{
+		if (m_FrontCCW == v)
+			return;
+
+		m_FrontCCW = v;
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_FrontCCW;
+			markPsoDirty();
+		}
+	}
+
+	void MaterialInstance::SetDepthEnable(bool v)
+	{
+		if (m_DepthEnable == v)
+			return;
+
+		m_DepthEnable = v;
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_DepthEnable;
+			markPsoDirty();
+		}
+	}
+
+	void MaterialInstance::SetDepthWriteEnable(bool v)
+	{
+		if (m_DepthWriteEnable == v)
+			return;
+
+		m_DepthWriteEnable = v;
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_DepthWriteEnable;
+			markPsoDirty();
+		}
+	}
+
+	void MaterialInstance::SetDepthFunc(COMPARISON_FUNCTION func)
+	{
+		if (m_DepthFunc == func)
+			return;
+
+		m_DepthFunc = func;
+		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_DepthFunc;
+			markPsoDirty();
+		}
+	}
+
+	void MaterialInstance::SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode)
+	{
+		if (m_TextureBindingMode == mode)
+			return;
+
+		m_TextureBindingMode = mode;
+		buildAutoResourceLayout();
+		markLayoutDirty();
+	}
+
+	void MaterialInstance::SetLinearWrapSamplerName(const std::string& name)
+	{
+		const std::string newName = name.empty() ? "g_LinearWrapSampler" : name;
+		if (m_LinearWrapSamplerName == newName)
+			return;
+
+		m_LinearWrapSamplerName = newName;
+		buildAutoResourceLayout();
+		markLayoutDirty();
+	}
+
+	void MaterialInstance::SetLinearWrapSamplerDesc(const SamplerDesc& desc)
+	{
+		if (std::memcmp(&m_LinearWrapSamplerDesc, &desc, sizeof(SamplerDesc)) == 0)
+			return;
+
+		m_LinearWrapSamplerDesc = desc;
+		buildAutoResourceLayout();
+		markLayoutDirty();
+	}
+
+	// --------------------------------------------------------------------
+	// Auto resource layout
+	// --------------------------------------------------------------------
+
+	void MaterialInstance::buildAutoResourceLayout()
+	{
+		ASSERT(m_pTemplate, "Template is null.");
+
+		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+		m_Variables.clear();
+		m_ImmutableSamplers.clear();
+
+		m_Variables.reserve(32);
+		m_ImmutableSamplers.reserve(4);
+
+		// Constant buffer (dynamic if exists)
+		if (m_pTemplate->GetCBufferCount() > 0)
 		{
 			ShaderResourceVariableDesc v = {};
-			v.ShaderStages = SHADER_TYPE_ALL;
+			v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires material constants?? 
 			v.Name = MaterialTemplate::MATERIAL_CBUFFER_NAME;
 			v.Type = SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC;
-			vars.push_back(v);
+			m_Variables.push_back(v);
 		}
 
-		const uint32 resCount = m_Template.GetResourceCount();
+		// Textures
+		const SHADER_RESOURCE_VARIABLE_TYPE texVarType =
+			(m_TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC)
+			? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC
+			: SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+
+		const uint32 resCount = m_pTemplate->GetResourceCount();
 		for (uint32 i = 0; i < resCount; ++i)
 		{
-			const MaterialResourceDesc& r = m_Template.GetResource(i);
+			const MaterialResourceDesc& r = m_pTemplate->GetResource(i);
 
 			if (isTextureType(r.Type))
 			{
 				ShaderResourceVariableDesc v = {};
-				v.ShaderStages = SHADER_TYPE_ALL;
+				v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires texture resources?? 
 				v.Name = r.Name.c_str();
-				v.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
-				vars.push_back(v);
+				v.Type = texVarType;
+				m_Variables.push_back(v);
 			}
 		}
 
-		m_ResourceLayout.Variables = std::move(vars);
+		// Fixed immutable sampler: LinearWrap
+		{
+			ImmutableSamplerDesc s = {};
+			s.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires a sampler ?? 
+			s.SamplerOrTextureName = m_LinearWrapSamplerName.c_str();
+			s.Desc = m_LinearWrapSamplerDesc;
+			m_ImmutableSamplers.push_back(s);
+		}
 	}
+
+	void MaterialInstance::buildFixedInputLayout()
+	{
+		static LayoutElement kLayoutElems[] =
+		{
+			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+			LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+			LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+
+			LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1},
+		};
+
+		kLayoutElems[4].Stride = sizeof(uint32);
+
+		m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
+		m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);
+	}
+
+	// --------------------------------------------------------------------
+	// CBuffer / dirty helpers
+	// --------------------------------------------------------------------
 
 	const uint8* MaterialInstance::GetCBufferBlobData(uint32 cbufferIndex) const
 	{
@@ -218,33 +373,35 @@ namespace shz
 	void MaterialInstance::MarkAllDirty()
 	{
 		for (uint8& b : m_bCBufferDirties)
-		{
 			b = 1;
-		}
+
 		for (uint8& b : m_bTextureDirties)
-		{
 			b = 1;
-		}
 	}
+
+	// --------------------------------------------------------------------
+	// Values
+	// --------------------------------------------------------------------
 
 	bool MaterialInstance::writeValueInternal(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedValueType)
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name.");
 		ASSERT(pData, "pData is null.");
+		ASSERT(m_pTemplate, "Template is null.");
 
 		MaterialValueParamDesc desc = {};
-		if (!m_Template.ValidateSetValue(name, expectedValueType, &desc))
+		if (!m_pTemplate->ValidateSetValue(name, expectedValueType, &desc))
 		{
-			ASSERTION_FAILED("There is no value named %s in shader template %s.", name, m_Template.GetName().c_str());
+			ASSERTION_FAILED("There is no value named %s in shader template %s.", name, m_pTemplate->GetName().c_str());
 			return false;
 		}
 
-		ASSERT(desc.CBufferIndex < m_CBufferBlobs.size(), "Out of bounds.");
-		ASSERT(byteSize > 0, "Byte size must be bigger than 0.");
+		ASSERT(desc.CBufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
+		ASSERT(byteSize > 0, "Byte size must be > 0.");
 		ASSERT(byteSize <= desc.ByteSize, "Byte size must be <= variable size (%u).", desc.ByteSize);
 
 		std::vector<uint8>& blob = m_CBufferBlobs[desc.CBufferIndex];
-		const uint32 endOffset = static_cast<uint32>(desc.ByteOffset) + byteSize;
+		const uint32 endOffset = desc.ByteOffset + byteSize;
 
 		ASSERT(endOffset <= static_cast<uint32>(blob.size()), "Out of bounds.");
 
@@ -259,86 +416,42 @@ namespace shz
 		return writeValueInternal(name, pData, byteSize, MATERIAL_VALUE_TYPE_UNKNOWN);
 	}
 
-	bool MaterialInstance::SetFloat(const char* name, float v)
-	{
-		return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_FLOAT);
-	}
+	bool MaterialInstance::SetFloat(const char* name, float v) { return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_FLOAT); }
+	bool MaterialInstance::SetFloat2(const char* name, const float v[2]) { return writeValueInternal(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2); }
+	bool MaterialInstance::SetFloat3(const char* name, const float v[3]) { return writeValueInternal(name, v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3); }
+	bool MaterialInstance::SetFloat4(const char* name, const float v[4]) { return writeValueInternal(name, v, sizeof(float) * 4, MATERIAL_VALUE_TYPE_FLOAT4); }
 
-	bool MaterialInstance::SetFloat2(const char* name, const float v[2])
-	{
-		return writeValueInternal(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2);
-	}
+	bool MaterialInstance::SetInt(const char* name, int32 v) { return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_INT); }
+	bool MaterialInstance::SetInt2(const char* name, const int32 v[2]) { return writeValueInternal(name, v, sizeof(int32) * 2, MATERIAL_VALUE_TYPE_INT2); }
+	bool MaterialInstance::SetInt3(const char* name, const int32 v[3]) { return writeValueInternal(name, v, sizeof(int32) * 3, MATERIAL_VALUE_TYPE_INT3); }
+	bool MaterialInstance::SetInt4(const char* name, const int32 v[4]) { return writeValueInternal(name, v, sizeof(int32) * 4, MATERIAL_VALUE_TYPE_INT4); }
 
-	bool MaterialInstance::SetFloat3(const char* name, const float v[3])
-	{
-		return writeValueInternal(name, v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3);
-	}
-
-	bool MaterialInstance::SetFloat4(const char* name, const float v[4])
-	{
-		return writeValueInternal(name, v, sizeof(float) * 4, MATERIAL_VALUE_TYPE_FLOAT4);
-	}
-
-	bool MaterialInstance::SetInt(const char* name, int32 v)
-	{
-		return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_INT);
-	}
-
-	bool MaterialInstance::SetInt2(const char* name, const int32 v[2])
-	{
-		return writeValueInternal(name, v, sizeof(int32) * 2, MATERIAL_VALUE_TYPE_INT2);
-	}
-
-	bool MaterialInstance::SetInt3(const char* name, const int32 v[3])
-	{
-		return writeValueInternal(name, v, sizeof(int32) * 3, MATERIAL_VALUE_TYPE_INT3);
-	}
-
-	bool MaterialInstance::SetInt4(const char* name, const int32 v[4])
-	{
-		return writeValueInternal(name, v, sizeof(int32) * 4, MATERIAL_VALUE_TYPE_INT4);
-	}
-
-	bool MaterialInstance::SetUint(const char* name, uint32 v)
-	{
-		return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_UINT);
-	}
-
-	bool MaterialInstance::SetUint2(const char* name, const uint32 v[2])
-	{
-		return writeValueInternal(name, v, sizeof(uint32) * 2, MATERIAL_VALUE_TYPE_UINT2);
-	}
-
-	bool MaterialInstance::SetUint3(const char* name, const uint32 v[3])
-	{
-		return writeValueInternal(name, v, sizeof(uint32) * 3, MATERIAL_VALUE_TYPE_UINT3);
-	}
-
-	bool MaterialInstance::SetUint4(const char* name, const uint32 v[4])
-	{
-		return writeValueInternal(name, v, sizeof(uint32) * 4, MATERIAL_VALUE_TYPE_UINT4);
-	}
+	bool MaterialInstance::SetUint(const char* name, uint32 v) { return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_UINT); }
+	bool MaterialInstance::SetUint2(const char* name, const uint32 v[2]) { return writeValueInternal(name, v, sizeof(uint32) * 2, MATERIAL_VALUE_TYPE_UINT2); }
+	bool MaterialInstance::SetUint3(const char* name, const uint32 v[3]) { return writeValueInternal(name, v, sizeof(uint32) * 3, MATERIAL_VALUE_TYPE_UINT3); }
+	bool MaterialInstance::SetUint4(const char* name, const uint32 v[4]) { return writeValueInternal(name, v, sizeof(uint32) * 4, MATERIAL_VALUE_TYPE_UINT4); }
 
 	bool MaterialInstance::SetFloat4x4(const char* name, const float m16[16])
 	{
 		return writeValueInternal(name, m16, sizeof(float) * 16, MATERIAL_VALUE_TYPE_FLOAT4X4);
 	}
 
+	// --------------------------------------------------------------------
+	// Resources
+	// --------------------------------------------------------------------
+
 	bool MaterialInstance::SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef)
 	{
 		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
+		ASSERT(m_pTemplate, "Template is null.");
 
 		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(textureName, &resIndex))
-		{
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
 			return false;
-		}
 
-		const MaterialResourceDesc& resourceDesc = m_Template.GetResource(resIndex);
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
 		if (!isTextureType(resourceDesc.Type))
-		{
 			return false;
-		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].TextureRef = textureRef;
@@ -351,18 +464,15 @@ namespace shz
 	bool MaterialInstance::SetTextureRuntimeView(const char* textureName, ITextureView* pView)
 	{
 		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
+		ASSERT(m_pTemplate, "Template is null.");
 
 		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(textureName, &resIndex))
-		{
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
 			return false;
-		}
 
-		const MaterialResourceDesc& resourceDesc = m_Template.GetResource(resIndex);
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
 		if (!isTextureType(resourceDesc.Type))
-		{
 			return false;
-		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pRuntimeView = pView;
@@ -374,18 +484,15 @@ namespace shz
 	bool MaterialInstance::SetSamplerOverride(const char* textureName, ISampler* pSampler)
 	{
 		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
+		ASSERT(m_pTemplate, "Template is null.");
 
 		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(textureName, &resIndex))
-		{
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
 			return false;
-		}
 
-		const MaterialResourceDesc& resourceDesc = m_Template.GetResource(resIndex);
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
 		if (!isTextureType(resourceDesc.Type))
-		{
 			return false;
-		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pSamplerOverride = pSampler;

@@ -62,7 +62,10 @@ namespace shz
 	// RenderObjects
 	// ------------------------------------------------------------
 
-	Handle<RenderScene::RenderObject> RenderScene::AddObject(Handle<StaticMeshRenderData> meshHandle, const std::vector<MaterialInstance>& materials, const Matrix4x4& transform)
+	Handle<RenderScene::RenderObject> RenderScene::AddObject(
+		Handle<StaticMeshRenderData> meshHandle,
+		std::vector<MaterialInstance>&& materials,
+		const Matrix4x4& transform)
 	{
 		UniqueHandle<RenderObject> owner = UniqueHandle<RenderObject>::Make();
 		const Handle<RenderObject> h = owner.Get();
@@ -79,8 +82,9 @@ namespace shz
 
 		RenderObject obj = {};
 		obj.MeshHandle = meshHandle;
-		obj.Materials = materials;
+		obj.Materials = std::move(materials); 
 		obj.Transform = transform;
+		obj.bMaterialDirty = true;
 
 		// Store dense
 		m_Objects.push_back(std::move(obj));
@@ -92,9 +96,9 @@ namespace shz
 		slot.bOccupied = true;
 
 		m_ObjectSparse[handleIndex] = denseIndex;
-
 		return h;
 	}
+
 
 	void RenderScene::RemoveObject(Handle<RenderObject> h)
 	{
@@ -153,18 +157,22 @@ namespace shz
 
 	void RenderScene::UpdateObjectMaterial(Handle<RenderObject> h, uint32 materialSlot, const MaterialInstance& material)
 	{
-		const uint32 denseIndex = findDenseIndex(h, m_ObjectSlots);
-		ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
-		RenderObject& obj = m_Objects[denseIndex];
-		ASSERT(materialSlot < static_cast<uint32>(obj.Materials.size()), "Material slot out of range.");
-		obj.Materials[materialSlot] = material; // TODO: Use handle or ...
+		//const uint32 denseIndex = findDenseIndex(h, m_ObjectSlots);
+		//ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
+		//RenderObject& obj = m_Objects[denseIndex];
+		//ASSERT(materialSlot < static_cast<uint32>(obj.Materials.size()), "Material slot out of range.");
+		//obj.Materials[materialSlot] = material; // TODO: Use handle or ...
+
+		// TODO:
 	}
 
 	void RenderScene::UpdateObjectMaterials(Handle<RenderObject> h, const std::vector<MaterialInstance>& materials)
 	{
-		const uint32 denseIndex = findDenseIndex(h, m_ObjectSlots);
-		ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
-		m_Objects[denseIndex].Materials = materials;
+		//const uint32 denseIndex = findDenseIndex(h, m_ObjectSlots);
+		//ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
+		//m_Objects[denseIndex].Materials = materials;
+
+		// TODO:
 	}
 
 	void RenderScene::UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world)
