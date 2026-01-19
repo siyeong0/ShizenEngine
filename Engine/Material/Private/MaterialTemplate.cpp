@@ -7,68 +7,92 @@
 
 namespace shz
 {
-	static inline MATERIAL_RESOURCE_TYPE convertResourceType(const ShaderResourceDesc& Res)
+	static inline MATERIAL_RESOURCE_TYPE convertResourceType(const ShaderResourceDesc& resourceDesc)
 	{
-		switch (Res.Type)
+		switch (resourceDesc.Type)
 		{
 		case SHADER_RESOURCE_TYPE_TEXTURE_SRV:
-			return MATERIAL_RESOURCE_TYPE_TEXTURE2D; // (선택) dimension 있으면 2D/Array/Cube 구분
+		{
+			ASSERT(resourceDesc.ArraySize > 0, "Array size must be greater than 0.");
+			if (resourceDesc.ArraySize == 1)
+			{
+				return MATERIAL_RESOURCE_TYPE_TEXTURE2D;
+			}
+			else if (resourceDesc.ArraySize == 6)
+			{
+				return MATERIAL_RESOURCE_TYPE_TEXTURECUBE;
+			}
+			else
+			{
+				return MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY;
+			}
+		}
 		case SHADER_RESOURCE_TYPE_BUFFER_SRV:
+		{
 			return MATERIAL_RESOURCE_TYPE_STRUCTUREDBUFFER;
+		}
 		case SHADER_RESOURCE_TYPE_BUFFER_UAV:
+		{
 			return MATERIAL_RESOURCE_TYPE_RWSTRUCTUREDBUFFER;
+		}
 		default:
+		{
 			return MATERIAL_RESOURCE_TYPE_UNKNOWN;
+		}
 		}
 	}
 
-	static inline MATERIAL_VALUE_TYPE convertValueType(const ShaderCodeVariableDesc& Var)
+	static inline MATERIAL_VALUE_TYPE convertValueType(const ShaderCodeVariableDesc& var)
 	{
-		auto IsScalarOrVector = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
+		auto isScalarOrVector = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
 		{
-			return c == SHADER_CODE_VARIABLE_CLASS_SCALAR ||
-				c == SHADER_CODE_VARIABLE_CLASS_VECTOR;
+			return c == SHADER_CODE_VARIABLE_CLASS_SCALAR || c == SHADER_CODE_VARIABLE_CLASS_VECTOR;
 		};
 
-		auto IsMatrix = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
+		auto isMatrix = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
 		{
-			return c == SHADER_CODE_VARIABLE_CLASS_MATRIX_ROWS ||
-				c == SHADER_CODE_VARIABLE_CLASS_MATRIX_COLUMNS;
+			return c == SHADER_CODE_VARIABLE_CLASS_MATRIX_ROWS || c == SHADER_CODE_VARIABLE_CLASS_MATRIX_COLUMNS;
 		};
 
-		if (Var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT)
+		if (var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT)
+		{
 			return MATERIAL_VALUE_TYPE_UNKNOWN;
+		}
 
-		if (IsMatrix(Var.Class))
+		if (isMatrix(var.Class))
 		{
-			if (Var.BasicType == SHADER_CODE_BASIC_TYPE_FLOAT && Var.NumRows == 4 && Var.NumColumns == 4)
+			if (var.BasicType == SHADER_CODE_BASIC_TYPE_FLOAT && var.NumRows == 4 && var.NumColumns == 4)
+			{
 				return MATERIAL_VALUE_TYPE_FLOAT4X4;
+			}
 			return MATERIAL_VALUE_TYPE_UNKNOWN;
 		}
 
-		if (!IsScalarOrVector(Var.Class))
+		if (!isScalarOrVector(var.Class))
+		{
 			return MATERIAL_VALUE_TYPE_UNKNOWN;
+		}
 
-		if (Var.BasicType == SHADER_CODE_BASIC_TYPE_FLOAT)
+		if (var.BasicType == SHADER_CODE_BASIC_TYPE_FLOAT)
 		{
-			if (Var.NumColumns == 1) return MATERIAL_VALUE_TYPE_FLOAT;
-			if (Var.NumColumns == 2) return MATERIAL_VALUE_TYPE_FLOAT2;
-			if (Var.NumColumns == 3) return MATERIAL_VALUE_TYPE_FLOAT3;
-			if (Var.NumColumns == 4) return MATERIAL_VALUE_TYPE_FLOAT4;
+			if (var.NumColumns == 1) return MATERIAL_VALUE_TYPE_FLOAT;
+			if (var.NumColumns == 2) return MATERIAL_VALUE_TYPE_FLOAT2;
+			if (var.NumColumns == 3) return MATERIAL_VALUE_TYPE_FLOAT3;
+			if (var.NumColumns == 4) return MATERIAL_VALUE_TYPE_FLOAT4;
 		}
-		else if (Var.BasicType == SHADER_CODE_BASIC_TYPE_INT)
+		else if (var.BasicType == SHADER_CODE_BASIC_TYPE_INT)
 		{
-			if (Var.NumColumns == 1) return MATERIAL_VALUE_TYPE_INT;
-			if (Var.NumColumns == 2) return MATERIAL_VALUE_TYPE_INT2;
-			if (Var.NumColumns == 3) return MATERIAL_VALUE_TYPE_INT3;
-			if (Var.NumColumns == 4) return MATERIAL_VALUE_TYPE_INT4;
+			if (var.NumColumns == 1) return MATERIAL_VALUE_TYPE_INT;
+			if (var.NumColumns == 2) return MATERIAL_VALUE_TYPE_INT2;
+			if (var.NumColumns == 3) return MATERIAL_VALUE_TYPE_INT3;
+			if (var.NumColumns == 4) return MATERIAL_VALUE_TYPE_INT4;
 		}
-		else if (Var.BasicType == SHADER_CODE_BASIC_TYPE_UINT)
+		else if (var.BasicType == SHADER_CODE_BASIC_TYPE_UINT)
 		{
-			if (Var.NumColumns == 1) return MATERIAL_VALUE_TYPE_UINT;
-			if (Var.NumColumns == 2) return MATERIAL_VALUE_TYPE_UINT2;
-			if (Var.NumColumns == 3) return MATERIAL_VALUE_TYPE_UINT3;
-			if (Var.NumColumns == 4) return MATERIAL_VALUE_TYPE_UINT4;
+			if (var.NumColumns == 1) return MATERIAL_VALUE_TYPE_UINT;
+			if (var.NumColumns == 2) return MATERIAL_VALUE_TYPE_UINT2;
+			if (var.NumColumns == 3) return MATERIAL_VALUE_TYPE_UINT3;
+			if (var.NumColumns == 4) return MATERIAL_VALUE_TYPE_UINT4;
 		}
 
 		return MATERIAL_VALUE_TYPE_UNKNOWN;
@@ -80,23 +104,22 @@ namespace shz
 		uint32 varIndex,
 		uint32 parentEndOffset)
 	{
-		const uint32 curOffset = pVars[varIndex].Offset;
+		const uint32 currOffset = pVars[varIndex].Offset;
 		uint32 nextOffset = parentEndOffset;
 
 		for (uint32 i = varIndex + 1; i < varCount; ++i)
 		{
 			const uint32 off = pVars[i].Offset;
-			if (off > curOffset)
+			if (off > currOffset)
 			{
 				nextOffset = off;
 				break;
 			}
 		}
 
-		if (nextOffset <= curOffset)
-			return 0;
+		ASSERT(nextOffset > currOffset, "Next offset must be bigger than current offset.");
 
-		return nextOffset - curOffset;
+		return nextOffset - currOffset;
 	}
 
 	bool MaterialTemplate::BuildFromShaders(const std::vector<const IShader*>& pShaders)
@@ -292,34 +315,35 @@ namespace shz
 
 	const MaterialValueParamDesc* MaterialTemplate::FindValueParam(const char* name) const
 	{
-		if (!name || name[0] == '\0')
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ValueParamLut.find(name);
 		if (it == m_ValueParamLut.end())
+		{
 			return nullptr;
+		}
 
 		return &m_ValueParams[it->second];
 	}
 
-	bool MaterialTemplate::FindValueParamIndex(const char* name, uint32& outIndex) const
+	bool MaterialTemplate::FindValueParamIndex(const char* name, uint32* pOutIndex) const
 	{
-		outIndex = 0;
-		if (!name || name[0] == '\0')
-			return false;
+		*pOutIndex = 0;
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ValueParamLut.find(name);
 		if (it == m_ValueParamLut.end())
+		{
 			return false;
+		}
 
-		outIndex = it->second;
+		*pOutIndex = it->second;
 		return true;
 	}
 
 	const MaterialResourceDesc* MaterialTemplate::FindResource(const char* name) const
 	{
-		if (!name || name[0] == '\0')
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ResourceLut.find(name);
 		if (it == m_ResourceLut.end())
@@ -328,17 +352,18 @@ namespace shz
 		return &m_Resources[it->second];
 	}
 
-	bool MaterialTemplate::FindResourceIndex(const char* name, uint32& outIndex) const
+	bool MaterialTemplate::FindResourceIndex(const char* name, uint32* pOutIndex) const
 	{
-		outIndex = 0;
-		if (!name || name[0] == '\0')
-			return false;
+		*pOutIndex = 0;
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ResourceLut.find(name);
 		if (it == m_ResourceLut.end())
+		{
 			return false;
+		}
 
-		outIndex = it->second;
+		*pOutIndex = it->second;
 		return true;
 	}
 
@@ -346,13 +371,19 @@ namespace shz
 	{
 		const MaterialValueParamDesc* pDesc = FindValueParam(name);
 		if (!pDesc)
+		{
 			return false;
+		}
 
 		if (expectedType != MATERIAL_VALUE_TYPE_UNKNOWN && pDesc->Type != expectedType)
+		{
 			return false;
+		}
 
 		if (pOutDesc)
+		{
 			*pOutDesc = *pDesc;
+		}
 
 		return true;
 	}
@@ -361,13 +392,19 @@ namespace shz
 	{
 		const MaterialResourceDesc* pDesc = FindResource(name);
 		if (!pDesc)
+		{
 			return false;
+		}
 
 		if (expectedType != MATERIAL_RESOURCE_TYPE_UNKNOWN && pDesc->Type != expectedType)
+		{
 			return false;
+		}
 
 		if (pOutDesc)
+		{
 			*pOutDesc = *pDesc;
+		}
 
 		return true;
 	}

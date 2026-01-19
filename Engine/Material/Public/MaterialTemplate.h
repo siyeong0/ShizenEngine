@@ -107,7 +107,7 @@ namespace shz
 		uint32 GetValueParamCount() const { return static_cast<uint32>(m_ValueParams.size()); }
 		const MaterialValueParamDesc& GetValueParam(uint32 index) const { return m_ValueParams[index]; }
 		const MaterialValueParamDesc* FindValueParam(const char* name) const;
-		bool FindValueParamIndex(const char* name, uint32& outIndex) const;
+		bool FindValueParamIndex(const char* name, uint32* pOutIndex) const;
 
 		// Constant buffers
 		uint32 GetCBufferCount() const { return static_cast<uint32>(m_CBuffers.size()); }
@@ -117,7 +117,7 @@ namespace shz
 		uint32 GetResourceCount() const { return static_cast<uint32>(m_Resources.size()); }
 		const MaterialResourceDesc& GetResource(uint32 index) const { return m_Resources[index]; }
 		const MaterialResourceDesc* FindResource(const char* name) const;
-		bool FindResourceIndex(const char* name, uint32& outIndex) const;
+		bool FindResourceIndex(const char* name, uint32* pOutIndex) const;
 
 		bool ValidateSetValue(const char* name, MATERIAL_VALUE_TYPE expectedType, MaterialValueParamDesc* pOutDesc = nullptr) const;
 		bool ValidateSetResource(const char* name, MATERIAL_RESOURCE_TYPE expectedType, MaterialResourceDesc* pOutDesc = nullptr) const;

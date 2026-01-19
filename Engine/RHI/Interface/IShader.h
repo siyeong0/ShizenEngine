@@ -682,7 +682,7 @@ namespace shz
 		constexpr ShaderResourceDesc(
 			const Char* _Name,
 			SHADER_RESOURCE_TYPE _Type,
-			uint32               _ArraySize) noexcept
+			uint32 _ArraySize) noexcept
 			: Name(_Name)
 			, Type(_Type)
 			, ArraySize(_ArraySize)

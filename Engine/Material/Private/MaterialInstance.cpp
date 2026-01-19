@@ -46,73 +46,68 @@ namespace shz
 
 	const uint8* MaterialInstance::GetCBufferBlobData(uint32 cbufferIndex) const
 	{
-		if (cbufferIndex >= static_cast<uint32>(m_CBufferBlobs.size()))
-			return nullptr;
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
 		return m_CBufferBlobs[cbufferIndex].data();
 	}
 
 	uint32 MaterialInstance::GetCBufferBlobSize(uint32 cbufferIndex) const
 	{
-		if (cbufferIndex >= static_cast<uint32>(m_CBufferBlobs.size()))
-			return 0;
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
 		return static_cast<uint32>(m_CBufferBlobs[cbufferIndex].size());
 	}
 
 	bool MaterialInstance::IsCBufferDirty(uint32 cbufferIndex) const
 	{
-		if (cbufferIndex >= static_cast<uint32>(m_bCBufferDirties.size()))
-			return false;
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
 		return m_bCBufferDirties[cbufferIndex] != 0;
 	}
 
 	void MaterialInstance::ClearCBufferDirty(uint32 cbufferIndex)
 	{
-		if (cbufferIndex >= static_cast<uint32>(m_bCBufferDirties.size()))
-			return;
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
 		m_bCBufferDirties[cbufferIndex] = 0;
 	}
 
 	bool MaterialInstance::IsTextureDirty(uint32 resourceIndex) const
 	{
-		if (resourceIndex >= static_cast<uint32>(m_bTextureDirties.size()))
-			return false;
+		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
 		return m_bTextureDirties[resourceIndex] != 0;
 	}
 
 	void MaterialInstance::ClearTextureDirty(uint32 resourceIndex)
 	{
-		if (resourceIndex >= static_cast<uint32>(m_bTextureDirties.size()))
-			return;
+		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
 		m_bTextureDirties[resourceIndex] = 0;
 	}
 
 	void MaterialInstance::MarkAllDirty()
 	{
-		for (auto& b : m_bCBufferDirties)  b = 1;
-		for (auto& b : m_bTextureDirties)  b = 1;
+		for (uint8& b : m_bCBufferDirties)  b = 1;
+		for (uint8& b : m_bTextureDirties)  b = 1;
 	}
 
 	bool MaterialInstance::writeValueInternal(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedValueType)
 	{
-		if (!m_pTemplate || !name || !pData)
-			return false;
+		ASSERT(m_pTemplate, "m_pTemplate is null. Please initialize material template.");
+		ASSERT(name, "Argument name is null.");
+		ASSERT(pData, "Argument pData is null.");
 
 		MaterialValueParamDesc desc = {};
 		if (!m_pTemplate->ValidateSetValue(name, expectedValueType, &desc))
+		{
+			ASSERTION_FAILED("There is no value named %s in shader %s.", name, m_pTemplate->GetName());
 			return false;
+		}
 
-		if (desc.CBufferIndex >= m_CBufferBlobs.size())
-			return false;
+		ASSERT(desc.CBufferIndex < m_CBufferBlobs.size(), "Out of bounds.");
+		ASSERT(byteSize > 0, "Byte size must be bigger than 0.");
+		ASSERT(byteSize <= desc.ByteSize, "Too big byte size. Byte size must be smaller than variable size(%d)", desc.ByteSize);
 
-		if (byteSize == 0 || byteSize > desc.ByteSize)
-			return false;
-
-		auto& Blob = m_CBufferBlobs[desc.CBufferIndex];
+		std::vector<uint8>& blob = m_CBufferBlobs[desc.CBufferIndex];
 		const uint32 endOffset = static_cast<uint32>(desc.ByteOffset) + byteSize;
-		if (endOffset > static_cast<uint32>(Blob.size()))
-			return false;
+		ASSERT(endOffset <= static_cast<uint32>(blob.size()), "Out of bounds.");
 
-		std::memcpy(Blob.data() + desc.ByteOffset, pData, byteSize);
+		std::memcpy(blob.data() + desc.ByteOffset, pData, byteSize);
 		m_bCBufferDirties[desc.CBufferIndex] = 1;
 
 		return true;
@@ -194,16 +189,20 @@ namespace shz
 
 	bool MaterialInstance::SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef)
 	{
-		if (!m_pTemplate || !textureName)
-			return false;
+		ASSERT(m_pTemplate, "m_pTemplate is null. Please initialize material template.");
+		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
 
 		uint32 resIndex = 0;
-		if (!m_pTemplate->FindResourceIndex(textureName, resIndex))
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
-		const MaterialResourceDesc& Res = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(Res.Type))
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
+		if (!isTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].TextureRef = textureRef;
@@ -217,16 +216,20 @@ namespace shz
 
 	bool MaterialInstance::SetTextureRuntimeView(const char* textureName, ITextureView* pView)
 	{
-		if (!m_pTemplate || !textureName)
-			return false;
+		ASSERT(m_pTemplate, "m_pTemplate is null. Please initialize material template.");
+		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
 
 		uint32 resIndex = 0;
-		if (!m_pTemplate->FindResourceIndex(textureName, resIndex))
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
-		const MaterialResourceDesc& Res = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(Res.Type))
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
+		if (!isTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pRuntimeView = pView;
@@ -237,16 +240,20 @@ namespace shz
 
 	bool MaterialInstance::SetSamplerOverride(const char* textureName, ISampler* pSampler)
 	{
-		if (!m_pTemplate || !textureName)
-			return false;
+		ASSERT(m_pTemplate, "m_pTemplate is null. Please initialize material template.");
+		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
 
 		uint32 resIndex = 0;
-		if (!m_pTemplate->FindResourceIndex(textureName, resIndex))
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
-		const MaterialResourceDesc& Res = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(Res.Type))
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
+		if (!isTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pSamplerOverride = pSampler;
