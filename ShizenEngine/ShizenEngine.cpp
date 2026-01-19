@@ -287,7 +287,7 @@ namespace shz
 		return materialInstance;
 	}
 
-	void ShizenEngine::LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bRotate)
+	void ShizenEngine::LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bUniformScale, bool bRotate)
 	{
 		LoadedMesh entry = {};
 		entry.Path = path;
@@ -305,9 +305,13 @@ namespace shz
 			return;
 		}
 
-		const Box& bounds = cpuMesh->GetBounds();
-		const float uniform = computeUniformScaleToFitUnitCube(bounds, 1.0f);
-		entry.Scale = float3(uniform, uniform, uniform);
+		entry.Scale = { 1.0f ,1.0f, 1.0f };
+		if (bUniformScale)
+		{
+			const Box& bounds = cpuMesh->GetBounds();
+			const float uniform = computeUniformScaleToFitUnitCube(bounds, 1.0f);
+			entry.Scale = float3(uniform, uniform, uniform);
+		}
 
 		// GPU mesh
 		entry.MeshHandle = m_pRenderer->CreateStaticMesh(*cpuMesh);
@@ -320,7 +324,7 @@ namespace shz
 
 		entry.Position = position;
 		entry.BaseRotation = rotation;
-		entry.Scale = scale;
+		entry.Scale *= scale;
 
 		if (bRotate)
 		{
@@ -441,35 +445,60 @@ namespace shz
 		// ------------------------------------------------------------
 		LoadMesh(
 			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx",
-			{ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+			{ -2.0f, -0.5f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, false);
 
 		LoadMesh(
 			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
-			{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
+			{ 0.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
-		// ------------------------------------------------------------
-		// Load mesh paths + spawn as grid
-		// ------------------------------------------------------------
-		//std::vector<const char*> meshPaths;
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
-		//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/clovers-plants-foliage/source/Clovers.fbx",
+			{ 2.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
-		//const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
-		//const float spacingX = 1.0f;
-		//const float spacingY = 1.0f;
-		//const float spacingZ = 2.0f;
+		//LoadMesh(
+		//	"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/grass0/scene.gltf",
+		//	{ -4.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
 
-		//spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
+		/*LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/grass-free-download/source/grass.fbx",
+			{ -2.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
+
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/cgrass-lowpoly/source/grass_cereale.fbx",
+			{ 0.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
+
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/grass-vegitation-mix/source/Grass_Vegitation_mix.fbx",
+			{ 2.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
+
+		LoadMesh(
+			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/lowpoly-plant/source/grass3.fbx",
+			{ 4.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });*/
+
+
+			// ------------------------------------------------------------
+			// Load mesh paths + spawn as grid
+			// ------------------------------------------------------------
+			//std::vector<const char*> meshPaths;
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
+			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+
+			//const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
+			//const float spacingX = 1.0f;
+			//const float spacingY = 1.0f;
+			//const float spacingZ = 2.0f;
+
+			//spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 	}

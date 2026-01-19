@@ -57,7 +57,7 @@ namespace shz
 	private:
 		MaterialInstance CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset);
 
-		void LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bRotate = false);
+		void LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bUniformScale = true, bool bRotate = false);
 
 		void spawnMeshesOnXYGrid(
 			const std::vector<const char*>& meshPaths,
