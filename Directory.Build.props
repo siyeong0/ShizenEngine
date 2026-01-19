@@ -48,7 +48,6 @@
 			<PreprocessorDefinitions>
 				PLATFORM_WIN32;
 				D3D12_SUPPORTED;
-				SHZ_DEBUG;
 				NOMINMAX;
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
@@ -74,6 +73,17 @@
 
 	</ItemDefinitionGroup>
 
+	<!-- ========================================================= -->
+	<!-- Debug-only preprocessor definitions                       -->
+	<!-- ========================================================= -->
+	<ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+		<ClCompile>
+			<PreprocessorDefinitions>
+				SHZ_DEBUG;
+				%(PreprocessorDefinitions)
+			</PreprocessorDefinitions>
+		</ClCompile>
+	</ItemDefinitionGroup>
 
 	<!-- ========================================================= -->
 	<!-- Additional linker dependencies for **Samples** projects   -->
