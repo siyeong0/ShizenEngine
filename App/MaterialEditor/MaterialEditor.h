@@ -1,11 +1,15 @@
 // ============================================================================
 // Samples/MaterialEditor/MaterialEditor.h
 //   - Workflow:
-//     1) Pick shader preset (VS/PS)
+//     1) Pick shader preset OR type shader paths (VS/PS + Entry)
 //     2) Build MaterialTemplate (shaders + reflection) and cache it
 //     3) Create MaterialInstance per mesh material slot
 //     4) Set RenderPass / Raster / Depth / Binding policy via UI (Set* APIs)
 //     5) Fill instance values/textures via UI (Set* APIs)
+//   - A-option (Recommended):
+//     - Template cache is global, but APPLY is explicit:
+//       * Build/Update Template: builds template only (no auto apply)
+//       * Apply Template to Selected Slot/Object/All: applies only where requested
 // ============================================================================
 
 #pragma once
@@ -119,20 +123,17 @@ namespace shz
 			float  AlphaCutoff = 0.5f;
 			float  NormalScale = 1.0f;
 
+			// Per-texture vertical flip (for imported textures / UV conventions)
+			bool BaseColorFlipVertically = false;
+			bool NormalFlipVertically = false;
+			bool MetallicRoughnessFlipVertically = false;
+			bool AOFlipVertically = false;
+			bool EmissiveFlipVertically = false;
+			bool HeightFlipVertically = false;
+
+
 			// Flags (mirrors shader flags if used)
 			uint32 MaterialFlags = 0;
-		};
-
-	public:
-		struct ShaderPreset final
-		{
-			const char* Label = "";
-			const char* VS = "";
-			const char* PS = "";
-			const char* VSEntry = "main";
-			const char* PSEntry = "main";
-			bool VS_CombinedSamplers = false;
-			bool PS_CombinedSamplers = false;
 		};
 
 	private:
@@ -148,7 +149,7 @@ namespace shz
 
 		// Path / runtime texture cache
 		static std::string sanitizeFilePath(std::string s);
-		ITextureView* getOrCreateTextureSRV(const std::string& path, bool isSRGB);
+		ITextureView* getOrCreateTextureSRV(const std::string& path, bool isSRGB, bool flipVertically);
 		void ensureResourceStateSRV(ITexture* pTex);
 
 		// Win32 helpers (optional)
@@ -156,12 +157,14 @@ namespace shz
 		void enableWindowDragDrop();  // WM_DROPFILES hookup point (if available)
 		void onFilesDropped(const std::vector<std::string>& paths);
 
-		// Template / Instance workflow
-		const ShaderPreset& getCurrentShaderPreset() const;
-		std::string makeTemplateKeyFromPreset(const ShaderPreset& p) const;
+		// Template / Instance workflow (inputs -> template)
+		std::string makeTemplateKeyFromInputs() const;
+		MaterialTemplate* getOrCreateTemplateFromInputs();
 
-		MaterialTemplate* getOrCreateTemplate(const ShaderPreset& preset);
+		// Explicit apply (A-option)
 		bool rebuildAllMaterialsFromCurrentTemplate();
+		bool rebuildSelectedMaterialSlotFromCurrentTemplate();
+		bool rebuildSelectedObjectFromCurrentTemplate();
 
 		// Preview scene
 		void loadPreviewMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bUniformScale = true);
@@ -201,7 +204,13 @@ namespace shz
 
 		EditorMaterialOverrides m_Overrides = {};
 
-		int32 m_SelectedShaderPreset = 0;
+		// Shader inputs (no ShaderPreset struct)
+		int32 m_SelectedPresetIndex = 0;
+
+		std::string m_ShaderVS = "GBuffer.vsh";
+		std::string m_ShaderPS = "GBuffer.psh";
+		std::string m_VSEntry = "main";
+		std::string m_PSEntry = "main";
 
 		// Drag&drop support
 		std::vector<std::string> m_DroppedFiles = {};

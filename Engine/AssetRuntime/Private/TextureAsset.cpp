@@ -58,9 +58,6 @@ namespace shz
 		info.GenerateMips = m_GenerateMips;
 		info.FlipVertically = m_FlipVertically;
 
-		// NOTE:
-		// Make sure the field name in TextureLoadInfo matches this exactly.
-		// Some codebases use "PremultiplyAlpha" (common spelling).
 		info.PremultiplyAlpha = m_PremultiplyAlpha;
 
 		info.Format = m_Format;

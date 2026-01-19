@@ -66,8 +66,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tutorial08-DeferredRenderin
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Renderer", "Engine\Renderer\Engine-Renderer.vcxproj", "{434146A2-C1AF-4D85-8E9B-2FAF1727B469}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShizenEngine", "ShizenEngine\ShizenEngine.vcxproj", "{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-AssetRuntime", "Engine\AssetRuntime\Engine-AssetRuntime.vcxproj", "{505D73A4-5365-4527-B263-3C10BE6D839B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Material", "Engine\Material\Engine-Material.vcxproj", "{079B918F-E9B0-4BA3-8027-08ED497F4628}"
@@ -78,14 +76,27 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "App-MaterialEditor", "App\M
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Framework", "Engine\Framework\Engine-Framework.vcxproj", "{A7B8EF1B-D2D8-4C3E-ACC8-FE57F22DF41F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D4CF4-FF88-49E2-B678-B242E569DF01}"
+	ProjectSection(SolutionItems) = preProject
+		Shaders\DeferredLighting.psh = Shaders\DeferredLighting.psh
+		Shaders\DeferredLighting.vsh = Shaders\DeferredLighting.vsh
+		Shaders\GBuffer.psh = Shaders\GBuffer.psh
+		Shaders\GBuffer.vsh = Shaders\GBuffer.vsh
+		Shaders\GBufferMasked.psh = Shaders\GBufferMasked.psh
+		Shaders\GBufferMasked.vsh = Shaders\GBufferMasked.vsh
+		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
+		Shaders\PostCopy.psh = Shaders\PostCopy.psh
+		Shaders\PostCopy.vsh = Shaders\PostCopy.vsh
+		Shaders\Shadow.psh = Shaders\Shadow.psh
+		Shaders\Shadow.vsh = Shaders\Shadow.vsh
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		Platforms\Common\Platforms-Common.vcxitems*{079b918f-e9b0-4ba3-8027-08ed497f4628}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{079b918f-e9b0-4ba3-8027-08ed497f4628}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{2504a2be-409e-4eba-ab7f-1c8d7375ad94}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{2504a2be-409e-4eba-ab7f-1c8d7375ad94}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{2fe04adc-89fb-4e2b-ae65-fd6743e7344e}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{2fe04adc-89fb-4e2b-ae65-fd6743e7344e}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
 		Primitives\Primitives.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
 		Platforms\Common\Platforms-Common.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
@@ -313,14 +324,6 @@ Global
 		{434146A2-C1AF-4D85-8E9B-2FAF1727B469}.Release|x64.Build.0 = Release|x64
 		{434146A2-C1AF-4D85-8E9B-2FAF1727B469}.Release|x86.ActiveCfg = Release|Win32
 		{434146A2-C1AF-4D85-8E9B-2FAF1727B469}.Release|x86.Build.0 = Release|Win32
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Debug|x64.ActiveCfg = Debug|x64
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Debug|x64.Build.0 = Debug|x64
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Debug|x86.ActiveCfg = Debug|Win32
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Debug|x86.Build.0 = Debug|Win32
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x64.ActiveCfg = Release|x64
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x64.Build.0 = Release|x64
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x86.ActiveCfg = Release|Win32
-		{2FE04ADC-89FB-4E2B-AE65-FD6743E7344E}.Release|x86.Build.0 = Release|Win32
 		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x64.ActiveCfg = Debug|x64
 		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x64.Build.0 = Debug|x64
 		{505D73A4-5365-4527-B263-3C10BE6D839B}.Debug|x86.ActiveCfg = Debug|Win32

@@ -46,23 +46,45 @@ namespace shz
 			return targetSize / maxDim;
 		}
 
-		static uint32 PackRGBA8(uint8 r, uint8 g, uint8 b, uint8 a) noexcept
+		static uint32 packRGBA8(uint8 r, uint8 g, uint8 b, uint8 a) noexcept
 		{
 			return (uint32(r) << 0) | (uint32(g) << 8) | (uint32(b) << 16) | (uint32(a) << 24);
 		}
 
-		static MaterialEditor::ShaderPreset g_ShaderPresets[] =
+		// Preset tables (no ShaderPreset struct)
+		static const char* g_PresetLabels[] =
 		{
-			{
-				"PBR GBuffer (GBuffer.vsh / GBuffer.psh)",
-				"GBuffer.vsh",
-				"GBuffer.psh",
-				"main",
-				"main",
-				false,
-				false
-			},
-			// { "Forward (Forward.vsh / Forward.psh)", "Forward.vsh", "Forward.psh", "main", "main", false, false },
+			"PBR GBuffer (GBuffer.vsh / GBuffer.psh)",
+			"GBuffer Masked (GBufferMasked.vsh / GBufferMasked.psh)",
+			"Custom (type paths)",
+		};
+
+		static const char* g_PresetVS[] =
+		{
+			"GBuffer.vsh",
+			"GBufferMasked.vsh",
+			nullptr, // custom
+		};
+
+		static const char* g_PresetPS[] =
+		{
+			"GBuffer.psh",
+			"GBufferMasked.psh",
+			nullptr, // custom
+		};
+
+		static const char* g_PresetVSEntry[] =
+		{
+			"main",
+			"main",
+			nullptr, // custom
+		};
+
+		static const char* g_PresetPSEntry[] =
+		{
+			"main",
+			"main",
+			nullptr, // custom
 		};
 
 		static const char* g_RenderPassNames[] =
@@ -73,7 +95,7 @@ namespace shz
 			"Post",
 		};
 
-		static const char* CullModeLabel(CULL_MODE m)
+		static const char* cullModeLabel(CULL_MODE m)
 		{
 			switch (m)
 			{
@@ -84,7 +106,7 @@ namespace shz
 			}
 		}
 
-		static const char* DepthFuncLabel(COMPARISON_FUNCTION f)
+		static const char* depthFuncLabel(COMPARISON_FUNCTION f)
 		{
 			switch (f)
 			{
@@ -100,7 +122,7 @@ namespace shz
 			}
 		}
 
-		static const char* TexBindModeLabel(MATERIAL_TEXTURE_BINDING_MODE m)
+		static const char* texBindModeLabel(MATERIAL_TEXTURE_BINDING_MODE m)
 		{
 			switch (m)
 			{
@@ -108,6 +130,31 @@ namespace shz
 			case MATERIAL_TEXTURE_BINDING_MODE_MUTABLE: return "MUTABLE (No overwrite by default)";
 			default: return "UNKNOWN";
 			}
+		}
+
+		static void imGuiInputString(const char* label, std::string& s, size_t maxLen = 512)
+		{
+			std::vector<char> buf;
+			buf.resize(maxLen);
+			memset(buf.data(), 0, buf.size());
+
+			if (!s.empty())
+				strncpy_s(buf.data(), buf.size(), s.c_str(), _TRUNCATE);
+
+			if (ImGui::InputText(label, buf.data(), buf.size()))
+				s = buf.data();
+		}
+
+		static std::string makeTextureCacheKey(const std::string& path, bool isSRGB, bool flipVertically)
+		{
+			std::string k;
+			k.reserve(path.size() + 32);
+			k += path;
+			k += "|SRGB:";
+			k += (isSRGB ? '1' : '0');
+			k += "|FLIPV:";
+			k += (flipVertically ? '1' : '0');
+			return k;
 		}
 	}
 
@@ -263,7 +310,7 @@ namespace shz
 		m_pImmediateContext->TransitionResourceStates(1, &barrier);
 	}
 
-	ITextureView* MaterialEditor::getOrCreateTextureSRV(const std::string& inPath, bool isSRGB)
+	ITextureView* MaterialEditor::getOrCreateTextureSRV(const std::string& inPath, bool isSRGB, bool flipVertically)
 	{
 		std::string path = sanitizeFilePath(inPath);
 		if (path.empty())
@@ -282,6 +329,7 @@ namespace shz
 
 		TextureLoadInfo tli = {};
 		tli.IsSRGB = isSRGB;
+		tli.FlipVertically = flipVertically;
 
 		CreateTextureFromFile(path.c_str(), tli, m_pDevice, &tex);
 		if (!tex)
@@ -320,7 +368,7 @@ namespace shz
 		(void)outPath; (void)filter; (void)title;
 #endif
 		return false;
-	}
+		}
 
 	void MaterialEditor::enableWindowDragDrop()
 	{
@@ -331,8 +379,6 @@ namespace shz
 
 	void MaterialEditor::onFilesDropped(const std::vector<std::string>& paths)
 	{
-		// Minimal policy:
-		// - store list for UI use (user chooses which slot to apply)
 		m_DroppedFiles = paths;
 	}
 
@@ -340,29 +386,24 @@ namespace shz
 	// Template / Instance workflow
 	// ------------------------------------------------------------
 
-	const MaterialEditor::ShaderPreset& MaterialEditor::getCurrentShaderPreset() const
-	{
-		ASSERT(m_SelectedShaderPreset >= 0 && m_SelectedShaderPreset < (int32)_countof(g_ShaderPresets), "Invalid shader preset index.");
-		return g_ShaderPresets[m_SelectedShaderPreset];
-	}
-
-	std::string MaterialEditor::makeTemplateKeyFromPreset(const ShaderPreset& p) const
+	std::string MaterialEditor::makeTemplateKeyFromInputs() const
 	{
 		std::string k;
 		k.reserve(256);
-		k += "VS:";  k += (p.VS ? p.VS : "");
-		k += "|VSE:"; k += (p.VSEntry ? p.VSEntry : "");
-		k += "|PS:";  k += (p.PS ? p.PS : "");
-		k += "|PSE:"; k += (p.PSEntry ? p.PSEntry : "");
-		k += "|CS:";
-		k += (p.VS_CombinedSamplers ? "1" : "0");
-		k += (p.PS_CombinedSamplers ? "1" : "0");
+		k += "VS:";   k += m_ShaderVS;
+		k += "|VSE:"; k += m_VSEntry;
+		k += "|PS:";  k += m_ShaderPS;
+		k += "|PSE:"; k += m_PSEntry;
 		return k;
 	}
 
-	MaterialTemplate* MaterialEditor::getOrCreateTemplate(const ShaderPreset& preset)
+	MaterialTemplate* MaterialEditor::getOrCreateTemplateFromInputs()
 	{
-		const std::string key = makeTemplateKeyFromPreset(preset);
+		// Basic validation
+		if (m_ShaderVS.empty() || m_ShaderPS.empty() || m_VSEntry.empty() || m_PSEntry.empty())
+			return nullptr;
+
+		const std::string key = makeTemplateKeyFromInputs();
 
 		auto it = m_TemplateCache.find(key);
 		if (it != m_TemplateCache.end())
@@ -372,7 +413,7 @@ namespace shz
 
 		MaterialTemplateCreateInfo tci = {};
 		tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-		tci.TemplateName = std::string("MaterialEditor: ") + preset.Label;
+		tci.TemplateName = std::string("MaterialEditor: ") + key;
 
 		tci.ShaderStages.clear();
 		tci.ShaderStages.reserve(2);
@@ -380,20 +421,20 @@ namespace shz
 		MaterialShaderStageDesc vs = {};
 		vs.ShaderType = SHADER_TYPE_VERTEX;
 		vs.DebugName = "MaterialEditor VS";
-		vs.FilePath = preset.VS;
-		vs.EntryPoint = preset.VSEntry ? preset.VSEntry : "main";
+		vs.FilePath = m_ShaderVS.c_str();
+		vs.EntryPoint = m_VSEntry.c_str();
 		vs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		vs.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-		vs.UseCombinedTextureSamplers = preset.VS_CombinedSamplers;
+		vs.UseCombinedTextureSamplers = false; // ignored
 
 		MaterialShaderStageDesc ps = {};
 		ps.ShaderType = SHADER_TYPE_PIXEL;
 		ps.DebugName = "MaterialEditor PS";
-		ps.FilePath = preset.PS;
-		ps.EntryPoint = preset.PSEntry ? preset.PSEntry : "main";
+		ps.FilePath = m_ShaderPS.c_str();
+		ps.EntryPoint = m_PSEntry.c_str();
 		ps.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		ps.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-		ps.UseCombinedTextureSamplers = preset.PS_CombinedSamplers;
+		ps.UseCombinedTextureSamplers = false; // ignored
 
 		tci.ShaderStages.push_back(vs);
 		tci.ShaderStages.push_back(ps);
@@ -405,12 +446,85 @@ namespace shz
 		return &insIt->second;
 	}
 
+	bool MaterialEditor::rebuildSelectedMaterialSlotFromCurrentTemplate()
+	{
+		if (!m_pRenderScene)
+			return false;
+
+		if (m_SelectedObject < 0 || m_SelectedObject >= (int32)m_Loaded.size())
+			return false;
+
+		LoadedMesh& sel = m_Loaded[(size_t)m_SelectedObject];
+		if (sel.SceneObjectIndex < 0 || sel.SceneObjectIndex >= (int32)m_pRenderScene->GetObjects().size())
+			return false;
+
+		auto& obj = m_pRenderScene->GetObjects()[(size_t)sel.SceneObjectIndex];
+		if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj.Materials.size())
+			return false;
+
+		MaterialTemplate* pTemplate = getOrCreateTemplateFromInputs();
+		if (!pTemplate)
+			return false;
+
+		MaterialInstance newMat = {};
+		{
+			const bool ok = newMat.Initialize(pTemplate, "MaterialEditor Instance");
+			ASSERT(ok, "MaterialInstance::Initialize failed.");
+		}
+
+		// Apply editor overrides onto the new instance.
+		applyPipelineOverrides(newMat, m_Overrides);
+		applyMaterialOverrides(newMat, m_Overrides);
+
+		obj.Materials[(size_t)m_SelectedMaterialSlot] = static_cast<MaterialInstance&&>(newMat);
+		return true;
+	}
+
+	bool MaterialEditor::rebuildSelectedObjectFromCurrentTemplate()
+	{
+		if (!m_pRenderScene)
+			return false;
+
+		if (m_SelectedObject < 0 || m_SelectedObject >= (int32)m_Loaded.size())
+			return false;
+
+		LoadedMesh& sel = m_Loaded[(size_t)m_SelectedObject];
+		if (!sel.MeshPtr)
+			return false;
+
+		if (sel.SceneObjectIndex < 0 || sel.SceneObjectIndex >= (int32)m_pRenderScene->GetObjects().size())
+			return false;
+
+		MaterialTemplate* pTemplate = getOrCreateTemplateFromInputs();
+		if (!pTemplate)
+			return false;
+
+		auto& obj = m_pRenderScene->GetObjects()[(size_t)sel.SceneObjectIndex];
+
+		// Recreate each slot instance with the same template + editor overrides.
+		for (size_t slot = 0; slot < obj.Materials.size(); ++slot)
+		{
+			MaterialInstance newMat = {};
+			{
+				const bool ok = newMat.Initialize(pTemplate, "MaterialEditor Instance");
+				ASSERT(ok, "MaterialInstance::Initialize failed.");
+			}
+
+			applyPipelineOverrides(newMat, m_Overrides);
+			applyMaterialOverrides(newMat, m_Overrides);
+
+			obj.Materials[slot] = static_cast<MaterialInstance&&>(newMat);
+		}
+
+		return true;
+	}
+
 	bool MaterialEditor::rebuildAllMaterialsFromCurrentTemplate()
 	{
 		if (!m_pRenderScene)
 			return false;
 
-		MaterialTemplate* pTemplate = getOrCreateTemplate(getCurrentShaderPreset());
+		MaterialTemplate* pTemplate = getOrCreateTemplateFromInputs();
 		if (!pTemplate)
 			return false;
 
@@ -425,12 +539,21 @@ namespace shz
 			if (entry.SceneObjectIndex < 0 || entry.SceneObjectIndex >= (int32)objects.size())
 				continue;
 
-			const StaticMeshAsset* cpuMesh = entry.MeshPtr.Get();
-			if (!cpuMesh)
-				continue;
+			auto& obj = objects[(size_t)entry.SceneObjectIndex];
 
-			std::vector<MaterialInstance> mats = buildMaterialsForCpuMeshSlots(*cpuMesh);
-			objects[(size_t)entry.SceneObjectIndex].Materials = static_cast<std::vector<MaterialInstance>&&>(mats);
+			for (size_t slot = 0; slot < obj.Materials.size(); ++slot)
+			{
+				MaterialInstance newMat = {};
+				{
+					const bool ok = newMat.Initialize(pTemplate, "MaterialEditor Instance");
+					ASSERT(ok, "MaterialInstance::Initialize failed.");
+				}
+
+				applyPipelineOverrides(newMat, m_Overrides);
+				applyMaterialOverrides(newMat, m_Overrides);
+
+				obj.Materials[slot] = static_cast<MaterialInstance&&>(newMat);
+			}
 		}
 
 		return true;
@@ -476,6 +599,7 @@ namespace shz
 		entry.BaseRotation = rotation;
 		entry.Scale *= scale;
 
+		// Initial creation uses current template + imported asset seeding.
 		std::vector<MaterialInstance> materials = buildMaterialsForCpuMeshSlots(*cpuMesh);
 
 		entry.ObjectId = m_pRenderScene->AddObject(
@@ -558,13 +682,18 @@ namespace shz
 		// Textures (runtime override)
 		uint32 flags = ov.MaterialFlags;
 
-		auto BindOrDefault = [&](const std::string& inPath, const char* varName, const RefCntAutoPtr<ITexture>& defaultTex, bool isSRGB, uint32 flagBit)
+		auto BindOrDefault = [&](
+			const std::string& inPath,
+			bool bFlipV,
+			const char* varName,
+			const RefCntAutoPtr<ITexture>& defaultTex,
+			bool isSRGB, uint32 flagBit)
 		{
 			const std::string path = sanitizeFilePath(inPath);
 
 			if (!path.empty())
 			{
-				if (ITextureView* srv = getOrCreateTextureSRV(path, isSRGB))
+				if (ITextureView* srv = getOrCreateTextureSRV(path, isSRGB, bFlipV))
 				{
 					mat.SetTextureRuntimeView(varName, srv);
 					flags |= flagBit;
@@ -576,12 +705,12 @@ namespace shz
 			flags &= ~flagBit;
 		};
 
-		BindOrDefault(ov.BaseColorPath, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR);
-		BindOrDefault(ov.NormalPath, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL);
-		BindOrDefault(ov.MetallicRoughnessPath, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR);
-		BindOrDefault(ov.AOPath, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO);
-		BindOrDefault(ov.EmissivePath, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE);
-		BindOrDefault(ov.HeightPath, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT);
+		BindOrDefault(ov.BaseColorPath, ov.BaseColorFlipVertically, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR);
+		BindOrDefault(ov.NormalPath, ov.NormalFlipVertically, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL);
+		BindOrDefault(ov.MetallicRoughnessPath, ov.MetallicRoughnessFlipVertically, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR);
+		BindOrDefault(ov.AOPath, ov.AOFlipVertically, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO);
+		BindOrDefault(ov.EmissivePath, ov.EmissiveFlipVertically, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE);
+		BindOrDefault(ov.HeightPath, ov.HeightFlipVertically, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT);
 
 		mat.SetUint("g_MaterialFlags", flags);
 
@@ -591,7 +720,7 @@ namespace shz
 
 	std::vector<MaterialInstance> MaterialEditor::buildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh)
 	{
-		MaterialTemplate* pTemplate = getOrCreateTemplate(getCurrentShaderPreset());
+		MaterialTemplate* pTemplate = getOrCreateTemplateFromInputs();
 		ASSERT(pTemplate, "Template is null.");
 
 		std::vector<MaterialInstance> materials;
@@ -614,16 +743,18 @@ namespace shz
 			// Bind textures from imported asset (best-effort), else default
 			uint32 materialFlags = 0;
 
-			auto BindFromAssetOrDefault = [&](MATERIAL_TEXTURE_SLOT slot,
+			auto BindFromAssetOrDefault = [&](
+				MATERIAL_TEXTURE_SLOT slot,
 				const char* shaderVar,
 				const RefCntAutoPtr<ITexture>& defaultTex,
 				bool isSRGB,
-				uint32 flagBit)
+				uint32 flagBit,
+				bool bFlipV)
 			{
 				if (matAsset.GetTexture(slot).IsValid())
 				{
 					const std::string texPath = matAsset.GetTexture(slot).GetSourcePath();
-					if (ITextureView* srv = getOrCreateTextureSRV(texPath, isSRGB))
+					if (ITextureView* srv = getOrCreateTextureSRV(texPath, isSRGB, bFlipV))
 					{
 						mat.SetTextureRuntimeView(shaderVar, srv);
 						materialFlags |= flagBit;
@@ -634,12 +765,12 @@ namespace shz
 				mat.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			};
 
-			BindFromAssetOrDefault(MATERIAL_TEX_ALBEDO, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR);
-			BindFromAssetOrDefault(MATERIAL_TEX_NORMAL, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL);
-			BindFromAssetOrDefault(MATERIAL_TEX_ORM, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR);
-			BindFromAssetOrDefault(MATERIAL_TEX_AO, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO);
-			BindFromAssetOrDefault(MATERIAL_TEX_EMISSIVE, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE);
-			BindFromAssetOrDefault(MATERIAL_TEX_HEIGHT, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT);
+			BindFromAssetOrDefault(MATERIAL_TEX_ALBEDO, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR, m_Overrides.BaseColorFlipVertically);
+			BindFromAssetOrDefault(MATERIAL_TEX_NORMAL, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL, m_Overrides.NormalFlipVertically);
+			BindFromAssetOrDefault(MATERIAL_TEX_ORM, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR, m_Overrides.MetallicRoughnessFlipVertically);
+			BindFromAssetOrDefault(MATERIAL_TEX_AO, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO, m_Overrides.AOFlipVertically);
+			BindFromAssetOrDefault(MATERIAL_TEX_EMISSIVE, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE, m_Overrides.EmissiveFlipVertically);
+			BindFromAssetOrDefault(MATERIAL_TEX_HEIGHT, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT, m_Overrides.HeightFlipVertically);
 
 			mat.SetUint("g_MaterialFlags", materialFlags);
 			mat.MarkAllDirty();
@@ -702,6 +833,9 @@ namespace shz
 	{
 		SampleBase::Initialize(InitInfo);
 
+		m_pDevice = m_pDevice; // SampleBase likely already has it (keep for clarity)
+		m_pImmediateContext = m_pImmediateContext;
+
 		m_pAssetManager = std::make_unique<AssetManager>();
 		registerAssetLoaders();
 
@@ -751,12 +885,12 @@ namespace shz
 			return (outTex != nullptr);
 		};
 
-		Create1x1Texture("DefaultWhite1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
-		Create1x1Texture("DefaultBlack1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
-		Create1x1Texture("DefaultNormal1x1", PackRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal);
-		Create1x1Texture("DefaultMR1x1", PackRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness);
-		Create1x1Texture("DefaultAO1x1", PackRGBA8(255, 255, 255, 255), m_DefaultTextures.AO);
-		Create1x1Texture("DefaultEmissive1x1", PackRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive);
+		Create1x1Texture("DefaultWhite1x1", packRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
+		Create1x1Texture("DefaultBlack1x1", packRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
+		Create1x1Texture("DefaultNormal1x1", packRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal);
+		Create1x1Texture("DefaultMR1x1", packRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness);
+		Create1x1Texture("DefaultAO1x1", packRGBA8(255, 255, 255, 255), m_DefaultTextures.AO);
+		Create1x1Texture("DefaultEmissive1x1", packRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive);
 
 		ensureResourceStateSRV(m_DefaultTextures.White.RawPtr());
 		ensureResourceStateSRV(m_DefaultTextures.Black.RawPtr());
@@ -776,16 +910,28 @@ namespace shz
 		m_ViewFamily.Views.clear();
 		m_ViewFamily.Views.push_back({});
 
-		(void)getOrCreateTemplate(getCurrentShaderPreset());
+		// Seed preset 0
+		m_SelectedPresetIndex = 0;
+		m_ShaderVS = g_PresetVS[0];
+		m_ShaderPS = g_PresetPS[0];
+		m_VSEntry = g_PresetVSEntry[0];
+		m_PSEntry = g_PresetPSEntry[0];
+
+		// Cache template once
+		(void)getOrCreateTemplateFromInputs();
 
 		// Preview models
 		loadPreviewMesh(
 			"C:/Dev/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx",
 			{ -2.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, false);
 
+		//loadPreviewMesh(
+		//	"C:/Dev/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
+		//	{ 0.0f, 0.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+
 		loadPreviewMesh(
-			"C:/Dev/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
-			{ 0.0f, 0.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+			"C:/Dev/ShizenEngine/Assets/Grass/grass-free-download/source/grass.fbx",
+			{ 0.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 
@@ -797,7 +943,6 @@ namespace shz
 		m_Overrides.RenderPassName = "GBuffer";
 		m_Overrides.SubpassIndex = 0;
 
-		// If possible, wire Win32 drag&drop here
 		enableWindowDragDrop();
 	}
 
@@ -825,13 +970,18 @@ namespace shz
 
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.CurrentTime = currTime;
-		m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
-		m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
-		m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
-		m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
-		m_ViewFamily.Views[0].FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
 
-		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
+		if (!m_ViewFamily.Views.empty())
+		{
+			m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
+			m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
+			m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
+			m_ViewFamily.Views[0].NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
+			m_ViewFamily.Views[0].FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
+		}
+
+		if (m_pRenderScene && m_GlobalLightHandle.IsValid())
+			m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
 	}
 
 	void MaterialEditor::ReleaseSwapChainBuffers()
@@ -874,319 +1024,376 @@ namespace shz
 		ImGui::SetNextWindowPos(ImVec2(10, 220), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(560, 620), ImGuiCond_FirstUseEver);
 
-		if (ImGui::Begin("MaterialEditor", nullptr))
+		if (!ImGui::Begin("MaterialEditor", nullptr))
 		{
-			// ------------------------------------------------------------
-			// 1) Shader preset -> Template
-			// ------------------------------------------------------------
-			ImGui::TextUnformatted("1) Shader Preset -> Build Template");
-			{
-				const char* current = g_ShaderPresets[m_SelectedShaderPreset].Label;
+			ImGui::End();
+			return;
+		}
 
-				if (ImGui::BeginCombo("Shader Preset", current))
+		// ------------------------------------------------------------
+		// 1) Shader inputs -> Template (cache only)
+		// ------------------------------------------------------------
+		ImGui::TextUnformatted("1) Shader Inputs -> Build Template (cache)");
+		{
+			const char* current = g_PresetLabels[m_SelectedPresetIndex];
+
+			if (ImGui::BeginCombo("Preset", current))
+			{
+				for (int i = 0; i < (int)_countof(g_PresetLabels); ++i)
 				{
-					for (int i = 0; i < static_cast<int>(_countof(g_ShaderPresets)); ++i)
+					const bool isSelected = (i == m_SelectedPresetIndex);
+					if (ImGui::Selectable(g_PresetLabels[i], isSelected))
 					{
-						const bool isSelected = (i == m_SelectedShaderPreset);
-						if (ImGui::Selectable(g_ShaderPresets[i].Label, isSelected))
+						m_SelectedPresetIndex = i;
+
+						// Apply non-custom preset to input fields (do NOT auto-rebuild materials)
+						if (g_PresetVS[i] && g_PresetPS[i] && g_PresetVSEntry[i] && g_PresetPSEntry[i])
 						{
-							m_SelectedShaderPreset = i;
-							(void)getOrCreateTemplate(getCurrentShaderPreset());
-							(void)rebuildAllMaterialsFromCurrentTemplate();
+							m_ShaderVS = g_PresetVS[i];
+							m_ShaderPS = g_PresetPS[i];
+							m_VSEntry = g_PresetVSEntry[i];
+							m_PSEntry = g_PresetPSEntry[i];
 						}
-						if (isSelected)
-							ImGui::SetItemDefaultFocus();
+
+						(void)getOrCreateTemplateFromInputs();
 					}
-					ImGui::EndCombo();
+					if (isSelected)
+						ImGui::SetItemDefaultFocus();
 				}
+				ImGui::EndCombo();
 			}
 
-			ImGui::Separator();
+			ImGui::SeparatorText("Shader Paths / Entry Points");
+			imGuiInputString("VS Path", m_ShaderVS);
+			imGuiInputString("PS Path", m_ShaderPS);
+			imGuiInputString("VS Entry", m_VSEntry);
+			imGuiInputString("PS Entry", m_PSEntry);
 
-			// ------------------------------------------------------------
-			// 2) Object/slot selection
-			// ------------------------------------------------------------
-			ImGui::TextUnformatted("2) Select Object / Slot");
-			if (m_Loaded.empty())
+			ImGui::TextDisabled("Combined samplers: ignored");
+
+			if (ImGui::Button("Build/Update Template"))
 			{
-				ImGui::TextUnformatted("No preview objects loaded.");
-				ImGui::End();
-				return;
-			}
-
-			for (int i = 0; i < static_cast<int>(m_Loaded.size()); ++i)
-			{
-				const bool selected = (i == m_SelectedObject);
-				const std::string label = "[" + std::to_string(i) + "] " + m_Loaded[(size_t)i].Path;
-
-				if (ImGui::Selectable(label.c_str(), selected))
-				{
-					m_SelectedObject = i;
-					m_SelectedMaterialSlot = 0;
-				}
-			}
-
-			if (m_SelectedObject < 0 || m_SelectedObject >= static_cast<int>(m_Loaded.size()))
-			{
-				ImGui::TextUnformatted("Invalid selection.");
-				ImGui::End();
-				return;
-			}
-
-			LoadedMesh& sel = m_Loaded[(size_t)m_SelectedObject];
-			if (!sel.MeshPtr)
-			{
-				ImGui::TextUnformatted("CPU mesh is not loaded.");
-				ImGui::End();
-				return;
-			}
-
-			const StaticMeshAsset* cpuMesh = sel.MeshPtr.Get();
-			const int slotCount = static_cast<int>(cpuMesh->GetMaterialSlots().size());
-
-			ImGui::Text("Material Slot: %d / %d", m_SelectedMaterialSlot, slotCount);
-			ImGui::SliderInt("##Slot", &m_SelectedMaterialSlot, 0, (slotCount > 0 ? slotCount - 1 : 0));
-
-			ImGui::Separator();
-
-			// Access material
-			if (sel.SceneObjectIndex < 0 || sel.SceneObjectIndex >= (int32)m_pRenderScene->GetObjects().size())
-			{
-				ImGui::TextUnformatted("Scene object index invalid.");
-				ImGui::End();
-				return;
-			}
-
-			auto& obj = m_pRenderScene->GetObjects()[(size_t)sel.SceneObjectIndex];
-			if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj.Materials.size())
-			{
-				ImGui::TextUnformatted("Material slot invalid.");
-				ImGui::End();
-				return;
-			}
-
-			MaterialInstance& mat = obj.Materials[(size_t)m_SelectedMaterialSlot];
-
-			// ------------------------------------------------------------
-			// 3) Pipeline knobs (Set*)
-			// ------------------------------------------------------------
-			ImGui::TextUnformatted("3) Pipeline Overrides (Set*)");
-
-			// RenderPass
-			{
-				int rpIndex = 0;
-				for (int i = 0; i < (int)_countof(g_RenderPassNames); ++i)
-				{
-					if (m_Overrides.RenderPassName == g_RenderPassNames[i])
-					{
-						rpIndex = i;
-						break;
-					}
-				}
-
-				if (ImGui::Combo("RenderPass", &rpIndex, g_RenderPassNames, (int)_countof(g_RenderPassNames)))
-				{
-					m_Overrides.RenderPassName = g_RenderPassNames[rpIndex];
-				}
-
-				ImGui::InputInt("Subpass", (int*)&m_Overrides.SubpassIndex);
-				if ((int)m_Overrides.SubpassIndex < 0) m_Overrides.SubpassIndex = 0;
-			}
-
-			// Cull/FrontCCW
-			{
-				int cull = (int)m_Overrides.CullMode - 1;
-				const char* items[] = { "None", "Front", "Back" };
-				if (ImGui::Combo("Cull", &cull, items, 3))
-				{
-					if (cull == 0) m_Overrides.CullMode = CULL_MODE_NONE;
-					if (cull == 1) m_Overrides.CullMode = CULL_MODE_FRONT;
-					if (cull == 2) m_Overrides.CullMode = CULL_MODE_BACK;
-				}
-
-				ImGui::Checkbox("FrontCCW", &m_Overrides.FrontCounterClockwise);
-			}
-
-			// Depth
-			{
-				ImGui::Checkbox("DepthEnable", &m_Overrides.DepthEnable);
-				ImGui::Checkbox("DepthWrite", &m_Overrides.DepthWriteEnable);
-
-				int df = 3;
-				const char* dfs[] =
-				{
-					"NEVER","LESS","EQUAL","LEQUAL","GREATER","NOT_EQUAL","GEQUAL","ALWAYS"
-				};
-
-				auto ToIndex = [](COMPARISON_FUNCTION f) -> int
-				{
-					switch (f)
-					{
-					case COMPARISON_FUNC_NEVER:         return 0;
-					case COMPARISON_FUNC_LESS:          return 1;
-					case COMPARISON_FUNC_EQUAL:         return 2;
-					case COMPARISON_FUNC_LESS_EQUAL:    return 3;
-					case COMPARISON_FUNC_GREATER:       return 4;
-					case COMPARISON_FUNC_NOT_EQUAL:     return 5;
-					case COMPARISON_FUNC_GREATER_EQUAL: return 6;
-					case COMPARISON_FUNC_ALWAYS:        return 7;
-					default:                            return 3;
-					}
-				};
-
-				auto FromIndex = [](int i) -> COMPARISON_FUNCTION
-				{
-					switch (i)
-					{
-					case 0: return COMPARISON_FUNC_NEVER;
-					case 1: return COMPARISON_FUNC_LESS;
-					case 2: return COMPARISON_FUNC_EQUAL;
-					case 3: return COMPARISON_FUNC_LESS_EQUAL;
-					case 4: return COMPARISON_FUNC_GREATER;
-					case 5: return COMPARISON_FUNC_NOT_EQUAL;
-					case 6: return COMPARISON_FUNC_GREATER_EQUAL;
-					case 7: return COMPARISON_FUNC_ALWAYS;
-					default:return COMPARISON_FUNC_LESS_EQUAL;
-					}
-				};
-
-				df = ToIndex(m_Overrides.DepthFunc);
-				if (ImGui::Combo("DepthFunc", &df, dfs, 8))
-				{
-					m_Overrides.DepthFunc = FromIndex(df);
-				}
-			}
-
-			// Binding mode
-			{
-				int bm = (int)m_Overrides.TextureBindingMode;
-				const char* bms[] = { "DYNAMIC", "MUTABLE" };
-				if (ImGui::Combo("TextureBindMode", &bm, bms, 2))
-				{
-					m_Overrides.TextureBindingMode = (bm == 0) ? MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC : MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
-				}
-				ImGui::TextDisabled("%s", TexBindModeLabel(m_Overrides.TextureBindingMode));
-			}
-
-			ImGui::Separator();
-
-			// ------------------------------------------------------------
-			// 4) Material params + textures
-			// ------------------------------------------------------------
-			ImGui::TextUnformatted("4) Material Overrides (Set*)");
-
-			ImGui::ColorEdit4("BaseColor", reinterpret_cast<float*>(&m_Overrides.BaseColor));
-			ImGui::SliderFloat("Roughness", &m_Overrides.Roughness, 0.0f, 1.0f);
-			ImGui::SliderFloat("Metallic", &m_Overrides.Metallic, 0.0f, 1.0f);
-			ImGui::SliderFloat("Occlusion", &m_Overrides.Occlusion, 0.0f, 1.0f);
-
-			ImGui::ColorEdit3("EmissiveColor", reinterpret_cast<float*>(&m_Overrides.EmissiveColor));
-			ImGui::SliderFloat("EmissiveIntensity", &m_Overrides.EmissiveIntensity, 0.0f, 50.0f);
-
-			ImGui::SliderFloat("AlphaCutoff", &m_Overrides.AlphaCutoff, 0.0f, 1.0f);
-			ImGui::SliderFloat("NormalScale", &m_Overrides.NormalScale, 0.0f, 4.0f);
-
-			ImGui::Separator();
-			ImGui::TextUnformatted("Texture Overrides (runtime path)");
-
-			drawTextureSlotUI("BaseColor (sRGB)", m_Overrides.BaseColorPath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick BaseColor");
-			drawTextureSlotUI("Normal (Linear)", m_Overrides.NormalPath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick Normal");
-
-			drawTextureSlotUI("MetallicRoughness (Linear)", m_Overrides.MetallicRoughnessPath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick MetallicRoughness");
-
-			drawTextureSlotUI("AO (Linear)", m_Overrides.AOPath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick AO");
-
-			drawTextureSlotUI("Emissive (sRGB)", m_Overrides.EmissivePath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick Emissive");
-
-			drawTextureSlotUI("Height (Linear)", m_Overrides.HeightPath,
-				"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
-				"Pick Height");
-
-			ImGui::Separator();
-
-			// ------------------------------------------------------------
-			// 5) Apply / Clear / Rebuild
-			// ------------------------------------------------------------
-			if (ImGui::Button("Apply Overrides"))
-			{
-				// Pipeline + params
-				applyPipelineOverrides(mat, m_Overrides);
-				applyMaterialOverrides(mat, m_Overrides);
-
-				// If your runtime rebuild path depends on PSO/SRB dirty flags,
-				// MaterialRenderData should see these changes and rebuild as needed.
+				(void)getOrCreateTemplateFromInputs();
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Clear Overrides"))
+			if (ImGui::Button("Apply Template -> Selected Slot"))
 			{
-				EditorMaterialOverrides defaults = {};
-				defaults.RenderPassName = "GBuffer";
-				defaults.SubpassIndex = 0;
-
-				defaults.CullMode = CULL_MODE_BACK;
-				defaults.FrontCounterClockwise = true;
-
-				defaults.DepthEnable = true;
-				defaults.DepthWriteEnable = true;
-				defaults.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-				defaults.TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
-
-				defaults.LinearWrapSamplerName = "g_LinearWrapSampler";
-				defaults.LinearWrapSamplerDesc =
-				{
-					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-				};
-
-				defaults.BaseColor = { 1, 1, 1, 1 };
-				defaults.Roughness = 1.0f;
-				defaults.Metallic = 0.0f;
-				defaults.Occlusion = 1.0f;
-
-				defaults.EmissiveColor = { 0, 0, 0 };
-				defaults.EmissiveIntensity = 0.0f;
-
-				defaults.AlphaCutoff = 0.5f;
-				defaults.NormalScale = 1.0f;
-
-				m_Overrides = defaults;
+				(void)getOrCreateTemplateFromInputs();
+				(void)rebuildSelectedMaterialSlotFromCurrentTemplate();
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Rebuild Materials (Template -> Instances)"))
+			if (ImGui::Button("Apply Template -> Selected Object"))
 			{
+				(void)getOrCreateTemplateFromInputs();
+				(void)rebuildSelectedObjectFromCurrentTemplate();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Apply Template -> All"))
+			{
+				(void)getOrCreateTemplateFromInputs();
 				(void)rebuildAllMaterialsFromCurrentTemplate();
 			}
+		}
 
-			ImGui::Separator();
+		ImGui::Separator();
 
-			// ------------------------------------------------------------
-			// Drag&drop helper: show dropped files list (if wired)
-			// ------------------------------------------------------------
-			if (!m_DroppedFiles.empty())
+		// ------------------------------------------------------------
+		// 2) Object/slot selection
+		// ------------------------------------------------------------
+		ImGui::TextUnformatted("2) Select Object / Slot");
+		if (m_Loaded.empty() || !m_pRenderScene)
+		{
+			ImGui::TextUnformatted("No preview objects loaded.");
+			ImGui::End();
+			return;
+		}
+
+		for (int i = 0; i < static_cast<int>(m_Loaded.size()); ++i)
+		{
+			const bool selected = (i == m_SelectedObject);
+			const std::string label = "[" + std::to_string(i) + "] " + m_Loaded[(size_t)i].Path;
+
+			if (ImGui::Selectable(label.c_str(), selected))
 			{
-				ImGui::TextUnformatted("Dropped files:");
-				for (size_t i = 0; i < m_DroppedFiles.size(); ++i)
-				{
-					ImGui::BulletText("%s", m_DroppedFiles[i].c_str());
-				}
-				ImGui::TextDisabled("Tip: drop a file on any texture path field to set it.");
+				m_SelectedObject = i;
+				m_SelectedMaterialSlot = 0;
 			}
 		}
+
+		if (m_SelectedObject < 0 || m_SelectedObject >= static_cast<int>(m_Loaded.size()))
+		{
+			ImGui::TextUnformatted("Invalid selection.");
+			ImGui::End();
+			return;
+		}
+
+		LoadedMesh& sel = m_Loaded[(size_t)m_SelectedObject];
+		if (!sel.MeshPtr)
+		{
+			ImGui::TextUnformatted("CPU mesh is not loaded.");
+			ImGui::End();
+			return;
+		}
+
+		const StaticMeshAsset* cpuMesh = sel.MeshPtr.Get();
+		const int slotCount = static_cast<int>(cpuMesh->GetMaterialSlots().size());
+
+		ImGui::Text("Material Slot: %d / %d", m_SelectedMaterialSlot, slotCount);
+		ImGui::SliderInt("##Slot", &m_SelectedMaterialSlot, 0, (slotCount > 0 ? slotCount - 1 : 0));
+
+		ImGui::Separator();
+
+		if (sel.SceneObjectIndex < 0 || sel.SceneObjectIndex >= (int32)m_pRenderScene->GetObjects().size())
+		{
+			ImGui::TextUnformatted("Scene object index invalid.");
+			ImGui::End();
+			return;
+		}
+
+		auto& obj = m_pRenderScene->GetObjects()[(size_t)sel.SceneObjectIndex];
+		if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj.Materials.size())
+		{
+			ImGui::TextUnformatted("Material slot invalid.");
+			ImGui::End();
+			return;
+		}
+
+		MaterialInstance& mat = obj.Materials[(size_t)m_SelectedMaterialSlot];
+
+		// ------------------------------------------------------------
+		// 3) Pipeline knobs (Set*)
+		// ------------------------------------------------------------
+		ImGui::TextUnformatted("3) Pipeline Overrides (Set*)");
+
+		// RenderPass
+		{
+			int rpIndex = 0;
+			for (int i = 0; i < (int)_countof(g_RenderPassNames); ++i)
+			{
+				if (m_Overrides.RenderPassName == g_RenderPassNames[i])
+				{
+					rpIndex = i;
+					break;
+				}
+			}
+
+			if (ImGui::Combo("RenderPass", &rpIndex, g_RenderPassNames, (int)_countof(g_RenderPassNames)))
+			{
+				m_Overrides.RenderPassName = g_RenderPassNames[rpIndex];
+			}
+
+			ImGui::InputInt("Subpass", (int*)&m_Overrides.SubpassIndex);
+			if ((int)m_Overrides.SubpassIndex < 0) m_Overrides.SubpassIndex = 0;
+		}
+
+		// Cull/FrontCCW
+		{
+			int cull = 2;
+			if (m_Overrides.CullMode == CULL_MODE_NONE)  cull = 0;
+			if (m_Overrides.CullMode == CULL_MODE_FRONT) cull = 1;
+			if (m_Overrides.CullMode == CULL_MODE_BACK)  cull = 2;
+
+			const char* items[] = { "None", "Front", "Back" };
+			if (ImGui::Combo("Cull", &cull, items, 3))
+			{
+				if (cull == 0) m_Overrides.CullMode = CULL_MODE_NONE;
+				if (cull == 1) m_Overrides.CullMode = CULL_MODE_FRONT;
+				if (cull == 2) m_Overrides.CullMode = CULL_MODE_BACK;
+			}
+
+			ImGui::Checkbox("FrontCCW", &m_Overrides.FrontCounterClockwise);
+			ImGui::TextDisabled("Cull: %s", cullModeLabel(m_Overrides.CullMode));
+		}
+
+		// Depth
+		{
+			ImGui::Checkbox("DepthEnable", &m_Overrides.DepthEnable);
+			ImGui::Checkbox("DepthWrite", &m_Overrides.DepthWriteEnable);
+
+			int df = 3;
+			const char* dfs[] =
+			{
+				"NEVER","LESS","EQUAL","LEQUAL","GREATER","NOT_EQUAL","GEQUAL","ALWAYS"
+			};
+
+			auto ToIndex = [](COMPARISON_FUNCTION f) -> int
+			{
+				switch (f)
+				{
+				case COMPARISON_FUNC_NEVER:         return 0;
+				case COMPARISON_FUNC_LESS:          return 1;
+				case COMPARISON_FUNC_EQUAL:         return 2;
+				case COMPARISON_FUNC_LESS_EQUAL:    return 3;
+				case COMPARISON_FUNC_GREATER:       return 4;
+				case COMPARISON_FUNC_NOT_EQUAL:     return 5;
+				case COMPARISON_FUNC_GREATER_EQUAL: return 6;
+				case COMPARISON_FUNC_ALWAYS:        return 7;
+				default:                            return 3;
+				}
+			};
+
+			auto FromIndex = [](int i) -> COMPARISON_FUNCTION
+			{
+				switch (i)
+				{
+				case 0: return COMPARISON_FUNC_NEVER;
+				case 1: return COMPARISON_FUNC_LESS;
+				case 2: return COMPARISON_FUNC_EQUAL;
+				case 3: return COMPARISON_FUNC_LESS_EQUAL;
+				case 4: return COMPARISON_FUNC_GREATER;
+				case 5: return COMPARISON_FUNC_NOT_EQUAL;
+				case 6: return COMPARISON_FUNC_GREATER_EQUAL;
+				case 7: return COMPARISON_FUNC_ALWAYS;
+				default:return COMPARISON_FUNC_LESS_EQUAL;
+				}
+			};
+
+			df = ToIndex(m_Overrides.DepthFunc);
+			if (ImGui::Combo("DepthFunc", &df, dfs, 8))
+			{
+				m_Overrides.DepthFunc = FromIndex(df);
+			}
+
+			ImGui::TextDisabled("DepthFunc: %s", depthFuncLabel(m_Overrides.DepthFunc));
+		}
+
+		// Binding mode
+		{
+			int bm = (m_Overrides.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
+			const char* bms[] = { "DYNAMIC", "MUTABLE" };
+			if (ImGui::Combo("TextureBindMode", &bm, bms, 2))
+			{
+				m_Overrides.TextureBindingMode = (bm == 0) ? MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC : MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
+			}
+			ImGui::TextDisabled("%s", texBindModeLabel(m_Overrides.TextureBindingMode));
+		}
+
+		ImGui::Separator();
+
+		// ------------------------------------------------------------
+		// 4) Material params + textures
+		// ------------------------------------------------------------
+		ImGui::TextUnformatted("4) Material Overrides (Set*)");
+
+		ImGui::ColorEdit4("BaseColor", reinterpret_cast<float*>(&m_Overrides.BaseColor));
+		ImGui::SliderFloat("Roughness", &m_Overrides.Roughness, 0.0f, 1.0f);
+		ImGui::SliderFloat("Metallic", &m_Overrides.Metallic, 0.0f, 1.0f);
+		ImGui::SliderFloat("Occlusion", &m_Overrides.Occlusion, 0.0f, 1.0f);
+
+		ImGui::ColorEdit3("EmissiveColor", reinterpret_cast<float*>(&m_Overrides.EmissiveColor));
+		ImGui::SliderFloat("EmissiveIntensity", &m_Overrides.EmissiveIntensity, 0.0f, 50.0f);
+
+		ImGui::SliderFloat("AlphaCutoff", &m_Overrides.AlphaCutoff, 0.0f, 1.0f);
+		ImGui::SliderFloat("NormalScale", &m_Overrides.NormalScale, 0.0f, 4.0f);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("Texture Overrides (runtime path)");
+
+		drawTextureSlotUI("BaseColor (sRGB)", m_Overrides.BaseColorPath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick BaseColor");
+		ImGui::Checkbox("FlipV##BaseColor", &m_Overrides.BaseColorFlipVertically);
+
+		drawTextureSlotUI("Normal (Linear)", m_Overrides.NormalPath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick Normal");
+		ImGui::Checkbox("FlipV##Normal", &m_Overrides.NormalFlipVertically);
+
+		drawTextureSlotUI("MetallicRoughness (Linear)", m_Overrides.MetallicRoughnessPath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick MetallicRoughness");
+		ImGui::Checkbox("FlipV##MetallicRoughness", &m_Overrides.MetallicRoughnessFlipVertically);
+
+		drawTextureSlotUI("AO (Linear)", m_Overrides.AOPath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick AO");
+		ImGui::Checkbox("FlipV##AO", &m_Overrides.AOFlipVertically);
+
+		drawTextureSlotUI("Emissive (sRGB)", m_Overrides.EmissivePath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick Emissive");
+		ImGui::Checkbox("FlipV##Emissive", &m_Overrides.EmissiveFlipVertically);
+
+		drawTextureSlotUI("Height (Linear)", m_Overrides.HeightPath,
+			"Image Files\0*.png;*.jpg;*.jpeg;*.tga;*.dds;*.hdr\0All Files\0*.*\0",
+			"Pick Height");
+		ImGui::Checkbox("FlipV##Height", &m_Overrides.HeightFlipVertically);
+
+		ImGui::Separator();
+
+		// ------------------------------------------------------------
+		// 5) Apply / Clear
+		// ------------------------------------------------------------
+		if (ImGui::Button("Apply Overrides"))
+		{
+			applyPipelineOverrides(mat, m_Overrides);
+			applyMaterialOverrides(mat, m_Overrides);
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Clear Overrides"))
+		{
+			EditorMaterialOverrides defaults = {};
+			defaults.RenderPassName = "GBuffer";
+			defaults.SubpassIndex = 0;
+
+			defaults.CullMode = CULL_MODE_BACK;
+			defaults.FrontCounterClockwise = true;
+
+			defaults.DepthEnable = true;
+			defaults.DepthWriteEnable = true;
+			defaults.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+			defaults.TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
+
+			defaults.LinearWrapSamplerName = "g_LinearWrapSampler";
+			defaults.LinearWrapSamplerDesc =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			defaults.BaseColor = { 1, 1, 1, 1 };
+			defaults.Roughness = 1.0f;
+			defaults.Metallic = 0.0f;
+			defaults.Occlusion = 1.0f;
+
+			defaults.EmissiveColor = { 0, 0, 0 };
+			defaults.EmissiveIntensity = 0.0f;
+
+			defaults.AlphaCutoff = 0.5f;
+			defaults.NormalScale = 1.0f;
+
+			defaults.BaseColorFlipVertically = false;
+			defaults.NormalFlipVertically = false;
+			defaults.MetallicRoughnessFlipVertically = false;
+			defaults.AOFlipVertically = false;
+			defaults.EmissiveFlipVertically = false;
+			defaults.HeightFlipVertically = false;
+
+
+			m_Overrides = defaults;
+		}
+
+		ImGui::Separator();
+
+		// ------------------------------------------------------------
+		// Drag&drop helper
+		// ------------------------------------------------------------
+		if (!m_DroppedFiles.empty())
+		{
+			ImGui::TextUnformatted("Dropped files:");
+			for (size_t i = 0; i < m_DroppedFiles.size(); ++i)
+			{
+				ImGui::BulletText("%s", m_DroppedFiles[i].c_str());
+			}
+			ImGui::TextDisabled("Tip: drop a file on any texture path field to set it.");
+		}
+
 		ImGui::End();
 	}
 
-} // namespace shz
-
+	} // namespace shz
