@@ -409,30 +409,41 @@ namespace shz
 	// ------------------------------------------------------------
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
 		const MaterialInstance* pInstance,
-		IPipelineState* pPSO,
-		const MaterialTemplate* pTemplate)
+		IDeviceContext* pCtx,
+		IMaterialStaticBinder* pStaticBinder)
 	{
-		if (!pInstance || !pPSO || !pTemplate || !m_pDevice)
+		if (!m_pDevice || !pInstance)
+		{
 			return {};
+		}
 
 		const uint64 key = ptrKey(pInstance);
 
+		// ------------------------------------------------------------
+		// Cache hit
+		// ------------------------------------------------------------
 		if (auto it = m_MaterialInstToRD.find(key); it != m_MaterialInstToRD.end())
 		{
 			const Handle<MaterialRenderData> cached = it->second;
-			if (FindSlot<MaterialRenderData>(cached, m_MaterialRDSlots) != nullptr)
-				return cached;
 
+			if (FindSlot<MaterialRenderData>(cached, m_MaterialRDSlots) != nullptr)
+			{
+				return cached;
+			}
+
+			// Stale handle -> remove mapping and recreate
 			m_MaterialInstToRD.erase(it);
 		}
 
+		// ------------------------------------------------------------
+		// Cache miss: create new MaterialRenderData
+		// ------------------------------------------------------------
 		MaterialRenderData rd = {};
-		if (!rd.Initialize(m_pDevice, pPSO, pTemplate))
+		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder))
+		{
+			ASSERT(false, "RenderResourceCache::GetOrCreateMaterialRenderData: failed to initialize MaterialRenderData.");
 			return {};
-
-		// NOTE:
-		// - FRAME_CONSTANTS / OBJECT_TABLE / OBJECT_INDEX are bound as PSO static vars (Renderer::create*Pso()).
-		// - MaterialRenderData SRB is used for material constants & textures only.
+		}
 
 		UniqueHandle<MaterialRenderData> owner = UniqueHandle<MaterialRenderData>::Make();
 		const Handle<MaterialRenderData> hRD = owner.Get();
@@ -448,7 +459,6 @@ namespace shz
 		m_MaterialInstToRD.emplace(key, hRD);
 		return hRD;
 	}
-
 
 	const MaterialRenderData* RenderResourceCache::TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept
 	{

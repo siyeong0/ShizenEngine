@@ -1,3 +1,8 @@
+// ============================================================================
+// Engine/Renderer/Public/MaterialRenderData.h
+//   - Creates PSO from MaterialInstance (no fixed PSO input).
+//   - Creates SRB and binds immediately using instance values/resources.
+// ============================================================================
 #pragma once
 #include <vector>
 
@@ -10,11 +15,12 @@
 #include "Engine/RHI/Interface/IPipelineState.h"
 #include "Engine/RHI/Interface/IShaderResourceBinding.h"
 #include "Engine/RHI/Interface/IShaderResourceVariable.h"
+#include "Engine/RHI/Interface/IDeviceContext.h"
 
-#include "Engine/Material/Public/MaterialTemplate.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 
 #include "Engine/Renderer/Public/TextureRenderData.h"
+#include "Engine/Renderer/Public/IMaterialStaticBinder.h"
 
 namespace shz
 {
@@ -26,26 +32,50 @@ namespace shz
 		MaterialRenderData() = default;
 		~MaterialRenderData() = default;
 
-		bool Initialize(IRenderDevice* pDevice, IPipelineState* pPSO, const MaterialTemplate* pTemplate);
+		// Creates PSO + SRB + material constants buffer and performs initial binding immediately.
+		bool Initialize(
+			IRenderDevice* pDevice,
+			RenderResourceCache* pCache,
+			IDeviceContext* pCtx,
+			const MaterialInstance& inst,
+			IMaterialStaticBinder* pStaticBinder = nullptr);
 
 		bool IsValid() const noexcept
 		{
 			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_pTemplate != nullptr);
 		}
 
-		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
-		IShaderResourceBinding* GetSRB() const noexcept { return m_pSRB; }
+		IPipelineState* GetPSO() const noexcept
+		{
+			return m_pPSO;
+		}
+		IShaderResourceBinding* GetSRB() const noexcept
+		{
+			return m_pSRB;
+		}
 
-		IBuffer* GetMaterialConstantsBuffer() const noexcept { return m_pMaterialConstants; }
-		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
+		IBuffer* GetMaterialConstantsBuffer() const noexcept
+		{
+			return m_pMaterialConstants;
+		}
+		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept
+		{
+			return m_BoundTextures;
+		}
 
+		// Re-apply per-instance values/resources (e.g., after SetFloat/SetTexture changes).
 		bool Apply(RenderResourceCache* pCache, const MaterialInstance& inst, IDeviceContext* pCtx);
 
 	private:
+		bool createPso(IRenderDevice* pDevice, const MaterialInstance& inst, IMaterialStaticBinder* pStaticBinder);
+		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst);
+
 		bool bindAllTextures(RenderResourceCache* pCache, const MaterialInstance& inst);
 		bool updateMaterialConstants(const MaterialInstance& inst, IDeviceContext* pCtx);
 
-		IShaderResourceVariable* findVarAnyStage(const char* name) const;
+		IShaderResourceVariable* findVarAnyStage(const char* name, const MaterialInstance& inst) const;
+
+		uint32 findMaterialCBufferIndexFallback(const MaterialTemplate* pTemplate) const;
 
 	private:
 		RefCntAutoPtr<IPipelineState>          m_pPSO = {};
@@ -56,4 +86,4 @@ namespace shz
 		const MaterialTemplate* m_pTemplate = nullptr;
 		uint32 m_MaterialCBufferIndex = 0;
 	};
-}
+} // namespace shz

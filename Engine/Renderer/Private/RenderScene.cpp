@@ -157,7 +157,7 @@ namespace shz
 		ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
 		RenderObject& obj = m_Objects[denseIndex];
 		ASSERT(materialSlot < static_cast<uint32>(obj.Materials.size()), "Material slot out of range.");
-		obj.Materials[materialSlot] = material;
+		obj.Materials[materialSlot] = material; // TODO: Use handle or ...
 	}
 
 	void RenderScene::UpdateObjectMaterials(Handle<RenderObject> h, const std::vector<MaterialInstance>& materials)

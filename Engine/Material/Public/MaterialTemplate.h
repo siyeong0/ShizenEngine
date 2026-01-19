@@ -71,7 +71,7 @@ namespace shz
 	{
 		std::string Name = {};
 		uint32 ByteSize = 0;
-		bool IsDynamic = true; // MATERIAL_CONSTANTS´Â º¸Åë dynamic
+		bool IsDynamic = true;
 	};
 
 	struct MaterialResourceDesc final
@@ -88,8 +88,8 @@ namespace shz
 		MaterialTemplate() = default;
 		~MaterialTemplate() = default;
 
-		MaterialTemplate(const MaterialTemplate&) = delete;
-		MaterialTemplate& operator=(const MaterialTemplate&) = delete;
+		MaterialTemplate(const MaterialTemplate&) = default; // TODO: Must delete
+		MaterialTemplate& operator=(const MaterialTemplate&) = default; // TODO: Must delete
 
 		MaterialTemplate(MaterialTemplate&&) noexcept = default;
 		MaterialTemplate& operator=(MaterialTemplate&&) noexcept = default;

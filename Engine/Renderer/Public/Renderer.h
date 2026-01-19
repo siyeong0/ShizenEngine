@@ -29,7 +29,7 @@
 #include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.h"
-
+#include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 namespace shz
 {
 	class AssetManagerBase;
@@ -71,6 +71,8 @@ namespace shz
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
+		IRenderPass* GetGBufferRenderPass() const { return m_RenderPassGBuffer; }
+
 	private:
 		bool createShadowTargets();
 		bool createDeferredTargets();
@@ -79,7 +81,6 @@ namespace shz
 		bool createDeferredRenderPasses();
 
 		bool createShadowPso();
-		bool createGBufferPso();
 		bool createLightingPso();
 		bool createPostPso();
 
@@ -128,6 +129,8 @@ namespace shz
 
 		uint32 m_ObjectTableCapacity = 0;
 
+		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
+
 		// Targets
 		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
 
@@ -165,8 +168,6 @@ namespace shz
 		// PSO/SRB
 		RefCntAutoPtr<IPipelineState>         m_ShadowPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
-
-		RefCntAutoPtr<IPipelineState> m_GBufferPSO;
 
 		RefCntAutoPtr<IPipelineState>         m_LightingPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;

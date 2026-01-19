@@ -188,42 +188,173 @@ namespace shz
 
 	MaterialInstance ShizenEngine::CreateMaterialInstanceFromAsset(const MaterialInstanceAsset& matInstanceAsset)
 	{
-		ShaderCreateInfo sci = {};
-		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-		sci.EntryPoint = "main";
-		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR | SHADER_COMPILE_FLAG_SKIP_OPTIMIZATION;
-		sci.LoadConstantBufferReflection = true;
+		// ------------------------------------------------------------
+		// Build MaterialInstanceCreateInfo for GBuffer pipeline
+		// ------------------------------------------------------------
 
-		RefCntAutoPtr<IShader> vs;
+		MaterialInstanceCreateInfo matInstCI = {};
+		matInstCI.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
+
+		matInstCI.TemplateName = "PBR_GBuffer_Template";
+
+		// Shaders (do NOT create shaders here; MaterialInstance will create them)
 		{
-			sci.Desc = {};
-			sci.Desc.Name = "GBuffer VS";
-			sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-			sci.FilePath = "GBuffer.vsh";
-			sci.Desc.UseCombinedTextureSamplers = false;
+			matInstCI.ShaderStages.clear();
+			matInstCI.ShaderStages.reserve(2);
 
-			m_pDevice->CreateShader(sci, &vs);
-			ASSERT(vs, "Failed to create GBuffer VS.");
+			MaterialShaderStageDesc vsStage = {};
+			vsStage.ShaderType = SHADER_TYPE_VERTEX;
+			vsStage.DebugName = "GBuffer VS";
+			vsStage.FilePath = "GBuffer.vsh";
+			vsStage.EntryPoint = "main";
+			vsStage.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+			vsStage.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+			vsStage.UseCombinedTextureSamplers = false;
+
+			MaterialShaderStageDesc psStage = {};
+			psStage.ShaderType = SHADER_TYPE_PIXEL;
+			psStage.DebugName = "GBuffer PS";
+			psStage.FilePath = "GBuffer.psh";
+			psStage.EntryPoint = "main";
+			psStage.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+			psStage.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+			psStage.UseCombinedTextureSamplers = false;
+
+			matInstCI.ShaderStages.push_back(vsStage);
+			matInstCI.ShaderStages.push_back(psStage);
 		}
 
-		RefCntAutoPtr<IShader> ps;
+		// Graphics PSO info
 		{
-			sci.Desc = {};
-			sci.Desc.Name = "GBuffer PS";
-			sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-			sci.FilePath = "GBuffer.psh";
-			sci.Desc.UseCombinedTextureSamplers = false;
+			matInstCI.Graphics.Name = "GBuffer PSO (Material)";
 
-			m_pDevice->CreateShader(sci, &ps);
-			ASSERT(ps, "Failed to create GBuffer PS.");
+			matInstCI.Graphics.PSODesc = {};
+			matInstCI.Graphics.PSODesc.Name = matInstCI.Graphics.Name.c_str();
+			matInstCI.Graphics.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+			GraphicsPipelineDesc& gp = matInstCI.Graphics.GraphicsPipeline;
+			gp = {};
+
+			// NOTE:
+			// You must provide a valid render pass for render-pass based pipelines.
+			// Replace this with your actual pointer (renderer-owned render pass).
+			gp.pRenderPass = m_pRenderer->GetGBufferRenderPass();
+			gp.SubpassIndex = 0;
+
+			gp.NumRenderTargets = 0;
+			gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+			gp.RTVFormats[1] = TEX_FORMAT_UNKNOWN;
+			gp.RTVFormats[2] = TEX_FORMAT_UNKNOWN;
+			gp.RTVFormats[3] = TEX_FORMAT_UNKNOWN;
+			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+			gp.RasterizerDesc.FrontCounterClockwise = true;
+
+			gp.DepthStencilDesc.DepthEnable = true;
+			gp.DepthStencilDesc.DepthWriteEnable = true;
+			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+			static LayoutElement layoutElems[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false},
+				LayoutElement{1, 0, 2, VT_FLOAT32, false},
+				LayoutElement{2, 0, 3, VT_FLOAT32, false},
+				LayoutElement{3, 0, 3, VT_FLOAT32, false},
+
+				LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1},
+			};
+			layoutElems[4].Stride = sizeof(uint32);
+
+			gp.InputLayout.LayoutElements = layoutElems;
+			gp.InputLayout.NumElements = _countof(layoutElems);
 		}
 
-		std::vector<const IShader*> pShaders = { vs, ps };
-		m_PBRMaterialTemplate.BuildFromShaders(pShaders);
+		// Resource layout
+		// - STATIC: renderer-owned (FRAME_CONSTANTS, g_ObjectTable, etc)
+		// - DYNAMIC: MATERIAL_CONSTANTS
+		// - MUTABLE: textures
+		{
+			matInstCI.ResourceLayout = {};
+			matInstCI.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		MaterialInstance materialInstance;
-		materialInstance.Initialize(&m_PBRMaterialTemplate);
+			matInstCI.ResourceLayout.Variables.clear();
+			matInstCI.ResourceLayout.Variables.reserve(16);
+
+			ShaderResourceVariableDesc v0 = {};
+			v0.ShaderStages = SHADER_TYPE_PIXEL;
+			v0.Name = "MATERIAL_CONSTANTS";
+			v0.Type = SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC;
+			matInstCI.ResourceLayout.Variables.push_back(v0);
+
+			ShaderResourceVariableDesc v1 = {};
+			v1.ShaderStages = SHADER_TYPE_PIXEL;
+			v1.Name = "g_BaseColorTex";
+			v1.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v1);
+
+			ShaderResourceVariableDesc v2 = {};
+			v2.ShaderStages = SHADER_TYPE_PIXEL;
+			v2.Name = "g_NormalTex";
+			v2.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v2);
+
+			ShaderResourceVariableDesc v3 = {};
+			v3.ShaderStages = SHADER_TYPE_PIXEL;
+			v3.Name = "g_MetallicRoughnessTex";
+			v3.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v3);
+
+			ShaderResourceVariableDesc v4 = {};
+			v4.ShaderStages = SHADER_TYPE_PIXEL;
+			v4.Name = "g_AOTex";
+			v4.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v4);
+
+			ShaderResourceVariableDesc v5 = {};
+			v5.ShaderStages = SHADER_TYPE_PIXEL;
+			v5.Name = "g_EmissiveTex";
+			v5.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v5);
+
+			// Optional height
+			ShaderResourceVariableDesc v6 = {};
+			v6.ShaderStages = SHADER_TYPE_PIXEL;
+			v6.Name = "g_HeightTex";
+			v6.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			matInstCI.ResourceLayout.Variables.push_back(v6);
+
+			matInstCI.ResourceLayout.ImmutableSamplers.clear();
+			matInstCI.ResourceLayout.ImmutableSamplers.reserve(4);
+
+			SamplerDesc linearWrap =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			ImmutableSamplerDesc s0 = {};
+			s0.ShaderStages = SHADER_TYPE_PIXEL;
+			s0.SamplerOrTextureName = "g_LinearWrapSampler";
+			s0.Desc = linearWrap;
+
+			matInstCI.ResourceLayout.ImmutableSamplers.push_back(s0);
+		}
+
+		// ------------------------------------------------------------
+		// Create material instance (new flow)
+		// ------------------------------------------------------------
+
+		MaterialInstance materialInstance = {};
+		{
+			const bool ok = materialInstance.Initialize(m_pDevice, m_pShaderSourceFactory, matInstCI);
+			ASSERT(ok, "MaterialInstance::Initialize failed.");
+		}
+
+		// ------------------------------------------------------------
+		// Set material parameters (same as before)
+		// ------------------------------------------------------------
 
 		// BaseColorFactor
 		{
@@ -286,6 +417,7 @@ namespace shz
 
 		return materialInstance;
 	}
+
 
 	void ShizenEngine::LoadMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bUniformScale, bool bRotate)
 	{
@@ -451,9 +583,9 @@ namespace shz
 			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/chinese-fountain-grass/source/untitled/Grass.fbx",
 			{ 0.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
-		LoadMesh(
-			"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/clovers-plants-foliage/source/Clovers.fbx",
-			{ 2.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+		//LoadMesh(
+		//	"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/clovers-plants-foliage/source/Clovers.fbx",
+		//	{ 2.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
 		//LoadMesh(
 		//	"C:/Dev/ShizenEngine/ShizenEngine/Assets/Grass/grass0/scene.gltf",
@@ -476,29 +608,29 @@ namespace shz
 			{ 4.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });*/
 
 
-			// ------------------------------------------------------------
-			// Load mesh paths + spawn as grid
-			// ------------------------------------------------------------
-			//std::vector<const char*> meshPaths;
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf"); 
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/CesiumMan/glTF/CesiumMan.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/glTF/DamagedHelmet.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/DamagedHelmet/DamagedHelmet.gltf"); 
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/FlightHelmet/glTF/FlightHelmet.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf"); 
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf"); 
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf"); 
-			//meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/ToyCar/glTF/ToyCar.gltf");
+		// ------------------------------------------------------------
+		// Load mesh paths + spawn as grid
+		// ------------------------------------------------------------
+		std::vector<const char*> meshPaths;
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/AnisotropyBarnLamp/glTF/AnisotropyBarnLamp.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/CesiumMan/glTF/CesiumMan.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/DamagedHelmet/DamagedHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/FlightHelmet/glTF/FlightHelmet.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/IridescenceAbalone/glTF/IridescenceAbalone.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/IridescentDishWithOlives/glTF/IridescentDishWithOlives.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/MetalRoughSpheres/glTF/MetalRoughSpheres.gltf");
+		meshPaths.push_back("C:/Dev/ShizenEngine/ShizenEngine/Assets/Basic/ToyCar/glTF/ToyCar.gltf");
 
-			//const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
-			//const float spacingX = 1.0f;
-			//const float spacingY = 1.0f;
-			//const float spacingZ = 2.0f;
+		const float3 gridCenter = float3(0.0f, 1.25f, 5.0f);
+		const float spacingX = 1.0f;
+		const float spacingY = 1.0f;
+		const float spacingZ = 2.0f;
 
-			//spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
+		spawnMeshesOnXYGrid(meshPaths, gridCenter, spacingX, spacingY, spacingZ);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 	}

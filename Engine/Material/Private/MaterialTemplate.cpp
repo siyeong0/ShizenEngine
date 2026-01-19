@@ -118,7 +118,6 @@ namespace shz
 		}
 
 		ASSERT(nextOffset > currOffset, "Next offset must be bigger than current offset.");
-
 		return nextOffset - currOffset;
 	}
 
@@ -131,16 +130,13 @@ namespace shz
 		m_Resources.clear();
 
 		m_pShaders = pShaders;
-		uint32 numShaders = static_cast<uint>(m_pShaders.size());
+		const uint32 numShaders = static_cast<uint32>(m_pShaders.size());
 
 		ASSERT(numShaders > 0, "At least one shader is needed.");
 
-		// We keep only MATERIAL_CONSTANTS.
 		bool bFoundMaterialCB = false;
-		uint32 MaterialCB_GlobalIndex = 0;
+		uint32 matCbGlobalIndex = 0;
 
-		// We still need a stable "localIndex" for GetConstantBufferDesc(localIndex).
-		// We'll build local mapping per shader.
 		std::function<void(const ShaderCodeVariableDesc*, uint32, uint32, uint32, uint32, const std::string&)> flattenVars;
 		flattenVars = [&](
 			const ShaderCodeVariableDesc* pVars,
@@ -155,12 +151,15 @@ namespace shz
 			for (uint32 i = 0; i < varCount; ++i)
 			{
 				const ShaderCodeVariableDesc& var = pVars[i];
-				ASSERT(var.Name && var.Name[0] != '\0', "Invalid variable name");
+				ASSERT(var.Name && var.Name[0] != '\0', "Invalid variable name.");
 
 				const uint32 absOffset = baseOffset + var.Offset;
 
 				std::string fullName = prefix;
-				if (!fullName.empty()) fullName += ".";
+				if (!fullName.empty())
+				{
+					fullName += ".";
+				}
 				fullName += var.Name;
 
 				if (var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT && var.NumMembers > 0 && var.pMembers)
@@ -175,23 +174,23 @@ namespace shz
 						absOffset,
 						structEnd,
 						fullName);
+
 					continue;
 				}
 
 				const MATERIAL_VALUE_TYPE valueType = convertValueType(var);
-				ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Type is unkown.");
+				ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Unsupported variable type in MATERIAL_CONSTANTS.");
 
 				uint32 leafSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
 				if (leafSize == 0 && parentEndOffset > absOffset)
 				{
 					leafSize = parentEndOffset - absOffset;
 				}
-				ASSERT(leafSize > 0, "At least one leaf needed.");
+				ASSERT(leafSize > 0, "Invalid leaf size.");
 
-				// Dedup by name across stages
 				if (m_ValueParamLut.find(fullName) != m_ValueParamLut.end())
 				{
-					ASSERT(false, "%s is not a valid variable name of shader.", fullName);
+					ASSERT(false, "Duplicate material value param name: %s", fullName.c_str());
 					continue;
 				}
 
@@ -221,17 +220,15 @@ namespace shz
 			const uint32 resCount = pShader->GetResourceCount();
 			for (uint32 r = 0; r < resCount; ++r)
 			{
-				ShaderResourceDesc resourceDesc = {};
-				pShader->GetResourceDesc(r, resourceDesc);
-				ASSERT(resourceDesc.Name && resourceDesc.Name[0] != '\0', "Invalid resource name.");
+				ShaderResourceDesc resDesc = {};
+				pShader->GetResourceDesc(r, resDesc);
+				ASSERT(resDesc.Name && resDesc.Name[0] != '\0', "Invalid resource name.");
 
-				// Constant buffer: only MATERIAL_CONSTANTS
-				if (resourceDesc.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER)
+				if (resDesc.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER)
 				{
-					const std::string cbName = resourceDesc.Name;
+					const std::string cbName = resDesc.Name;
 					if (cbName != MATERIAL_CBUFFER_NAME)
 					{
-						// Ignore FRAME/OBJECT/SHADOW/whatever. Renderer owns them.
 						continue;
 					}
 
@@ -250,7 +247,7 @@ namespace shz
 					if (!bFoundMaterialCB)
 					{
 						bFoundMaterialCB = true;
-						MaterialCB_GlobalIndex = 0;
+						matCbGlobalIndex = 0;
 
 						MaterialCBufferDesc CB = {};
 						CB.Name = cbName;
@@ -260,18 +257,15 @@ namespace shz
 					}
 
 					const ShaderCodeBufferDesc* pCBDesc = pShader->GetConstantBufferDesc(localIndex);
-					ASSERT(pCBDesc, "Constant buffer desc of index %d is null.", localIndex);
+					ASSERT(pCBDesc, "Constant buffer desc of index %u is null.", localIndex);
 
-					m_CBuffers[MaterialCB_GlobalIndex].ByteSize =
-						std::max<uint32>(m_CBuffers[MaterialCB_GlobalIndex].ByteSize, pCBDesc->Size);
+					m_CBuffers[matCbGlobalIndex].ByteSize =
+						std::max<uint32>(m_CBuffers[matCbGlobalIndex].ByteSize, pCBDesc->Size);
 
-					// Prefix:
-					// - We intentionally omit CB name prefix for convenience: "BaseColor" not "MATERIAL_CONSTANTS.BaseColor"
-					// - Still supports structs as "MyStruct.Member"
 					flattenVars(
 						pCBDesc->pVariables,
 						pCBDesc->NumVariables,
-						MaterialCB_GlobalIndex,
+						matCbGlobalIndex,
 						0,
 						pCBDesc->Size,
 						"");
@@ -279,32 +273,30 @@ namespace shz
 					continue;
 				}
 
-				// Skip explicit sampler resources (we'll use immutable samplers or engine-side samplers)
-				if (resourceDesc.Type == SHADER_RESOURCE_TYPE_SAMPLER)
+				if (resDesc.Type == SHADER_RESOURCE_TYPE_SAMPLER)
 				{
 					continue;
 				}
 
-				// Other resources
 				{
-					const std::string resourceName = resourceDesc.Name;
+					const std::string resourceName = resDesc.Name;
 
 					if (m_ResourceLut.find(resourceName) != m_ResourceLut.end())
 					{
 						continue;
 					}
 
-					const MATERIAL_RESOURCE_TYPE matType = convertResourceType(resourceDesc);
-					ASSERT(matType != MATERIAL_RESOURCE_TYPE_UNKNOWN, "Material type is unkown.");
+					const MATERIAL_RESOURCE_TYPE matType = convertResourceType(resDesc);
+					ASSERT(matType != MATERIAL_RESOURCE_TYPE_UNKNOWN, "Unsupported resource type for material template.");
 
-					MaterialResourceDesc resourceDesc = {};
-					resourceDesc.Name = resourceName;
-					resourceDesc.Type = matType;
-					resourceDesc.ArraySize = static_cast<uint16>(std::max<uint32>(resourceDesc.ArraySize, 1u));
-					resourceDesc.IsDynamic = true;
+					MaterialResourceDesc MR = {};
+					MR.Name = resourceName;
+					MR.Type = matType;
+					MR.ArraySize = static_cast<uint16>(std::max<uint32>(resDesc.ArraySize, 1u));
+					MR.IsDynamic = true;
 
 					const uint32 newIndex = static_cast<uint32>(m_Resources.size());
-					m_Resources.push_back(resourceDesc);
+					m_Resources.push_back(MR);
 					m_ResourceLut.emplace(resourceName, newIndex);
 				}
 			}
@@ -328,7 +320,9 @@ namespace shz
 
 	bool MaterialTemplate::FindValueParamIndex(const char* name, uint32* pOutIndex) const
 	{
+		ASSERT(pOutIndex, "pOutIndex is null.");
 		*pOutIndex = 0;
+
 		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ValueParamLut.find(name);
@@ -347,14 +341,18 @@ namespace shz
 
 		auto it = m_ResourceLut.find(name);
 		if (it == m_ResourceLut.end())
+		{
 			return nullptr;
+		}
 
 		return &m_Resources[it->second];
 	}
 
 	bool MaterialTemplate::FindResourceIndex(const char* name, uint32* pOutIndex) const
 	{
+		ASSERT(pOutIndex, "pOutIndex is null.");
 		*pOutIndex = 0;
+
 		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		auto it = m_ResourceLut.find(name);

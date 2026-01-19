@@ -57,11 +57,7 @@ namespace shz
 		bool DestroyStaticMeshRenderData(Handle<StaticMeshRenderData> h);
 		void InvalidateStaticMeshByAsset(const StaticMeshAsset& asset);
 
-		// MaterialRenderData
-		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(
-			const MaterialInstance* pInstance,
-			IPipelineState* pPSO,
-			const MaterialTemplate* pTemplate);
+		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(const MaterialInstance* pInstance, IDeviceContext* pCtx, IMaterialStaticBinder* pStaticBinder);
 
 		const MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept;
 		MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) noexcept;
