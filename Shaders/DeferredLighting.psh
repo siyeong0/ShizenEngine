@@ -70,7 +70,7 @@ static float3 WorldToShadowUVZ(float3 worldPos)
 
 static float3 ReconstructWorldRayDir(float2 uv)
 {
-    // NDC: xy in [-1,1], z=0(near) / 1(far) in D3D convention
+	// NDC: xy in [-1,1], z=0(near) / 1(far) in D3D convention
     float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
 
     float4 ndcNear = float4(ndcXY, 0.0, 1.0);
@@ -116,165 +116,33 @@ static float G_Smith(float NdotV, float NdotL, float roughness)
     return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
 }
 
-// ------------------------------------------------------------
-// Shadow (PCF 3x3) - baseline
-// ------------------------------------------------------------
-
-static float SampleShadowPCF3x3(float3 shadowUVZ)
-{
-    if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
-        return 1.0;
-
-    if (shadowUVZ.z <= 0.0)
-        return 1.0;
-    if (shadowUVZ.z >= 1.0)
-        return 1.0;
-
-    uint w = 1, h = 1;
-    g_ShadowMap.GetDimensions(w, h);
-    float2 texel = 1.0 / float2(w, h);
-
-    float sum = 0.0;
-    [unroll]
-    for (int y = -1; y <= 1; ++y)
-    {
-        [unroll]
-        for (int x = -1; x <= 1; ++x)
-        {
-            float2 uv = shadowUVZ.xy + float2(x, y) * texel;
-            sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, uv, shadowUVZ.z);
-        }
-    }
-    return sum / 9.0;
-}
-
-// ------------------------------------------------------------
-// PCSS (stable NDC-depth version)
-// ------------------------------------------------------------
-static float FindBlockerAvgDepth_NDC(float2 uv, float receiverZ, float2 texel,
-                                     float searchRadiusTexels,
-                                     out float numBlockers)
-{
-    float blockerSum = 0.0;
-    numBlockers = 0.0;
-
-    float2 searchR = texel * searchRadiusTexels;
-
-    [unroll]
-    for (int i = 0; i < 64; ++i)
-    {
-        float2 suv = uv + diskSamples64[i] * searchR;
-
-        // keep it inside to avoid sampling border garbage
-        suv = saturate(suv);
-
-        float z = g_ShadowMap.SampleLevel(g_LinearClampSampler, suv, 0).r;
-
-        if (z < receiverZ)
-        {
-            blockerSum += z;
-            numBlockers += 1.0;
-        }
-    }
-
-    return (numBlockers > 0.0) ? (blockerSum / numBlockers) : 0.0;
-}
-
-static float PCF_Disk64(float2 uv, float receiverZ, float2 texel, float filterRadiusTexels)
-{
-    float2 r = texel * filterRadiusTexels;
-
-    float sum = 0.0;
-    [unroll]
-    for (int i = 0; i < 64; ++i)
-    {
-        float2 suv = uv + diskSamples64[i] * r;
-        suv = saturate(suv);
-        sum += g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, suv, receiverZ);
-    }
-
-    return sum / 64.0;
-}
-
-static float SampleShadowPCSS(float3 shadowUVZ)
-{
-    // same guard as PCF baseline
-    if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
-        return 1.0;
-
-    float receiverZ = shadowUVZ.z;
-
-    if (receiverZ <= 0.0)
-        return 1.0;
-    if (receiverZ >= 1.0)
-        return 1.0;
-
-    uint w = 1, h = 1;
-    g_ShadowMap.GetDimensions(w, h);
-    float2 texel = 1.0 / float2(w, h);
-
-    // ----------------------------
-    // 1) blocker search
-    // ----------------------------
-    float depthScale = saturate((receiverZ - 0.2) / 0.8); // 0..1
-    float searchRadiusTexels = lerp(6.0, 18.0, depthScale);
-
-    float numBlockers = 0.0;
-    float avgBlockerZ = FindBlockerAvgDepth_NDC(shadowUVZ.xy, receiverZ, texel, searchRadiusTexels, numBlockers);
-
-    // no blockers => lit
-    if (numBlockers < 1.0)
-        return 1.0;
-
-    // ----------------------------
-    // 2) penumbra size (approx)
-    // ----------------------------
-    // classic ratio, but in NDC space (approx)
-    float penumbra = (receiverZ - avgBlockerZ) / max(avgBlockerZ, 1e-5);
-
-    // ----------------------------
-    // 3) filter radius
-    // ----------------------------
-    float lightRadiusTexels = lerp(10.0, 40.0, depthScale);
-
-    float filterRadiusTexels = penumbra * lightRadiusTexels;
-
-    // clamp to keep stable
-    filterRadiusTexels = clamp(filterRadiusTexels, 0.5, 64.0);
-
-    // ----------------------------
-    // 4) PCF with disk samples
-    // ----------------------------
-    return PCF_Disk64(shadowUVZ.xy, receiverZ, texel, filterRadiusTexels);
-}
-
 static float3 EvaluateIBL(
-    float3 N,
-    float3 V,
-    float3 baseColor,
-    float metallic,
-    float roughness,
-    float ao)
+	float3 N,
+	float3 V,
+	float3 baseColor,
+	float metallic,
+	float roughness,
+	float ao)
 {
-    // F0 / Fresnel
+	// F0 / Fresnel
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
     float NdotV = saturate(dot(N, V));
 
-    // Use Fresnel at view angle for IBL spec
+	// Use Fresnel at view angle for IBL spec
     float3 F = FresnelSchlick(F0, NdotV);
 
-    // Energy conservation
+	// Energy conservation
     float3 kd = (1.0 - F) * (1.0 - metallic);
 
-    // ----------------------------
-    // Diffuse IBL
-    // ----------------------------
+	// ----------------------------
+	// Diffuse IBL
+	// ----------------------------
     float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
     float3 diffuseIBL = kd * baseColor * irradiance; // (Lambert PI term is "baked" into irradiance usually)
 
-    // ----------------------------
-    // Specular IBL (prefilter + BRDF LUT)
-    // ----------------------------
+	// ----------------------------
+	// Specular IBL (prefilter + BRDF LUT)
+	// ----------------------------
     float3 R = reflect(-V, N);
 
     uint w = 1, h = 1, mipLevels = 1;
@@ -286,7 +154,7 @@ static float3 EvaluateIBL(
     float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, roughness));
     float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
 
-    // AO: 보통 diffuse/spec 모두에 곱하거나, spec은 약하게만 적용(취향)
+	// AO: 보통 diffuse/spec 모두에 곱하거나, spec은 약하게만 적용(취향)
     float3 ambientIBL = (diffuseIBL + specIBL) * ao;
     return ambientIBL;
 }
@@ -302,7 +170,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
 
-    // Background / sky pixels (no geometry written to GBuffer)
+	// Background / sky pixels (no geometry written to GBuffer)
     if (depth01 >= 0.999999)
     {
         float3 dirWS = ReconstructWorldRayDir(uv);
@@ -310,12 +178,12 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
         OutColor = float4(sky, 1.0);
         return;
     }
-    
+	
     float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-    
+	
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
 
@@ -335,21 +203,23 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float NdotL = saturate(dot(N, L));
     float NdotV = saturate(dot(N, V));
 
-    // Shadow
+	// Shadow
     float shadow = 1.0;
+    float3 sh = WorldToShadowUVZ(worldPos);
+
+    if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
     {
-        float biasConst = 0.008;
-        float biasSlope = 0.0025 * (1.0 - NdotL);
-
-        float3 shadowUVZ = WorldToShadowUVZ(worldPos);
-        shadowUVZ.z -= (biasConst + biasSlope);
-
-        shadow = SampleShadowPCSS(shadowUVZ);
+        float bias = 0.005;
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
     }
-
-    // ------------------------------------------------------------
-    // PBR shading (direct)
-    // ------------------------------------------------------------
+    else
+    {
+        shadow = 1.0;
+    }
+	
+	// ------------------------------------------------------------
+	// PBR shading (direct)
+	// ------------------------------------------------------------
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
 
     float3 H = normalize(V + L);
@@ -369,13 +239,13 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float3 radiance = g_FrameCB.LightColor * g_FrameCB.LightIntensity;
 
     float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
-    direct *= shadow;
+    direct *= shadow * shadow;
 
-    // ------------------------------------------------------------
-    // Ambient (IBL) + emissive
-    // ------------------------------------------------------------
+	// ------------------------------------------------------------
+	// Ambient (IBL) + emissive
+	// ------------------------------------------------------------
     float3 ibl = EvaluateIBL(N, V, baseColor, metallic, roughness, ao);
-    
-    float3 lit = ibl + direct + emissive;
+	
+    float3 lit = ibl * 0.4 + direct + emissive;
     OutColor = float4(lit, opacity);
 }

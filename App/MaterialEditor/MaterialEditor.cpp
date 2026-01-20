@@ -887,7 +887,7 @@ namespace shz
 
 		loadPreviewMesh(
 			"C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf",
-			{ 0.0f, 1.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+			{ 0.0f, 0.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 
