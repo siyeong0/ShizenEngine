@@ -19,6 +19,11 @@ SamplerState g_LinearClampSampler;
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
 
+TextureCube<float4> g_EnvMapTex;
+TextureCube<float4> g_IrradianceIBLTex;
+TextureCube<float4> g_SpecularIBLTex;
+Texture2D<float2> g_BrdfIBLTex;
+
 struct PSInput
 {
     float4 Pos : SV_POSITION;
@@ -61,6 +66,23 @@ static float3 WorldToShadowUVZ(float3 worldPos)
     uv.y = 1.0 - uv.y;
 
     return float3(uv, ls.z);
+}
+
+static float3 ReconstructWorldRayDir(float2 uv)
+{
+    // NDC: xy in [-1,1], z=0(near) / 1(far) in D3D convention
+    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+
+    float4 ndcNear = float4(ndcXY, 0.0, 1.0);
+    float4 ndcFar = float4(ndcXY, 1.0, 1.0);
+
+    float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
+    float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
+
+    wsNear.xyz /= max(wsNear.w, 1e-6);
+    wsFar.xyz /= max(wsFar.w, 1e-6);
+
+    return normalize(wsFar.xyz - wsNear.xyz);
 }
 
 // ------------------------------------------------------------
@@ -226,6 +248,50 @@ static float SampleShadowPCSS(float3 shadowUVZ)
     return PCF_Disk64(shadowUVZ.xy, receiverZ, texel, filterRadiusTexels);
 }
 
+static float3 EvaluateIBL(
+    float3 N,
+    float3 V,
+    float3 baseColor,
+    float metallic,
+    float roughness,
+    float ao)
+{
+    // F0 / Fresnel
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
+    float NdotV = saturate(dot(N, V));
+
+    // Use Fresnel at view angle for IBL spec
+    float3 F = FresnelSchlick(F0, NdotV);
+
+    // Energy conservation
+    float3 kd = (1.0 - F) * (1.0 - metallic);
+
+    // ----------------------------
+    // Diffuse IBL
+    // ----------------------------
+    float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
+    float3 diffuseIBL = kd * baseColor * irradiance; // (Lambert PI term is "baked" into irradiance usually)
+
+    // ----------------------------
+    // Specular IBL (prefilter + BRDF LUT)
+    // ----------------------------
+    float3 R = reflect(-V, N);
+
+    uint w = 1, h = 1, mipLevels = 1;
+    g_SpecularIBLTex.GetDimensions(0, w, h, mipLevels); // mipLevels >= 1
+
+    float mip = roughness * (float) (max((int) mipLevels - 1, 0));
+    float3 prefiltered = g_SpecularIBLTex.SampleLevel(g_LinearClampSampler, R, mip).rgb;
+
+    float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, roughness));
+    float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
+
+    // AO: 보통 diffuse/spec 모두에 곱하거나, spec은 약하게만 적용(취향)
+    float3 ambientIBL = (diffuseIBL + specIBL) * ao;
+    return ambientIBL;
+}
+
+
 // ------------------------------------------------------------
 // Main
 // ------------------------------------------------------------
@@ -234,12 +300,22 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
 
+    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
+
+    // Background / sky pixels (no geometry written to GBuffer)
+    if (depth01 >= 0.999999)
+    {
+        float3 dirWS = ReconstructWorldRayDir(uv);
+        float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
+        OutColor = float4(sky, 1.0);
+        return;
+    }
+    
     float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
-
+    
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
 
@@ -295,8 +371,11 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
     direct *= shadow;
 
-    float3 ambient = (baseColor / PI) * 0.03;
-    float3 lit = ambient * ao + direct + emissive;
-
+    // ------------------------------------------------------------
+    // Ambient (IBL) + emissive
+    // ------------------------------------------------------------
+    float3 ibl = EvaluateIBL(N, V, baseColor, metallic, roughness, ao);
+    
+    float3 lit = ibl + direct + emissive;
     OutColor = float4(lit, opacity);
 }

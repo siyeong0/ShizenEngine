@@ -7,6 +7,8 @@
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
+#include "Tools/Image/Public/TextureUtilities.h"
+
 namespace shz
 {
 	namespace hlsl
@@ -52,6 +54,12 @@ namespace shz
 		m_pMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 		m_pMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
 		m_pMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+
+		TextureLoadInfo tli = {};
+		CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleEnvHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvTex);
+		CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleDiffuseHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvDiffuseTex);
+		CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleSpecularHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvSpecularTex);
+		CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleBrdf.dds", tli, m_CreateInfo.pDevice, &m_EnvBrdfTex);
 
 		m_ShadowDirty = true;
 		m_DeferredDirty = true;
@@ -286,6 +294,11 @@ namespace shz
 		// Object indirection resources
 		pushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(m_pObjectIndexVB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+
+		pushBarrier(m_EnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(m_EnvDiffuseTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(m_EnvSpecularTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(m_EnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
 		for (RenderScene::RenderObject& obj : scene.GetObjects())
 		{
@@ -1439,6 +1452,10 @@ namespace shz
 			{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_ShadowMap",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_EnvMapTex",		SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex",	SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex",	SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex",		SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		psoCi.PSODesc.ResourceLayout.Variables = vars;
 		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
@@ -1513,6 +1530,24 @@ namespace shz
 			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_GBufferDepth"))
 			{
 				var->Set(m_GBufferDepthSRV);
+			}
+
+
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_EnvMapTex"))
+			{
+				var->Set(m_EnvTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
+			{
+				var->Set(m_EnvDiffuseTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
+			{
+				var->Set(m_EnvSpecularTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
+			if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
+			{
+				var->Set(m_EnvBrdfTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			}
 		}
 

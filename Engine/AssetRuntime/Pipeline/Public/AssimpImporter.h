@@ -20,7 +20,7 @@ namespace shz
 		bool CalcTangentSpace = false;  // recommended true when using tangents
 
 		// UV / Winding / Handedness
-		bool FlipUVs = false;            // enable only when needed
+		bool FlipUVs = true;            // enable only when needed
 		bool ConvertToLeftHanded = true; // D3D-style LH is often convenient
 
 		// Scaling

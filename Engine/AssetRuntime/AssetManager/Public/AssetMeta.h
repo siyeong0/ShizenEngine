@@ -42,7 +42,7 @@ namespace shz
 		bool bGenTangents = false;
 		bool bCalcTangentSpace = false;
 
-		bool bFlipUVs = false;
+		bool bFlipUVs = true;
 		bool bConvertToLeftHanded = true;
 		
 		float32 UniformScale = 1.0f;

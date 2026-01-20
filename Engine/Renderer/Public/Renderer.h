@@ -183,6 +183,12 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         m_PostPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
 
+		// Env mapping
+		RefCntAutoPtr<ITexture> m_EnvTex;
+		RefCntAutoPtr<ITexture> m_EnvDiffuseTex;
+		RefCntAutoPtr<ITexture> m_EnvSpecularTex;
+		RefCntAutoPtr<ITexture> m_EnvBrdfTex;
+
 		// Per-frame data
 		std::vector<StateTransitionDesc> m_PreBarriers;
 		std::vector<uint64> m_FrameMatKeys;
