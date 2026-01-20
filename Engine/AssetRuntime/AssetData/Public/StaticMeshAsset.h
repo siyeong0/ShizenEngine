@@ -30,15 +30,6 @@ namespace shz
 		~StaticMeshAsset() = default;
 
 		// ------------------------------------------------------------
-		// Metadata
-		// ------------------------------------------------------------
-		void SetName(const std::string& name) { m_Name = name; }
-		const std::string& GetName() const noexcept { return m_Name; }
-
-		void SetSourcePath(const std::string& path) { m_SourcePath = path; }
-		const std::string& GetSourcePath() const noexcept { return m_SourcePath; }
-
-		// ------------------------------------------------------------
 		// Geometry setters
 		// ------------------------------------------------------------
 		void ReserveVertices(uint32 count);
@@ -114,9 +105,6 @@ namespace shz
 		void RecomputeSectionBounds();
 
 	private:
-		std::string m_Name;
-		std::string m_SourcePath;
-
 		std::vector<float3> m_Positions;
 		std::vector<float3> m_Normals;
 		std::vector<float3> m_Tangents;

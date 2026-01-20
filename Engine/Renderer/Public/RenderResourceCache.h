@@ -33,12 +33,9 @@ namespace shz
 		RenderResourceCache& operator=(const RenderResourceCache&) = delete;
 		~RenderResourceCache() = default;
 
-		bool Initialize(IRenderDevice* pDevice);
+		bool Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager);
 		void Shutdown();
 		void Clear();
-
-		void SetAssetManager(AssetManager* pAssetManager) noexcept { m_pAssetManager = pAssetManager; }
-		AssetManager* GetAssetManager() const noexcept { return m_pAssetManager; }
 
 		Handle<TextureRenderData> GetOrCreateTextureRenderData(const TextureAsset& asset);
 		Handle<TextureRenderData> GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef, EAssetLoadFlags flags = EAssetLoadFlags::AllowFallback);

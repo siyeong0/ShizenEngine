@@ -152,12 +152,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AssetManager\Public\AssetMeta.h" />
     <ClInclude Include="Pipeline\Public\StaticMeshImporter.h" />
     <ClInclude Include="Pipeline\Public\TextureImporter.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="AssetManager\Public\AssetManager.h" />
     <ClInclude Include="Common\AssetID.hpp" />
-    <ClInclude Include="AssetManager\Public\AssetManagerBase.h" />
     <ClInclude Include="Common\AssetObject.h" />
     <ClInclude Include="Common\AssetPtr.hpp" />
     <ClInclude Include="AssetManager\Public\AssetRecord.h" />

@@ -311,9 +311,6 @@ namespace shz
 
 	void StaticMeshAsset::Clear()
 	{
-		m_Name.clear();
-		m_SourcePath.clear();
-
 		m_Positions.clear();
 		m_Normals.clear();
 		m_Tangents.clear();

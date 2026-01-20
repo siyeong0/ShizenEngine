@@ -418,7 +418,6 @@ namespace shz
 		};
 
 		outMat.Clear();
-		outMat.SetSourcePath(sceneFilePath);
 
 		// Name
 		{
@@ -610,7 +609,6 @@ namespace shz
 		}
 
 		pOutMesh->Clear();
-		pOutMesh->SetSourcePath(filePath);
 
 		Assimp::Importer importer;
 		const uint32 flags = makeAssimpFlags(options);
@@ -683,7 +681,7 @@ namespace shz
 		auto pushIndex = [&](uint32 idx)
 		{
 			if (indexType == VT_UINT32) idx32.push_back(idx);
-			else                        idx16.push_back(static_cast<uint16>(idx));
+			else idx16.push_back(static_cast<uint16>(idx));
 		};
 
 		// ------------------------------------------------------------

@@ -26,7 +26,7 @@ namespace shz
 		ASSERT(id, "Invalid AssetID.");
 		ASSERT(typeID != 0, "Invalid AssetTypeID.");
 
-		AssetRegistry::AssetMeta meta = {};
+		AssetMeta meta = {};
 		meta.TypeID = typeID;
 		meta.SourcePath = sourcePath;
 
@@ -155,7 +155,9 @@ namespace shz
 		}
 
 		if (!rec)
+		{
 			return nullptr;
+		}
 
 		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
@@ -170,7 +172,7 @@ namespace shz
 		return rec->Object.get();
 	}
 
-	const AssetObject* AssetManager::TryGetByIDConst(const AssetID& id, AssetTypeID typeId) const noexcept
+	const AssetObject* AssetManager::TryGetByID(const AssetID& id, AssetTypeID typeId) const noexcept
 	{
 		ASSERT(id, "Invalid AssetID.");
 		ASSERT(typeId != 0, "Invalid TypeID.");
@@ -376,7 +378,7 @@ namespace shz
 
 	void AssetManager::loadNow(AssetRecord& record)
 	{
-		AssetRegistry::AssetMeta meta = {};
+		AssetMeta meta = {};
 		LoaderFn loader;
 
 		{
@@ -390,24 +392,14 @@ namespace shz
 			loader = it->second;
 		}
 
-		std::unique_ptr<AssetObject> obj;
 		std::string err;
 		uint64 bytes = 0;
 
-		const bool bOk = loader(meta, obj, bytes, err);
+		std::unique_ptr<AssetObject> obj = loader(*this, meta, &bytes, &err);
+		ASSERT(obj, "Load failed.");
 
 		{
 			std::unique_lock<std::mutex> lock(record.Mutex);
-
-			if (!bOk)
-			{
-				record.Object.reset();
-				record.Error = err.empty() ? "Loader failed." : err;
-				record.Status = EAssetStatus::Failed;
-				record.ResidentBytes = 0;
-				record.Cv.notify_all();
-				return;
-			}
 
 			ASSERT(obj, "Loader returned ok but object is null.");
 			ASSERT(obj->GetTypeID() == record.TypeID, "Loaded object TypeID mismatch.");

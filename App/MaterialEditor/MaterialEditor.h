@@ -57,16 +57,6 @@ namespace shz
 			float3 Scale = { 1, 1, 1 };
 		};
 
-		struct DefaultMaterialTextures final
-		{
-			RefCntAutoPtr<ITexture> Black;
-			RefCntAutoPtr<ITexture> White;
-			RefCntAutoPtr<ITexture> Normal;
-			RefCntAutoPtr<ITexture> MetallicRoughness;
-			RefCntAutoPtr<ITexture> AO;
-			RefCntAutoPtr<ITexture> Emissive;
-		};
-
 		struct EditorMaterialOverrides final
 		{
 			// RenderPass / pipeline knobs (per-selected material)
@@ -136,7 +126,6 @@ namespace shz
 		// Path / runtime texture cache
 		static std::string sanitizeFilePath(std::string s);
 		ITextureView* getOrCreateTextureSRV(const std::string& path, bool isSRGB, bool flipVertically);
-		void ensureResourceStateSRV(ITexture* pTex);
 
 		// Win32 helpers (optional)
 		bool openFileDialog(std::string& outPath, const char* filter, const char* title) const;
@@ -177,8 +166,6 @@ namespace shz
 
 		RenderScene::LightObject m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
-
-		DefaultMaterialTextures m_DefaultTextures = {};
 
 		std::unordered_map<std::string, RefCntAutoPtr<ITexture>> m_RuntimeTextureCache = {};
 		std::unordered_map<std::string, MaterialTemplate> m_TemplateCache = {};

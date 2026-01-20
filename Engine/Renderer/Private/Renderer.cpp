@@ -31,7 +31,7 @@ namespace shz
 		m_pShaderSourceFactory = createInfo.pShaderSourceFactory;
 
 		m_pCache = std::make_unique<RenderResourceCache>();
-		m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr());
+		m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr(), m_pAssetManager);
 
 		const SwapChainDesc& scDesc = m_CreateInfo.pSwapChain->GetDesc();
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
@@ -255,12 +255,12 @@ namespace shz
 		}
 
 		auto drawFullScreenTriangle = [&]()
-			{
-				DrawAttribs da = {};
-				da.NumVertices = 3;
-				da.Flags = DRAW_FLAG_VERIFY_ALL;
-				ctx->Draw(da);
-			};
+		{
+			DrawAttribs da = {};
+			da.NumVertices = 3;
+			da.Flags = DRAW_FLAG_VERIFY_ALL;
+			ctx->Draw(da);
+		};
 
 		// ------------------------------------------------------------
 		// Pre-Transition
@@ -270,15 +270,15 @@ namespace shz
 		m_FrameMatKeys.clear();
 
 		auto pushBarrier = [&](IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
-			{
-				if (!pObj) return;
-				StateTransitionDesc b = {};
-				b.pResource = pObj;
-				b.OldState = from;
-				b.NewState = to;
-				b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-				m_PreBarriers.push_back(b);
-			};
+		{
+			if (!pObj) return;
+			StateTransitionDesc b = {};
+			b.pResource = pObj;
+			b.OldState = from;
+			b.NewState = to;
+			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+			m_PreBarriers.push_back(b);
+		};
 
 		pushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -325,6 +325,12 @@ namespace shz
 
 				if (auto* matCB = rd->GetMaterialConstantsBuffer())
 					pushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+
+				for (auto texHandle : rd->GetBoundTextures())
+				{
+					auto texRD = m_pCache->TryGetTextureRenderData(texHandle);
+					pushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+				}
 			}
 		}
 
@@ -751,29 +757,29 @@ namespace shz
 			RefCntAutoPtr<ITexture>& outTex,
 			RefCntAutoPtr<ITextureView>& outRtv,
 			RefCntAutoPtr<ITextureView>& outSrv)
-			{
-				TextureDesc td = {};
-				td.Name = name;
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = width;
-				td.Height = height;
-				td.MipLevels = 1;
-				td.Format = fmt;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+		{
+			TextureDesc td = {};
+			td.Name = name;
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = width;
+			td.Height = height;
+			td.MipLevels = 1;
+			td.Format = fmt;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-				outTex.Release();
-				outRtv.Release();
-				outSrv.Release();
+			outTex.Release();
+			outRtv.Release();
+			outSrv.Release();
 
-				device->CreateTexture(td, nullptr, &outTex);
-				ASSERT(outTex, "Failed to create RT texture.");
+			device->CreateTexture(td, nullptr, &outTex);
+			ASSERT(outTex, "Failed to create RT texture.");
 
-				outRtv = outTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-				outSrv = outTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-				ASSERT(outRtv && outSrv, "RTV/SRV is null.");
-			};
+			outRtv = outTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+			outSrv = outTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			ASSERT(outRtv && outSrv, "RTV/SRV is null.");
+		};
 
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_GBufferTex[0], m_GBufferRtv[0], m_GBufferSrv[0]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_GBufferTex[1], m_GBufferRtv[1], m_GBufferSrv[1]);

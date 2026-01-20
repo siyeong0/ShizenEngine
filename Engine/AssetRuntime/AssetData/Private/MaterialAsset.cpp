@@ -275,14 +275,12 @@ namespace shz
 			nr.StableID = stableId;
 			nr.Name = resourceName;
 			nr.Type = expectedType;
-			nr.pRuntimeView = pView;
 			m_ResourceBindings.push_back(static_cast<ResourceBinding&&>(nr));
 			return true;
 		}
 
 		r->StableID = (stableId != 0) ? stableId : r->StableID;
 		r->Type = expectedType;
-		r->pRuntimeView = pView;
 		return true;
 	}
 
@@ -331,7 +329,6 @@ namespace shz
 	void MaterialAsset::Clear()
 	{
 		m_Name.clear();
-		m_SourcePath.clear();
 		m_TemplateKey.clear();
 
 		m_Options = {};
@@ -376,18 +373,9 @@ namespace shz
 				continue;
 			}
 
-			// If runtime view is provided, prefer it (editor preview).
-			if (r.pRuntimeView)
+			if (r.TextureRef)
 			{
-				// Expected type is best-effort here; template validation happens inside instance.
-				pInstance->SetTextureRuntimeView(r.Name.c_str(), r.pRuntimeView);
-			}
-			else
-			{
-				if (r.TextureRef)
-				{
-					pInstance->SetTextureAssetRef(r.Name.c_str(), r.TextureRef);
-				}
+				pInstance->SetTextureAssetRef(r.Name.c_str(), r.TextureRef);
 			}
 
 			if (r.bHasSamplerOverride)

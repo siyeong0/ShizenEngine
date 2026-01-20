@@ -30,10 +30,9 @@
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
+
 namespace shz
 {
-	class AssetManagerBase;
-
 	struct RendererCreateInfo
 	{
 		RefCntAutoPtr<IEngineFactory> pEngineFactory;
@@ -44,7 +43,7 @@ namespace shz
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
 
 		ImGuiImplShizen* pImGui = nullptr;
-		AssetManagerBase* pAssetManager = nullptr; // not owned
+		AssetManager* pAssetManager = nullptr; // not owned
 
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
@@ -114,7 +113,7 @@ namespace shz
 
 	private:
 		RendererCreateInfo m_CreateInfo = {};
-		AssetManagerBase* m_pAssetManager = nullptr;
+		AssetManager* m_pAssetManager = nullptr;
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;

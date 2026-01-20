@@ -23,7 +23,6 @@ namespace shz
 	public:
 		struct Options final : MaterialCommonOptions
 		{
-			// Authoring-friendly flags
 			bool bTwoSided = false;
 			bool bCastShadow = true;
 		};
@@ -42,11 +41,7 @@ namespace shz
 			std::string Name = {};
 			MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
 
-			// Persistent binding (recommended)
 			AssetRef<TextureAsset> TextureRef = {};
-
-			// Optional runtime view (not serialized)
-			ITextureView* pRuntimeView = nullptr;
 
 			// Optional sampler override (serialized)
 			bool bHasSamplerOverride = false;
@@ -68,9 +63,6 @@ namespace shz
 		// Metadata
 		void SetName(const std::string& name) { m_Name = name; }
 		const std::string& GetName() const noexcept { return m_Name; }
-
-		void SetSourcePath(const std::string& path) { m_SourcePath = path; }
-		const std::string& GetSourcePath() const noexcept { return m_SourcePath; }
 
 		void SetTemplateKey(const std::string& key) { m_TemplateKey = key; }
 		const std::string& GetTemplateKey() const noexcept { return m_TemplateKey; }
@@ -168,7 +160,6 @@ namespace shz
 
 	private:
 		std::string m_Name = {};
-		std::string m_SourcePath = {};
 		std::string m_TemplateKey = {};
 
 		Options m_Options = {};

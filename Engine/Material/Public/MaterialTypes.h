@@ -6,6 +6,7 @@
 #include "Primitives/BasicTypes.h"
 
 #include "Engine/RHI/Interface/GraphicsTypes.h"
+#include "Engine/RHI/Interface/RasterizerState.h"
 #include "Engine/RHI/Interface/ISampler.h"
 #include "Engine/RHI/Interface/IShader.h"
 

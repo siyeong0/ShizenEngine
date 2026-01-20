@@ -22,7 +22,7 @@ namespace shz
 		virtual EAssetStatus GetStatusByID(const AssetID& id, AssetTypeID typeId) const noexcept = 0;
 
 		virtual AssetObject* TryGetByID(const AssetID& id, AssetTypeID typeId) noexcept = 0;
-		virtual const AssetObject* TryGetByIDConst(const AssetID& id, AssetTypeID typeId) const noexcept = 0;
+		virtual const AssetObject* TryGetByID(const AssetID& id, AssetTypeID typeId) const noexcept = 0;
 
 		virtual void WaitByID(const AssetID& id, AssetTypeID typeId) const = 0;
 	};

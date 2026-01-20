@@ -10,7 +10,7 @@
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
-#include "Engine/AssetRuntime/Pipeline/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshImporter.h"
 #include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
 #include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
@@ -208,55 +208,12 @@ namespace shz
 		// ------------------------------------------------------------
 		// StaticMeshAsset loader
 		// ------------------------------------------------------------
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID,
-			[this](const AssetRegistry::AssetMeta& meta,
-				std::unique_ptr<AssetObject>& outObject,
-				uint64& outResidentBytes,
-				std::string& outError) -> bool
-			{
-				StaticMeshAsset mesh = {};
-
-				AssimpImportOptions opt = {};
-				opt.MergeMeshes = true;
-				opt.ImportMaterials = true;
-				opt.RegisterTextureAssets = true;
-
-				// IMPORTANT:
-				// Importer will register TextureAsset refs via AssetManager when needed.
-				if (!AssimpImporter::LoadStaticMeshAsset(meta.SourcePath, &mesh, opt, &outError, m_pAssetManager.get()))
-				{
-					if (outError.empty())
-						outError = "LoadStaticMeshAsset failed.";
-					return false;
-				}
-
-				outObject = std::make_unique<TypedAssetObject<StaticMeshAsset>>(static_cast<StaticMeshAsset&&>(mesh));
-				outResidentBytes = 0;
-				return true;
-			});
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshImporter{});
 
 		// ------------------------------------------------------------
 		// TextureAsset loader (minimum: keep SourcePath)
 		// ------------------------------------------------------------
 		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
-
-		// ------------------------------------------------------------
-		// MaterialAsset loader (optional stub)
-		// ------------------------------------------------------------
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<MaterialAsset>::TypeID,
-			[](const AssetRegistry::AssetMeta& meta,
-				std::unique_ptr<AssetObject>& outObject,
-				uint64& outResidentBytes,
-				std::string& outError) -> bool
-			{
-				MaterialAsset ma = {};
-				ma.SetSourcePath(meta.SourcePath);
-
-				outObject = std::make_unique<TypedAssetObject<MaterialAsset>>(static_cast<MaterialAsset&&>(ma));
-				outResidentBytes = 0;
-				outError.clear();
-				return true;
-			});
 	}
 
 	AssetRef<StaticMeshAsset> MaterialEditor::registerStaticMeshPath(const std::string& path)
@@ -320,60 +277,6 @@ namespace shz
 
 		return s;
 	}
-
-	// ------------------------------------------------------------
-	// Runtime texture cache
-	// ------------------------------------------------------------
-
-	void MaterialEditor::ensureResourceStateSRV(ITexture* pTex)
-	{
-		if (!m_pImmediateContext || !pTex)
-			return;
-
-		StateTransitionDesc barrier = {};
-		barrier.pResource = pTex;
-		barrier.OldState = RESOURCE_STATE_UNKNOWN;
-		barrier.NewState = RESOURCE_STATE_SHADER_RESOURCE;
-		barrier.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-
-		m_pImmediateContext->TransitionResourceStates(1, &barrier);
-	}
-
-	ITextureView* MaterialEditor::getOrCreateTextureSRV(const std::string& inPath, bool isSRGB, bool flipVertically)
-	{
-		std::string path = sanitizeFilePath(inPath);
-		if (path.empty())
-			return nullptr;
-
-		const std::string cacheKey = makeTextureCacheKey(path, isSRGB, flipVertically);
-
-		auto it = m_RuntimeTextureCache.find(cacheKey);
-		if (it != m_RuntimeTextureCache.end() && it->second)
-		{
-			return it->second->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-		}
-
-		// (Optional) Register & load via AssetManager (so TextureAsset exists), but actual GPU texture
-		// creation here is still done by CreateTextureFromFile (editor preview path).
-		AssetRef<TextureAsset> texRef = registerTexturePath(path);
-		(void)loadTextureBlocking(texRef, EAssetLoadFlags::AllowFallback);
-
-		RefCntAutoPtr<ITexture> tex;
-
-		TextureLoadInfo tli = {};
-		tli.IsSRGB = isSRGB;
-		tli.FlipVertically = flipVertically;
-
-		CreateTextureFromFile(path.c_str(), tli, m_pDevice, &tex);
-		if (!tex)
-			return nullptr;
-
-		ensureResourceStateSRV(tex.RawPtr());
-
-		m_RuntimeTextureCache.emplace(cacheKey, tex);
-		return tex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-	}
-
 
 	// ------------------------------------------------------------
 	// Win32 dialog / drag&drop (optional)
@@ -770,31 +673,31 @@ namespace shz
 			const std::string& inPath,
 			bool bFlipV,
 			const char* varName,
-			const RefCntAutoPtr<ITexture>& defaultTex,
+			const std::string& defaltPath,
 			bool isSRGB, uint32 flagBit)
 		{
 			const std::string path = sanitizeFilePath(inPath);
 
 			if (!path.empty())
 			{
-				if (ITextureView* srv = getOrCreateTextureSRV(path, isSRGB, bFlipV))
-				{
-					mat.SetTextureRuntimeView(varName, srv);
-					flags |= flagBit;
-					return;
-				}
+				AssetRef<TextureAsset> texRef = registerTexturePath(path);
+				mat.SetTextureAssetRef(varName, texRef);
+				flags |= flagBit;
+				return;
 			}
-
-			mat.SetTextureRuntimeView(varName, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			AssetRef<TextureAsset> texRef = registerTexturePath(defaltPath);
+			mat.SetTextureAssetRef(varName, texRef);
 			flags &= ~flagBit;
 		};
 
-		BindOrDefault(ov.BaseColorPath, ov.BaseColorFlipVertically, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR);
-		BindOrDefault(ov.NormalPath, ov.NormalFlipVertically, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL);
-		BindOrDefault(ov.MetallicRoughnessPath, ov.MetallicRoughnessFlipVertically, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR);
-		BindOrDefault(ov.AOPath, ov.AOFlipVertically, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO);
-		BindOrDefault(ov.EmissivePath, ov.EmissiveFlipVertically, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE);
-		BindOrDefault(ov.HeightPath, ov.HeightFlipVertically, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT);
+		const std::string defaultTexPath = "C:/Dev/ShizenEngine/Assets/Error.jpg";
+
+		BindOrDefault(ov.BaseColorPath, ov.BaseColorFlipVertically, "g_BaseColorTex", defaultTexPath, true, MAT_HAS_BASECOLOR);
+		BindOrDefault(ov.NormalPath, ov.NormalFlipVertically, "g_NormalTex", defaultTexPath, false, MAT_HAS_NORMAL);
+		BindOrDefault(ov.MetallicRoughnessPath, ov.MetallicRoughnessFlipVertically, "g_MetallicRoughnessTex", defaultTexPath, false, MAT_HAS_MR);
+		BindOrDefault(ov.AOPath, ov.AOFlipVertically, "g_AOTex", defaultTexPath, false, MAT_HAS_AO);
+		BindOrDefault(ov.EmissivePath, ov.EmissiveFlipVertically, "g_EmissiveTex", defaultTexPath, true, MAT_HAS_EMISSIVE);
+		BindOrDefault(ov.HeightPath, ov.HeightFlipVertically, "g_HeightTex", defaultTexPath, false, MAT_HAS_HEIGHT);
 
 		mat.SetUint("g_MaterialFlags", flags);
 
@@ -829,54 +732,34 @@ namespace shz
 
 			auto BindFromAssetOrDefault = [&](
 				const char* shaderVar,
-				const RefCntAutoPtr<ITexture>& defaultTex,
+				const std::string& defaultPath,
 				bool isSRGB,
 				uint32 flagBit,
 				bool bFlipV)
 			{
-				// 1) ResourceBinding exists?
 				if (const auto* rb = matAsset.FindResourceBinding(shaderVar))
 				{
-					// Prefer runtime view if provided (editor/import preview)
-					if (rb->pRuntimeView)
-					{
-						mat.SetTextureRuntimeView(shaderVar, rb->pRuntimeView);
-						materialFlags |= flagBit;
-						return;
-					}
-
 					// Otherwise use TextureRef -> load TextureAsset -> SourcePath -> create SRV
 					if (rb->TextureRef)
 					{
-						AssetPtr<TextureAsset> texPtr = loadTextureBlocking(rb->TextureRef, EAssetLoadFlags::AllowFallback);
-						if (const TextureAsset* texAsset = texPtr.Get())
-						{
-							const std::string texPath = texAsset->GetSourcePath();
-							if (!texPath.empty())
-							{
-								if (ITextureView* srv = getOrCreateTextureSRV(texPath, isSRGB, bFlipV))
-								{
-									mat.SetTextureRuntimeView(shaderVar, srv);
-									materialFlags |= flagBit;
-									return;
-								}
-							}
-						}
+						mat.SetTextureAssetRef(shaderVar, rb->TextureRef);
+						materialFlags |= flagBit;
+						return;
 					}
 				}
-
-				// 2) Fallback
-				mat.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-				// Important: clear the flag bit when fallback happens
+				AssetRef<TextureAsset> texRef = registerTexturePath(defaultPath);
+				mat.SetTextureAssetRef(shaderVar, texRef);
 				materialFlags &= ~flagBit;
 			};
 
-			BindFromAssetOrDefault("g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR, m_Overrides.BaseColorFlipVertically);
-			BindFromAssetOrDefault("g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL, m_Overrides.NormalFlipVertically);
-			BindFromAssetOrDefault("g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR, m_Overrides.MetallicRoughnessFlipVertically);
-			BindFromAssetOrDefault("g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO, m_Overrides.AOFlipVertically);
-			BindFromAssetOrDefault("g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE, m_Overrides.EmissiveFlipVertically);
-			BindFromAssetOrDefault("g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT, m_Overrides.HeightFlipVertically);
+			const std::string defaultTexPath = "C:/Dev/ShizenEngine/Assets/Error.jpg";
+
+			BindFromAssetOrDefault("g_BaseColorTex", defaultTexPath, true, MAT_HAS_BASECOLOR, m_Overrides.BaseColorFlipVertically);
+			BindFromAssetOrDefault("g_NormalTex", defaultTexPath, false, MAT_HAS_NORMAL, m_Overrides.NormalFlipVertically);
+			BindFromAssetOrDefault("g_MetallicRoughnessTex", defaultTexPath, false, MAT_HAS_MR, m_Overrides.MetallicRoughnessFlipVertically);
+			BindFromAssetOrDefault("g_AOTex", defaultTexPath, false, MAT_HAS_AO, m_Overrides.AOFlipVertically);
+			BindFromAssetOrDefault("g_EmissiveTex", defaultTexPath, true, MAT_HAS_EMISSIVE, m_Overrides.EmissiveFlipVertically);
+			BindFromAssetOrDefault("g_HeightTex", defaultTexPath, false, MAT_HAS_HEIGHT, m_Overrides.HeightFlipVertically);
 
 			mat.SetUint("g_MaterialFlags", materialFlags);
 			mat.MarkAllDirty();
@@ -967,44 +850,6 @@ namespace shz
 		m_pRenderer->Initialize(rendererCreateInfo);
 
 		m_pRenderScene = std::make_unique<RenderScene>();
-
-		auto Create1x1Texture = [&](const char* name, uint32 rgba, RefCntAutoPtr<ITexture>& outTex) -> bool
-		{
-			TextureDesc desc = {};
-			desc.Name = name;
-			desc.Type = RESOURCE_DIM_TEX_2D;
-			desc.Width = 1;
-			desc.Height = 1;
-			desc.MipLevels = 1;
-			desc.Format = TEX_FORMAT_RGBA8_UNORM;
-			desc.Usage = USAGE_IMMUTABLE;
-			desc.BindFlags = BIND_SHADER_RESOURCE;
-
-			TextureSubResData sub = {};
-			sub.pData = &rgba;
-			sub.Stride = sizeof(uint32);
-
-			TextureData data = {};
-			data.pSubResources = &sub;
-			data.NumSubresources = 1;
-
-			m_pDevice->CreateTexture(desc, &data, &outTex);
-			return (outTex != nullptr);
-		};
-
-		Create1x1Texture("DefaultWhite1x1", packRGBA8(255, 255, 255, 255), m_DefaultTextures.White);
-		Create1x1Texture("DefaultBlack1x1", packRGBA8(0, 0, 0, 255), m_DefaultTextures.Black);
-		Create1x1Texture("DefaultNormal1x1", packRGBA8(128, 128, 255, 255), m_DefaultTextures.Normal);
-		Create1x1Texture("DefaultMR1x1", packRGBA8(0, 255, 0, 255), m_DefaultTextures.MetallicRoughness);
-		Create1x1Texture("DefaultAO1x1", packRGBA8(255, 255, 255, 255), m_DefaultTextures.AO);
-		Create1x1Texture("DefaultEmissive1x1", packRGBA8(0, 0, 0, 255), m_DefaultTextures.Emissive);
-
-		ensureResourceStateSRV(m_DefaultTextures.White.RawPtr());
-		ensureResourceStateSRV(m_DefaultTextures.Black.RawPtr());
-		ensureResourceStateSRV(m_DefaultTextures.Normal.RawPtr());
-		ensureResourceStateSRV(m_DefaultTextures.MetallicRoughness.RawPtr());
-		ensureResourceStateSRV(m_DefaultTextures.AO.RawPtr());
-		ensureResourceStateSRV(m_DefaultTextures.Emissive.RawPtr());
 
 		// Camera/ViewFamily
 		m_Camera.SetProjAttribs(

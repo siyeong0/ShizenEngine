@@ -1,21 +1,14 @@
 #pragma once
-#include <string>
 #include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/AssetRuntime/Common/AssetID.hpp"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetMeta.h"
 
 namespace shz
 {
 	class AssetRegistry final
 	{
-	public:
-		struct AssetMeta final
-		{
-			AssetTypeID TypeID = 0;
-			std::string SourcePath = {};
-		};
-
 	public:
 		void Register(const AssetID& id, const AssetMeta& meta)
 		{
@@ -42,6 +35,11 @@ namespace shz
 			return it->second;
 		}
 
+		bool Contains(const AssetID& id) const noexcept
+		{
+			return m_Map.find(id) != m_Map.end();
+		}
+
 		void Clear()
 		{
 			m_Map.clear();
@@ -50,5 +48,4 @@ namespace shz
 	private:
 		std::unordered_map<AssetID, AssetMeta> m_Map = {};
 	};
-
 } // namespace shz

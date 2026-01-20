@@ -220,7 +220,7 @@ namespace shz
 	}
 
 
-	bool MaterialRenderData::createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice,const MaterialInstance& inst)
+	bool MaterialRenderData::createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst)
 	{
 		if (!m_pPSO || !m_pTemplate)
 		{
@@ -313,7 +313,7 @@ namespace shz
 			return true;
 		}
 
-		const uint64 frameIndex = pCtx->GetFrameNumber(); 
+		const uint64 frameIndex = pCtx->GetFrameNumber();
 
 		const bool bFirstUseThisFrame = (m_LastConstantsUpdateFrame != frameIndex);
 		const bool bDirty = inst.IsCBufferDirty(m_MaterialCBufferIndex);
@@ -377,21 +377,16 @@ namespace shz
 
 			const TextureBinding& b = inst.GetTextureBinding(i);
 
-			ITextureView* pView = b.pRuntimeView;
+			ASSERT(b.TextureRef, "Texture is not set.");
+			ITextureView* pView = nullptr;
 
-			// Policy:
-			// - runtime view wins
-			// - otherwise resolve via cache using AssetRef
-			if (pView == nullptr && b.TextureRef)
+			const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(b.TextureRef);
+			const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
+
+			if (texRD)
 			{
-				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(b.TextureRef);
-				const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
-
-				if (texRD)
-				{
-					pView = texRD->GetSRV();
-					m_BoundTextures.push_back(hTexRD);
-				}
+				pView = texRD->GetSRV();
+				m_BoundTextures.push_back(hTexRD);
 			}
 
 			IShaderResourceVariable* pVar = findVarAnyStage(res.Name.c_str(), inst);

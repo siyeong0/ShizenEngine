@@ -73,10 +73,11 @@ namespace shz
 	// ------------------------------------------------------------
 	// RenderResourceCache
 	// ------------------------------------------------------------
-	bool RenderResourceCache::Initialize(IRenderDevice* pDevice)
+	bool RenderResourceCache::Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager)
 	{
-		m_pDevice = pDevice;
 		Clear();
+		m_pDevice = pDevice;
+		m_pAssetManager = pAssetManager;
 		return (m_pDevice != nullptr);
 	}
 
@@ -108,22 +109,95 @@ namespace shz
 	// ------------------------------------------------------------
 	bool RenderResourceCache::createTextureFromAsset(const TextureAsset& asset, TextureRenderData* outRD)
 	{
-		if (!outRD || !m_pDevice)
-			return false;
-
-		// Prefer using the asset helper (less bug-prone).
-		TextureLoadInfo loadInfo = asset.BuildTextureLoadInfo();
-
-		ITexture* outTex = nullptr;
-		CreateTextureFromFile(asset.GetSourcePath().c_str(), loadInfo, m_pDevice, &outTex);
-
-		if (!outTex)
+		if (!outRD)
 		{
-			ASSERT(false, "Failed to create texture from asset.");
 			return false;
 		}
 
-		outRD->SetTexture(outTex);
+		if (!m_pDevice)
+		{
+			return false;
+		}
+
+		const auto& mips = asset.GetMips();
+		if (mips.empty())
+		{
+			ASSERT(false, "TextureAsset has no mips.");
+			return false;
+		}
+
+		const uint32 width = mips[0].Width;
+		const uint32 height = mips[0].Height;
+
+		if (width == 0 || height == 0)
+		{
+			ASSERT(false, "TextureAsset has invalid size.");
+			return false;
+		}
+
+		// Validate mip chain (basic).
+		for (size_t i = 0; i < mips.size(); ++i)
+		{
+			const TextureMip& mip = mips[i];
+
+			if (mip.Width == 0 || mip.Height == 0)
+			{
+				ASSERT(false, "Invalid mip dimension.");
+				return false;
+			}
+
+			const uint64 expectedBytes = uint64(mip.Width) * uint64(mip.Height) * 4ull;
+			if (mip.RGBA.size() != expectedBytes)
+			{
+				ASSERT(false, "Mip RGBA byte size mismatch.");
+				return false;
+			}
+		}
+
+		TextureDesc desc = {};
+		desc.Name = "TextureFromAsset"; // TODO: allow debug name from asset registry/meta if needed
+		desc.Type = RESOURCE_DIM_TEX_2D;
+		desc.Width = width;
+		desc.Height = height;
+		desc.MipLevels = static_cast<uint32>(mips.size());
+		desc.ArraySize = 1;
+
+		// Since your system-memory format is RGBA8, pick one GPU format.
+		// If you want sRGB, you should decide outside (material slot / meta / render-data option).
+		desc.Format = TEX_FORMAT_RGBA8_UNORM;
+
+		desc.Usage = USAGE_DEFAULT;
+		desc.BindFlags = BIND_SHADER_RESOURCE;
+
+		std::vector<TextureSubResData> subres;
+		subres.resize(mips.size());
+
+		for (size_t i = 0; i < mips.size(); ++i)
+		{
+			const TextureMip& mip = mips[i];
+
+			TextureSubResData sr = {};
+			sr.pData = mip.RGBA.data();
+			sr.Stride = mip.Width * 4; // tightly packed RGBA8 row pitch
+			sr.DepthStride = 0;
+
+			subres[i] = sr;
+		}
+
+		TextureData initData = {};
+		initData.pSubResources = subres.data();
+		initData.NumSubresources = static_cast<uint32>(subres.size());
+
+		RefCntAutoPtr<ITexture> tex;
+		m_pDevice->CreateTexture(desc, &initData, &tex);
+
+		if (!tex)
+		{
+			ASSERT(false, "CreateTexture failed.");
+			return false;
+		}
+
+		outRD->SetTexture(tex.RawPtr());
 		return true;
 	}
 

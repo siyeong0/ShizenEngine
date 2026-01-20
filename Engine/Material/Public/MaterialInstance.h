@@ -28,7 +28,6 @@ namespace shz
 
 		AssetRef<TextureAsset> TextureRef = {};
 
-		ITextureView* pRuntimeView = nullptr;
 		ISampler* pSamplerOverride = nullptr;
 	};
 
@@ -122,7 +121,6 @@ namespace shz
 		// Resources
 		// --------------------------------------------------------------------
 		bool SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef);
-		bool SetTextureRuntimeView(const char* textureName, ITextureView* pView);
 		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
 
 		// --------------------------------------------------------------------

@@ -454,31 +454,6 @@ namespace shz
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].TextureRef = textureRef;
-		m_TextureBindings[resIndex].pRuntimeView = nullptr;
-
-		m_bTextureDirties[resIndex] = 1;
-		return true;
-	}
-
-	bool MaterialInstance::SetTextureRuntimeView(const char* textureName, ITextureView* pView)
-	{
-		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
-		ASSERT(m_pTemplate, "Template is null.");
-
-		uint32 resIndex = 0;
-		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
-		{
-			return false;
-		}
-
-		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
-		if (!IsTextureType(resourceDesc.Type))
-		{
-			return false;
-		}
-
-		m_TextureBindings[resIndex].Name = textureName;
-		m_TextureBindings[resIndex].pRuntimeView = pView;
 
 		m_bTextureDirties[resIndex] = 1;
 		return true;
