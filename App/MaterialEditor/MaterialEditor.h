@@ -1,17 +1,3 @@
-// ============================================================================
-// Samples/MaterialEditor/MaterialEditor.h
-//   - Workflow:
-//     1) Pick shader preset OR type shader paths (VS/PS + Entry)
-//     2) Build MaterialTemplate (shaders + reflection) and cache it
-//     3) Create MaterialInstance per mesh material slot
-//     4) Set RenderPass / Raster / Depth / Binding policy via UI (Set* APIs)
-//     5) Fill instance values/textures via UI (Set* APIs)
-//   - A-option (Recommended):
-//     - Template cache is global, but APPLY is explicit:
-//       * Build/Update Template: builds template only (no auto apply)
-//       * Apply Template to Selected Slot/Object/All: applies only where requested
-// ============================================================================
-
 #pragma once
 
 #include <vector>
@@ -172,7 +158,7 @@ namespace shz
 		// Material build/apply
 		std::vector<MaterialInstance> buildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh);
 
-		void seedFromImportedAsset(MaterialInstance& mat, const MaterialInstanceAsset& matAsset);
+		void seedFromImportedAsset(MaterialInstance& mat, const MaterialAsset& matAsset);
 		void applyPipelineOverrides(MaterialInstance& mat, const EditorMaterialOverrides& ov);
 		void applyMaterialOverrides(MaterialInstance& mat, const EditorMaterialOverrides& ov);
 

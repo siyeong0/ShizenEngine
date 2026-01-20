@@ -17,6 +17,7 @@
 #include "Engine/RHI/Interface/IShaderResourceVariable.h"
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 
+#include "Engine/Material/Public/MaterialTypes.h"
 #include "Engine/Material/Public/MaterialTemplate.h"
 
 namespace shz
@@ -29,12 +30,6 @@ namespace shz
 
 		ITextureView* pRuntimeView = nullptr;
 		ISampler* pSamplerOverride = nullptr;
-	};
-
-	enum MATERIAL_TEXTURE_BINDING_MODE : uint8
-	{
-		MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC = 0,
-		MATERIAL_TEXTURE_BINDING_MODE_MUTABLE,
 	};
 
 	class MaterialInstance final
@@ -87,8 +82,8 @@ namespace shz
 		void SetLinearWrapSamplerName(const std::string& name);
 		void SetLinearWrapSamplerDesc(const SamplerDesc& desc);
 
-		const SamplerDesc& GetLinearWrapSamplerDesc() const { return m_LinearWrapSamplerDesc; }
-		const char* GetLinearWrapSamplerName() const { return m_LinearWrapSamplerName.c_str(); }
+		const SamplerDesc& GetLinearWrapSamplerDesc() const { return m_Options.LinearWrapSamplerDesc; }
+		const char* GetLinearWrapSamplerName() const { return m_Options.LinearWrapSamplerName.c_str(); }
 
 		// --------------------------------------------------------------------
 		// Resource layout (auto-generated from template reflection)
@@ -163,46 +158,25 @@ namespace shz
 		void markPsoDirty() { m_bPsoDirty = 1; }
 		void markLayoutDirty() { m_bLayoutDirty = 1; }
 
-		static inline bool isTextureType(MATERIAL_RESOURCE_TYPE t)
-		{
-			return (t == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
-				(t == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
-				(t == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
-		}
-
 	private:
 		std::string m_InstanceName = {};
 		const MaterialTemplate* m_pTemplate = nullptr;
+
+		// Shared knobs (also used by MaterialAsset Options)
+		MaterialCommonOptions m_Options = {};
 
 		// Pipeline state owned by instance
 		PipelineStateDesc m_PSODesc = {};
 		GraphicsPipelineDesc m_GraphicsPipeline = {};
 
-		// Current state knobs
+		// RenderPass selection
 		IRenderPass* m_pRenderPass = nullptr;
 		uint32 m_SubpassIndex = 0;
-
-		CULL_MODE m_CullMode = CULL_MODE_BACK;
-		bool m_FrontCCW = true;
-
-		bool m_DepthEnable = true;
-		bool m_DepthWriteEnable = true;
-		COMPARISON_FUNCTION m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-		MATERIAL_TEXTURE_BINDING_MODE m_TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
 
 		// Auto layout
 		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		std::vector<ShaderResourceVariableDesc> m_Variables = {};
 		std::vector<ImmutableSamplerDesc> m_ImmutableSamplers = {};
-
-		// Fixed immutable sampler
-		std::string m_LinearWrapSamplerName = "g_LinearWrapSampler";
-		SamplerDesc m_LinearWrapSamplerDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
 
 		// Constant buffers (CPU-side blobs)
 		std::vector<std::vector<uint8>> m_CBufferBlobs = {};

@@ -1,7 +1,7 @@
 #pragma once
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
 
 namespace shz
 {
@@ -11,5 +11,5 @@ namespace shz
 
 	template<> struct AssetTypeTraits<StaticMeshAsset> { static constexpr AssetTypeID TypeID = ASSET_TYPE_STATIC_MESH; };
 	template<> struct AssetTypeTraits<TextureAsset> { static constexpr AssetTypeID TypeID = ASSET_TYPE_TEXTURE; };
-	template<> struct AssetTypeTraits<MaterialInstanceAsset> { static constexpr AssetTypeID TypeID = ASSET_TYPE_MATERIAL_INSTANCE; };
+	template<> struct AssetTypeTraits<MaterialAsset> { static constexpr AssetTypeID TypeID = ASSET_TYPE_MATERIAL_INSTANCE; };
 }

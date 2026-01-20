@@ -33,7 +33,7 @@
     <ClInclude Include="Public\AssetID.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\MaterialInstanceAsset.h">
+    <ClInclude Include="Public\MaterialAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\AssetRef.hpp">
@@ -81,6 +81,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\AssetManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\MaterialAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

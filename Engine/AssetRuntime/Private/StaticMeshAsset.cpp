@@ -96,13 +96,13 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-	MaterialInstanceAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
+	MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];
 	}
 
-	const MaterialInstanceAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
+	const MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];

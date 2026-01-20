@@ -1,5 +1,9 @@
+// ============================================================================
+// Engine/AssetRuntime/Private/AssimpImporter.cpp
+// ============================================================================
+
 #include "pch.h"
-#include "AssimpImporter.h"
+#include "Engine/AssetRuntime/Public/AssimpImporter.h"
 
 #include <vector>
 #include <string>
@@ -7,11 +11,17 @@
 #include <filesystem>
 #include <system_error>
 #include <fstream>
+#include <cctype>
 
 // Assimp
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+
+// Engine
+#include "Engine/AssetRuntime/Public/AssetManager.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Public/TextureAsset.h"
 
 namespace shz
 {
@@ -28,98 +38,149 @@ namespace shz
 		return s;
 	}
 
+	static inline bool isSpaceChar(unsigned char c) noexcept
+	{
+		return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+	}
+
+	// Trim spaces + optional wrapping quotes, normalize slashes to '/'
+	static std::string sanitizePathString(std::string s)
+	{
+		while (!s.empty() && isSpaceChar((unsigned char)s.front()))
+			s.erase(s.begin());
+		while (!s.empty() && isSpaceChar((unsigned char)s.back()))
+			s.pop_back();
+
+		if (s.size() >= 2)
+		{
+			const char a = s.front();
+			const char b = s.back();
+			if ((a == '"' && b == '"') || (a == '\'' && b == '\''))
+			{
+				s = s.substr(1, s.size() - 2);
+
+				while (!s.empty() && isSpaceChar((unsigned char)s.front()))
+					s.erase(s.begin());
+				while (!s.empty() && isSpaceChar((unsigned char)s.back()))
+					s.pop_back();
+			}
+		}
+
+		for (char& c : s)
+		{
+			if (c == '\\') c = '/';
+		}
+
+		return s;
+	}
+
 	static std::string getDirectoryOfPath(const std::string& path)
 	{
 		if (path.empty())
-		{
 			return {};
-		}
 
 		const size_t pos = path.find_last_of("/\\");
 		if (pos == std::string::npos)
-		{
 			return {};
-		}
 
 		return path.substr(0, pos + 1);
 	}
 
-	static std::string joinPath(const std::string& dir, const std::string& rel)
+	// Fix patterns like "c:/c:/dev/..." or "C:\C:\dev\..."
+	// This can happen when a path was already absolute but got "joined" again.
+	static std::string fixDuplicateDrivePrefix(std::string s)
 	{
-		if (dir.empty())
+		// Work on normalized slashes form.
+		s = sanitizePathString(static_cast<std::string&&>(s));
+
+		if (s.size() < 6)
+			return s;
+
+		auto IsAlpha = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
+
+		// Pattern: "<d>:/<d>:/..."
+		if (IsAlpha(s[0]) && s[1] == ':' && s[2] == '/' &&
+			IsAlpha(s[3]) && s[4] == ':' && s[5] == '/')
 		{
-			return rel;
+			// Keep the first drive, drop the duplicated second drive.
+			// "c:/c:/dev/x" -> "c:/dev/x"
+			s.erase(0, 3); // drop first "c:/"
+			// Now s begins with "c:/dev/x". But we wanted the first drive, not the second.
+			// So instead reconstruct with first drive:
+			// original: D0 = s0 (before erase) is lost now, so do it differently.
 		}
 
-		if (rel.empty())
+		// Implement properly with original.
 		{
-			return dir;
+			const std::string t = s;
+			if (t.size() >= 6 && IsAlpha(t[0]) && t[1] == ':' && t[2] == '/' &&
+				IsAlpha(t[3]) && t[4] == ':' && t[5] == '/')
+			{
+				std::string out;
+				out.reserve(t.size());
+				out.push_back(t[0]);
+				out.push_back(':');
+				out.push_back('/');
+				out.append(t.substr(6)); // skip "<d>:/"
+				return out;
+			}
 		}
 
-		// Absolute paths (Windows drive, UNC, unix-like root)
-		if ((rel.size() >= 2 && rel[1] == ':') ||
-			(rel.size() >= 2 && rel[0] == '\\' && rel[1] == '\\') ||
-			(rel[0] == '/' || rel[0] == '\\'))
-		{
-			return rel;
-		}
+		return s;
+	}
 
-		return dir + rel;
+	static std::string normalizeResolvedPath(const std::filesystem::path& p)
+	{
+		// Use lexically_normal (no filesystem access needed).
+		std::filesystem::path n = p.lexically_normal();
+
+		// Use generic string with forward slashes (matches your sanitizeFilePath behavior).
+		std::string out = n.generic_string();
+		out = sanitizePathString(static_cast<std::string&&>(out));
+		out = fixDuplicateDrivePrefix(static_cast<std::string&&>(out));
+		return out;
+	}
+
+	static std::filesystem::path pathFromUtf8(const std::string& s)
+	{
+		// On Windows, std::filesystem::path accepts UTF-8 in modern MSVC; assume ok.
+		return std::filesystem::path(s);
 	}
 
 	static inline uint32 makeAssimpFlags(const AssimpImportOptions& opt)
 	{
 		uint32 flags = 0;
 
-		if (opt.Triangulate)
-		{
-			flags |= aiProcess_Triangulate;
-		}
-
-		if (opt.JoinIdenticalVertices)
-		{
-			flags |= aiProcess_JoinIdenticalVertices;
-		}
+		if (opt.Triangulate)            flags |= aiProcess_Triangulate;
+		if (opt.JoinIdenticalVertices)  flags |= aiProcess_JoinIdenticalVertices;
 
 		// Normal generation
 		if (opt.GenNormals)
 		{
-			if (opt.GenSmoothNormals)
-			{
-				flags |= aiProcess_GenSmoothNormals;
-			}
-			else
-			{
-				flags |= aiProcess_GenNormals;
-			}
+			if (opt.GenSmoothNormals) flags |= aiProcess_GenSmoothNormals;
+			else                      flags |= aiProcess_GenNormals;
 		}
 
 		// Tangent space (optional)
 		if (opt.GenTangents || opt.CalcTangentSpace)
-		{
 			flags |= aiProcess_CalcTangentSpace;
-		}
 
 		// Helpful cleanup / cache locality
 		flags |= aiProcess_ImproveCacheLocality;
 		flags |= aiProcess_RemoveRedundantMaterials;
 		flags |= aiProcess_SortByPType;
 
-		if (opt.FlipUVs)
-		{
-			flags |= aiProcess_FlipUVs;
-		}
+		if (opt.FlipUVs) flags |= aiProcess_FlipUVs;
 
 		// D3D-style left-handed conversion (positions + winding)
-		if (opt.ConvertToLeftHanded)
-		{
-			flags |= aiProcess_MakeLeftHanded;
-		}
+		if (opt.ConvertToLeftHanded) flags |= aiProcess_MakeLeftHanded;
 
 		return flags;
 	}
 
+	// ------------------------------------------------------------
 	// Assimp matrix -> math helpers (bake node transforms)
+	// ------------------------------------------------------------
 
 	static inline float3 transformPoint(const aiMatrix4x4& m, const float3& p) noexcept
 	{
@@ -145,7 +206,9 @@ namespace shz
 		return Vector3::Normalize(float3(x, y, z));
 	}
 
+	// ------------------------------------------------------------
 	// Filesystem helpers (portable)
+	// ------------------------------------------------------------
 
 	static bool writeBytesToFile(
 		const std::string& path,
@@ -155,30 +218,21 @@ namespace shz
 	{
 		if (pData == nullptr || sizeBytes == 0)
 		{
-			if (outError)
-			{
-				*outError = "WriteBytesToFile: empty data.";
-			}
+			if (outError) *outError = "WriteBytesToFile: empty data.";
 			return false;
 		}
 
 		std::ofstream ofs(path, std::ios::binary);
 		if (!ofs)
 		{
-			if (outError)
-			{
-				*outError = "WriteBytesToFile: failed to open output file: " + path;
-			}
+			if (outError) *outError = "WriteBytesToFile: failed to open output file: " + path;
 			return false;
 		}
 
 		ofs.write(reinterpret_cast<const char*>(pData), static_cast<std::streamsize>(sizeBytes));
 		if (!ofs.good())
 		{
-			if (outError)
-			{
-				*outError = "WriteBytesToFile: write failed: " + path;
-			}
+			if (outError) *outError = "WriteBytesToFile: write failed: " + path;
 			return false;
 		}
 
@@ -196,45 +250,33 @@ namespace shz
 
 		if (scene == nullptr)
 		{
-			if (outError)
-			{
-				*outError = "TryDumpEmbeddedTextureToFile: scene is null.";
-			}
+			if (outError) *outError = "TryDumpEmbeddedTextureToFile: scene is null.";
 			return false;
 		}
 
-		// Assimp provides a helper: scene->GetEmbeddedTexture("*0")
 		const std::string key = "*" + std::to_string(embeddedIndex);
 		const aiTexture* tex = scene->GetEmbeddedTexture(key.c_str());
 		if (tex == nullptr)
 		{
 			if (embeddedIndex < scene->mNumTextures)
-			{
 				tex = scene->mTextures[embeddedIndex];
-			}
 		}
 
 		if (tex == nullptr)
 		{
-			if (outError)
-			{
-				*outError = "TryDumpEmbeddedTextureToFile: embedded texture not found: " + key;
-			}
+			if (outError) *outError = "TryDumpEmbeddedTextureToFile: embedded texture not found: " + key;
 			return false;
 		}
 
-		const std::string sceneDir = getDirectoryOfPath(sceneFilePath);
-		const std::string dumpDir = sceneDir + "_embedded_textures/";
+		const std::filesystem::path sceneDir = pathFromUtf8(getDirectoryOfPath(sceneFilePath));
+		const std::filesystem::path dumpDir = sceneDir / "_embedded_textures";
 
 		std::error_code ec;
 		if (!std::filesystem::exists(dumpDir, ec))
 		{
 			if (!std::filesystem::create_directories(dumpDir, ec))
 			{
-				if (outError)
-				{
-					*outError = "EnsureDirectory: create_directories failed: " + ec.message();
-				}
+				if (outError) *outError = "EnsureDirectory: create_directories failed: " + ec.message();
 				return false;
 			}
 		}
@@ -247,18 +289,17 @@ namespace shz
 			ext += hint;
 		}
 
-		const std::string outFile = dumpDir + "tex_" + std::to_string(embeddedIndex) + ext;
+		const std::filesystem::path outFilePath =
+			dumpDir / (std::string("tex_") + std::to_string(embeddedIndex) + ext);
 
-		// Compressed (common for glTF): mHeight == 0, mWidth == data size in bytes
+		const std::string outFile = normalizeResolvedPath(outFilePath);
+
+		// Compressed: mHeight == 0, mWidth == data size in bytes
 		if (tex->mHeight == 0)
 		{
 			const size_t sizeBytes = static_cast<size_t>(tex->mWidth);
-			const void* pBytes = tex->pcData;
-
-			if (!writeBytesToFile(outFile, pBytes, sizeBytes, outError))
-			{
+			if (!writeBytesToFile(outFile, tex->pcData, sizeBytes, outError))
 				return false;
-			}
 
 			outPath = outFile;
 			return true;
@@ -272,21 +313,24 @@ namespace shz
 			const size_t texelCount = static_cast<size_t>(w) * static_cast<size_t>(h);
 			const size_t sizeBytes = texelCount * sizeof(aiTexel);
 
-			const std::string rawFile = dumpDir + "tex_" + std::to_string(embeddedIndex) + ".rgba8";
+			const std::filesystem::path rawFilePath =
+				dumpDir / (std::string("tex_") + std::to_string(embeddedIndex) + ".rgba8");
+
+			const std::string rawFile = normalizeResolvedPath(rawFilePath);
 
 			if (!writeBytesToFile(rawFile, tex->pcData, sizeBytes, outError))
-			{
 				return false;
-			}
 
 			outPath = rawFile;
 			return true;
 		}
 	}
 
-	// Material import
+	// ------------------------------------------------------------
+	// Material import helpers
+	// ------------------------------------------------------------
 
-	static bool tryGetTexturePath(
+	static bool resolveTexturePath(
 		const aiScene* scene,
 		const aiMaterial* mat,
 		aiTextureType type,
@@ -296,65 +340,70 @@ namespace shz
 	{
 		outPath.clear();
 
-		if (mat == nullptr)
-		{
+		if (!mat)
 			return false;
-		}
 
 		if (mat->GetTextureCount(type) == 0)
-		{
 			return false;
-		}
 
 		aiString path;
 		if (mat->GetTexture(type, 0, &path) != AI_SUCCESS)
-		{
 			return false;
-		}
 
 		const char* cstr = path.C_Str();
-		if (cstr == nullptr || cstr[0] == '\0')
-		{
+		if (!cstr || cstr[0] == '\0')
 			return false;
-		}
+
+		std::string raw = sanitizePathString(cstr);
 
 		// Embedded texture "*0", "*1", ...
-		if (cstr[0] == '*')
+		if (!raw.empty() && raw[0] == '*')
 		{
 			bool isValid = true;
 			uint32 embeddedIndex = 0;
 
-			for (uint32 i = 1; cstr[i] != '\0'; ++i)
+			for (uint32 i = 1; i < (uint32)raw.size(); ++i)
 			{
-				const char ch = cstr[i];
+				const char ch = raw[i];
 				if (ch < '0' || ch > '9')
 				{
 					isValid = false;
 					break;
 				}
-
 				embeddedIndex = embeddedIndex * 10u + static_cast<uint32>(ch - '0');
 			}
 
-			if (isValid)
-			{
-				std::string dumped;
-				if (tryDumpEmbeddedTextureToFile(scene, sceneFilePath, embeddedIndex, dumped, outError))
-				{
-					outPath = dumped;
-					return true;
-				}
-
+			if (!isValid)
 				return false;
-			}
 
+			std::string dumped;
+			if (tryDumpEmbeddedTextureToFile(scene, sceneFilePath, embeddedIndex, dumped, outError))
+			{
+				outPath = dumped;
+				return true;
+			}
 			return false;
 		}
 
-		// Assimp commonly returns relative texture paths (especially for glTF).
-		const std::string rel = cstr;
-		const std::string dir = getDirectoryOfPath(sceneFilePath);
-		outPath = joinPath(dir, rel);
+		// Resolve relative paths against scene directory using std::filesystem.
+		const std::filesystem::path sceneDir = pathFromUtf8(getDirectoryOfPath(sceneFilePath));
+		const std::filesystem::path p = pathFromUtf8(raw);
+
+		std::filesystem::path resolved;
+		if (p.is_absolute() || p.has_root_name())
+		{
+			// Already absolute path. Just normalize.
+			resolved = p;
+		}
+		else
+		{
+			// Relative -> resolve against scene directory.
+			resolved = sceneDir / p;
+		}
+
+		outPath = normalizeResolvedPath(resolved);
+		outPath = fixDuplicateDrivePrefix(static_cast<std::string&&>(outPath));
+
 		return !outPath.empty();
 	}
 
@@ -363,10 +412,16 @@ namespace shz
 		const aiMaterial* mat,
 		uint32 materialIndex,
 		const std::string& sceneFilePath,
-		MaterialInstanceAsset& outMat,
+		MaterialAsset& outMat,
+		AssetManager* pAssetManager,
+		const AssimpImportOptions& opt,
 		std::string* outError)
 	{
-		(void)materialIndex;
+		auto PushErrorOnce = [&](const std::string& msg)
+		{
+			if (!outError) return;
+			if (outError->empty()) *outError = msg;
+		};
 
 		outMat.Clear();
 		outMat.SetSourcePath(sceneFilePath);
@@ -378,137 +433,167 @@ namespace shz
 			{
 				outMat.SetName(n.C_Str());
 			}
+			else
+			{
+				outMat.SetName(std::string("Material_") + std::to_string(materialIndex));
+			}
 		}
 
 		// Default template key (Renderer can map this later)
 		outMat.SetTemplateKey("DefaultLit");
 
-		// BaseColor (Diffuse / BaseColor)
+		// ------------------------------------------------------------
+		// Values (store as overrides by shader param names)
+		// ------------------------------------------------------------
+
+		// BaseColor
+		float baseColor[4] = { 1, 1, 1, 1 };
 		{
 			aiColor4D c(1, 1, 1, 1);
 
 #if defined(AI_MATKEY_BASE_COLOR)
 			if (mat != nullptr && mat->Get(AI_MATKEY_BASE_COLOR, c) == AI_SUCCESS)
 			{
-				outMat.GetParams().BaseColor = float4(c.r, c.g, c.b, c.a);
+				baseColor[0] = c.r; baseColor[1] = c.g; baseColor[2] = c.b; baseColor[3] = c.a;
 			}
 			else
 #endif
-			{
 				if (mat != nullptr && mat->Get(AI_MATKEY_COLOR_DIFFUSE, c) == AI_SUCCESS)
 				{
-					outMat.GetParams().BaseColor = float4(c.r, c.g, c.b, c.a);
+					baseColor[0] = c.r; baseColor[1] = c.g; baseColor[2] = c.b; baseColor[3] = c.a;
 				}
-			}
 		}
+		outMat.SetFloat4("g_BaseColorFactor", baseColor);
 
-		// Emissive color
+		// Emissive
 		{
 			aiColor3D e(0, 0, 0);
+			float emissive[3] = { 0, 0, 0 };
+
 			if (mat != nullptr && mat->Get(AI_MATKEY_COLOR_EMISSIVE, e) == AI_SUCCESS)
 			{
-				outMat.GetParams().EmissiveColor = float3(e.r, e.g, e.b);
+				emissive[0] = e.r; emissive[1] = e.g; emissive[2] = e.b;
 			}
+
+			outMat.SetFloat3("g_EmissiveFactor", emissive);
+			outMat.SetFloat("g_EmissiveIntensity", 1.0f);
 		}
 
-		// Metallic / Roughness (best effort)
+		// Metallic / Roughness
 		{
-#if defined(AI_MATKEY_METALLIC_FACTOR)
-			float metallic = outMat.GetParams().Metallic;
-			if (mat != nullptr && mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS)
-			{
-				outMat.GetParams().Metallic = metallic;
-			}
-#endif
+			float metallic = 0.0f;
+			float roughness = 1.0f;
 
-#if defined(AI_MATKEY_ROUGHNESS_FACTOR)
-			float roughness = outMat.GetParams().Roughness;
-			if (mat != nullptr && mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS)
-			{
-				outMat.GetParams().Roughness = roughness;
-			}
+#if defined(AI_MATKEY_METALLIC_FACTOR)
+			if (!(mat != nullptr && mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS))
+				metallic = 0.0f;
 #endif
+#if defined(AI_MATKEY_ROUGHNESS_FACTOR)
+			if (!(mat != nullptr && mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS))
+				roughness = 1.0f;
+#endif
+			outMat.SetFloat("g_MetallicFactor", metallic);
+			outMat.SetFloat("g_RoughnessFactor", roughness);
 		}
 
-		// Opacity / alpha cutoff / blend mode (best effort)
+		// Occlusion strength
+		outMat.SetFloat("g_OcclusionStrength", 1.0f);
+
+		// Opacity / cutoff
 		{
 			float opacity = 1.0f;
 			if (mat != nullptr && mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
 			{
-				float4 bc = outMat.GetParams().BaseColor;
-				bc.w = opacity;
-				outMat.GetParams().BaseColor = bc;
-
-				// Heuristic: if opacity is not 1, treat as translucent
-				if (opacity < 0.999f)
-				{
-					outMat.GetOptions().BlendMode = MATERIAL_BLEND_TRANSLUCENT;
-					outMat.GetOptions().AlphaMode = MATERIAL_ALPHA_BLEND;
-				}
+				baseColor[3] = opacity;
+				outMat.SetFloat4("g_BaseColorFactor", baseColor);
 			}
 
+			float alphaCutoff = 0.5f;
 #if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
-			float cutoff = outMat.GetParams().AlphaCutoff;
-			if (mat != nullptr && mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, cutoff) == AI_SUCCESS)
-			{
-				outMat.GetParams().AlphaCutoff = cutoff;
-			}
+			if (!(mat != nullptr && mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff) == AI_SUCCESS))
+				alphaCutoff = 0.5f;
 #endif
+			outMat.SetFloat("g_AlphaCutoff", alphaCutoff);
 		}
 
-		// Two-sided (best effort)
+		// Normal scale
+		outMat.SetFloat("g_NormalScale", 1.0f);
+
+		// ------------------------------------------------------------
+		// Textures (path -> AssetRef via AssetManager)
+		// ------------------------------------------------------------
+
+		auto BindTex2D = [&](const char* shaderVar, const std::string& texPath)
 		{
-#if defined(AI_MATKEY_TWOSIDED)
-			int twoSided = 0;
-			if (mat != nullptr && mat->Get(AI_MATKEY_TWOSIDED, twoSided) == AI_SUCCESS)
-			{
-				outMat.GetOptions().TwoSided = (twoSided != 0);
-			}
-#endif
-		}
+			if (!shaderVar || shaderVar[0] == '\0')
+				return;
 
-		// Textures (best effort with fallbacks)
+			if (texPath.empty())
+				return;
+
+			// If we don't have AssetManager or policy disabled: skip.
+			if (!pAssetManager || !opt.RegisterTextureAssets)
+				return;
+
+			// Register texture asset by path and store AssetRef.
+			// NOTE: RegisterAssetRefByPath is expected to be deterministic.
+			const AssetRef<TextureAsset> texRef = pAssetManager->RegisterAssetRefByPath<TextureAsset>(texPath);
+			if (!texRef)
+			{
+				PushErrorOnce(std::string("RegisterAssetRefByPath<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);
+				return;
+			}
+
+			outMat.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
+		};
+
 		{
 			std::string path;
 
-			// Albedo / BaseColor
+			// BaseColor
 			path.clear();
-			if (tryGetTexturePath(scene, mat, aiTextureType_BASE_COLOR, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_DIFFUSE, sceneFilePath, path, outError))
+			if (resolveTexturePath(scene, mat, aiTextureType_BASE_COLOR, sceneFilePath, path, outError) ||
+				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE, sceneFilePath, path, outError))
 			{
-				outMat.SetTexture(MATERIAL_TEX_ALBEDO, path, true);
+				BindTex2D("g_BaseColorTex", path);
 			}
 
 			// Normal
 			path.clear();
-			if (tryGetTexturePath(scene, mat, aiTextureType_NORMALS, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
+			if (resolveTexturePath(scene, mat, aiTextureType_NORMALS, sceneFilePath, path, outError) ||
+				resolveTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
 			{
-				outMat.SetTexture(MATERIAL_TEX_NORMAL, path, false);
+				BindTex2D("g_NormalTex", path);
 			}
 
-			// ORM (Occlusion/Roughness/Metallic)
+			// Metallic/Roughness (packed)
 			path.clear();
-			if (tryGetTexturePath(scene, mat, aiTextureType_METALNESS, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path, outError) ||
-				tryGetTexturePath(scene, mat, aiTextureType_UNKNOWN, sceneFilePath, path, outError))
+			if (resolveTexturePath(scene, mat, aiTextureType_METALNESS, sceneFilePath, path, outError) ||
+				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, sceneFilePath, path, outError) ||
+				resolveTexturePath(scene, mat, aiTextureType_UNKNOWN, sceneFilePath, path, outError))
 			{
-				outMat.SetTexture(MATERIAL_TEX_ORM, path, false);
+				BindTex2D("g_MetallicRoughnessTex", path);
+			}
+
+			// AO
+			path.clear();
+			if (resolveTexturePath(scene, mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path, outError))
+			{
+				BindTex2D("g_AOTex", path);
 			}
 
 			// Emissive
 			path.clear();
-			if (tryGetTexturePath(scene, mat, aiTextureType_EMISSIVE, sceneFilePath, path, outError))
+			if (resolveTexturePath(scene, mat, aiTextureType_EMISSIVE, sceneFilePath, path, outError))
 			{
-				outMat.SetTexture(MATERIAL_TEX_EMISSIVE, path, true);
+				BindTex2D("g_EmissiveTex", path);
 			}
 
-			// Height / Displacement
+			// Height
 			path.clear();
-			if (tryGetTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
+			if (resolveTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
 			{
-				outMat.SetTexture(MATERIAL_TEX_HEIGHT, path, false);
+				BindTex2D("g_HeightTex", path);
 			}
 		}
 	}
@@ -521,14 +606,12 @@ namespace shz
 		const std::string& filePath,
 		StaticMeshAsset* pOutMesh,
 		const AssimpImportOptions& options,
-		std::string* outError)
+		std::string* outError,
+		AssetManager* pAssetManager)
 	{
 		if (pOutMesh == nullptr)
 		{
-			if (outError)
-			{
-				*outError = "AssimpImporter: pOutMesh is null.";
-			}
+			if (outError) *outError = "AssimpImporter: pOutMesh is null.";
 			return false;
 		}
 
@@ -541,45 +624,37 @@ namespace shz
 		const aiScene* scene = importer.ReadFile(filePath.c_str(), flags);
 		if (scene == nullptr)
 		{
-			if (outError)
-			{
-				*outError = makeError("Assimp ReadFile failed", importer.GetErrorString());
-			}
+			if (outError) *outError = makeError("Assimp ReadFile failed", importer.GetErrorString());
 			return false;
 		}
 
 		if ((scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene->mRootNode == nullptr)
 		{
-			if (outError)
-			{
-				*outError = makeError("Assimp scene incomplete", importer.GetErrorString());
-			}
+			if (outError) *outError = makeError("Assimp scene incomplete", importer.GetErrorString());
 			return false;
 		}
 
 		if (scene->mNumMeshes == 0)
 		{
-			if (outError)
-			{
-				*outError = "Assimp: scene has no meshes.";
-			}
+			if (outError) *outError = "Assimp: scene has no meshes.";
 			return false;
 		}
 
 		// ------------------------------------------------------------
-		// Import materials (slots) -> MaterialInstanceAsset
+		// Import materials
 		// ------------------------------------------------------------
+		if (options.ImportMaterials)
 		{
-			std::vector<MaterialInstanceAsset> materials;
+			std::vector<MaterialAsset> materials;
 			materials.resize(scene->mNumMaterials);
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
 			{
 				const aiMaterial* mat = scene->mMaterials[i];
-				importOneMaterial(scene, mat, i, filePath, materials[i], outError);
+				importOneMaterial(scene, mat, i, filePath, materials[i], pAssetManager, options, outError);
 			}
 
-			pOutMesh->SetMaterialSlots(std::move(materials));
+			pOutMesh->SetMaterialSlots(static_cast<std::vector<MaterialAsset>&&>(materials));
 		}
 
 		// ------------------------------------------------------------
@@ -593,9 +668,7 @@ namespace shz
 			{
 				const aiMesh* mesh = scene->mMeshes[m];
 				if (mesh != nullptr)
-				{
 					totalVertexCount += mesh->mNumVertices;
-				}
 			}
 		}
 		else
@@ -607,29 +680,17 @@ namespace shz
 
 		const VALUE_TYPE indexType = totalVertexCount <= 65535u ? VT_UINT16 : VT_UINT32;
 
-		if (indexType == VT_UINT32)
-		{
-			pOutMesh->SetIndicesU32({});
-		}
-		else
-		{
-			pOutMesh->SetIndicesU16({});
-		}
+		if (indexType == VT_UINT32) pOutMesh->SetIndicesU32({});
+		else                        pOutMesh->SetIndicesU16({});
 
 		auto& idx32 = pOutMesh->GetIndicesU32();
 		auto& idx16 = pOutMesh->GetIndicesU16();
 
 		auto pushIndex = [&](uint32 idx)
-			{
-				if (indexType == VT_UINT32)
-				{
-					idx32.push_back(idx);
-				}
-				else
-				{
-					idx16.push_back(static_cast<uint16>(idx));
-				}
-			};
+		{
+			if (indexType == VT_UINT32) idx32.push_back(idx);
+			else                        idx16.push_back(static_cast<uint16>(idx));
+		};
 
 		// ------------------------------------------------------------
 		// Import meshes by traversing nodes (BAKE node transforms)
@@ -648,169 +709,141 @@ namespace shz
 		sections.reserve(options.MergeMeshes ? scene->mNumMeshes : 1);
 
 		auto ImportMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global) -> bool
-			{
-				if (mesh == nullptr)
-				{
-					return true;
-				}
-
-				if (!mesh->HasPositions())
-				{
-					return false;
-				}
-
-				const uint32 baseVertex = static_cast<uint32>(positions.size());
-				const uint32 vertexCount = mesh->mNumVertices;
-
-				const bool hasNormals = mesh->HasNormals();
-				const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
-				const bool hasUV0 = mesh->HasTextureCoords(0);
-
-				const aiMatrix3x3 normalM = makeNormalMatrix(global);
-
-				for (uint32 v = 0; v < vertexCount; ++v)
-				{
-					const aiVector3D& pA = mesh->mVertices[v];
-					float3 p = float3(pA.x, pA.y, pA.z) * options.UniformScale;
-					p = transformPoint(global, p);
-					positions.push_back(p);
-
-					float3 n = hasNormals
-						? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
-						: float3(0.0f, 1.0f, 0.0f);
-					normals.push_back(transformNormal(normalM, n));
-
-					float3 t = hasTangents
-						? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
-						: float3(1.0f, 0.0f, 0.0f);
-					tangents.push_back(transformNormal(normalM, t));
-
-					if (hasUV0)
-					{
-						texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
-					}
-					else
-					{
-						texCoords.push_back(float2(0.0f, 0.0f));
-					}
-				}
-
-				StaticMeshAsset::Section sec{};
-				sec.BaseVertex = 0; // baseVertex;
-				sec.MaterialSlot = mesh->mMaterialIndex;
-
-				const uint32 firstIndex = pOutMesh->GetIndexCount();
-				uint32 indexCount = 0;
-
-				for (uint32 f = 0; f < mesh->mNumFaces; ++f)
-				{
-					const aiFace& face = mesh->mFaces[f];
-					if (face.mNumIndices != 3)
-					{
-						continue;
-					}
-
-					const uint32 i0 = baseVertex + face.mIndices[0];
-					const uint32 i1 = baseVertex + face.mIndices[1];
-					const uint32 i2 = baseVertex + face.mIndices[2];
-
-					pushIndex(i0);
-					pushIndex(i1);
-					pushIndex(i2);
-					indexCount += 3;
-				}
-
-				sec.FirstIndex = firstIndex;
-				sec.IndexCount = indexCount;
-
-				sections.push_back(sec);
+		{
+			if (mesh == nullptr)
 				return true;
-			};
+
+			if (!mesh->HasPositions())
+				return false;
+
+			const uint32 baseVertex = static_cast<uint32>(positions.size());
+			const uint32 vertexCount = mesh->mNumVertices;
+
+			const bool hasNormals = mesh->HasNormals();
+			const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
+			const bool hasUV0 = mesh->HasTextureCoords(0);
+
+			const aiMatrix3x3 normalM = makeNormalMatrix(global);
+
+			for (uint32 v = 0; v < vertexCount; ++v)
+			{
+				const aiVector3D& pA = mesh->mVertices[v];
+
+				float3 p = float3(pA.x, pA.y, pA.z) * options.UniformScale;
+				p = transformPoint(global, p);
+				positions.push_back(p);
+
+				float3 n = hasNormals
+					? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
+					: float3(0.0f, 1.0f, 0.0f);
+				normals.push_back(transformNormal(normalM, n));
+
+				float3 t = hasTangents
+					? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
+					: float3(1.0f, 0.0f, 0.0f);
+				tangents.push_back(transformNormal(normalM, t));
+
+				if (hasUV0)
+					texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
+				else
+					texCoords.push_back(float2(0.0f, 0.0f));
+			}
+
+			StaticMeshAsset::Section sec = {};
+			sec.BaseVertex = baseVertex;     // IMPORTANT: use baseVertex
+			sec.MaterialSlot = mesh->mMaterialIndex;
+
+			const uint32 firstIndex = pOutMesh->GetIndexCount();
+			uint32 indexCount = 0;
+
+			for (uint32 f = 0; f < mesh->mNumFaces; ++f)
+			{
+				const aiFace& face = mesh->mFaces[f];
+				if (face.mNumIndices != 3)
+					continue;
+
+				// Chosen policy:
+				// - Indices are LOCAL [0..vertexCount)
+				// - Use BaseVertex at draw time
+				const uint32 i0 = face.mIndices[0];
+				const uint32 i1 = face.mIndices[1];
+				const uint32 i2 = face.mIndices[2];
+
+				pushIndex(i0);
+				pushIndex(i1);
+				pushIndex(i2);
+				indexCount += 3;
+			}
+
+			sec.FirstIndex = firstIndex;
+			sec.IndexCount = indexCount;
+
+			sections.push_back(sec);
+			return true;
+		};
 
 		auto TraverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
-			{
-				if (node == nullptr)
-				{
-					return true;
-				}
-
-				aiMatrix4x4 global = parent * node->mTransformation;
-
-				for (uint32 i = 0; i < node->mNumMeshes; ++i)
-				{
-					const uint32 meshIndex = node->mMeshes[i];
-					if (meshIndex >= scene->mNumMeshes)
-					{
-						continue;
-					}
-
-					if (!options.MergeMeshes)
-					{
-						const aiMesh* mesh0 = scene->mMeshes[meshIndex];
-						return ImportMeshAsSection(mesh0, global);
-					}
-
-					const aiMesh* mesh = scene->mMeshes[meshIndex];
-					if (!ImportMeshAsSection(mesh, global))
-					{
-						return false;
-					}
-				}
-
-				for (uint32 c = 0; c < node->mNumChildren; ++c)
-				{
-					if (!self(self, node->mChildren[c], global))
-					{
-						return false;
-					}
-
-					if (!options.MergeMeshes && !sections.empty())
-					{
-						return true;
-					}
-				}
-
+		{
+			if (node == nullptr)
 				return true;
-			};
+
+			aiMatrix4x4 global = parent * node->mTransformation;
+
+			for (uint32 i = 0; i < node->mNumMeshes; ++i)
+			{
+				const uint32 meshIndex = node->mMeshes[i];
+				if (meshIndex >= scene->mNumMeshes)
+					continue;
+
+				const aiMesh* mesh = scene->mMeshes[meshIndex];
+				if (!ImportMeshAsSection(mesh, global))
+					return false;
+
+				if (!options.MergeMeshes)
+					return true;
+			}
+
+			for (uint32 c = 0; c < node->mNumChildren; ++c)
+			{
+				if (!self(self, node->mChildren[c], global))
+					return false;
+
+				if (!options.MergeMeshes && !sections.empty())
+					return true;
+			}
+
+			return true;
+		};
 
 		{
 			const aiMatrix4x4 identity;
 			if (!TraverseNode(TraverseNode, scene->mRootNode, identity))
 			{
-				if (outError)
-				{
-					*outError = "Assimp: failed to import meshes while traversing nodes (bake transforms).";
-				}
+				if (outError) *outError = "Assimp: failed to import meshes while traversing nodes (bake transforms).";
 				return false;
 			}
 		}
 
 		if (positions.empty() || sections.empty())
 		{
-			if (outError)
-			{
-				*outError = "Assimp: node traversal produced empty mesh.";
-			}
+			if (outError) *outError = "Assimp: node traversal produced empty mesh.";
 			return false;
 		}
 
 		// ------------------------------------------------------------
 		// Commit to asset (SoA)
 		// ------------------------------------------------------------
-		pOutMesh->SetPositions(std::move(positions));
-		pOutMesh->SetNormals(std::move(normals));
-		pOutMesh->SetTangents(std::move(tangents));
-		pOutMesh->SetTexCoords(std::move(texCoords));
-		pOutMesh->SetSections(std::move(sections));
+		pOutMesh->SetPositions(static_cast<std::vector<float3>&&>(positions));
+		pOutMesh->SetNormals(static_cast<std::vector<float3>&&>(normals));
+		pOutMesh->SetTangents(static_cast<std::vector<float3>&&>(tangents));
+		pOutMesh->SetTexCoords(static_cast<std::vector<float2>&&>(texCoords));
+		pOutMesh->SetSections(static_cast<std::vector<StaticMeshAsset::Section>&&>(sections));
 
 		pOutMesh->RecomputeBounds();
 
 		if (!pOutMesh->IsValid())
 		{
-			if (outError)
-			{
-				*outError = "Assimp: imported mesh is invalid (empty vertices/indices or inconsistent attributes/sections/material slots).";
-			}
+			if (outError) *outError = "Assimp: imported mesh is invalid (empty vertices/indices or inconsistent attributes/sections/material slots).";
 			return false;
 		}
 

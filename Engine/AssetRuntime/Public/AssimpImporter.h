@@ -1,3 +1,7 @@
+// ============================================================================
+// Engine/AssetRuntime/Public/AssimpImporter.h
+// ============================================================================
+
 #pragma once
 #include <string>
 
@@ -6,6 +10,9 @@
 
 namespace shz
 {
+	class AssetManager;
+	class MaterialAsset;
+
 	struct AssimpImportOptions final
 	{
 		// Geometry processing
@@ -17,7 +24,7 @@ namespace shz
 		bool CalcTangentSpace = false;  // recommended true when using tangents
 
 		// UV / Winding / Handedness
-		bool FlipUVs = false;           // enable only when needed
+		bool FlipUVs = false;            // enable only when needed
 		bool ConvertToLeftHanded = true; // D3D-style LH is often convenient
 
 		// Scaling
@@ -25,6 +32,14 @@ namespace shz
 
 		// Mesh merging policy
 		bool MergeMeshes = true;
+
+		// Material import policy
+		bool ImportMaterials = true;
+
+		// If AssetManager provided:
+		// - Register texture assets from resolved paths
+		// - Save bindings into MaterialAsset
+		bool RegisterTextureAssets = true;
 	};
 
 	class AssimpImporter final
@@ -34,6 +49,7 @@ namespace shz
 			const std::string& filePath,
 			StaticMeshAsset* pOutMesh,
 			const AssimpImportOptions& options = {},
-			std::string* outError = nullptr);
+			std::string* outError = nullptr,
+			AssetManager* pAssetManager = nullptr);
 	};
 } // namespace shz

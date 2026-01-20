@@ -4,7 +4,7 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
 
 namespace shz
 {
@@ -69,15 +69,15 @@ namespace shz
 		// Materials (slots)
 		// ------------------------------------------------------------
 		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
-		void SetMaterialSlots(std::vector<MaterialInstanceAsset>&& materials) { m_MaterialSlots = std::move(materials); }
+		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
 
-		std::vector<MaterialInstanceAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
-		const std::vector<MaterialInstanceAsset>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
+		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
+		const std::vector<MaterialAsset>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		MaterialInstanceAsset& GetMaterialSlot(uint32 slot) noexcept;
-		const MaterialInstanceAsset& GetMaterialSlot(uint32 slot) const noexcept;
+		MaterialAsset& GetMaterialSlot(uint32 slot) noexcept;
+		const MaterialAsset& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
@@ -133,7 +133,7 @@ namespace shz
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-		std::vector<MaterialInstanceAsset> m_MaterialSlots;
+		std::vector<MaterialAsset> m_MaterialSlots;
 
 		Box m_Bounds = {};
 	};

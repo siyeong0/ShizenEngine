@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
@@ -156,6 +157,42 @@ namespace shz
 			k += (flipVertically ? '1' : '0');
 			return k;
 		}
+
+		static bool readFloatFromOverride(const MaterialAsset::ValueOverride* v, float& outV)
+		{
+			if (!v || v->Type != MATERIAL_VALUE_TYPE_FLOAT || v->Data.size() != sizeof(float))
+				return false;
+
+			memcpy(&outV, v->Data.data(), sizeof(float));
+			return true;
+		}
+
+		static bool readFloat3FromOverride(const MaterialAsset::ValueOverride* v, float outV[3])
+		{
+			if (!v || v->Type != MATERIAL_VALUE_TYPE_FLOAT3 || v->Data.size() != sizeof(float) * 3)
+				return false;
+
+			memcpy(outV, v->Data.data(), sizeof(float) * 3);
+			return true;
+		}
+
+		static bool readFloat4FromOverride(const MaterialAsset::ValueOverride* v, float outV[4])
+		{
+			if (!v || v->Type != MATERIAL_VALUE_TYPE_FLOAT4 || v->Data.size() != sizeof(float) * 4)
+				return false;
+
+			memcpy(outV, v->Data.data(), sizeof(float) * 4);
+			return true;
+		}
+
+		static bool readUintFromOverride(const MaterialAsset::ValueOverride* v, uint32& outV)
+		{
+			if (!v || v->Type != MATERIAL_VALUE_TYPE_UINT || v->Data.size() != sizeof(uint32))
+				return false;
+
+			memcpy(&outV, v->Data.data(), sizeof(uint32));
+			return true;
+		}
 	}
 
 	SampleBase* CreateSample()
@@ -164,43 +201,46 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// AssetManager integration helpers
-	// ------------------------------------------------------------
-
-	AssetID MaterialEditor::makeAssetIDFromPath(AssetTypeID typeId, const std::string& path) const
-	{
-		const size_t h0 = std::hash<std::string>{}(path);
-		const size_t h1 = std::hash<std::string>{}(path + std::to_string(static_cast<uint64>(typeId)));
-
-		const uint64 hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeId) * 0x9E3779B185EBCA87ull);
-		const uint64 lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeId) * 0xC2B2AE3D27D4EB4Full);
-
-		return AssetID(hi, lo);
-	}
+// AssetManager integration helpers
+// ------------------------------------------------------------
 
 	void MaterialEditor::registerAssetLoaders()
 	{
 		ASSERT(m_pAssetManager, "AssetManager is null.");
 
+		// ------------------------------------------------------------
+		// StaticMeshAsset loader
+		// ------------------------------------------------------------
 		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID,
-			[](const AssetRegistry::AssetMeta& meta,
+			[this](const AssetRegistry::AssetMeta& meta,
 				std::unique_ptr<AssetObject>& outObject,
 				uint64& outResidentBytes,
 				std::string& outError) -> bool
 			{
 				StaticMeshAsset mesh = {};
-				if (!AssimpImporter::LoadStaticMeshAsset(meta.SourcePath.c_str(), &mesh))
+
+				AssimpImportOptions opt = {};
+				opt.MergeMeshes = true;
+				opt.ImportMaterials = true;
+				opt.RegisterTextureAssets = true;
+
+				// IMPORTANT:
+				// Importer will register TextureAsset refs via AssetManager when needed.
+				if (!AssimpImporter::LoadStaticMeshAsset(meta.SourcePath, &mesh, opt, &outError, m_pAssetManager.get()))
 				{
-					outError = "LoadStaticMeshAsset failed.";
+					if (outError.empty())
+						outError = "LoadStaticMeshAsset failed.";
 					return false;
 				}
 
 				outObject = std::make_unique<TypedAssetObject<StaticMeshAsset>>(static_cast<StaticMeshAsset&&>(mesh));
 				outResidentBytes = 0;
-				outError.clear();
 				return true;
 			});
 
+		// ------------------------------------------------------------
+		// TextureAsset loader (minimum: keep SourcePath)
+		// ------------------------------------------------------------
 		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID,
 			[](const AssetRegistry::AssetMeta& meta,
 				std::unique_ptr<AssetObject>& outObject,
@@ -208,7 +248,10 @@ namespace shz
 				std::string& outError) -> bool
 			{
 				TextureAsset tex = {};
-				(void)meta;
+				tex.SetSourcePath(meta.SourcePath);
+
+				// Optional: name from filename
+				tex.SetName(std::filesystem::path(meta.SourcePath).filename().string().c_str());
 
 				outObject = std::make_unique<TypedAssetObject<TextureAsset>>(static_cast<TextureAsset&&>(tex));
 				outResidentBytes = 0;
@@ -216,16 +259,19 @@ namespace shz
 				return true;
 			});
 
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<MaterialInstanceAsset>::TypeID,
+		// ------------------------------------------------------------
+		// MaterialAsset loader (optional stub)
+		// ------------------------------------------------------------
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<MaterialAsset>::TypeID,
 			[](const AssetRegistry::AssetMeta& meta,
 				std::unique_ptr<AssetObject>& outObject,
 				uint64& outResidentBytes,
 				std::string& outError) -> bool
 			{
-				MaterialInstanceAsset mi = {};
-				(void)meta;
+				MaterialAsset ma = {};
+				ma.SetSourcePath(meta.SourcePath);
 
-				outObject = std::make_unique<TypedAssetObject<MaterialInstanceAsset>>(static_cast<MaterialInstanceAsset&&>(mi));
+				outObject = std::make_unique<TypedAssetObject<MaterialAsset>>(static_cast<MaterialAsset&&>(ma));
 				outResidentBytes = 0;
 				outError.clear();
 				return true;
@@ -234,25 +280,29 @@ namespace shz
 
 	AssetRef<StaticMeshAsset> MaterialEditor::registerStaticMeshPath(const std::string& path)
 	{
-		const AssetID id = makeAssetIDFromPath(AssetTypeTraits<StaticMeshAsset>::TypeID, path);
-		m_pAssetManager->RegisterAsset(id, AssetTypeTraits<StaticMeshAsset>::TypeID, path);
-		return AssetRef<StaticMeshAsset>(id);
+		ASSERT(m_pAssetManager, "AssetManager is null.");
+
+		// New AssetManager API: register by source path -> returns AssetRef
+		return m_pAssetManager->RegisterAssetRefByPath<StaticMeshAsset>(path);
 	}
 
 	AssetRef<TextureAsset> MaterialEditor::registerTexturePath(const std::string& path)
 	{
-		const AssetID id = makeAssetIDFromPath(AssetTypeTraits<TextureAsset>::TypeID, path);
-		m_pAssetManager->RegisterAsset(id, AssetTypeTraits<TextureAsset>::TypeID, path);
-		return AssetRef<TextureAsset>(id);
+		ASSERT(m_pAssetManager, "AssetManager is null.");
+
+		// New AssetManager API: register by source path -> returns AssetRef
+		return m_pAssetManager->RegisterAssetRefByPath<TextureAsset>(path);
 	}
 
 	AssetPtr<StaticMeshAsset> MaterialEditor::loadStaticMeshBlocking(AssetRef<StaticMeshAsset> ref, EAssetLoadFlags flags)
 	{
+		ASSERT(m_pAssetManager, "AssetManager is null.");
 		return m_pAssetManager->LoadBlocking(ref, flags);
 	}
 
 	AssetPtr<TextureAsset> MaterialEditor::loadTextureBlocking(AssetRef<TextureAsset> ref, EAssetLoadFlags flags)
 	{
+		ASSERT(m_pAssetManager, "AssetManager is null.");
 		return m_pAssetManager->LoadBlocking(ref, flags);
 	}
 
@@ -316,12 +366,16 @@ namespace shz
 		if (path.empty())
 			return nullptr;
 
-		auto it = m_RuntimeTextureCache.find(path);
+		const std::string cacheKey = makeTextureCacheKey(path, isSRGB, flipVertically);
+
+		auto it = m_RuntimeTextureCache.find(cacheKey);
 		if (it != m_RuntimeTextureCache.end() && it->second)
 		{
 			return it->second->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 		}
 
+		// (Optional) Register & load via AssetManager (so TextureAsset exists), but actual GPU texture
+		// creation here is still done by CreateTextureFromFile (editor preview path).
 		AssetRef<TextureAsset> texRef = registerTexturePath(path);
 		(void)loadTextureBlocking(texRef, EAssetLoadFlags::AllowFallback);
 
@@ -337,9 +391,10 @@ namespace shz
 
 		ensureResourceStateSRV(tex.RawPtr());
 
-		m_RuntimeTextureCache.emplace(path, tex);
+		m_RuntimeTextureCache.emplace(cacheKey, tex);
 		return tex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 	}
+
 
 	// ------------------------------------------------------------
 	// Win32 dialog / drag&drop (optional)
@@ -368,7 +423,7 @@ namespace shz
 		(void)outPath; (void)filter; (void)title;
 #endif
 		return false;
-		}
+	}
 
 	void MaterialEditor::enableWindowDragDrop()
 	{
@@ -569,7 +624,6 @@ namespace shz
 		entry.Path = path;
 
 		entry.MeshRef = registerStaticMeshPath(entry.Path);
-		entry.MeshID = makeAssetIDFromPath(AssetTypeTraits<StaticMeshAsset>::TypeID, entry.Path);
 		entry.MeshPtr = loadStaticMeshBlocking(entry.MeshRef);
 
 		const StaticMeshAsset* cpuMesh = entry.MeshPtr.Get();
@@ -615,24 +669,75 @@ namespace shz
 	// Material build/apply
 	// ------------------------------------------------------------
 
-	void MaterialEditor::seedFromImportedAsset(MaterialInstance& mat, const MaterialInstanceAsset& matAsset)
+	void MaterialEditor::seedFromImportedAsset(MaterialInstance& mat, const MaterialAsset& matAsset)
 	{
-		const auto& p = matAsset.GetParams();
+		// NOTE:
+		// New MaterialAsset stores overrides by name (ValueOverride/ResourceBinding).
+		// We read known shader parameter names if present, otherwise leave defaults.
 
-		float bc[4] = { p.BaseColor.x, p.BaseColor.y, p.BaseColor.z, p.BaseColor.w };
-		mat.SetFloat4("g_BaseColorFactor", bc);
+		// BaseColorFactor
+		{
+			float bc[4] = { 1, 1, 1, 1 };
+			if (const auto* v = matAsset.FindValueOverride("g_BaseColorFactor"))
+			{
+				(void)readFloat4FromOverride(v, bc);
+			}
+			mat.SetFloat4("g_BaseColorFactor", bc);
+		}
 
-		mat.SetFloat("g_RoughnessFactor", p.Roughness);
-		mat.SetFloat("g_MetallicFactor", p.Metallic);
-		mat.SetFloat("g_OcclusionStrength", p.Occlusion);
+		// Roughness/Metallic/Occlusion
+		{
+			float rough = 1.0f;
+			if (const auto* v = matAsset.FindValueOverride("g_RoughnessFactor"))
+				(void)readFloatFromOverride(v, rough);
+			mat.SetFloat("g_RoughnessFactor", rough);
 
-		float ec[3] = { p.EmissiveColor.x, p.EmissiveColor.y, p.EmissiveColor.z };
-		mat.SetFloat3("g_EmissiveFactor", ec);
-		mat.SetFloat("g_EmissiveIntensity", p.EmissiveIntensity);
+			float metal = 0.0f;
+			if (const auto* v = matAsset.FindValueOverride("g_MetallicFactor"))
+				(void)readFloatFromOverride(v, metal);
+			mat.SetFloat("g_MetallicFactor", metal);
 
-		mat.SetFloat("g_AlphaCutoff", p.AlphaCutoff);
-		mat.SetFloat("g_NormalScale", p.NormalScale);
+			float occ = 1.0f;
+			if (const auto* v = matAsset.FindValueOverride("g_OcclusionStrength"))
+				(void)readFloatFromOverride(v, occ);
+			mat.SetFloat("g_OcclusionStrength", occ);
+		}
+
+		// EmissiveFactor / EmissiveIntensity
+		{
+			float ec[3] = { 0, 0, 0 };
+			if (const auto* v = matAsset.FindValueOverride("g_EmissiveFactor"))
+				(void)readFloat3FromOverride(v, ec);
+			mat.SetFloat3("g_EmissiveFactor", ec);
+
+			float ei = 0.0f;
+			if (const auto* v = matAsset.FindValueOverride("g_EmissiveIntensity"))
+				(void)readFloatFromOverride(v, ei);
+			mat.SetFloat("g_EmissiveIntensity", ei);
+		}
+
+		// AlphaCutoff / NormalScale
+		{
+			float ac = 0.5f;
+			if (const auto* v = matAsset.FindValueOverride("g_AlphaCutoff"))
+				(void)readFloatFromOverride(v, ac);
+			mat.SetFloat("g_AlphaCutoff", ac);
+
+			float ns = 1.0f;
+			if (const auto* v = matAsset.FindValueOverride("g_NormalScale"))
+				(void)readFloatFromOverride(v, ns);
+			mat.SetFloat("g_NormalScale", ns);
+		}
+
+		// MaterialFlags (optional)
+		{
+			uint32 flags = 0;
+			if (const auto* v = matAsset.FindValueOverride("g_MaterialFlags"))
+				(void)readUintFromOverride(v, flags);
+			mat.SetUint("g_MaterialFlags", flags);
+		}
 	}
+
 
 	void MaterialEditor::applyPipelineOverrides(MaterialInstance& mat, const EditorMaterialOverrides& ov)
 	{
@@ -726,7 +831,7 @@ namespace shz
 		std::vector<MaterialInstance> materials;
 		materials.reserve(cpuMesh.GetMaterialSlots().size());
 
-		for (const MaterialInstanceAsset& matAsset : cpuMesh.GetMaterialSlots())
+		for (const MaterialAsset& matAsset : cpuMesh.GetMaterialSlots())
 		{
 			MaterialInstance mat = {};
 			{
@@ -737,40 +842,62 @@ namespace shz
 			// Pipeline knobs default (from current UI overrides)
 			applyPipelineOverrides(mat, m_Overrides);
 
-			// Seed params from imported asset first
+			// Seed known numeric params from imported asset (new override model)
 			seedFromImportedAsset(mat, matAsset);
 
-			// Bind textures from imported asset (best-effort), else default
+			// Bind textures from imported asset (ResourceBinding by shader var name), else default.
 			uint32 materialFlags = 0;
 
 			auto BindFromAssetOrDefault = [&](
-				MATERIAL_TEXTURE_SLOT slot,
 				const char* shaderVar,
 				const RefCntAutoPtr<ITexture>& defaultTex,
 				bool isSRGB,
 				uint32 flagBit,
 				bool bFlipV)
 			{
-				if (matAsset.GetTexture(slot).IsValid())
+				// 1) ResourceBinding exists?
+				if (const auto* rb = matAsset.FindResourceBinding(shaderVar))
 				{
-					const std::string texPath = matAsset.GetTexture(slot).GetSourcePath();
-					if (ITextureView* srv = getOrCreateTextureSRV(texPath, isSRGB, bFlipV))
+					// Prefer runtime view if provided (editor/import preview)
+					if (rb->pRuntimeView)
 					{
-						mat.SetTextureRuntimeView(shaderVar, srv);
+						mat.SetTextureRuntimeView(shaderVar, rb->pRuntimeView);
 						materialFlags |= flagBit;
 						return;
 					}
+
+					// Otherwise use TextureRef -> load TextureAsset -> SourcePath -> create SRV
+					if (rb->TextureRef)
+					{
+						AssetPtr<TextureAsset> texPtr = loadTextureBlocking(rb->TextureRef, EAssetLoadFlags::AllowFallback);
+						if (const TextureAsset* texAsset = texPtr.Get())
+						{
+							const std::string texPath = texAsset->GetSourcePath();
+							if (!texPath.empty())
+							{
+								if (ITextureView* srv = getOrCreateTextureSRV(texPath, isSRGB, bFlipV))
+								{
+									mat.SetTextureRuntimeView(shaderVar, srv);
+									materialFlags |= flagBit;
+									return;
+								}
+							}
+						}
+					}
 				}
 
+				// 2) Fallback
 				mat.SetTextureRuntimeView(shaderVar, defaultTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				// Important: clear the flag bit when fallback happens
+				materialFlags &= ~flagBit;
 			};
 
-			BindFromAssetOrDefault(MATERIAL_TEX_ALBEDO, "g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR, m_Overrides.BaseColorFlipVertically);
-			BindFromAssetOrDefault(MATERIAL_TEX_NORMAL, "g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL, m_Overrides.NormalFlipVertically);
-			BindFromAssetOrDefault(MATERIAL_TEX_ORM, "g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR, m_Overrides.MetallicRoughnessFlipVertically);
-			BindFromAssetOrDefault(MATERIAL_TEX_AO, "g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO, m_Overrides.AOFlipVertically);
-			BindFromAssetOrDefault(MATERIAL_TEX_EMISSIVE, "g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE, m_Overrides.EmissiveFlipVertically);
-			BindFromAssetOrDefault(MATERIAL_TEX_HEIGHT, "g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT, m_Overrides.HeightFlipVertically);
+			BindFromAssetOrDefault("g_BaseColorTex", m_DefaultTextures.White, true, MAT_HAS_BASECOLOR, m_Overrides.BaseColorFlipVertically);
+			BindFromAssetOrDefault("g_NormalTex", m_DefaultTextures.Normal, false, MAT_HAS_NORMAL, m_Overrides.NormalFlipVertically);
+			BindFromAssetOrDefault("g_MetallicRoughnessTex", m_DefaultTextures.MetallicRoughness, false, MAT_HAS_MR, m_Overrides.MetallicRoughnessFlipVertically);
+			BindFromAssetOrDefault("g_AOTex", m_DefaultTextures.AO, false, MAT_HAS_AO, m_Overrides.AOFlipVertically);
+			BindFromAssetOrDefault("g_EmissiveTex", m_DefaultTextures.Emissive, true, MAT_HAS_EMISSIVE, m_Overrides.EmissiveFlipVertically);
+			BindFromAssetOrDefault("g_HeightTex", m_DefaultTextures.Black, false, MAT_HAS_HEIGHT, m_Overrides.HeightFlipVertically);
 
 			mat.SetUint("g_MaterialFlags", materialFlags);
 			mat.MarkAllDirty();
@@ -780,6 +907,7 @@ namespace shz
 
 		return materials;
 	}
+
 
 	// ------------------------------------------------------------
 	// UI helpers
@@ -1400,4 +1528,4 @@ namespace shz
 		ImGui::End();
 	}
 
-	} // namespace shz
+} // namespace shz

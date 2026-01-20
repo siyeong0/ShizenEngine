@@ -134,10 +134,6 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// IMPORTANT:
-	// Your ShaderResourceDesc has no CB index, and ShaderCodeBufferDesc has no Name.
-	// Therefore we cannot map "MATERIAL_CONSTANTS" -> buffer desc by name.
-	//
 	// Policy:
 	// - If the shader declares a constant buffer named MATERIAL_CONSTANTS,
 	//   we assume its reflection buffer desc is index 0.
@@ -169,7 +165,9 @@ namespace shz
 		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
 
 		m_PipelineType = ci.PipelineType;
-		m_Name = ci.TemplateName.empty() ? "MaterialTemplate" : ci.TemplateName;
+
+		ASSERT(!ci.TemplateName.empty(), "Empty template name.");
+		m_Name = ci.TemplateName;
 
 		m_Shaders.clear();
 		m_ValueParamLut.clear();

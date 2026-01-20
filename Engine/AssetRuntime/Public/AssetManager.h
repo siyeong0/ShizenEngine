@@ -1,3 +1,7 @@
+// ============================================================================
+// Engine/AssetRuntime/Public/AssetManager.h
+// ============================================================================
+
 #pragma once
 #include <unordered_map>
 #include <functional>
@@ -9,9 +13,13 @@
 #include <string>
 
 #include "Primitives/BasicTypes.h"
+
 #include "Engine/AssetRuntime/Public/AssetManagerBase.h"
 #include "Engine/AssetRuntime/Public/AssetRegistry.h"
 #include "Engine/AssetRuntime/Public/AssetRecord.h"
+
+#include "Engine/AssetRuntime/Public/AssetRef.hpp"
+#include "Engine/AssetRuntime/Public/AssetTypeTraits.h"
 
 namespace shz
 {
@@ -31,8 +39,30 @@ namespace shz
 		AssetManager(const AssetManager&) = delete;
 		AssetManager& operator=(const AssetManager&) = delete;
 
+		// --------------------------------------------------------------------
+		// Registry
+		// --------------------------------------------------------------------
 		void RegisterAsset(const AssetID& id, AssetTypeID typeId, const std::string& sourcePath);
 		void UnregisterAsset(const AssetID& id);
+
+		// --------------------------------------------------------------------
+		// Deterministic IDs & path helpers (Importer-friendly)
+		// --------------------------------------------------------------------
+		static AssetID MakeDeterministicAssetID(AssetTypeID typeId, const std::string& normalizedSourcePath);
+
+		AssetID MakeAssetIDFromPath(AssetTypeID typeId, const std::string& sourcePath) const;
+
+		AssetID RegisterAssetByPath(AssetTypeID typeId, const std::string& sourcePath);
+
+		template<typename T>
+		AssetRef<T> RegisterAssetRefByPath(const std::string& sourcePath)
+		{
+			const AssetTypeID typeId = AssetTypeTraits<T>::TypeID;
+			ASSERT(typeId != 0, "AssetManager::RegisterAssetRefByPath: invalid AssetTypeID.");
+
+			const AssetID id = RegisterAssetByPath(typeId, sourcePath);
+			return AssetRef<T>(id);
+		}
 
 		void RegisterLoader(AssetTypeID typeId, LoaderFn loader);
 
@@ -43,6 +73,9 @@ namespace shz
 		uint64 GetFrameIndex() const noexcept { return m_FrameIndex.load(std::memory_order_relaxed); }
 
 	public:
+		// --------------------------------------------------------------------
+		// AssetManagerBase
+		// --------------------------------------------------------------------
 		void AddStrongRef(const AssetID& id, AssetTypeID typeId) noexcept override;
 		void ReleaseStrongRef(const AssetID& id, AssetTypeID typeId) noexcept override;
 

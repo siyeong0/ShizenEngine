@@ -140,6 +140,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\MaterialInstance.h" />
     <ClInclude Include="Public\MaterialTemplate.h" />
+    <ClInclude Include="Public\MaterialTypes.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

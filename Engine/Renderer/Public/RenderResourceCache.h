@@ -14,7 +14,7 @@
 
 #include "Engine/AssetRuntime/Public/TextureAsset.h"
 #include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialInstanceAsset.h"
+#include "Engine/AssetRuntime/Public/MaterialAsset.h"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"

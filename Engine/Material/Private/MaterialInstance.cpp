@@ -1,3 +1,7 @@
+// ============================================================================
+// Engine/Material/Private/MaterialInstance.cpp
+// ============================================================================
+
 #include "pch.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 
@@ -30,21 +34,7 @@ namespace shz
 		m_pRenderPass = nullptr;
 		m_SubpassIndex = 0;
 
-		m_CullMode = CULL_MODE_BACK;
-		m_FrontCCW = true;
-
-		m_DepthEnable = true;
-		m_DepthWriteEnable = true;
-		m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-		m_TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
-
-		m_LinearWrapSamplerName = "g_LinearWrapSampler";
-		m_LinearWrapSamplerDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
+		m_Options = {};
 
 		// ------------------------------------------------------------
 		// PSO desc (RenderPass-driven formats policy)
@@ -68,12 +58,12 @@ namespace shz
 
 			m_GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-			m_GraphicsPipeline.RasterizerDesc.CullMode = m_CullMode;
-			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_FrontCCW;
+			m_GraphicsPipeline.RasterizerDesc.CullMode = m_Options.CullMode;
+			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
 
-			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_DepthEnable;
-			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_DepthWriteEnable;
-			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_DepthFunc;
+			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
 
 			buildFixedInputLayout();
 		}
@@ -161,75 +151,80 @@ namespace shz
 
 	void MaterialInstance::SetCullMode(CULL_MODE mode)
 	{
-		if (m_CullMode == mode)
+		if (m_Options.CullMode == mode)
 			return;
 
-		m_CullMode = mode;
+		m_Options.CullMode = mode;
+
 		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			m_GraphicsPipeline.RasterizerDesc.CullMode = m_CullMode;
+			m_GraphicsPipeline.RasterizerDesc.CullMode = m_Options.CullMode;
 			markPsoDirty();
 		}
 	}
 
 	void MaterialInstance::SetFrontCounterClockwise(bool v)
 	{
-		if (m_FrontCCW == v)
+		if (m_Options.FrontCounterClockwise == v)
 			return;
 
-		m_FrontCCW = v;
+		m_Options.FrontCounterClockwise = v;
+
 		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_FrontCCW;
+			m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
 			markPsoDirty();
 		}
 	}
 
 	void MaterialInstance::SetDepthEnable(bool v)
 	{
-		if (m_DepthEnable == v)
+		if (m_Options.DepthEnable == v)
 			return;
 
-		m_DepthEnable = v;
+		m_Options.DepthEnable = v;
+
 		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_DepthEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
 			markPsoDirty();
 		}
 	}
 
 	void MaterialInstance::SetDepthWriteEnable(bool v)
 	{
-		if (m_DepthWriteEnable == v)
+		if (m_Options.DepthWriteEnable == v)
 			return;
 
-		m_DepthWriteEnable = v;
+		m_Options.DepthWriteEnable = v;
+
 		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_DepthWriteEnable;
+			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
 			markPsoDirty();
 		}
 	}
 
 	void MaterialInstance::SetDepthFunc(COMPARISON_FUNCTION func)
 	{
-		if (m_DepthFunc == func)
+		if (m_Options.DepthFunc == func)
 			return;
 
-		m_DepthFunc = func;
+		m_Options.DepthFunc = func;
+
 		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_DepthFunc;
+			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
 			markPsoDirty();
 		}
 	}
 
 	void MaterialInstance::SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode)
 	{
-		if (m_TextureBindingMode == mode)
+		if (m_Options.TextureBindingMode == mode)
 			return;
 
-		m_TextureBindingMode = mode;
+		m_Options.TextureBindingMode = mode;
 		buildAutoResourceLayout();
 		markLayoutDirty();
 	}
@@ -237,20 +232,20 @@ namespace shz
 	void MaterialInstance::SetLinearWrapSamplerName(const std::string& name)
 	{
 		const std::string newName = name.empty() ? "g_LinearWrapSampler" : name;
-		if (m_LinearWrapSamplerName == newName)
+		if (m_Options.LinearWrapSamplerName == newName)
 			return;
 
-		m_LinearWrapSamplerName = newName;
+		m_Options.LinearWrapSamplerName = newName;
 		buildAutoResourceLayout();
 		markLayoutDirty();
 	}
 
 	void MaterialInstance::SetLinearWrapSamplerDesc(const SamplerDesc& desc)
 	{
-		if (std::memcmp(&m_LinearWrapSamplerDesc, &desc, sizeof(SamplerDesc)) == 0)
+		if (std::memcmp(&m_Options.LinearWrapSamplerDesc, &desc, sizeof(SamplerDesc)) == 0)
 			return;
 
-		m_LinearWrapSamplerDesc = desc;
+		m_Options.LinearWrapSamplerDesc = desc;
 		buildAutoResourceLayout();
 		markLayoutDirty();
 	}
@@ -275,7 +270,7 @@ namespace shz
 		if (m_pTemplate->GetCBufferCount() > 0)
 		{
 			ShaderResourceVariableDesc v = {};
-			v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires material constants?? 
+			v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may require material constants depending on shader.
 			v.Name = MaterialTemplate::MATERIAL_CBUFFER_NAME;
 			v.Type = SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC;
 			m_Variables.push_back(v);
@@ -283,7 +278,7 @@ namespace shz
 
 		// Textures
 		const SHADER_RESOURCE_VARIABLE_TYPE texVarType =
-			(m_TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC)
+			(m_Options.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC)
 			? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC
 			: SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
 
@@ -295,7 +290,7 @@ namespace shz
 			if (isTextureType(r.Type))
 			{
 				ShaderResourceVariableDesc v = {};
-				v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires texture resources?? 
+				v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex textures possible (e.g. VT, skinning, etc.)
 				v.Name = r.Name.c_str();
 				v.Type = texVarType;
 				m_Variables.push_back(v);
@@ -305,9 +300,9 @@ namespace shz
 		// Fixed immutable sampler: LinearWrap
 		{
 			ImmutableSamplerDesc s = {};
-			s.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may not requires a sampler ?? 
-			s.SamplerOrTextureName = m_LinearWrapSamplerName.c_str();
-			s.Desc = m_LinearWrapSamplerDesc;
+			s.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex samplers possible
+			s.SamplerOrTextureName = m_Options.LinearWrapSamplerName.c_str();
+			s.Desc = m_Options.LinearWrapSamplerDesc;
 			m_ImmutableSamplers.push_back(s);
 		}
 	}
