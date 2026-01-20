@@ -1,9 +1,5 @@
-// ============================================================================
-// Engine/AssetRuntime/Private/AssimpImporter.cpp
-// ============================================================================
-
 #include "pch.h"
-#include "Engine/AssetRuntime/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Importer/Public/AssimpImporter.h"
 
 #include <vector>
 #include <string>
@@ -13,15 +9,13 @@
 #include <fstream>
 #include <cctype>
 
-// Assimp
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-// Engine
-#include "Engine/AssetRuntime/Public/AssetManager.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
-#include "Engine/AssetRuntime/Public/TextureAsset.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
 
 namespace shz
 {

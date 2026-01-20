@@ -18,49 +18,49 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\StaticMeshAsset.h">
+    <ClInclude Include="AssetData\Public\StaticMeshAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssimpImporter.h">
+    <ClInclude Include="Importer\Public\AssimpImporter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\TextureAsset.h">
+    <ClInclude Include="AssetData\Public\TextureAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetManagerBase.h">
+    <ClInclude Include="AssetManager\Public\AssetManagerBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetID.hpp">
+    <ClInclude Include="Common\AssetID.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\MaterialAsset.h">
+    <ClInclude Include="AssetData\Public\MaterialAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetRef.hpp">
+    <ClInclude Include="Common\AssetRef.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetPtr.hpp">
+    <ClInclude Include="Common\AssetPtr.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\IAssetManager.h">
+    <ClInclude Include="AssetManager\Public\IAssetManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\EAssetStatus.h">
+    <ClInclude Include="Common\EAssetStatus.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetObject.h">
+    <ClInclude Include="Common\AssetObject.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetRegistry.h">
+    <ClInclude Include="AssetManager\Public\AssetRegistry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetRecord.h">
+    <ClInclude Include="AssetManager\Public\AssetRecord.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetManager.h">
+    <ClInclude Include="AssetManager\Public\AssetManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\AssetTypeTraits.h">
+    <ClInclude Include="Common\AssetTypeTraits.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -68,19 +68,19 @@
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\StaticMeshAsset.cpp">
+    <ClCompile Include="AssetData\Public\StaticMeshAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\AssimpImporter.cpp">
+    <ClCompile Include="Importer\Private\AssimpImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\TextureAsset.cpp">
+    <ClCompile Include="AssetData\Private\TextureAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\AssetManager.cpp">
+    <ClCompile Include="AssetManager\Private\AssetManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\MaterialAsset.cpp">
+    <ClCompile Include="AssetData\Private\MaterialAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

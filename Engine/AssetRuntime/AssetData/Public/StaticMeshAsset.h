@@ -4,7 +4,7 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
 namespace shz
 {

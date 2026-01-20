@@ -3,17 +3,10 @@
 #include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// AssetRegistry
-	// - Minimal in-memory mapping: AssetID -> (TypeID, SourcePath)
-	// - Assumption:
-	//   - Runtime registry is valid and complete.
-	//   - Missing entries / type mismatch are programmer error => ASSERT.
-	// ------------------------------------------------------------
 	class AssetRegistry final
 	{
 	public:

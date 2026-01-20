@@ -10,12 +10,12 @@
 
 #include "Primitives/BasicTypes.h"
 
-#include "Engine/AssetRuntime/Public/AssetManagerBase.h"
-#include "Engine/AssetRuntime/Public/AssetRegistry.h"
-#include "Engine/AssetRuntime/Public/AssetRecord.h"
+#include "Engine/AssetRuntime/Common/AssetRef.hpp"
+#include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
-#include "Engine/AssetRuntime/Public/AssetRef.hpp"
-#include "Engine/AssetRuntime/Public/AssetTypeTraits.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManagerBase.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetRegistry.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetRecord.h"
 
 namespace shz
 {

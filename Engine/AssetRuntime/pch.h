@@ -8,5 +8,7 @@
 #define PCH_H
 
 #include <cstring>
+#include <cctype>
+#include <filesystem>
 
 #endif //PCH_H

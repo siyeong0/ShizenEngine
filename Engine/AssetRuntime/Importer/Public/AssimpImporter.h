@@ -6,7 +6,7 @@
 #include <string>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
 
 namespace shz
 {

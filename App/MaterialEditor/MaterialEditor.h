@@ -11,9 +11,9 @@
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
-#include "Engine/AssetRuntime/Public/AssetManager.h"
-#include "Engine/AssetRuntime/Public/AssetRef.hpp"
-#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
+#include "Engine/AssetRuntime/Common/AssetRef.hpp"
+#include "Engine/AssetRuntime/Common/AssetPtr.hpp"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 

@@ -7,14 +7,14 @@
 #include "Primitives/Handle.hpp"
 #include "Primitives/UniqueHandle.hpp"
 
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
-#include "Engine/AssetRuntime/Public/AssetRef.hpp"
-#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
-#include "Engine/AssetRuntime/Public/AssetManager.h"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/AssetRef.hpp"
+#include "Engine/AssetRuntime/Common/AssetPtr.hpp"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 
-#include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"

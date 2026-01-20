@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
 #include "Engine/Material/Public/MaterialInstance.h"
 

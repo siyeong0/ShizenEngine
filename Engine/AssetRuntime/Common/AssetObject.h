@@ -3,7 +3,7 @@
 #include <concepts>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
 
 namespace shz
 {

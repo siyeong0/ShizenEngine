@@ -3,7 +3,7 @@
 
 #include <unordered_map>
 
-#include "Engine/AssetRuntime/Public/AssetManager.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 

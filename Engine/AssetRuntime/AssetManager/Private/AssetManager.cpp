@@ -1,12 +1,5 @@
-// ============================================================================
-// Engine/AssetRuntime/Private/AssetManager.cpp
-// ============================================================================
-
 #include "pch.h"
-#include "Engine/AssetRuntime/Public/AssetManager.h"
-
-#include <cctype>
-#include <filesystem>
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 
 namespace shz
 {
@@ -16,7 +9,7 @@ namespace shz
 
 	AssetID AssetManager::RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath)
 	{
-		ASSERT(typeID != 0, "AssetManager::RegisterAssetRefByPath: invalid AssetTypeID.");
+		ASSERT(typeID != 0, "Invalid AssetTypeID.");
 		ASSERT(!sourcePath.empty(), "Path is empty.");
 
 		const std::string relativeSourcePath = std::filesystem::relative(sourcePath).string();
@@ -30,8 +23,8 @@ namespace shz
 
 		const AssetID id(hi, lo);
 
-		ASSERT(id, "AssetManager::RegisterAsset: invalid AssetID.");
-		ASSERT(typeID != 0, "AssetManager::RegisterAsset: invalid AssetTypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeID != 0, "Invalid AssetTypeID.");
 
 		AssetRegistry::AssetMeta meta = {};
 		meta.TypeID = typeID;
@@ -50,8 +43,8 @@ namespace shz
 
 	void AssetManager::RegisterLoader(AssetTypeID typeId, LoaderFn loader)
 	{
-		ASSERT(typeId != 0, "AssetManager::RegisterLoader: invalid TypeID.");
-		ASSERT(static_cast<bool>(loader), "AssetManager::RegisterLoader: loader is null.");
+		ASSERT(typeId != 0, "Invalid TypeID.");
+		ASSERT(static_cast<bool>(loader), "Loader is null.");
 
 		std::lock_guard<std::mutex> lock(m_MapMutex);
 		m_Loaders[typeId] = static_cast<LoaderFn&&>(loader);
@@ -63,8 +56,8 @@ namespace shz
 
 	void AssetManager::AddStrongRef(const AssetID& id, AssetTypeID typeId) noexcept
 	{
-		ASSERT(id, "AssetManager::AddStrongRef: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::AddStrongRef: invalid AssetTypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid AssetTypeID.");
 
 		std::lock_guard<std::mutex> lock(m_MapMutex);
 		AssetRecord& rec = getOrCreateRecord_NoLock(id, typeId);
@@ -73,22 +66,22 @@ namespace shz
 
 	void AssetManager::ReleaseStrongRef(const AssetID& id, AssetTypeID typeId) noexcept
 	{
-		ASSERT(id, "AssetManager::ReleaseStrongRef: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::ReleaseStrongRef: invalid AssetTypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid AssetTypeID.");
 
 		std::lock_guard<std::mutex> lock(m_MapMutex);
 		AssetRecord* rec = getRecordOrNull_NoLock(id);
-		ASSERT(rec, "AssetManager::ReleaseStrongRef: record not found.");
-		ASSERT(rec->TypeID == typeId, "AssetManager::ReleaseStrongRef: TypeID mismatch.");
+		ASSERT(rec, "Record not found.");
+		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
 		const uint32 prev = rec->StrongRefCount.fetch_sub(1, std::memory_order_relaxed);
-		ASSERT(prev != 0, "AssetManager::ReleaseStrongRef: StrongRefCount underflow.");
+		ASSERT(prev != 0, "StrongRefCount underflow.");
 	}
 
 	void AssetManager::RequestLoad(const AssetID& id, AssetTypeID typeId, uint32 flags)
 	{
-		ASSERT(id, "AssetManager::RequestLoad: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::RequestLoad: invalid AssetTypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid AssetTypeID.");
 
 		AssetRecord* rec = nullptr;
 
@@ -128,8 +121,8 @@ namespace shz
 
 	EAssetStatus AssetManager::GetStatusByID(const AssetID& id, AssetTypeID typeId) const noexcept
 	{
-		ASSERT(id, "AssetManager::GetStatusByID: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::GetStatusByID: invalid TypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid TypeID.");
 
 		const AssetRecord* rec = nullptr;
 
@@ -143,7 +136,7 @@ namespace shz
 			return EAssetStatus::Unloaded;
 		}
 
-		ASSERT(rec->TypeID == typeId, "AssetManager::GetStatusByID: TypeID mismatch.");
+		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
 		std::unique_lock<std::mutex> recLock(rec->Mutex);
 		return rec->Status;
@@ -151,8 +144,8 @@ namespace shz
 
 	AssetObject* AssetManager::TryGetByID(const AssetID& id, AssetTypeID typeId) noexcept
 	{
-		ASSERT(id, "AssetManager::TryGetByID: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::TryGetByID: invalid TypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid TypeID.");
 
 		AssetRecord* rec = nullptr;
 
@@ -164,7 +157,7 @@ namespace shz
 		if (!rec)
 			return nullptr;
 
-		ASSERT(rec->TypeID == typeId, "AssetManager::TryGetByID: TypeID mismatch.");
+		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
 		std::unique_lock<std::mutex> lock(rec->Mutex);
 
@@ -179,8 +172,8 @@ namespace shz
 
 	const AssetObject* AssetManager::TryGetByIDConst(const AssetID& id, AssetTypeID typeId) const noexcept
 	{
-		ASSERT(id, "AssetManager::TryGetByIDConst: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::TryGetByIDConst: invalid TypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid TypeID.");
 
 		const AssetRecord* rec = nullptr;
 
@@ -194,7 +187,7 @@ namespace shz
 			return nullptr;
 		}
 
-		ASSERT(rec->TypeID == typeId, "AssetManager::TryGetByIDConst: TypeID mismatch.");
+		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
 		std::unique_lock<std::mutex> lock(rec->Mutex);
 
@@ -209,8 +202,8 @@ namespace shz
 
 	void AssetManager::WaitByID(const AssetID& id, AssetTypeID typeId) const
 	{
-		ASSERT(id, "AssetManager::WaitByID: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::WaitByID: invalid TypeID.");
+		ASSERT(id, "Invalid AssetID.");
+		ASSERT(typeId != 0, "Invalid TypeID.");
 
 		const AssetRecord* rec = nullptr;
 
@@ -219,8 +212,8 @@ namespace shz
 			rec = getRecordOrNull_NoLock(id);
 		}
 
-		ASSERT(rec != nullptr, "AssetManager::WaitByID: record not found.");
-		ASSERT(rec->TypeID == typeId, "AssetManager::WaitByID: TypeID mismatch.");
+		ASSERT(rec != nullptr, "Record not found.");
+		ASSERT(rec->TypeID == typeId, "TypeID mismatch.");
 
 		std::unique_lock<std::mutex> lock(rec->Mutex);
 		rec->Cv.wait(lock, [&]()
@@ -233,7 +226,7 @@ namespace shz
 
 	bool AssetManager::Unload(const AssetID& id)
 	{
-		ASSERT(id, "AssetManager::Unload: invalid AssetID.");
+		ASSERT(id, "Invalid AssetID.");
 
 		AssetRecord* rec = nullptr;
 
@@ -241,17 +234,17 @@ namespace shz
 			std::lock_guard<std::mutex> lock(m_MapMutex);
 
 			rec = getRecordOrNull_NoLock(id);
-			ASSERT(rec, "AssetManager::Unload: record not found.");
+			ASSERT(rec, "Record not found.");
 
 			if (isPinned_NoLock(*rec))
 			{
-				ASSERT(false, "AssetManager::Unload: cannot unload pinned asset.");
+				ASSERT(false, "Cannot unload pinned asset.");
 				return false;
 			}
 
 			if (rec->StrongRefCount.load(std::memory_order_relaxed) != 0)
 			{
-				ASSERT(false, "AssetManager::Unload: cannot unload asset with active strong references.");
+				ASSERT(false, "Cannot unload asset with active strong references.");
 				return false;
 			}
 
@@ -365,7 +358,7 @@ namespace shz
 	{
 		if (AssetRecord* existing = getRecordOrNull_NoLock(id))
 		{
-			ASSERT(existing->TypeID == typeId, "AssetManager: record TypeID mismatch.");
+			ASSERT(existing->TypeID == typeId, "Record TypeID mismatch.");
 			return *existing;
 		}
 
@@ -390,10 +383,10 @@ namespace shz
 			std::lock_guard<std::mutex> lock(m_MapMutex);
 
 			meta = m_Registry.Get(record.ID);
-			ASSERT(meta.TypeID == record.TypeID, "AssetManager::loadNow: registry TypeID mismatch.");
+			ASSERT(meta.TypeID == record.TypeID, "Registry TypeID mismatch.");
 
 			auto it = m_Loaders.find(meta.TypeID);
-			ASSERT(it != m_Loaders.end(), "AssetManager::loadNow: no loader registered for TypeID.");
+			ASSERT(it != m_Loaders.end(), "No loader registered for TypeID.");
 			loader = it->second;
 		}
 
@@ -416,8 +409,8 @@ namespace shz
 				return;
 			}
 
-			ASSERT(obj, "AssetManager::loadNow: loader returned ok but object is null.");
-			ASSERT(obj->GetTypeID() == record.TypeID, "AssetManager::loadNow: loaded object TypeID mismatch.");
+			ASSERT(obj, "Loader returned ok but object is null.");
+			ASSERT(obj->GetTypeID() == record.TypeID, "Loaded object TypeID mismatch.");
 
 			record.Object = static_cast<std::unique_ptr<AssetObject>&&>(obj);
 			record.Error.clear();

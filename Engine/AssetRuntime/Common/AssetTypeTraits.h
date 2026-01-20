@@ -1,7 +1,7 @@
 #pragma once
-#include "Engine/AssetRuntime/Public/StaticMeshAsset.h"
-#include "Engine/AssetRuntime/Public/TextureAsset.h"
-#include "Engine/AssetRuntime/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
 namespace shz
 {

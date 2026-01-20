@@ -3,21 +3,13 @@
 #include <concepts>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
-#include "Engine/AssetRuntime/Public/AssetObject.h"
-#include "Engine/AssetRuntime/Public/EAssetStatus.h"
-#include "Engine/AssetRuntime/Public/IAssetManager.h"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/AssetObject.h"
+#include "Engine/AssetRuntime/Common/EAssetStatus.h"
+#include "Engine/AssetRuntime/AssetManager/Public/IAssetManager.h"
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// AssetPtr<T>
-	// - Strong reference:
-	//   - Keeps asset resident while this object exists (AddRef/Release in manager).
-	//   - Provides direct pointer access when loaded.
-	// - IMPORTANT:
-	//   - AssetPtr may be "pending": valid reference but not loaded yet => Get() == nullptr.
-	// ------------------------------------------------------------
 	template<typename T>
 	class AssetPtr final
 	{

@@ -1,8 +1,8 @@
 #pragma once
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/IAssetManager.h"
-#include "Engine/AssetRuntime/Public/AssetRef.hpp"
-#include "Engine/AssetRuntime/Public/AssetPtr.hpp"
+#include "Engine/AssetRuntime/AssetManager/Public/IAssetManager.h"
+#include "Engine/AssetRuntime/Common/AssetRef.hpp"
+#include "Engine/AssetRuntime/Common/AssetPtr.hpp"
 
 namespace shz
 {

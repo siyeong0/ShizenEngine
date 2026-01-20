@@ -1,14 +1,8 @@
 #pragma once
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// AssetRef<T>
-	// - Soft reference: holds AssetID only.
-	// - Safe to serialize/store in components/scenes.
-	// - Does NOT guarantee the asset is loaded/resident.
-	// ------------------------------------------------------------
 	template<typename T>
 	class AssetRef final
 	{

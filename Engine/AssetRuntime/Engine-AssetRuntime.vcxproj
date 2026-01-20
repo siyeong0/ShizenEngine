@@ -153,21 +153,21 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\AssetManager.h" />
-    <ClInclude Include="Public\AssetID.hpp" />
-    <ClInclude Include="Public\AssetManagerBase.h" />
-    <ClInclude Include="Public\AssetObject.h" />
-    <ClInclude Include="Public\AssetPtr.hpp" />
-    <ClInclude Include="Public\AssetRecord.h" />
-    <ClInclude Include="Public\AssetRef.hpp" />
-    <ClInclude Include="Public\AssetRegistry.h" />
-    <ClInclude Include="Public\AssetTypeTraits.h" />
-    <ClInclude Include="Public\AssimpImporter.h" />
-    <ClInclude Include="Public\EAssetStatus.h" />
-    <ClInclude Include="Public\IAssetManager.h" />
-    <ClInclude Include="Public\MaterialAsset.h" />
-    <ClInclude Include="Public\StaticMeshAsset.h" />
-    <ClInclude Include="Public\TextureAsset.h" />
+    <ClInclude Include="AssetManager\Public\AssetManager.h" />
+    <ClInclude Include="Common\AssetID.hpp" />
+    <ClInclude Include="AssetManager\Public\AssetManagerBase.h" />
+    <ClInclude Include="Common\AssetObject.h" />
+    <ClInclude Include="Common\AssetPtr.hpp" />
+    <ClInclude Include="AssetManager\Public\AssetRecord.h" />
+    <ClInclude Include="Common\AssetRef.hpp" />
+    <ClInclude Include="AssetManager\Public\AssetRegistry.h" />
+    <ClInclude Include="Common\AssetTypeTraits.h" />
+    <ClInclude Include="Importer\Public\AssimpImporter.h" />
+    <ClInclude Include="Common\EAssetStatus.h" />
+    <ClInclude Include="AssetManager\Public\IAssetManager.h" />
+    <ClInclude Include="AssetData\Public\MaterialAsset.h" />
+    <ClInclude Include="AssetData\Public\StaticMeshAsset.h" />
+    <ClInclude Include="AssetData\Public\TextureAsset.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -176,11 +176,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\AssetManager.cpp" />
-    <ClCompile Include="Private\AssimpImporter.cpp" />
-    <ClCompile Include="Private\MaterialAsset.cpp" />
-    <ClCompile Include="Private\StaticMeshAsset.cpp" />
-    <ClCompile Include="Private\TextureAsset.cpp" />
+    <ClCompile Include="AssetManager\Private\AssetManager.cpp" />
+    <ClCompile Include="Importer\Private\AssimpImporter.cpp" />
+    <ClCompile Include="AssetData\Private\MaterialAsset.cpp" />
+    <ClCompile Include="AssetData\Public\StaticMeshAsset.cpp" />
+    <ClCompile Include="AssetData\Private\TextureAsset.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\Engine-Core.vcxproj">

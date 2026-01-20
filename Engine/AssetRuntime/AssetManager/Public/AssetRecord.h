@@ -6,9 +6,9 @@
 #include <string>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetRuntime/Public/AssetID.hpp"
-#include "Engine/AssetRuntime/Public/EAssetStatus.h"
-#include "Engine/AssetRuntime/Public/AssetObject.h"
+#include "Engine/AssetRuntime/Common/AssetID.hpp"
+#include "Engine/AssetRuntime/Common/EAssetStatus.h"
+#include "Engine/AssetRuntime/Common/AssetObject.h"
 
 namespace shz
 {

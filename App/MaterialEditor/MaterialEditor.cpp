@@ -10,8 +10,8 @@
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
-#include "Engine/AssetRuntime/Public/AssimpImporter.h"
-#include "Engine/AssetRuntime/Public/AssetTypeTraits.h"
+#include "Engine/AssetRuntime/Importer/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
 #include "Tools/Image/Public/TextureUtilities.h"
 
