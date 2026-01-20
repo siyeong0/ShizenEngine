@@ -10,5 +10,6 @@
 #include <cstring>
 #include <cctype>
 #include <filesystem>
+#include <system_error>
 
 #endif //PCH_H

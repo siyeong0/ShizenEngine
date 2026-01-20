@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/AssetRuntime/Importer/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/AssimpImporter.h"
 
 #include <vector>
 #include <string>

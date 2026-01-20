@@ -10,7 +10,8 @@
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
-#include "Engine/AssetRuntime/Importer/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
 #include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
 #include "Tools/Image/Public/TextureUtilities.h"
@@ -237,23 +238,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// TextureAsset loader (minimum: keep SourcePath)
 		// ------------------------------------------------------------
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID,
-			[](const AssetRegistry::AssetMeta& meta,
-				std::unique_ptr<AssetObject>& outObject,
-				uint64& outResidentBytes,
-				std::string& outError) -> bool
-			{
-				TextureAsset tex = {};
-				tex.SetSourcePath(meta.SourcePath);
-
-				// Optional: name from filename
-				tex.SetName(std::filesystem::path(meta.SourcePath).filename().string().c_str());
-
-				outObject = std::make_unique<TypedAssetObject<TextureAsset>>(static_cast<TextureAsset&&>(tex));
-				outResidentBytes = 0;
-				outError.clear();
-				return true;
-			});
+		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
 
 		// ------------------------------------------------------------
 		// MaterialAsset loader (optional stub)

@@ -21,7 +21,7 @@
     <ClInclude Include="AssetData\Public\StaticMeshAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Importer\Public\AssimpImporter.h">
+    <ClInclude Include="Pipeline\Public\AssimpImporter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="AssetData\Public\TextureAsset.h">
@@ -63,15 +63,21 @@
     <ClInclude Include="Common\AssetTypeTraits.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Pipeline\Public\TextureImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline\Public\StaticMeshImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AssetData\Public\StaticMeshAsset.cpp">
+    <ClCompile Include="AssetData\Private\StaticMeshAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Importer\Private\AssimpImporter.cpp">
+    <ClCompile Include="Pipeline\Private\AssimpImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AssetData\Private\TextureAsset.cpp">
@@ -81,6 +87,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AssetData\Private\MaterialAsset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline\Private\TextureImporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline\Private\StaticMeshImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

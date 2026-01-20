@@ -152,6 +152,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Pipeline\Public\StaticMeshImporter.h" />
+    <ClInclude Include="Pipeline\Public\TextureImporter.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="AssetManager\Public\AssetManager.h" />
     <ClInclude Include="Common\AssetID.hpp" />
@@ -162,7 +164,7 @@
     <ClInclude Include="Common\AssetRef.hpp" />
     <ClInclude Include="AssetManager\Public\AssetRegistry.h" />
     <ClInclude Include="Common\AssetTypeTraits.h" />
-    <ClInclude Include="Importer\Public\AssimpImporter.h" />
+    <ClInclude Include="Pipeline\Public\AssimpImporter.h" />
     <ClInclude Include="Common\EAssetStatus.h" />
     <ClInclude Include="AssetManager\Public\IAssetManager.h" />
     <ClInclude Include="AssetData\Public\MaterialAsset.h" />
@@ -170,6 +172,8 @@
     <ClInclude Include="AssetData\Public\TextureAsset.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Pipeline\Private\StaticMeshImporter.cpp" />
+    <ClCompile Include="Pipeline\Private\TextureImporter.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -177,9 +181,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="AssetManager\Private\AssetManager.cpp" />
-    <ClCompile Include="Importer\Private\AssimpImporter.cpp" />
+    <ClCompile Include="Pipeline\Private\AssimpImporter.cpp" />
     <ClCompile Include="AssetData\Private\MaterialAsset.cpp" />
-    <ClCompile Include="AssetData\Public\StaticMeshAsset.cpp" />
+    <ClCompile Include="AssetData\Private\StaticMeshAsset.cpp" />
     <ClCompile Include="AssetData\Private\TextureAsset.cpp" />
   </ItemGroup>
   <ItemGroup>
