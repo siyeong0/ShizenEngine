@@ -1,11 +1,5 @@
-// ============================================================================
-// Engine/AssetRuntime/Private/MaterialAsset.cpp
-// ============================================================================
-
 #include "pch.h"
 #include "Engine/AssetRuntime/Public/MaterialAsset.h"
-
-#include <cstring>
 
 #include "Engine/Material/Public/MaterialInstance.h"
 
@@ -21,9 +15,8 @@ namespace shz
 
 	static inline void copyBytes(std::vector<uint8>& dst, const void* pData, uint32 byteSize)
 	{
+		ASSERT(byteSize > 0, "Byte size must not be 0.");
 		dst.resize(byteSize);
-		if (byteSize == 0)
-			return;
 
 		if (!pData)
 		{
@@ -39,13 +32,14 @@ namespace shz
 	// ============================================================
 	const MaterialAsset::ValueOverride* MaterialAsset::FindValueOverride(const char* name) const
 	{
-		if (!name)
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (const ValueOverride& v : m_ValueOverrides)
 		{
 			if (strEq(v.Name, name))
+			{
 				return &v;
+			}
 		}
 
 		return nullptr;
@@ -53,13 +47,14 @@ namespace shz
 
 	MaterialAsset::ValueOverride* MaterialAsset::findValueOverrideMutable(const char* name)
 	{
-		if (!name)
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (ValueOverride& v : m_ValueOverrides)
 		{
 			if (strEq(v.Name, name))
+			{
 				return &v;
+			}
 		}
 
 		return nullptr;
@@ -67,8 +62,7 @@ namespace shz
 
 	bool MaterialAsset::RemoveValueOverride(const char* name)
 	{
-		if (!name)
-			return false;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (size_t i = 0; i < m_ValueOverrides.size(); ++i)
 		{
@@ -84,13 +78,14 @@ namespace shz
 
 	const MaterialAsset::ResourceBinding* MaterialAsset::FindResourceBinding(const char* name) const
 	{
-		if (!name)
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (const ResourceBinding& r : m_ResourceBindings)
 		{
 			if (strEq(r.Name, name))
+			{
 				return &r;
+			}
 		}
 
 		return nullptr;
@@ -98,13 +93,14 @@ namespace shz
 
 	MaterialAsset::ResourceBinding* MaterialAsset::findResourceBindingMutable(const char* name)
 	{
-		if (!name)
-			return nullptr;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (ResourceBinding& r : m_ResourceBindings)
 		{
 			if (strEq(r.Name, name))
+			{
 				return &r;
+			}
 		}
 
 		return nullptr;
@@ -112,8 +108,7 @@ namespace shz
 
 	bool MaterialAsset::RemoveResourceBinding(const char* name)
 	{
-		if (!name)
-			return false;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
 		for (size_t i = 0; i < m_ResourceBindings.size(); ++i)
 		{
@@ -212,14 +207,9 @@ namespace shz
 		uint32 byteSize,
 		uint64 stableId)
 	{
-		if (!name || name[0] == '\0')
-			return false;
-
-		if (type == MATERIAL_VALUE_TYPE_UNKNOWN)
-			return false;
-
-		if (byteSize == 0)
-			return false;
+		ASSERT(name && name[0] != '\0', "Invalid name string.");
+		ASSERT(type != MATERIAL_VALUE_TYPE_UNKNOWN, "Value type is unkown. Please specify value type.");
+		ASSERT(byteSize > 0, "Byte size must not be 0.");
 
 		ValueOverride* v = findValueOverrideMutable(name);
 		if (!v)
@@ -248,11 +238,8 @@ namespace shz
 		const AssetRef<TextureAsset>& textureRef,
 		uint64 stableId)
 	{
-		if (!resourceName || resourceName[0] == '\0')
-			return false;
-
-		if (!isTextureType(expectedType))
-			return false;
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+		ASSERT(IsTextureType(expectedType), "Expected type must be a texture type.");
 
 		ResourceBinding* r = findResourceBindingMutable(resourceName);
 		if (!r)
@@ -278,11 +265,8 @@ namespace shz
 		ITextureView* pView,
 		uint64 stableId)
 	{
-		if (!resourceName || resourceName[0] == '\0')
-			return false;
-
-		if (!isTextureType(expectedType))
-			return false;
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+		ASSERT(IsTextureType(expectedType), "Expected type must be a texture type.");
 
 		ResourceBinding* r = findResourceBindingMutable(resourceName);
 		if (!r)
@@ -307,8 +291,7 @@ namespace shz
 		const SamplerDesc& desc,
 		uint64 stableId)
 	{
-		if (!resourceName || resourceName[0] == '\0')
-			return false;
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
 
 		ResourceBinding* r = findResourceBindingMutable(resourceName);
 		if (!r)
@@ -330,12 +313,13 @@ namespace shz
 
 	bool MaterialAsset::ClearSamplerOverride(const char* resourceName)
 	{
-		if (!resourceName || resourceName[0] == '\0')
-			return false;
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
 
 		ResourceBinding* r = findResourceBindingMutable(resourceName);
 		if (!r)
+		{
 			return false;
+		}
 
 		r->bHasSamplerOverride = false;
 		return true;
@@ -350,8 +334,6 @@ namespace shz
 		m_SourcePath.clear();
 		m_TemplateKey.clear();
 
-		m_TemplateSignatureHash = 0;
-
 		m_Options = {};
 
 		m_ValueOverrides.clear();
@@ -363,8 +345,7 @@ namespace shz
 	// ============================================================
 	bool MaterialAsset::ApplyToInstance(MaterialInstance* pInstance) const
 	{
-		if (!pInstance)
-			return false;
+		ASSERT(pInstance, "Material instance is null.");
 
 		// Options -> instance knobs
 		pInstance->SetCullMode(m_Options.CullMode);
@@ -380,7 +361,9 @@ namespace shz
 		for (const ValueOverride& v : m_ValueOverrides)
 		{
 			if (v.Name.empty() || v.Data.empty())
+			{
 				continue;
+			}
 
 			pInstance->SetRaw(v.Name.c_str(), v.Data.data(), static_cast<uint32>(v.Data.size()));
 		}
@@ -389,7 +372,9 @@ namespace shz
 		for (const ResourceBinding& r : m_ResourceBindings)
 		{
 			if (r.Name.empty())
+			{
 				continue;
+			}
 
 			// If runtime view is provided, prefer it (editor preview).
 			if (r.pRuntimeView)
@@ -411,6 +396,7 @@ namespace shz
 				// but the asset stores SamplerDesc. If you have a sampler cache, resolve it there.
 				// For now, just store it in the asset and let higher-level code apply it.
 				// (No-op here.)
+				ASSERT(false, "Not implemented.");
 			}
 		}
 

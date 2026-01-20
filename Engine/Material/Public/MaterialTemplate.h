@@ -104,11 +104,8 @@ namespace shz
 		bool ValidateSetValue(const char* name, MATERIAL_VALUE_TYPE expectedType, MaterialValueParamDesc* pOutDesc = nullptr) const;
 		bool ValidateSetResource(const char* name, MATERIAL_RESOURCE_TYPE expectedType, MaterialResourceDesc* pOutDesc = nullptr) const;
 
+	public:
 		static constexpr const char* MATERIAL_CBUFFER_NAME = "MATERIAL_CONSTANTS";
-
-	private:
-		bool buildShaders(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const std::vector<MaterialShaderStageDesc>& stages);
-		bool buildReflectionFromShaders();
 
 	private:
 		MATERIAL_PIPELINE_TYPE m_PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;

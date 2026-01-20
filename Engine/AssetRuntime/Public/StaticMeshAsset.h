@@ -8,12 +8,6 @@
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// StaticMeshAsset
-	// - CPU-side static mesh asset data (no GPU/RHI dependency).
-	// - Stored as SoA for easy vertex stream split later.
-	// - Importers may feed AoS and deinterleave into these streams.
-	// ------------------------------------------------------------
 	class StaticMeshAsset final
 	{
 	public:

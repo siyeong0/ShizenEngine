@@ -4,11 +4,11 @@
 namespace shz
 {
 	// ------------------------------------------------------------
-// AssetRef<T>
-// - Soft reference: holds AssetID only.
-// - Safe to serialize/store in components/scenes.
-// - Does NOT guarantee the asset is loaded/resident.
-// ------------------------------------------------------------
+	// AssetRef<T>
+	// - Soft reference: holds AssetID only.
+	// - Safe to serialize/store in components/scenes.
+	// - Does NOT guarantee the asset is loaded/resident.
+	// ------------------------------------------------------------
 	template<typename T>
 	class AssetRef final
 	{
@@ -26,7 +26,8 @@ namespace shz
 		constexpr const AssetID& GetID() const noexcept { return m_ID; }
 
 		constexpr bool IsNull() const noexcept { return m_ID.IsNull(); }
-		constexpr explicit operator bool() const noexcept { return !IsNull(); }
+		constexpr bool IsValid() const noexcept { return !IsNull(); }
+		constexpr explicit operator bool() const noexcept { return IsValid(); }
 
 		friend constexpr bool operator==(const AssetRef& a, const AssetRef& b) noexcept
 		{

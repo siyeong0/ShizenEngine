@@ -34,7 +34,7 @@ namespace shz
 
 		// If explicit mip levels are requested, generating mips should usually be enabled.
 		// This is policy-dependent, so keep it permissive.
-		if (m_MipLevels > 1 && !m_GenerateMips)
+		if (m_MipLevels > 1 && !m_bGenerateMips)
 		{
 			return true;
 		}
@@ -54,11 +54,11 @@ namespace shz
 		info.BindFlags = m_BindFlags;
 		info.MipLevels = m_MipLevels;
 
-		info.IsSRGB = m_IsSRGB;
-		info.GenerateMips = m_GenerateMips;
-		info.FlipVertically = m_FlipVertically;
+		info.IsSRGB = m_bSRGB;
+		info.GenerateMips = m_bGenerateMips;
+		info.FlipVertically = m_bFlipVertically;
 
-		info.PremultiplyAlpha = m_PremultiplyAlpha;
+		info.PremultiplyAlpha = m_bPremultiplyAlpha;
 
 		info.Format = m_Format;
 
@@ -82,10 +82,10 @@ namespace shz
 		m_BindFlags = BIND_SHADER_RESOURCE;
 		m_MipLevels = 0;
 
-		m_IsSRGB = false;
-		m_GenerateMips = true;
-		m_FlipVertically = false;
-		m_PremultiplyAlpha = false;
+		m_bSRGB = false;
+		m_bGenerateMips = true;
+		m_bFlipVertically = false;
+		m_bPremultiplyAlpha = false;
 
 		m_Format = TEX_FORMAT_UNKNOWN;
 

@@ -1,7 +1,3 @@
-// ============================================================================
-// Samples/MaterialEditor/MaterialEditor.cpp
-// ============================================================================
-
 #include "MaterialEditor.h"
 
 #include <iostream>
@@ -282,16 +278,14 @@ namespace shz
 	{
 		ASSERT(m_pAssetManager, "AssetManager is null.");
 
-		// New AssetManager API: register by source path -> returns AssetRef
-		return m_pAssetManager->RegisterAssetRefByPath<StaticMeshAsset>(path);
+		return m_pAssetManager->RegisterAsset<StaticMeshAsset>(path);
 	}
 
 	AssetRef<TextureAsset> MaterialEditor::registerTexturePath(const std::string& path)
 	{
 		ASSERT(m_pAssetManager, "AssetManager is null.");
 
-		// New AssetManager API: register by source path -> returns AssetRef
-		return m_pAssetManager->RegisterAssetRefByPath<TextureAsset>(path);
+		return m_pAssetManager->RegisterAsset<TextureAsset>(path);
 	}
 
 	AssetPtr<StaticMeshAsset> MaterialEditor::loadStaticMeshBlocking(AssetRef<StaticMeshAsset> ref, EAssetLoadFlags flags)

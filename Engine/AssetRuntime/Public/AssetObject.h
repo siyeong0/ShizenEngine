@@ -30,9 +30,7 @@ namespace shz
 	// - IMPORTANT: This should NOT derive from AssetObject.
 	// ------------------------------------------------------------
 	template<typename T>
-	concept AssetTypeConcept =
-		(!std::derived_from<T, AssetObject>) &&
-		std::is_object_v<T>;
+	concept AssetTypeConcept = (!std::derived_from<T, AssetObject>) && std::is_object_v<T>;
 
 	// ------------------------------------------------------------
 	// TypedAssetObject<T>

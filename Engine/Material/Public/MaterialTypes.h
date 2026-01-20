@@ -72,14 +72,14 @@ namespace shz
 	// ------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------
-	static inline bool isTextureType(MATERIAL_RESOURCE_TYPE t)
+	static inline bool IsTextureType(MATERIAL_RESOURCE_TYPE t)
 	{
 		return (t == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
 			(t == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
 			(t == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
 	}
 
-	static inline uint32 valueTypeByteSize(MATERIAL_VALUE_TYPE t) noexcept
+	static inline uint32 ValueTypeByteSize(MATERIAL_VALUE_TYPE t) noexcept
 	{
 		switch (t)
 		{
@@ -135,7 +135,9 @@ namespace shz
 		bool EqualsSampler(const MaterialCommonOptions& rhs) const
 		{
 			if (LinearWrapSamplerName != rhs.LinearWrapSamplerName)
+			{
 				return false;
+			}
 
 			return std::memcmp(&LinearWrapSamplerDesc, &rhs.LinearWrapSamplerDesc, sizeof(SamplerDesc)) == 0;
 		}

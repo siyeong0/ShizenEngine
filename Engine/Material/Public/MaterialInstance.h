@@ -45,7 +45,6 @@ namespace shz
 		MaterialInstance& operator=(MaterialInstance&&) noexcept = default;
 
 		// NOTE:
-		// - Initialize only takes minimal inputs.
 		// - All pipeline/binding knobs are set by setter APIs (and mark dirty bits).
 		bool Initialize(const MaterialTemplate* pTemplate, const std::string& instanceName);
 
@@ -54,11 +53,8 @@ namespace shz
 
 		uint32 GetShaderCount() const { return m_pTemplate ? m_pTemplate->GetShaderCount() : 0; }
 		IShader* GetShader(uint32 index) const { return m_pTemplate ? m_pTemplate->GetShader(index) : nullptr; }
-		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const;
+		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const { return m_pTemplate->GetShaders(); }
 
-		// --------------------------------------------------------------------
-		// PSO / Pipeline state (owned by instance)
-		// --------------------------------------------------------------------
 		const PipelineStateDesc& GetPSODesc() const { return m_PSODesc; }
 		const GraphicsPipelineDesc& GetGraphicsPipelineDesc() const { return m_GraphicsPipeline; }
 
@@ -85,9 +81,7 @@ namespace shz
 		const SamplerDesc& GetLinearWrapSamplerDesc() const { return m_Options.LinearWrapSamplerDesc; }
 		const char* GetLinearWrapSamplerName() const { return m_Options.LinearWrapSamplerName.c_str(); }
 
-		// --------------------------------------------------------------------
 		// Resource layout (auto-generated from template reflection)
-		// --------------------------------------------------------------------
 		SHADER_RESOURCE_VARIABLE_TYPE GetDefaultVariableType() const { return m_DefaultVariableType; }
 
 		uint32 GetLayoutVarCount() const { return static_cast<uint32>(m_Variables.size()); }
@@ -153,7 +147,6 @@ namespace shz
 		bool writeValueInternal(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedValueType);
 
 		void buildAutoResourceLayout();
-		void buildFixedInputLayout();
 
 		void markPsoDirty() { m_bPsoDirty = 1; }
 		void markLayoutDirty() { m_bLayoutDirty = 1; }

@@ -7,12 +7,6 @@
 
 namespace shz
 {
-	// ------------------------------------------------------------
-	// TextureAsset
-	// - CPU-side texture asset (no GPU resource ownership).
-	// - Holds source path + loading options (sRGB, mips, compression, etc.).
-	// - Renderer uses these options to create GPU texture resources.
-	// ------------------------------------------------------------
 	class TextureAsset final
 	{
 	public:
@@ -23,9 +17,6 @@ namespace shz
 		TextureAsset& operator=(TextureAsset&&) noexcept = default;
 		~TextureAsset() = default;
 
-		// ------------------------------------------------------------
-		// Identity
-		// ------------------------------------------------------------
 		void SetName(const std::string& name) { m_Name = name; }
 		const std::string& GetName() const noexcept { return m_Name; }
 
@@ -35,17 +26,17 @@ namespace shz
 		// ------------------------------------------------------------
 		// Load options
 		// ------------------------------------------------------------
-		void SetIsSRGB(bool value) noexcept { m_IsSRGB = value; }
-		bool GetIsSRGB() const noexcept { return m_IsSRGB; }
+		void SetIsSRGB(bool value) noexcept { m_bSRGB = value; }
+		bool GetIsSRGB() const noexcept { return m_bSRGB; }
 
-		void SetGenerateMips(bool value) noexcept { m_GenerateMips = value; }
-		bool GetGenerateMips() const noexcept { return m_GenerateMips; }
+		void SetGenerateMips(bool value) noexcept { m_bGenerateMips = value; }
+		bool GetGenerateMips() const noexcept { return m_bGenerateMips; }
 
-		void SetFlipVertically(bool value) noexcept { m_FlipVertically = value; }
-		bool GetFlipVertically() const noexcept { return m_FlipVertically; }
+		void SetFlipVertically(bool value) noexcept { m_bFlipVertically = value; }
+		bool GetFlipVertically() const noexcept { return m_bFlipVertically; }
 
-		void SetPremultiplyAlpha(bool value) noexcept { m_PremultiplyAlpha = value; }
-		bool GetPremultiplyAlpha() const noexcept { return m_PremultiplyAlpha; }
+		void SetPremultiplyAlpha(bool value) noexcept { m_bPremultiplyAlpha = value; }
+		bool GetPremultiplyAlpha() const noexcept { return m_bPremultiplyAlpha; }
 
 		void SetMipFilter(TEXTURE_LOAD_MIP_FILTER value) noexcept { m_MipFilter = value; }
 		TEXTURE_LOAD_MIP_FILTER GetMipFilter() const noexcept { return m_MipFilter; }
@@ -95,14 +86,14 @@ namespace shz
 		std::string m_Name;
 		std::string m_SourcePath;
 
-		USAGE      m_Usage = USAGE_IMMUTABLE;
+		USAGE m_Usage = USAGE_IMMUTABLE;
 		BIND_FLAGS m_BindFlags = BIND_SHADER_RESOURCE;
-		uint32     m_MipLevels = 0;
+		uint32 m_MipLevels = 0;
 
-		bool m_IsSRGB = false;
-		bool m_GenerateMips = true;
-		bool m_FlipVertically = false;
-		bool m_PremultiplyAlpha = false;
+		bool m_bSRGB = false;
+		bool m_bGenerateMips = true;
+		bool m_bFlipVertically = false;
+		bool m_bPremultiplyAlpha = false;
 
 		TEXTURE_FORMAT m_Format = TEX_FORMAT_UNKNOWN;
 

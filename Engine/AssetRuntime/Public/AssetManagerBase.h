@@ -1,4 +1,3 @@
-// AssetManager.h
 #pragma once
 #include "Primitives/BasicTypes.h"
 #include "Engine/AssetRuntime/Public/IAssetManager.h"
@@ -83,7 +82,6 @@ namespace shz
 			return AssetObjectCast<T>(obj);
 		}
 
-	public:
 		virtual bool Unload(const AssetID& id) = 0;
 		virtual void CollectGarbage() = 0;
 		virtual void Tick(float deltaSeconds) = 0;

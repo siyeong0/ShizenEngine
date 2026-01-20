@@ -1,9 +1,3 @@
-// ============================================================================
-// Engine/AssetRuntime/Public/MaterialAsset.h
-// - CPU-side authoring data for a material instance.
-// - Stores overrides (values/resources/options) against a MaterialTemplate.
-// ============================================================================
-
 #pragma once
 #include <cstdint>
 #include <string>
@@ -24,35 +18,16 @@ namespace shz
 {
 	class MaterialInstance;
 
-	// ------------------------------------------------------------
-	// MaterialAsset
-	// - Persistent authoring asset for a material instance.
-	// - Uses TemplateKey to reference a MaterialTemplate.
-	// - Stores:
-	//   * renderer knobs (subset of MaterialInstance state)
-	//   * Value overrides (by name / optional stable id)
-	//   * Resource bindings (TextureAsset refs / runtime overrides / sampler overrides)
-	// ------------------------------------------------------------
 	class MaterialAsset final
 	{
 	public:
-		// ------------------------------------------------------------
-		// Options
-		// - These map to renderer knobs / PSO knobs.
-		// ------------------------------------------------------------
 		struct Options final : MaterialCommonOptions
 		{
 			// Authoring-friendly flags
-			bool TwoSided = false;
-			bool CastShadow = true;
+			bool bTwoSided = false;
+			bool bCastShadow = true;
 		};
 
-		// ------------------------------------------------------------
-		// Value override
-		// - Name: primary lookup key.
-		// - StableID: optional (0 means unused). Can be used for robustness.
-		// - Data: raw bytes (size must match template param ByteSize when applied).
-		// ------------------------------------------------------------
 		struct ValueOverride final
 		{
 			uint64 StableID = 0;
@@ -61,9 +36,6 @@ namespace shz
 			std::vector<uint8> Data = {};
 		};
 
-		// ------------------------------------------------------------
-		// Resource binding override (textures + samplers)
-		// ------------------------------------------------------------
 		struct ResourceBinding final
 		{
 			uint64 StableID = 0;
@@ -93,9 +65,7 @@ namespace shz
 		MaterialAsset& operator=(MaterialAsset&&) noexcept = default;
 		~MaterialAsset() = default;
 
-		// ------------------------------------------------------------
 		// Metadata
-		// ------------------------------------------------------------
 		void SetName(const std::string& name) { m_Name = name; }
 		const std::string& GetName() const noexcept { return m_Name; }
 
@@ -105,13 +75,7 @@ namespace shz
 		void SetTemplateKey(const std::string& key) { m_TemplateKey = key; }
 		const std::string& GetTemplateKey() const noexcept { return m_TemplateKey; }
 
-		// Optional: template build signature (hash of stage paths/flags/defines)
-		void SetTemplateSignatureHash(uint64 h) noexcept { m_TemplateSignatureHash = h; }
-		uint64 GetTemplateSignatureHash() const noexcept { return m_TemplateSignatureHash; }
-
-		// ------------------------------------------------------------
 		// Options
-		// ------------------------------------------------------------
 		Options& GetOptions() noexcept { return m_Options; }
 		const Options& GetOptions() const noexcept { return m_Options; }
 
@@ -123,17 +87,15 @@ namespace shz
 		void SetDepthWriteEnable(bool v) noexcept { m_Options.DepthWriteEnable = v; }
 		void SetDepthFunc(COMPARISON_FUNCTION f) noexcept { m_Options.DepthFunc = f; }
 
-		void SetTwoSided(bool v) noexcept { m_Options.TwoSided = v; }
-		void SetCastShadow(bool v) noexcept { m_Options.CastShadow = v; }
+		void SetTwoSided(bool v) noexcept { m_Options.bTwoSided = v; }
+		void SetCastShadow(bool v) noexcept { m_Options.bCastShadow = v; }
 
 		void SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode) noexcept { m_Options.TextureBindingMode = mode; }
 
 		void SetLinearWrapSamplerName(const std::string& name) { m_Options.LinearWrapSamplerName = name.empty() ? "g_LinearWrapSampler" : name; }
 		void SetLinearWrapSamplerDesc(const SamplerDesc& desc) { m_Options.LinearWrapSamplerDesc = desc; }
 
-		// ------------------------------------------------------------
 		// Values (stored as overrides)
-		// ------------------------------------------------------------
 		uint32 GetValueOverrideCount() const noexcept { return static_cast<uint32>(m_ValueOverrides.size()); }
 		const ValueOverride& GetValueOverride(uint32 index) const { return m_ValueOverrides[index]; }
 
@@ -157,16 +119,9 @@ namespace shz
 
 		bool SetFloat4x4(const char* name, const float m16[16], uint64 stableId = 0);
 
-		bool SetRaw(
-			const char* name,
-			MATERIAL_VALUE_TYPE type,
-			const void* pData,
-			uint32 byteSize,
-			uint64 stableId = 0);
+		bool SetRaw(const char* name, MATERIAL_VALUE_TYPE type, const void* pData, uint32 byteSize, uint64 stableId = 0);
 
-		// ------------------------------------------------------------
 		// Resources
-		// ------------------------------------------------------------
 		uint32 GetResourceBindingCount() const noexcept { return static_cast<uint32>(m_ResourceBindings.size()); }
 		const ResourceBinding& GetResourceBinding(uint32 index) const { return m_ResourceBindings[index]; }
 
@@ -192,19 +147,12 @@ namespace shz
 
 		bool ClearSamplerOverride(const char* resourceName);
 
-		// ------------------------------------------------------------
 		// Reset / Validation
-		// ------------------------------------------------------------
 		void Clear();
 
-		bool IsValid() const noexcept
-		{
-			return true;
-		}
+		bool IsValid() const noexcept { return true; }
 
-		// ------------------------------------------------------------
 		// Apply to runtime instance
-		// ------------------------------------------------------------
 		bool ApplyToInstance(MaterialInstance* pInstance) const;
 
 	private:
@@ -222,8 +170,6 @@ namespace shz
 		std::string m_Name = {};
 		std::string m_SourcePath = {};
 		std::string m_TemplateKey = {};
-
-		uint64 m_TemplateSignatureHash = 0;
 
 		Options m_Options = {};
 

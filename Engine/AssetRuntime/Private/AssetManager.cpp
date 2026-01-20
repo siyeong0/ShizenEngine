@@ -11,78 +11,42 @@
 namespace shz
 {
 	// ------------------------------------------------------------
-	// Registry
+	// AssetManager Registry
 	// ------------------------------------------------------------
 
-	void AssetManager::RegisterAsset(const AssetID& id, AssetTypeID typeId, const std::string& sourcePath)
+	AssetID AssetManager::RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath)
 	{
+		ASSERT(typeID != 0, "AssetManager::RegisterAssetRefByPath: invalid AssetTypeID.");
+		ASSERT(!sourcePath.empty(), "Path is empty.");
+
+		const std::string relativeSourcePath = std::filesystem::relative(sourcePath).string();
+
+		// Make deterministic asset ID from path.
+		const size_t h0 = std::hash<std::string>{}(relativeSourcePath);
+		const size_t h1 = std::hash<std::string>{}(relativeSourcePath + std::to_string(static_cast<uint64>(typeID)));
+
+		const uint64 hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeID) * 0x9E3779B185EBCA87ull);
+		const uint64 lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeID) * 0xC2B2AE3D27D4EB4Full);
+
+		const AssetID id(hi, lo);
+
 		ASSERT(id, "AssetManager::RegisterAsset: invalid AssetID.");
-		ASSERT(typeId != 0, "AssetManager::RegisterAsset: invalid AssetTypeID.");
+		ASSERT(typeID != 0, "AssetManager::RegisterAsset: invalid AssetTypeID.");
 
 		AssetRegistry::AssetMeta meta = {};
-		meta.TypeID = typeId;
+		meta.TypeID = typeID;
 		meta.SourcePath = sourcePath;
 
 		// Registry should be idempotent: override/update meta if already exists.
 		m_Registry.Register(id, meta);
+
+		return id;
 	}
 
 	void AssetManager::UnregisterAsset(const AssetID& id)
 	{
 		m_Registry.Unregister(id);
 	}
-
-	AssetID AssetManager::MakeDeterministicAssetID(AssetTypeID typeId, const std::string& normalizedSourcePath)
-	{
-		ASSERT(typeId != 0, "AssetManager::MakeDeterministicAssetID: invalid AssetTypeID.");
-		ASSERT(!normalizedSourcePath.empty(), "AssetManager::MakeDeterministicAssetID: normalized path is empty.");
-
-		const size_t h0 = std::hash<std::string>{}(normalizedSourcePath);
-		const size_t h1 = std::hash<std::string>{}(normalizedSourcePath + std::to_string(static_cast<uint64>(typeId)));
-
-		const uint64 hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeId) * 0x9E3779B185EBCA87ull);
-		const uint64 lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeId) * 0xC2B2AE3D27D4EB4Full);
-
-		return AssetID(hi, lo);
-	}
-
-	AssetID AssetManager::MakeAssetIDFromPath(AssetTypeID typeId, const std::string& sourcePath) const
-	{
-		const std::string norm = std::filesystem::relative(sourcePath).string();
-		return MakeDeterministicAssetID(typeId, norm);
-	}
-
-	AssetID AssetManager::RegisterAssetByPath(AssetTypeID typeId, const std::string& sourcePath)
-	{
-		ASSERT(typeId != 0, "AssetManager::RegisterAssetByPath: invalid AssetTypeID.");
-		ASSERT(!sourcePath.empty(), "AssetManager::RegisterAssetByPath: sourcePath is empty.");
-
-		const std::string norm = std::filesystem::relative(sourcePath).string();
-		if (norm.empty())
-			return AssetID();
-
-		const AssetID id = MakeDeterministicAssetID(typeId, norm);
-
-		{
-			std::lock_guard<std::mutex> lock(m_MapMutex);
-
-			// Register is idempotent; if already registered, this is a no-op/update.
-			AssetRegistry::AssetMeta meta = {};
-			meta.TypeID = typeId;
-			meta.SourcePath = norm;
-
-			m_Registry.Register(id, meta);
-
-			// NOTE:
-			// We do NOT create a record here. Records are created lazily on load/ref.
-		}
-
-		return id;
-	}
-
-	// ------------------------------------------------------------
-	// Loaders
-	// ------------------------------------------------------------
 
 	void AssetManager::RegisterLoader(AssetTypeID typeId, LoaderFn loader)
 	{
@@ -175,7 +139,9 @@ namespace shz
 		}
 
 		if (!rec)
+		{
 			return EAssetStatus::Unloaded;
+		}
 
 		ASSERT(rec->TypeID == typeId, "AssetManager::GetStatusByID: TypeID mismatch.");
 
@@ -203,7 +169,9 @@ namespace shz
 		std::unique_lock<std::mutex> lock(rec->Mutex);
 
 		if (rec->Status != EAssetStatus::Loaded || !rec->Object)
+		{
 			return nullptr;
+		}
 
 		touchRecord_NoLock(*rec);
 		return rec->Object.get();
@@ -222,14 +190,18 @@ namespace shz
 		}
 
 		if (!rec)
+		{
 			return nullptr;
+		}
 
 		ASSERT(rec->TypeID == typeId, "AssetManager::TryGetByIDConst: TypeID mismatch.");
 
 		std::unique_lock<std::mutex> lock(rec->Mutex);
 
 		if (rec->Status != EAssetStatus::Loaded || !rec->Object)
+		{
 			return nullptr;
+		}
 
 		touchRecord_NoLock(*rec);
 		return rec->Object.get();
@@ -292,7 +264,9 @@ namespace shz
 	void AssetManager::CollectGarbage()
 	{
 		if (m_ResidentBytes.load(std::memory_order_relaxed) <= m_BudgetBytes.load(std::memory_order_relaxed))
+		{
 			return;
+		}
 
 		std::vector<AssetRecord*> candidates;
 		candidates.reserve(m_Records.size());
@@ -305,15 +279,21 @@ namespace shz
 				AssetRecord* rec = kv.second.get();
 
 				if (rec->StrongRefCount.load(std::memory_order_relaxed) != 0)
+				{
 					continue;
+				}
 
 				if (isPinned_NoLock(*rec))
+				{
 					continue;
+				}
 
 				std::unique_lock<std::mutex> recLock(rec->Mutex);
 
 				if (rec->Status != EAssetStatus::Loaded && rec->Status != EAssetStatus::Failed)
+				{
 					continue;
+				}
 
 				candidates.push_back(rec);
 			}
@@ -335,13 +315,19 @@ namespace shz
 			for (AssetRecord* rec : candidates)
 			{
 				if (m_ResidentBytes.load(std::memory_order_relaxed) <= m_BudgetBytes.load(std::memory_order_relaxed))
+				{
 					break;
+				}
 
 				if (evictedCount >= m_MaxEvictPerCollect)
+				{
 					break;
+				}
 
 				if (unloadRecord_NoLock(*rec))
+				{
 					++evictedCount;
+				}
 			}
 		}
 	}
@@ -462,9 +448,20 @@ namespace shz
 	{
 		std::unique_lock<std::mutex> lock(rec.Mutex);
 
-		if (rec.Status == EAssetStatus::Unloaded) return false;
-		if (rec.StrongRefCount.load(std::memory_order_relaxed) != 0) return false;
-		if (isPinned_NoLock(rec)) return false;
+		if (rec.Status == EAssetStatus::Unloaded)
+		{
+			return false;
+		}
+
+		if (rec.StrongRefCount.load(std::memory_order_relaxed) != 0)
+		{
+			return false;
+		}
+
+		if (isPinned_NoLock(rec))
+		{
+			return false;
+		}
 
 		const uint64 bytes = rec.ResidentBytes;
 

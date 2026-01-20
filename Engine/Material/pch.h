@@ -7,4 +7,8 @@
 #ifndef PCH_H
 #define PCH_H
 
+#include <cstring>
+#include <algorithm>
+#include <functional>
+
 #endif //PCH_H

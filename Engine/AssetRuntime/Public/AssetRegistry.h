@@ -26,25 +26,25 @@ namespace shz
 	public:
 		void Register(const AssetID& id, const AssetMeta& meta)
 		{
-			ASSERT(id, "AssetRegistry::Register: invalid AssetID.");
-			ASSERT(meta.TypeID != 0, "AssetRegistry::Register: invalid TypeID.");
-			ASSERT(!meta.SourcePath.empty(), "AssetRegistry::Register: empty SourcePath.");
+			ASSERT(id, "Register: invalid AssetID.");
+			ASSERT(meta.TypeID != 0, "Register: invalid TypeID.");
+			ASSERT(!meta.SourcePath.empty(), "Register: empty SourcePath.");
 
 			m_Map[id] = meta;
 		}
 
 		void Unregister(const AssetID& id)
 		{
-			ASSERT(id, "AssetRegistry::Unregister: invalid AssetID.");
+			ASSERT(id, "Unregister: invalid AssetID.");
 			m_Map.erase(id);
 		}
 
 		const AssetMeta& Get(const AssetID& id) const
 		{
-			ASSERT(id, "AssetRegistry::Get: invalid AssetID.");
+			ASSERT(id, "Get: invalid AssetID.");
 
 			auto it = m_Map.find(id);
-			ASSERT(it != m_Map.end(), "AssetRegistry::Get: asset not registered.");
+			ASSERT(it != m_Map.end(), "Get: asset not registered.");
 
 			return it->second;
 		}

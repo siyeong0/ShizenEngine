@@ -29,8 +29,8 @@ namespace shz
 
 		// LRU / budget
 		mutable std::atomic<uint64> LastUsedFrame = 0; // touched when asset is accessed (TryGet*)
-		uint64 LoadedFrame = 0;                         // set when load completes
-		uint64 ResidentBytes = 0;                       // estimated residency (0 = unknown)
+		uint64 LoadedFrame = 0;                        // set when load completes
+		uint64 ResidentBytes = 0;                      // estimated residency (0 = unknown)
 
 		std::unique_ptr<AssetObject> Object = nullptr;
 

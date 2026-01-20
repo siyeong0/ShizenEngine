@@ -37,9 +37,11 @@ namespace shz
 		{
 		}
 
-		constexpr bool IsNull() const noexcept { return (Hi | Lo) == 0; }
 		static constexpr AssetID Null() noexcept { return AssetID{}; }
-		constexpr explicit operator bool() const noexcept { return !IsNull(); }
+
+		constexpr bool IsNull() const noexcept { return (Hi | Lo) == 0; }
+		constexpr bool IsValid() const noexcept { return !IsNull(); }
+		constexpr explicit operator bool() const noexcept { return IsValid(); }
 
 		friend constexpr bool operator==(const AssetID& a, const AssetID& b) noexcept
 		{

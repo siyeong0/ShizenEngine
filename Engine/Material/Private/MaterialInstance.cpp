@@ -1,20 +1,8 @@
-// ============================================================================
-// Engine/Material/Private/MaterialInstance.cpp
-// ============================================================================
-
 #include "pch.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 
-#include <cstring>
-
 namespace shz
 {
-	const std::vector<RefCntAutoPtr<IShader>>& MaterialInstance::GetShaders() const
-	{
-		static const std::vector<RefCntAutoPtr<IShader>> kEmpty = {};
-		return m_pTemplate ? m_pTemplate->GetShaders() : kEmpty;
-	}
-
 	bool MaterialInstance::Initialize(const MaterialTemplate* pTemplate, const std::string& instanceName)
 	{
 		ASSERT(pTemplate, "Template is null.");
@@ -65,7 +53,21 @@ namespace shz
 			m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
 			m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
 
-			buildFixedInputLayout();
+			// Build fixed layout
+			static LayoutElement kLayoutElems[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+				LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+
+				LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1},
+			};
+
+			kLayoutElems[4].Stride = sizeof(uint32);
+
+			m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
+			m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);
 		}
 		else if (m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_COMPUTE)
 		{
@@ -80,21 +82,23 @@ namespace shz
 		// Debug name
 		{
 			if (!m_InstanceName.empty())
+			{
 				m_PSODesc.Name = m_InstanceName.c_str();
+			}
 			else if (!m_pTemplate->GetName().empty())
+			{
 				m_PSODesc.Name = m_pTemplate->GetName().c_str();
+			}
 			else
+			{
 				m_PSODesc.Name = "Material PSO";
+			}
 		}
 
-		// ------------------------------------------------------------
 		// Auto resource layout from template
-		// ------------------------------------------------------------
 		buildAutoResourceLayout();
 
-		// ------------------------------------------------------------
 		// Allocate CB blobs
-		// ------------------------------------------------------------
 		const uint32 cbCount = m_pTemplate->GetCBufferCount();
 		m_CBufferBlobs.resize(cbCount);
 		m_bCBufferDirties.resize(cbCount);
@@ -109,9 +113,7 @@ namespace shz
 			m_bCBufferDirties[i] = 1;
 		}
 
-		// ------------------------------------------------------------
 		// Allocate resource bindings aligned with template resources
-		// ------------------------------------------------------------
 		const uint32 resCount = m_pTemplate->GetResourceCount();
 		m_TextureBindings.resize(resCount);
 		m_bTextureDirties.resize(resCount);
@@ -136,7 +138,9 @@ namespace shz
 	void MaterialInstance::SetRenderPass(IRenderPass* pRenderPass, uint32 subpassIndex)
 	{
 		if (m_pRenderPass == pRenderPass && m_SubpassIndex == subpassIndex)
+		{
 			return;
+		}
 
 		m_pRenderPass = pRenderPass;
 		m_SubpassIndex = subpassIndex;
@@ -152,7 +156,9 @@ namespace shz
 	void MaterialInstance::SetCullMode(CULL_MODE mode)
 	{
 		if (m_Options.CullMode == mode)
+		{
 			return;
+		}
 
 		m_Options.CullMode = mode;
 
@@ -166,7 +172,9 @@ namespace shz
 	void MaterialInstance::SetFrontCounterClockwise(bool v)
 	{
 		if (m_Options.FrontCounterClockwise == v)
+		{
 			return;
+		}
 
 		m_Options.FrontCounterClockwise = v;
 
@@ -180,7 +188,9 @@ namespace shz
 	void MaterialInstance::SetDepthEnable(bool v)
 	{
 		if (m_Options.DepthEnable == v)
+		{
 			return;
+		}
 
 		m_Options.DepthEnable = v;
 
@@ -194,7 +204,9 @@ namespace shz
 	void MaterialInstance::SetDepthWriteEnable(bool v)
 	{
 		if (m_Options.DepthWriteEnable == v)
+		{
 			return;
+		}
 
 		m_Options.DepthWriteEnable = v;
 
@@ -208,7 +220,9 @@ namespace shz
 	void MaterialInstance::SetDepthFunc(COMPARISON_FUNCTION func)
 	{
 		if (m_Options.DepthFunc == func)
+		{
 			return;
+		}
 
 		m_Options.DepthFunc = func;
 
@@ -222,7 +236,9 @@ namespace shz
 	void MaterialInstance::SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode)
 	{
 		if (m_Options.TextureBindingMode == mode)
+		{
 			return;
+		}
 
 		m_Options.TextureBindingMode = mode;
 		buildAutoResourceLayout();
@@ -233,7 +249,9 @@ namespace shz
 	{
 		const std::string newName = name.empty() ? "g_LinearWrapSampler" : name;
 		if (m_Options.LinearWrapSamplerName == newName)
+		{
 			return;
+		}
 
 		m_Options.LinearWrapSamplerName = newName;
 		buildAutoResourceLayout();
@@ -243,7 +261,9 @@ namespace shz
 	void MaterialInstance::SetLinearWrapSamplerDesc(const SamplerDesc& desc)
 	{
 		if (std::memcmp(&m_Options.LinearWrapSamplerDesc, &desc, sizeof(SamplerDesc)) == 0)
+		{
 			return;
+		}
 
 		m_Options.LinearWrapSamplerDesc = desc;
 		buildAutoResourceLayout();
@@ -287,7 +307,7 @@ namespace shz
 		{
 			const MaterialResourceDesc& r = m_pTemplate->GetResource(i);
 
-			if (isTextureType(r.Type))
+			if (IsTextureType(r.Type))
 			{
 				ShaderResourceVariableDesc v = {};
 				v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex textures possible (e.g. VT, skinning, etc.)
@@ -305,24 +325,6 @@ namespace shz
 			s.Desc = m_Options.LinearWrapSamplerDesc;
 			m_ImmutableSamplers.push_back(s);
 		}
-	}
-
-	void MaterialInstance::buildFixedInputLayout()
-	{
-		static LayoutElement kLayoutElems[] =
-		{
-			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
-			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-			LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
-			LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
-
-			LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1},
-		};
-
-		kLayoutElems[4].Stride = sizeof(uint32);
-
-		m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
-		m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);
 	}
 
 	// --------------------------------------------------------------------
@@ -368,10 +370,14 @@ namespace shz
 	void MaterialInstance::MarkAllDirty()
 	{
 		for (uint8& b : m_bCBufferDirties)
-			b = 1;
+		{
+			b = 1; // True
+		}
 
 		for (uint8& b : m_bTextureDirties)
-			b = 1;
+		{
+			b = 1; // True
+		}
 	}
 
 	// --------------------------------------------------------------------
@@ -406,10 +412,7 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialInstance::SetRaw(const char* name, const void* pData, uint32 byteSize)
-	{
-		return writeValueInternal(name, pData, byteSize, MATERIAL_VALUE_TYPE_UNKNOWN);
-	}
+	bool MaterialInstance::SetRaw(const char* name, const void* pData, uint32 byteSize) { return writeValueInternal(name, pData, byteSize, MATERIAL_VALUE_TYPE_UNKNOWN); }
 
 	bool MaterialInstance::SetFloat(const char* name, float v) { return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_FLOAT); }
 	bool MaterialInstance::SetFloat2(const char* name, const float v[2]) { return writeValueInternal(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2); }
@@ -426,10 +429,7 @@ namespace shz
 	bool MaterialInstance::SetUint3(const char* name, const uint32 v[3]) { return writeValueInternal(name, v, sizeof(uint32) * 3, MATERIAL_VALUE_TYPE_UINT3); }
 	bool MaterialInstance::SetUint4(const char* name, const uint32 v[4]) { return writeValueInternal(name, v, sizeof(uint32) * 4, MATERIAL_VALUE_TYPE_UINT4); }
 
-	bool MaterialInstance::SetFloat4x4(const char* name, const float m16[16])
-	{
-		return writeValueInternal(name, m16, sizeof(float) * 16, MATERIAL_VALUE_TYPE_FLOAT4X4);
-	}
+	bool MaterialInstance::SetFloat4x4(const char* name, const float m16[16]) { return writeValueInternal(name, m16, sizeof(float) * 16, MATERIAL_VALUE_TYPE_FLOAT4X4); }
 
 	// --------------------------------------------------------------------
 	// Resources
@@ -442,11 +442,15 @@ namespace shz
 
 		uint32 resIndex = 0;
 		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
 		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(resourceDesc.Type))
+		if (!IsTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].TextureRef = textureRef;
@@ -463,11 +467,15 @@ namespace shz
 
 		uint32 resIndex = 0;
 		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
 		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(resourceDesc.Type))
+		if (!IsTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pRuntimeView = pView;
@@ -483,11 +491,15 @@ namespace shz
 
 		uint32 resIndex = 0;
 		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
 			return false;
+		}
 
 		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
-		if (!isTextureType(resourceDesc.Type))
+		if (!IsTextureType(resourceDesc.Type))
+		{
 			return false;
+		}
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pSamplerOverride = pSampler;

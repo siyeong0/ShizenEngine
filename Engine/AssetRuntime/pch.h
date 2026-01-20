@@ -7,5 +7,6 @@
 #ifndef PCH_H
 #define PCH_H
 
+#include <cstring>
 
 #endif //PCH_H

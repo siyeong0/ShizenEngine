@@ -537,7 +537,7 @@ namespace shz
 
 			// Register texture asset by path and store AssetRef.
 			// NOTE: RegisterAssetRefByPath is expected to be deterministic.
-			const AssetRef<TextureAsset> texRef = pAssetManager->RegisterAssetRefByPath<TextureAsset>(texPath);
+			const AssetRef<TextureAsset> texRef = pAssetManager->RegisterAsset<TextureAsset>(texPath);
 			if (!texRef)
 			{
 				PushErrorOnce(std::string("RegisterAssetRefByPath<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);

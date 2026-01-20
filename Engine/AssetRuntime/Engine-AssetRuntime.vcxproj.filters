@@ -77,9 +77,6 @@
     <ClCompile Include="Private\TextureAsset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\AssetManagerBase.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Private\AssetManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
