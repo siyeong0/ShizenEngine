@@ -373,20 +373,34 @@ namespace shz
 			}
 
 			if (!inst.IsTextureDirty(i))
+			{
 				continue;
+			}
 
 			const TextureBinding& b = inst.GetTextureBinding(i);
 
-			ASSERT(b.TextureRef, "Texture is not set.");
 			ITextureView* pView = nullptr;
 
-			const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(b.TextureRef);
-			const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
-
-			if (texRD)
+			// ------------------------------------------------------------
+			// 1) If user provided a texture ref, bind it.
+			// 2) Otherwise, bind a error texture for this slot.
+			// ------------------------------------------------------------
+			if (b.TextureRef.has_value() && b.TextureRef->IsValid())
 			{
-				pView = texRD->GetSRV();
-				m_BoundTextures.push_back(hTexRD);
+				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(*b.TextureRef);
+				const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
+
+				if (texRD)
+				{
+					pView = texRD->GetSRV();
+					m_BoundTextures.push_back(hTexRD);
+				}
+			}
+
+			if (!pView)
+			{
+				// Fall back to error texture SRV (white/normal/orm/black/cube etc.)
+				pView = pCache->GetErrorTexture().GetSRV();
 			}
 
 			IShaderResourceVariable* pVar = findVarAnyStage(res.Name.c_str(), inst);
@@ -400,7 +414,6 @@ namespace shz
 
 		return true;
 	}
-
 
 	bool MaterialRenderData::Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx)
 	{

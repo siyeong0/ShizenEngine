@@ -603,4 +603,18 @@ namespace shz
 		DestroyMaterialRenderData(hRD);
 	}
 
+	void RenderResourceCache::SetErrorTexture(const std::string& path)
+	{
+		AssetRef<TextureAsset> ref = m_pAssetManager->RegisterAsset<TextureAsset>(path);
+		AssetPtr<TextureAsset> ptr = m_pAssetManager->Acquire(ref);
+
+		createTextureFromAsset(*ptr.Get(), &m_ErrorTex);
+	}
+
+	const TextureRenderData& RenderResourceCache::GetErrorTexture() const noexcept
+	{
+		ASSERT(m_ErrorTex.IsValid(), "Error texture is not valid. Please set error texture.");
+		return m_ErrorTex;
+	}
+
 } // namespace shz

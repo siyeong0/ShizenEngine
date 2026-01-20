@@ -62,6 +62,9 @@ namespace shz
 		bool DestroyMaterialRenderData(Handle<MaterialRenderData> h);
 		void InvalidateMaterialByInstance(const MaterialInstance* pInstance);
 
+		void SetErrorTexture(const std::string& path);
+		const TextureRenderData& GetErrorTexture() const noexcept;
+
 	private:
 		template<class T>
 		struct Slot final
@@ -150,6 +153,8 @@ namespace shz
 
 		std::unordered_map<uint64, Handle<MaterialRenderData>> m_MaterialInstToRD = {};
 		std::vector<Slot<MaterialRenderData>> m_MaterialRDSlots = {};
+
+		TextureRenderData m_ErrorTex = {};
 	};
 
 } // namespace shz

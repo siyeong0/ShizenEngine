@@ -57,9 +57,21 @@ namespace shz
 			float3 Scale = { 1, 1, 1 };
 		};
 
-		struct EditorMaterialOverrides final
+		struct ViewportState final
 		{
-			// RenderPass / pipeline knobs (per-selected material)
+			uint32 Width = 0;
+			uint32 Height = 0;
+			bool Hovered = false;
+			bool Focused = false;
+		};
+
+		struct MaterialUiCache final
+		{
+			// Keyed by shader variable name (reflection name)
+			std::unordered_map<std::string, std::vector<uint8>> ValueBytes = {};
+			std::unordered_map<std::string, std::string> TexturePaths = {};
+
+			// Pipeline knobs (stored as UI-state, applied directly to MaterialInstance when changed)
 			std::string RenderPassName = "GBuffer";
 			uint32 SubpassIndex = 0;
 
@@ -79,43 +91,12 @@ namespace shz
 				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
 			};
 
-			// Textures (runtime override paths)
-			std::string BaseColorPath = {};
-			std::string NormalPath = {};
-			std::string MetallicRoughnessPath = {};
-			std::string AOPath = {};
-			std::string EmissivePath = {};
-			std::string HeightPath = {};
-
-			// Factors
-			float4 BaseColor = { 1, 1, 1, 1 };
-			float  Roughness = 1.0f;
-			float  Metallic = 0.0f;
-			float  Occlusion = 1.0f;
-
-			float3 EmissiveColor = { 0, 0, 0 };
-			float  EmissiveIntensity = 0.0f;
-
-			float  AlphaCutoff = 0.5f;
-			float  NormalScale = 1.0f;
-
-			// Per-texture vertical flip (for imported textures / UV conventions)
-			bool BaseColorFlipVertically = false;
-			bool NormalFlipVertically = false;
-			bool MetallicRoughnessFlipVertically = false;
-			bool AOFlipVertically = false;
-			bool EmissiveFlipVertically = false;
-			bool HeightFlipVertically = false;
-
-
-			// Flags (mirrors shader flags if used)
-			uint32 MaterialFlags = 0;
+			bool Dirty = true; // first-time apply / template changed
 		};
 
 	private:
 		// Asset helpers
 		void registerAssetLoaders();
-		AssetID makeAssetIDFromPath(AssetTypeID typeId, const std::string& path) const;
 
 		AssetRef<StaticMeshAsset> registerStaticMeshPath(const std::string& path);
 		AssetRef<TextureAsset>    registerTexturePath(const std::string& path);
@@ -123,36 +104,35 @@ namespace shz
 		AssetPtr<StaticMeshAsset> loadStaticMeshBlocking(AssetRef<StaticMeshAsset> ref, EAssetLoadFlags flags = EAssetLoadFlags::None);
 		AssetPtr<TextureAsset>    loadTextureBlocking(AssetRef<TextureAsset> ref, EAssetLoadFlags flags = EAssetLoadFlags::None);
 
-		// Path / runtime texture cache
-		static std::string sanitizeFilePath(std::string s);
-		ITextureView* getOrCreateTextureSRV(const std::string& path, bool isSRGB, bool flipVertically);
-
-		// Win32 helpers (optional)
-		bool openFileDialog(std::string& outPath, const char* filter, const char* title) const;
-		void enableWindowDragDrop();  // WM_DROPFILES hookup point (if available)
-		void onFilesDropped(const std::vector<std::string>& paths);
-
-		// Template / Instance workflow (inputs -> template)
+		// Template / Instance
 		std::string makeTemplateKeyFromInputs() const;
 		MaterialTemplate* getOrCreateTemplateFromInputs();
 
-		// Explicit apply (A-option)
-		bool rebuildAllMaterialsFromCurrentTemplate();
-		bool rebuildSelectedMaterialSlotFromCurrentTemplate();
-		bool rebuildSelectedObjectFromCurrentTemplate();
-
-		// Preview scene
+		// Scene helpers
 		void loadPreviewMesh(const char* path, float3 position, float3 rotation, float3 scale, bool bUniformScale = true);
-
-		// Material build/apply
 		std::vector<MaterialInstance> buildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh);
 
-		void seedFromImportedAsset(MaterialInstance& mat, const MaterialAsset& matAsset);
-		void applyPipelineOverrides(MaterialInstance& mat, const EditorMaterialOverrides& ov);
-		void applyMaterialOverrides(MaterialInstance& mat, const EditorMaterialOverrides& ov);
+		// UI framework
+		void uiDockspace();
+		void uiScenePanel();
+		void uiViewportPanel();
+		void uiMaterialInspector();
+		void uiStatsPanel();
 
-		// UI helpers
-		void drawTextureSlotUI(const char* label, std::string& path, const char* dialogFilter, const char* dialogTitle);
+		// Material UI (reflection-driven)
+		MaterialInstance* getSelectedMaterialOrNull();
+		MaterialUiCache& getOrCreateMaterialCache(uint64 key);
+		uint64 makeSelectionKey(int32 objIndex, int32 slotIndex) const;
+
+		void syncCacheFromTemplateDefaults(MaterialUiCache& cache, const MaterialTemplate& tmpl);
+		void applyCacheToInstance(MaterialInstance& inst, MaterialUiCache& cache);
+
+		void drawValueEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl);
+		void drawResourceEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl);
+		void drawPipelineEditor(MaterialInstance& inst, MaterialUiCache& cache);
+
+		// Utility
+		static std::string sanitizeFilePath(std::string s);
 
 	private:
 		std::unique_ptr<Renderer> m_pRenderer = nullptr;
@@ -167,25 +147,25 @@ namespace shz
 		RenderScene::LightObject m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
-		std::unordered_map<std::string, RefCntAutoPtr<ITexture>> m_RuntimeTextureCache = {};
 		std::unordered_map<std::string, MaterialTemplate> m_TemplateCache = {};
-
 		std::vector<LoadedMesh> m_Loaded = {};
 
 		int32 m_SelectedObject = -1;
 		int32 m_SelectedMaterialSlot = 0;
 
-		EditorMaterialOverrides m_Overrides = {};
+		ViewportState m_Viewport = {};
 
-		// Shader inputs (no ShaderPreset struct)
+		// Shader inputs
 		int32 m_SelectedPresetIndex = 0;
-
 		std::string m_ShaderVS = "GBuffer.vsh";
 		std::string m_ShaderPS = "GBuffer.psh";
 		std::string m_VSEntry = "main";
 		std::string m_PSEntry = "main";
 
-		// Drag&drop support
-		std::vector<std::string> m_DroppedFiles = {};
+		// Material UI caches (per selection)
+		std::unordered_map<uint64, MaterialUiCache> m_MaterialUi = {};
+
+		// Frame
+		bool m_DockBuilt = false;
 	};
 } // namespace shz

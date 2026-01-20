@@ -29,7 +29,7 @@ namespace shz
 		void SetTexture(ITexture* pTex) noexcept { m_pTexture = pTex; }
 
 	private:
-		RefCntAutoPtr<ITexture>     m_pTexture = {};
-		RefCntAutoPtr<ISampler>     m_pDefaultSampler = {};
+		RefCntAutoPtr<ITexture> m_pTexture = {};
+		RefCntAutoPtr<ISampler> m_pDefaultSampler = {};
 	};
 }

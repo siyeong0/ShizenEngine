@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
@@ -25,9 +26,7 @@ namespace shz
 	struct TextureBinding final
 	{
 		std::string Name = {};
-
-		AssetRef<TextureAsset> TextureRef = {};
-
+		std::optional<AssetRef<TextureAsset>> TextureRef = {};
 		ISampler* pSamplerOverride = nullptr;
 	};
 

@@ -59,6 +59,8 @@ namespace shz
 		ImGuiIO& io = ImGui::GetIO();
 		io.IniFilename = nullptr;
 
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
 		m_pRenderer = std::make_unique<ImGuiShizenRenderer>(CI);
 	}
 

@@ -259,31 +259,6 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialAsset::SetTextureRuntimeView(
-		const char* resourceName,
-		MATERIAL_RESOURCE_TYPE expectedType,
-		ITextureView* pView,
-		uint64 stableId)
-	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
-		ASSERT(IsTextureType(expectedType), "Expected type must be a texture type.");
-
-		ResourceBinding* r = findResourceBindingMutable(resourceName);
-		if (!r)
-		{
-			ResourceBinding nr = {};
-			nr.StableID = stableId;
-			nr.Name = resourceName;
-			nr.Type = expectedType;
-			m_ResourceBindings.push_back(static_cast<ResourceBinding&&>(nr));
-			return true;
-		}
-
-		r->StableID = (stableId != 0) ? stableId : r->StableID;
-		r->Type = expectedType;
-		return true;
-	}
-
 	bool MaterialAsset::SetSamplerOverride(
 		const char* resourceName,
 		const SamplerDesc& desc,

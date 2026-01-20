@@ -81,6 +81,15 @@ namespace shz
 			return nullptr;
 		}
 
+		ITextureView* GetLightingSRV() const noexcept { return m_LightingSRV.RawPtr(); }
+		ITextureView* GetGBufferSRV(uint32 index) const noexcept
+		{
+			if (index >= NUM_GBUFFERS) return nullptr;
+			return m_GBufferSrv[index].RawPtr();
+		}
+		ITextureView* GetDepthSRV() const noexcept { return m_GBufferDepthSRV.RawPtr(); }
+
+
 	private:
 		bool createShadowTargets();
 		bool createDeferredTargets();

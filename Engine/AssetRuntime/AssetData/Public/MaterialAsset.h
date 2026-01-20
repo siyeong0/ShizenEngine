@@ -126,12 +126,6 @@ namespace shz
 			const AssetRef<TextureAsset>& textureRef,
 			uint64 stableId = 0);
 
-		bool SetTextureRuntimeView(
-			const char* resourceName,
-			MATERIAL_RESOURCE_TYPE expectedType,
-			ITextureView* pView,
-			uint64 stableId = 0);
-
 		bool SetSamplerOverride(
 			const char* resourceName,
 			const SamplerDesc& desc,
