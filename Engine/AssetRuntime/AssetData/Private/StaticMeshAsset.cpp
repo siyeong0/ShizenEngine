@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "StaticMeshAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
 
 #include <limits>
 
