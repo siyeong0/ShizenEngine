@@ -1698,6 +1698,8 @@ namespace shz
 		if (!createPostPso())
 			return false;
 
+		m_pCache->Clear();
+
 		return true;
 	}
 
