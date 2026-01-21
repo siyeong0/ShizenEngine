@@ -90,17 +90,30 @@ namespace shz
 
 	void RenderResourceCache::Clear()
 	{
+		ClearTextures();
+		ClearMeshes();
+		ClearMaterials();
+	}
+
+	void RenderResourceCache::ClearTextures()
+	{
 		m_TexAssetToRD.clear();
 		m_TexIDToRD.clear();
-		m_MeshAssetToRD.clear();
-		m_MaterialInstToRD.clear();
-
 		for (auto& s : m_TexRDSlots) { s.Value.reset(); s.Owner.Reset(); }
-		for (auto& s : m_MeshRDSlots) { s.Value.reset(); s.Owner.Reset(); }
-		for (auto& s : m_MaterialRDSlots) { s.Value.reset(); s.Owner.Reset(); }
-
 		m_TexRDSlots.clear();
+	}
+
+	void RenderResourceCache::ClearMeshes()
+	{
+		m_MeshAssetToRD.clear();
+		for (auto& s : m_MeshRDSlots) { s.Value.reset(); s.Owner.Reset(); }
 		m_MeshRDSlots.clear();
+	}
+
+	void RenderResourceCache::ClearMaterials()
+	{
+		m_MaterialInstToRD.clear();
+		for (auto& s : m_MaterialRDSlots) { s.Value.reset(); s.Owner.Reset(); }
 		m_MaterialRDSlots.clear();
 	}
 
@@ -530,6 +543,7 @@ namespace shz
 		// Cache miss / rebuild: create new MaterialRenderData
 		// ------------------------------------------------------------
 		MaterialRenderData rd = {};
+		pInstance->MarkAllDirty();
 		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder))
 		{
 			ASSERT(false, "RenderResourceCache::GetOrCreateMaterialRenderData: failed to initialize MaterialRenderData.");

@@ -36,6 +36,9 @@ namespace shz
 		bool Initialize(IRenderDevice* pDevice, AssetManager* pAssetManager);
 		void Shutdown();
 		void Clear();
+		void ClearTextures();
+		void ClearMeshes();
+		void ClearMaterials();
 
 		Handle<TextureRenderData> GetOrCreateTextureRenderData(const TextureAsset& asset);
 		Handle<TextureRenderData> GetOrCreateTextureRenderData(const AssetRef<TextureAsset>& texRef, EAssetLoadFlags flags = EAssetLoadFlags::AllowFallback);

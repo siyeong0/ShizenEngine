@@ -116,11 +116,16 @@ namespace shz
 		bool SetFloat4x4(const char* name, const float m16[16]);
 		bool SetRaw(const char* name, const void* pData, uint32 byteSize);
 
+		bool SetValue(const char* name, const void* pData, MATERIAL_VALUE_TYPE valType);
+
 		// --------------------------------------------------------------------
 		// Resources
 		// --------------------------------------------------------------------
 		bool SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef);
 		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
+
+		bool ClearTextureAssetRef(const char* textureName);
+		bool ClearSamplerOverride(const char* textureName);
 
 		// --------------------------------------------------------------------
 		// For MaterialRenderData

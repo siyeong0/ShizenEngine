@@ -273,9 +273,13 @@ namespace shz
 			"C:/Dev/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx",
 			{ -2.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, false);
 
+		//loadPreviewMesh(
+		//	"C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf",
+		//	{ 0.0f, 0.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+
 		loadPreviewMesh(
-			"C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/glTF/DamagedHelmet.gltf",
-			{ 0.0f, 1.0f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
+			"C:/Dev/ShizenEngine/Assets/Grass/grass-free-download/source/grass.fbx",
+			{ 0.0f, -0.5f, 3.0f }, { 0, 0, 0 }, { 1, 1, 1 }, true);
 
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 
@@ -309,6 +313,11 @@ namespace shz
 
 		if (!m_ViewFamily.Views.empty())
 		{
+			m_ViewFamily.Views[0].Viewport.left = 0;
+			m_ViewFamily.Views[0].Viewport.top = 0;
+			m_ViewFamily.Views[0].Viewport.right = m_Viewport.Width;
+			m_ViewFamily.Views[0].Viewport.bottom = m_Viewport.Height;
+
 			m_ViewFamily.Views[0].CameraPosition = m_Camera.GetPos();
 			m_ViewFamily.Views[0].ViewMatrix = m_Camera.GetViewMatrix();
 			m_ViewFamily.Views[0].ProjMatrix = m_Camera.GetProjMatrix();
@@ -501,9 +510,18 @@ namespace shz
 		}
 
 		// Draw the final color buffer inside the viewport.
-		ITextureView* pColor = m_pRenderer->GetLightingSRV();
-		ImTextureID tid = reinterpret_cast<ImTextureID>(pColor);
-		ImGui::Image(tid, avail);
+		ITextureView* pColor = m_pRenderer ? m_pRenderer->GetLightingSRV() : nullptr;
+		if (pColor)
+		{
+			ImTextureID tid = reinterpret_cast<ImTextureID>(pColor);
+
+			const ImVec2 imgSize = ImVec2((float)m_Viewport.Width, (float)m_Viewport.Height);
+			ImGui::Image(tid, imgSize, ImVec2(0, 1), ImVec2(1, 0));
+		}
+		else
+		{
+			ImGui::TextDisabled("No renderer output.");
+		}
 
 		ImGui::End();
 	}
@@ -541,10 +559,14 @@ namespace shz
 
 		if (ImGui::Button("Get/Create Template"))
 		{
-			(void)getOrCreateTemplateFromInputs();
+			MaterialTemplate* pNewTmpl = rebuildTemplateFromInputs();
 
+			// 선택 슬롯 UI 캐시 더티 (템플릿 리플렉션 갱신 필요)
 			const uint64 key = makeSelectionKey(m_SelectedObject, m_SelectedMaterialSlot);
 			m_MaterialUi[key].Dirty = true;
+
+			// “진짜 적용”: 현재 선택된 MaterialInstance를 새 템플릿으로 갈아끼움
+			rebindSelectedMaterialToTemplate(pNewTmpl);
 		}
 
 		ImGui::Spacing();
@@ -577,8 +599,7 @@ namespace shz
 		MaterialUiCache& cache = getOrCreateMaterialCache(makeSelectionKey(m_SelectedObject, m_SelectedMaterialSlot));
 		if (cache.Dirty)
 		{
-			syncCacheFromTemplateDefaults(cache, *pTmpl);
-			applyCacheToInstance(*pInst, cache);
+			syncCacheFromInstance(cache, *pInst, *pTmpl);
 			cache.Dirty = false;
 		}
 
@@ -673,85 +694,377 @@ namespace shz
 	// ------------------------------------------------------------
 	// Reflection-driven cache init/apply
 	// ------------------------------------------------------------
-	//
-	// IMPORTANT:
-	// 아래에서 MaterialTemplate 리플렉션 API 이름은 “추정”이야.
-	// 네 엔진 실제 API에 맞춰서 함수/필드명만 바꾸면 된다.
-	//
 
-	void MaterialEditor::syncCacheFromTemplateDefaults(MaterialUiCache& cache, const MaterialTemplate& tmpl)
+	MaterialTemplate* MaterialEditor::rebuildTemplateFromInputs()
 	{
+		if (m_ShaderVS.empty() || m_ShaderPS.empty() || m_VSEntry.empty() || m_PSEntry.empty())
+			return nullptr;
+
+		const std::string key = makeTemplateKeyFromInputs();
+		m_TemplateCache.erase(key); // <- 핵심: 같은 키여도 강제 재생성
+
+		return getOrCreateTemplateFromInputs();
+	}
+
+	void MaterialEditor::rebindSelectedMaterialToTemplate(MaterialTemplate* pNewTmpl)
+	{
+		if (!pNewTmpl || !m_pRenderScene) return;
+
+		if (m_SelectedObject < 0 || m_SelectedObject >= (int32)m_Loaded.size()) return;
+
+		LoadedMesh& sel = m_Loaded[(size_t)m_SelectedObject];
+		if (sel.SceneObjectIndex < 0 || sel.SceneObjectIndex >= (int32)m_pRenderScene->GetObjects().size()) return;
+
+		auto& obj = m_pRenderScene->GetObjects()[(size_t)sel.SceneObjectIndex];
+		if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj.Materials.size()) return;
+
+		MaterialInstance& oldInst = obj.Materials[(size_t)m_SelectedMaterialSlot];
+
+		const uint64 key = makeSelectionKey(m_SelectedObject, m_SelectedMaterialSlot);
+		MaterialUiCache& cache = getOrCreateMaterialCache(key);
+
+		MaterialInstance newInst = {};
+		{
+			const bool ok = newInst.Initialize(pNewTmpl, "MaterialEditor Instance");
+			ASSERT(ok, "MaterialInstance::Initialize failed.");
+		}
+
+		// ★ 핵심: cache -> newInst 적용
+		applyCacheToInstance(newInst, cache, *pNewTmpl);
+
+		// 교체
+		oldInst = std::move(newInst);
+
+		// 강제 재빌드
+		oldInst.MarkAllDirty();
+	}
+
+
+
+	void MaterialEditor::syncCacheFromInstance(
+		MaterialUiCache& cache,
+		const MaterialInstance& inst,
+		const MaterialTemplate& tmpl)
+	{
+		// 기존 cache 값도 최대한 보존(템플릿 변경/누락 대비)
+		auto oldValues = std::move(cache.ValueBytes);
+		auto oldTextures = std::move(cache.TexturePaths);
+
 		cache.ValueBytes.clear();
 		cache.TexturePaths.clear();
 
-		// -------------------------
-		// Values
-		// -------------------------
-		// TODO: Replace with your real reflection getters
-		// for (const auto& p : tmpl.GetValueParams()) { ... }
+		// ---------------------------------------------------------------------
+		// Pipeline: inst에서 읽을 getter가 현재 없으니
+		// - "기존 cache 값" 우선 유지
+		// - cache가 완전 비었을 때만 기본값 채움 (안전)
+		// ---------------------------------------------------------------------
+		if (cache.RenderPassName.empty())
+		{
+			// old cache가 있었다면 그대로 유지, 아니면 기본값
+			if (!oldValues.empty() || !oldTextures.empty())
+			{
+				// cache.RenderPassName은 move 이후라 비어있음.
+				// old cache 구조에 RenderPassName을 저장했다면 여기서 가져오긴 어려우니
+				// "빈 값이면 기본값"으로 두자.
+				cache.RenderPassName = "GBuffer";
+			}
+			else
+			{
+				cache.RenderPassName = "GBuffer";
+			}
+		}
 
-		// 예시 구조:
-		// p.Name (std::string)
-		// p.Type (MATERIAL_VALUE_TYPE)
-		// p.DefaultData (std::vector<uint8> or pointer+size)
+		// 나머지 파이프라인 옵션들도 “이전 cache 유지” 전략
+		// (MaterialUiCache에 해당 멤버들이 존재한다는 전제)
+		// 없으면 아래 블록은 삭제해도 됨.
+		{
+			// NOTE: move 이후 cache 멤버들은 그대로 남아있을 수도 있고,
+			// 네 코드상 cache는 struct라면 기본 생성값일 가능성이 큼.
+			// 여기선 "현재 값이 default-like면 기본값 채움" 정도로만 처리.
+			// - 정확히 inst 상태를 반영하려면 MaterialInstance에 GetXXX() 추가하는 게 정석.
+		}
+
+		// ---------------------------------------------------------------------
+		// Values: tmpl param 목록 기준으로 cache 엔트리 만들고,
+		//   1) inst CBufferBlob에서 읽을 수 있으면 inst 값으로
+		//   2) 아니면 old cache에서 복원
+		//   3) 아니면 0
+		// ---------------------------------------------------------------------
+		for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
+		{
+			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
+			if (desc.Name.empty())
+				continue;
+
+			uint32 sz = desc.ByteSize;
+			if (sz == 0)
+			{
+				// fallback
+				switch (desc.Type)
+				{
+				case MATERIAL_VALUE_TYPE_FLOAT:    sz = sizeof(float); break;
+				case MATERIAL_VALUE_TYPE_FLOAT2:   sz = sizeof(float) * 2; break;
+				case MATERIAL_VALUE_TYPE_FLOAT3:   sz = sizeof(float) * 3; break;
+				case MATERIAL_VALUE_TYPE_FLOAT4:   sz = sizeof(float) * 4; break;
+				case MATERIAL_VALUE_TYPE_INT:      sz = sizeof(int32); break;
+				case MATERIAL_VALUE_TYPE_INT2:     sz = sizeof(int32) * 2; break;
+				case MATERIAL_VALUE_TYPE_INT3:     sz = sizeof(int32) * 3; break;
+				case MATERIAL_VALUE_TYPE_INT4:     sz = sizeof(int32) * 4; break;
+				case MATERIAL_VALUE_TYPE_UINT:     sz = sizeof(uint32); break;
+				case MATERIAL_VALUE_TYPE_UINT2:    sz = sizeof(uint32) * 2; break;
+				case MATERIAL_VALUE_TYPE_UINT3:    sz = sizeof(uint32) * 3; break;
+				case MATERIAL_VALUE_TYPE_UINT4:    sz = sizeof(uint32) * 4; break;
+				case MATERIAL_VALUE_TYPE_FLOAT4X4: sz = sizeof(float) * 16; break;
+				default:                           sz = 0; break;
+				}
+			}
+
+			std::vector<uint8> bytes;
+			bytes.resize(sz);
+			if (sz > 0)
+				memset(bytes.data(), 0, bytes.size());
+
+			bool filled = false;
+
+			// 1) inst -> cache (CBuffer blobs)
+			if (sz > 0)
+			{
+				const uint32 cbIndex = desc.CBufferIndex;
+				const uint32 cbCount = inst.GetCBufferBlobCount();
+
+				if (cbIndex < cbCount)
+				{
+					const uint8* pCB = inst.GetCBufferBlobData(cbIndex);
+					const uint32 cbSize = inst.GetCBufferBlobSize(cbIndex);
+
+					if (pCB && desc.ByteOffset + sz <= cbSize)
+					{
+						memcpy(bytes.data(), pCB + desc.ByteOffset, sz);
+						filled = true;
+					}
+				}
+			}
+
+			// 2) old cache -> cache
+			if (!filled)
+			{
+				auto itOld = oldValues.find(desc.Name);
+				if (itOld != oldValues.end())
+				{
+					const auto& old = itOld->second;
+					const size_t copySz = std::min(old.size(), bytes.size());
+					if (copySz > 0)
+						memcpy(bytes.data(), old.data(), copySz);
+					filled = true;
+				}
+			}
+
+			cache.ValueBytes.emplace(desc.Name, std::move(bytes));
+		}
+
+		// ---------------------------------------------------------------------
+		// Resources (textures):
+		//   1) inst.TextureBindings에서 이름 매칭 -> AssetRef 있으면 cache에 기록
+		//   2) 없으면 old cache 유지
 		//
-		// 여기서는 “기본값 바이트”를 그대로 복사해 cache.ValueBytes[name]에 담는 방식.
+		// NOTE:
+		// - UI에서 "Path"를 보여주려면 AssetRef -> SourcePath 해석이 필요함.
+		// - 지금은 cache.TexturePaths에 "경로 문자열"을 저장하는 구조라서
+		//   inst에서 ref만 있을 때는 경로를 못 만들 수도 있음.
+		//   => 일단 old cache 유지하고, old에 없으면 빈 문자열로 둔다.
+		// ---------------------------------------------------------------------
+		// inst의 바인딩을 이름->ref로 빠르게 찾기 위한 선형 검색(개수 적으면 OK)
+		auto findInstTexRefByName = [&](const std::string& name, std::optional<AssetRef<TextureAsset>>& outRef) -> bool
+		{
+			const uint32 n = inst.GetTextureBindingCount();
+			for (uint32 t = 0; t < n; ++t)
+			{
+				const TextureBinding& b = inst.GetTextureBinding(t);
+				if (b.Name == name)
+				{
+					outRef = b.TextureRef;
+					return true;
+				}
+			}
+			return false;
+		};
 
-		// -------------------------
-		// Resources (textures)
-		// -------------------------
-		// TODO: Replace with your real reflection getters
-		// for (const auto& r : tmpl.GetResourceParams()) { if texture -> cache.TexturePaths[r.Name] = "" }
+		for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
+		{
+			const MaterialResourceDesc& resDesc = tmpl.GetResource(i);
+			if (resDesc.Name.empty())
+				continue;
+
+			const bool isTexture =
+				(resDesc.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
+				(resDesc.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
+				(resDesc.Type == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
+
+			if (!isTexture)
+				continue;
+
+			std::string path;
+
+			// 1) inst -> (optional ref) -> (path?)
+			// 현재 공개 API로는 ref->path 변환 불가.
+			// 대신 old cache에 path가 있으면 유지, 없으면 빈 문자열.
+			{
+				std::optional<AssetRef<TextureAsset>> refOpt;
+				if (findInstTexRefByName(resDesc.Name, refOpt))
+				{
+					// ref는 존재할 수 있지만 path는 모름.
+					// 네 UI는 path 문자열을 바탕으로 registerTexturePath 하니까
+					// 기존에 한번 입력/로딩된 적이 있으면 old cache에 path가 남아있을 것.
+					// -> old cache 우선 유지 전략으로 간다.
+				}
+			}
+
+			// 2) old cache -> path 유지
+			{
+				auto itOld = oldTextures.find(resDesc.Name);
+				if (itOld != oldTextures.end())
+					path = itOld->second;
+			}
+
+			cache.TexturePaths.emplace(resDesc.Name, std::move(path));
+		}
 	}
 
-	void MaterialEditor::applyCacheToInstance(MaterialInstance& inst, MaterialUiCache& cache)
+	// MaterialEditor.cpp (MaterialEditor::applyCacheToInstance)
+
+	static uint32 flagFromTextureName(const std::string& n) noexcept
 	{
-		// Pipeline knobs applied
-		drawPipelineEditor(inst, cache);
+		if (n == "g_BaseColorTex")         return MAT_HAS_BASECOLOR;
+		if (n == "g_NormalTex")            return MAT_HAS_NORMAL;
+		if (n == "g_MetallicRoughnessTex") return MAT_HAS_MR;
+		if (n == "g_AOTex")                return MAT_HAS_AO;
+		if (n == "g_EmissiveTex")          return MAT_HAS_EMISSIVE;
+		if (n == "g_HeightTex")            return MAT_HAS_HEIGHT;
+		return 0;
+	}
 
-		// Values applied from cache
-		for (auto& [name, bytes] : cache.ValueBytes)
+	void MaterialEditor::applyCacheToInstance(
+		MaterialInstance& inst,
+		MaterialUiCache& cache,
+		const MaterialTemplate& tmpl)
+	{
+		// ------------------------------------------------------------
+		// Pipeline (cache -> inst)
+		// ------------------------------------------------------------
+		if (inst.GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			// Minimal support: float/float3/float4/uint (common)
-			if (bytes.size() == sizeof(float))
+			IRenderPass* rp = nullptr;
+			if (m_pRenderer && !cache.RenderPassName.empty())
+				rp = m_pRenderer->GetRenderPassOrNull(cache.RenderPassName);
+
+			inst.SetRenderPass(rp, cache.SubpassIndex);
+
+			inst.SetCullMode(cache.CullMode);
+			inst.SetFrontCounterClockwise(cache.FrontCounterClockwise);
+
+			inst.SetDepthEnable(cache.DepthEnable);
+			inst.SetDepthWriteEnable(cache.DepthWriteEnable);
+			inst.SetDepthFunc(cache.DepthFunc);
+
+			inst.SetTextureBindingMode(cache.TextureBindingMode);
+
+			inst.SetLinearWrapSamplerName(cache.LinearWrapSamplerName);
+			inst.SetLinearWrapSamplerDesc(cache.LinearWrapSamplerDesc);
+		}
+
+		// ------------------------------------------------------------
+		// Values (cache.ValueBytes -> inst)
+		// - tmpl에 있는 것만 적용 (안전)
+		// ------------------------------------------------------------
+		for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
+		{
+			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
+			if (desc.Name.empty())
+				continue;
+
+			auto it = cache.ValueBytes.find(desc.Name);
+			if (it == cache.ValueBytes.end())
+				continue;
+
+			const std::vector<uint8>& bytes = it->second;
+			if (bytes.empty())
+				continue;
+
+			(void)inst.SetValue(desc.Name.c_str(), bytes.data(), desc.Type);
+		}
+
+		// ------------------------------------------------------------
+		// Resources (cache.TexturePaths -> inst) + g_MaterialFlags 재계산
+		// ------------------------------------------------------------
+		uint32 materialFlags = 0;
+
+		// cache에 g_MaterialFlags 엔트리가 없을 수도 있으니 확보
+		{
+			auto& flagBytes = cache.ValueBytes["g_MaterialFlags"];
+			if (flagBytes.size() != sizeof(uint32))
 			{
-				float v = 0.0f;
-				memcpy(&v, bytes.data(), sizeof(float));
-				inst.SetFloat(name.c_str(), v);
-			}
-			else if (bytes.size() == sizeof(float) * 3)
-			{
-				float v[3] = {};
-				memcpy(v, bytes.data(), sizeof(float) * 3);
-				inst.SetFloat3(name.c_str(), v);
-			}
-			else if (bytes.size() == sizeof(float) * 4)
-			{
-				float v[4] = {};
-				memcpy(v, bytes.data(), sizeof(float) * 4);
-				inst.SetFloat4(name.c_str(), v);
-			}
-			else if (bytes.size() == sizeof(uint32))
-			{
-				uint32 v = 0;
-				memcpy(&v, bytes.data(), sizeof(uint32));
-				inst.SetUint(name.c_str(), v);
+				flagBytes.resize(sizeof(uint32));
+				std::memset(flagBytes.data(), 0, flagBytes.size());
 			}
 		}
 
-		// Resources applied from cache
-		for (auto& [name, path] : cache.TexturePaths)
+		for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
 		{
-			const std::string p = sanitizeFilePath(path);
-			if (!p.empty())
+			const MaterialResourceDesc& res = tmpl.GetResource(i);
+			if (res.Name.empty())
+				continue;
+
+			const bool isTexture =
+				(res.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
+				(res.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
+				(res.Type == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
+
+			if (!isTexture)
+				continue;
+
+			const std::string& name = res.Name;
+
+			std::string path;
+			if (auto it = cache.TexturePaths.find(name); it != cache.TexturePaths.end())
+				path = it->second;
+
+			const uint32 bit = flagFromTextureName(name);
+
+			if (!path.empty())
 			{
-				AssetRef<TextureAsset> ref = registerTexturePath(p);
-				inst.SetTextureAssetRef(name.c_str(), ref);
+				const std::string p = sanitizeFilePath(path);
+				if (!p.empty())
+				{
+					AssetRef<TextureAsset> ref = registerTexturePath(p);
+					inst.SetTextureAssetRef(name.c_str(), ref);
+
+					if (bit != 0)
+						materialFlags |= bit;
+				}
+				else
+				{
+					// sanitize 결과가 비면 제거 취급
+					inst.ClearTextureAssetRef(name.c_str());
+				}
+			}
+			else
+			{
+				inst.ClearTextureAssetRef(name.c_str());
 			}
 		}
 
+		// g_MaterialFlags 적용 (cache + inst 둘 다)
+		{
+			auto& flagBytes = cache.ValueBytes["g_MaterialFlags"];
+			std::memcpy(flagBytes.data(), &materialFlags, sizeof(uint32));
+			inst.SetUint("g_MaterialFlags", materialFlags);
+		}
+
+		// 마지막에 dirty
 		inst.MarkAllDirty();
 	}
+
+
 
 	void MaterialEditor::drawPipelineEditor(MaterialInstance& inst, MaterialUiCache& cache)
 	{
@@ -872,22 +1185,408 @@ namespace shz
 		ImGui::TextDisabled("Reflection-driven (Template -> Values).");
 		ImGui::Separator();
 
-		// TODO: Replace with your real reflection getters
-		// for (const auto& p : tmpl.GetValueParams()) { ... }
+		const uint32 count = tmpl.GetValueParamCount();
+		if (count == 0)
+		{
+			ImGui::TextDisabled("No value params.");
+			return;
+		}
 
-		ImGui::TextDisabled("TODO: hook tmpl.GetValueParams()");
+		// Optional: search/filter
+		static char s_Filter[128] = {};
+		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
+
+		auto passFilter = [&](const std::string& name) -> bool
+		{
+			if (s_Filter[0] == 0)
+				return true;
+			return name.find(s_Filter) != std::string::npos;
+		};
+
+		for (uint32 i = 0; i < count; ++i)
+		{
+			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
+			if (desc.Name.empty())
+				continue;
+
+			if (!passFilter(desc.Name))
+				continue;
+
+			// Ensure cache has a byte buffer for this param
+			auto& bytes = cache.ValueBytes[desc.Name];
+			const uint32 expectedSize = (desc.ByteSize != 0) ? desc.ByteSize : (uint32)bytes.size();
+			if (expectedSize != 0 && (uint32)bytes.size() != expectedSize)
+			{
+				bytes.resize(expectedSize);
+				memset(bytes.data(), 0, bytes.size());
+			}
+
+			ImGui::PushID((int)i);
+
+			bool changed = false;
+
+			// UI per type
+			switch (desc.Type)
+			{
+			case MATERIAL_VALUE_TYPE_FLOAT:
+			{
+				float v = 0.0f;
+				if (bytes.size() >= sizeof(float)) memcpy(&v, bytes.data(), sizeof(float));
+				if (ImGui::DragFloat(desc.Name.c_str(), &v, 0.01f))
+				{
+					changed = true;
+					memcpy(bytes.data(), &v, sizeof(float));
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_FLOAT2:
+			{
+				float v[2] = {};
+				if (bytes.size() >= sizeof(float) * 2) memcpy(v, bytes.data(), sizeof(float) * 2);
+				if (ImGui::DragFloat2(desc.Name.c_str(), v, 0.01f))
+				{
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(float) * 2);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_FLOAT3:
+			{
+				float v[3] = {};
+				if (bytes.size() >= sizeof(float) * 3) memcpy(v, bytes.data(), sizeof(float) * 3);
+
+				// color-like heuristic: name contains "Color" or "Albedo" etc.
+				const bool isColor =
+					(desc.Name.find("Color") != std::string::npos) ||
+					(desc.Name.find("Albedo") != std::string::npos) ||
+					(desc.Name.find("BaseColor") != std::string::npos);
+
+				if (isColor)
+				{
+					if (ImGui::ColorEdit3(desc.Name.c_str(), v))
+					{
+						changed = true;
+						memcpy(bytes.data(), v, sizeof(float) * 3);
+					}
+				}
+				else
+				{
+					if (ImGui::DragFloat3(desc.Name.c_str(), v, 0.01f))
+					{
+						changed = true;
+						memcpy(bytes.data(), v, sizeof(float) * 3);
+					}
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_FLOAT4:
+			{
+				float v[4] = {};
+				if (bytes.size() >= sizeof(float) * 4) memcpy(v, bytes.data(), sizeof(float) * 4);
+
+				const bool isColor =
+					(desc.Name.find("Color") != std::string::npos) ||
+					(desc.Name.find("Albedo") != std::string::npos) ||
+					(desc.Name.find("BaseColor") != std::string::npos);
+
+				if (isColor)
+				{
+					if (ImGui::ColorEdit4(desc.Name.c_str(), v))
+					{
+						changed = true;
+						memcpy(bytes.data(), v, sizeof(float) * 4);
+					}
+				}
+				else
+				{
+					if (ImGui::DragFloat4(desc.Name.c_str(), v, 0.01f))
+					{
+						changed = true;
+						memcpy(bytes.data(), v, sizeof(float) * 4);
+					}
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_INT:
+			{
+				int32 v = 0;
+				if (bytes.size() >= sizeof(int32)) memcpy(&v, bytes.data(), sizeof(int32));
+				if (ImGui::DragInt(desc.Name.c_str(), &v, 1.0f))
+				{
+					changed = true;
+					memcpy(bytes.data(), &v, sizeof(int32));
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_INT2:
+			{
+				int32 v[2] = {};
+				if (bytes.size() >= sizeof(int32) * 2) memcpy(v, bytes.data(), sizeof(int32) * 2);
+				if (ImGui::DragInt2(desc.Name.c_str(), v, 1.0f))
+				{
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(int32) * 2);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_INT3:
+			{
+				int32 v[3] = {};
+				if (bytes.size() >= sizeof(int32) * 3) memcpy(v, bytes.data(), sizeof(int32) * 3);
+				if (ImGui::DragInt3(desc.Name.c_str(), v, 1.0f))
+				{
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(int32) * 3);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_INT4:
+			{
+				int32 v[4] = {};
+				if (bytes.size() >= sizeof(int32) * 4) memcpy(v, bytes.data(), sizeof(int32) * 4);
+				if (ImGui::DragInt4(desc.Name.c_str(), v, 1.0f))
+				{
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(int32) * 4);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_UINT:
+			{
+				uint32 v = 0;
+				if (bytes.size() >= sizeof(uint32)) memcpy(&v, bytes.data(), sizeof(uint32));
+				int tmp = (int)v;
+				if (ImGui::DragInt(desc.Name.c_str(), &tmp, 1.0f, 0, INT32_MAX))
+				{
+					v = (uint32)std::max(0, tmp);
+					changed = true;
+					memcpy(bytes.data(), &v, sizeof(uint32));
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_UINT2:
+			{
+				uint32 v[2] = {};
+				if (bytes.size() >= sizeof(uint32) * 2) memcpy(v, bytes.data(), sizeof(uint32) * 2);
+				int tmp[2] = { (int)v[0], (int)v[1] };
+				if (ImGui::DragInt2(desc.Name.c_str(), tmp, 1.0f, 0, INT32_MAX))
+				{
+					v[0] = (uint32)std::max(0, tmp[0]);
+					v[1] = (uint32)std::max(0, tmp[1]);
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(uint32) * 2);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_UINT3:
+			{
+				uint32 v[3] = {};
+				if (bytes.size() >= sizeof(uint32) * 3) memcpy(v, bytes.data(), sizeof(uint32) * 3);
+				int tmp[3] = { (int)v[0], (int)v[1], (int)v[2] };
+				if (ImGui::DragInt3(desc.Name.c_str(), tmp, 1.0f, 0, INT32_MAX))
+				{
+					v[0] = (uint32)std::max(0, tmp[0]);
+					v[1] = (uint32)std::max(0, tmp[1]);
+					v[2] = (uint32)std::max(0, tmp[2]);
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(uint32) * 3);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_UINT4:
+			{
+				uint32 v[4] = {};
+				if (bytes.size() >= sizeof(uint32) * 4) memcpy(v, bytes.data(), sizeof(uint32) * 4);
+				int tmp[4] = { (int)v[0], (int)v[1], (int)v[2], (int)v[3] };
+				if (ImGui::DragInt4(desc.Name.c_str(), tmp, 1.0f, 0, INT32_MAX))
+				{
+					v[0] = (uint32)std::max(0, tmp[0]);
+					v[1] = (uint32)std::max(0, tmp[1]);
+					v[2] = (uint32)std::max(0, tmp[2]);
+					v[3] = (uint32)std::max(0, tmp[3]);
+					changed = true;
+					memcpy(bytes.data(), v, sizeof(uint32) * 4);
+				}
+				break;
+			}
+			case MATERIAL_VALUE_TYPE_FLOAT4X4:
+			{
+				// matrix는 UI로 편집하기 복잡하니, 간단히 raw 표시 + Reset만 제공
+				ImGui::Text("%s (float4x4)", desc.Name.c_str());
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Reset Identity"))
+				{
+					changed = true;
+					bytes.resize(sizeof(float) * 16);
+					float m[16] =
+					{
+						1,0,0,0,
+						0,1,0,0,
+						0,0,1,0,
+						0,0,0,1
+					};
+					memcpy(bytes.data(), m, sizeof(m));
+				}
+				break;
+			}
+			default:
+			{
+				// Unknown -> raw bytes length only
+				ImGui::Text("%s (unknown, %u bytes)", desc.Name.c_str(), (uint32)bytes.size());
+				break;
+			}
+			}
+
+			// Apply immediately only when changed
+			if (changed)
+			{
+				inst.SetValue(desc.Name.c_str(), bytes.data(), desc.Type);
+				inst.MarkAllDirty();
+			}
+
+			ImGui::PopID();
+		}
 	}
+
+	// ------------------------------------------------------------
+	// ImGui std::string InputText helper (fixes duplicated/concatenated path issue)
+	// ------------------------------------------------------------
+	static int ImGuiInputTextCallback_Resize(ImGuiInputTextCallbackData* data)
+	{
+		if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+		{
+			auto* str = reinterpret_cast<std::string*>(data->UserData);
+			str->resize((size_t)data->BufTextLen);
+			data->Buf = str->data();
+		}
+		return 0;
+	}
+
+	static bool InputTextString(const char* label, std::string& str, size_t reserveCap = 512)
+	{
+		if (str.capacity() < reserveCap)
+			str.reserve(reserveCap);
+
+		// NOTE: ImGui expects mutable char buffer; std::string::data() is mutable in C++17+
+		return ImGui::InputText(
+			label,
+			str.data(),
+			str.capacity() + 1,
+			ImGuiInputTextFlags_CallbackResize,
+			ImGuiInputTextCallback_Resize,
+			(void*)&str);
+	}
+
 
 	void MaterialEditor::drawResourceEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl)
 	{
 		ImGui::TextDisabled("Reflection-driven (Template -> Resources).");
 		ImGui::Separator();
 
-		// TODO: Replace with your real reflection getters
-		// for (const auto& r : tmpl.GetResourceParams()) { if texture -> edit path + SetTextureAssetRef }
+		const uint32 count = tmpl.GetResourceCount();
+		if (count == 0)
+		{
+			ImGui::TextDisabled("No resource params.");
+			return;
+		}
 
-		ImGui::TextDisabled("TODO: hook tmpl.GetResourceParams()");
+		static char s_Filter[128] = {};
+		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
+
+		auto passFilter = [&](const std::string& name) -> bool
+		{
+			if (s_Filter[0] == 0)
+				return true;
+			return name.find(s_Filter) != std::string::npos;
+		};
+
+		for (uint32 i = 0; i < count; ++i)
+		{
+			const MaterialResourceDesc& desc = tmpl.GetResource(i);
+			if (desc.Name.empty())
+				continue;
+
+			if (!passFilter(desc.Name))
+				continue;
+
+			const bool isTexture =
+				(desc.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2D) ||
+				(desc.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ||
+				(desc.Type == MATERIAL_RESOURCE_TYPE_TEXTURECUBE);
+
+			if (!isTexture)
+				continue;
+
+			ImGui::PushID((int)i);
+
+			// cache entry (stable storage)
+			std::string& path = cache.TexturePaths[desc.Name];
+
+			// Header line
+			ImGui::Text("%s", desc.Name.c_str());
+			ImGui::SameLine();
+			ImGui::TextDisabled("(%s)",
+				(desc.Type == MATERIAL_RESOURCE_TYPE_TEXTURECUBE) ? "Cube" :
+				(desc.Type == MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY) ? "2DArray" : "2D");
+
+			// Path editor (NO local buf -> fixes duplicated input)
+			bool edited = InputTextString("Path", path, 512);
+
+			ImGui::SameLine();
+			const bool applyPressed = ImGui::Button("Apply");
+
+			ImGui::SameLine();
+			const bool clearPressed = ImGui::Button("Clear");
+
+			auto flagFromTextureName = [](const std::string& n) -> uint32
+			{
+				if (n == "g_BaseColorTex")        return MAT_HAS_BASECOLOR;
+				if (n == "g_NormalTex")           return MAT_HAS_NORMAL;
+				if (n == "g_MetallicRoughnessTex")return MAT_HAS_MR;
+				if (n == "g_AOTex")               return MAT_HAS_AO;
+				if (n == "g_EmissiveTex")         return MAT_HAS_EMISSIVE;
+				if (n == "g_HeightTex")           return MAT_HAS_HEIGHT;
+				return 0;
+			};
+
+			const uint32 flagBit = flagFromTextureName(desc.Name);
+
+			if (clearPressed)
+			{
+				path.clear();
+				if (flagBit != 0)
+				{
+					uint32* pMatFlag = reinterpret_cast<uint32*>(cache.ValueBytes["g_MaterialFlags"].data());
+					*pMatFlag &= ~flagBit;
+					inst.SetUint("g_MaterialFlags", *pMatFlag);
+				}
+				inst.ClearTextureAssetRef(desc.Name.c_str());
+				inst.MarkAllDirty();
+			}
+
+			// Apply condition:
+			if (applyPressed && !clearPressed)
+			{
+				const std::string p = sanitizeFilePath(path);
+				if (!p.empty())
+				{
+					AssetRef<TextureAsset> ref = registerTexturePath(p);
+					inst.SetTextureAssetRef(desc.Name.c_str(), ref);
+					if (flagBit != 0)
+					{
+						uint32* pMatFlag = reinterpret_cast<uint32*>(cache.ValueBytes["g_MaterialFlags"].data());
+						*pMatFlag |= flagBit;
+						inst.SetUint("g_MaterialFlags", *pMatFlag);
+					}
+					inst.MarkAllDirty();
+				}
+			}
+
+			ImGui::PopID();
+			ImGui::Separator();
+		}
 	}
+
 
 	// ------------------------------------------------------------
 	// Scene load (kept similar to your previous flow)
@@ -993,6 +1692,24 @@ namespace shz
 					if (bindingName == varName)
 					{
 						mat.SetTextureAssetRef(varName.c_str(), resBinding.TextureRef);
+						break;
+					}
+				}
+			}
+
+			for (uint valIndex = 0; valIndex < pTemplate->GetValueParamCount(); ++valIndex)
+			{
+				const MaterialValueParamDesc& valDesc = pTemplate->GetValueParam(valIndex);
+				const std::string& varName = valDesc.Name;
+
+				for (uint32 bindingIndex = 0; bindingIndex < slot.GetValueOverrideCount(); ++bindingIndex)
+				{
+					const MaterialAsset::ValueOverride& valOverride = slot.GetValueOverride(bindingIndex);
+					const std::string bindingName = valOverride.Name;
+
+					if (bindingName == varName)
+					{
+						mat.SetValue(varName.c_str(), valOverride.Data.data(), valOverride.Type);
 						break;
 					}
 				}

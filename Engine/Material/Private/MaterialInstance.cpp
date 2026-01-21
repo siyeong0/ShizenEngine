@@ -369,6 +369,7 @@ namespace shz
 
 	void MaterialInstance::MarkAllDirty()
 	{
+		m_bPsoDirty = true;
 		for (uint8& b : m_bCBufferDirties)
 		{
 			b = 1; // True
@@ -412,8 +413,6 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialInstance::SetRaw(const char* name, const void* pData, uint32 byteSize) { return writeValueInternal(name, pData, byteSize, MATERIAL_VALUE_TYPE_UNKNOWN); }
-
 	bool MaterialInstance::SetFloat(const char* name, float v) { return writeValueInternal(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_FLOAT); }
 	bool MaterialInstance::SetFloat2(const char* name, const float v[2]) { return writeValueInternal(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2); }
 	bool MaterialInstance::SetFloat3(const char* name, const float v[3]) { return writeValueInternal(name, v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3); }
@@ -430,6 +429,51 @@ namespace shz
 	bool MaterialInstance::SetUint4(const char* name, const uint32 v[4]) { return writeValueInternal(name, v, sizeof(uint32) * 4, MATERIAL_VALUE_TYPE_UINT4); }
 
 	bool MaterialInstance::SetFloat4x4(const char* name, const float m16[16]) { return writeValueInternal(name, m16, sizeof(float) * 16, MATERIAL_VALUE_TYPE_FLOAT4X4); }
+
+	bool MaterialInstance::SetRaw(const char* name, const void* pData, uint32 byteSize) { return writeValueInternal(name, pData, byteSize, MATERIAL_VALUE_TYPE_UNKNOWN); }
+
+	bool MaterialInstance::SetValue(const char* name, const void* pData, MATERIAL_VALUE_TYPE valType)
+	{
+		ASSERT(name && name[0] != '\0', "Invalid name.");
+		ASSERT(pData, "pData is null.");
+
+		auto byteSizeOf = [](MATERIAL_VALUE_TYPE t) -> uint32
+		{
+			switch (t)
+			{
+			case MATERIAL_VALUE_TYPE_FLOAT:     return sizeof(float);
+			case MATERIAL_VALUE_TYPE_FLOAT2:    return sizeof(float) * 2;
+			case MATERIAL_VALUE_TYPE_FLOAT3:    return sizeof(float) * 3;
+			case MATERIAL_VALUE_TYPE_FLOAT4:    return sizeof(float) * 4;
+
+			case MATERIAL_VALUE_TYPE_INT:       return sizeof(int32);
+			case MATERIAL_VALUE_TYPE_INT2:      return sizeof(int32) * 2;
+			case MATERIAL_VALUE_TYPE_INT3:      return sizeof(int32) * 3;
+			case MATERIAL_VALUE_TYPE_INT4:      return sizeof(int32) * 4;
+
+			case MATERIAL_VALUE_TYPE_UINT:      return sizeof(uint32);
+			case MATERIAL_VALUE_TYPE_UINT2:     return sizeof(uint32) * 2;
+			case MATERIAL_VALUE_TYPE_UINT3:     return sizeof(uint32) * 3;
+			case MATERIAL_VALUE_TYPE_UINT4:     return sizeof(uint32) * 4;
+
+			case MATERIAL_VALUE_TYPE_FLOAT4X4:  return sizeof(float) * 16;
+
+			case MATERIAL_VALUE_TYPE_UNKNOWN:
+			default:
+				return 0;
+			}
+		};
+
+		const uint32 byteSize = byteSizeOf(valType);
+		if (byteSize == 0)
+		{
+			ASSERTION_FAILED("SetValue do nat support UNKOWN value type. Use SetRaw");
+			return false;
+		}
+
+		return writeValueInternal(name, pData, byteSize, valType);
+	}
+
 
 	// --------------------------------------------------------------------
 	// Resources
@@ -478,6 +522,55 @@ namespace shz
 
 		m_TextureBindings[resIndex].Name = textureName;
 		m_TextureBindings[resIndex].pSamplerOverride = pSampler;
+
+		m_bTextureDirties[resIndex] = 1;
+		return true;
+	}
+
+	bool MaterialInstance::ClearTextureAssetRef(const char* textureName)
+	{
+		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
+		ASSERT(m_pTemplate, "Template is null.");
+
+		uint32 resIndex = 0;
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
+			return false;
+		}
+
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
+		if (!IsTextureType(resourceDesc.Type))
+		{
+			return false;
+		}
+
+		m_TextureBindings[resIndex].TextureRef = {};
+		m_TextureBindings[resIndex].Name = {};
+		m_TextureBindings[resIndex].pSamplerOverride = nullptr;
+
+		m_bTextureDirties[resIndex] = 1;
+		return true;
+	}
+
+	bool MaterialInstance::ClearSamplerOverride(const char* textureName)
+	{
+		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
+		ASSERT(m_pTemplate, "Template is null.");
+
+		uint32 resIndex = 0;
+		if (!m_pTemplate->FindResourceIndex(textureName, &resIndex))
+		{
+			return false;
+		}
+
+		const MaterialResourceDesc& resourceDesc = m_pTemplate->GetResource(resIndex);
+		if (!IsTextureType(resourceDesc.Type))
+		{
+			return false;
+		}
+
+		m_TextureBindings[resIndex].Name = textureName;
+		m_TextureBindings[resIndex].pSamplerOverride = {};
 
 		m_bTextureDirties[resIndex] = 1;
 		return true;

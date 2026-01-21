@@ -19,6 +19,10 @@
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	}
 	// ------------------------------------------------------------
 	// Small helpers
 	// ------------------------------------------------------------
@@ -543,12 +547,15 @@ namespace shz
 		{
 			std::string path;
 
+			uint32 materialFlag = 0;
+
 			// BaseColor
 			path.clear();
 			if (resolveTexturePath(scene, mat, aiTextureType_BASE_COLOR, sceneFilePath, path, outError) ||
 				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_BaseColorTex", path);
+				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
 			}
 
 			// Normal
@@ -557,6 +564,7 @@ namespace shz
 				resolveTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_NormalTex", path);
+				materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
 
 			// Metallic/Roughness (packed)
@@ -566,6 +574,7 @@ namespace shz
 				resolveTexturePath(scene, mat, aiTextureType_UNKNOWN, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_MetallicRoughnessTex", path);
+				materialFlag |= hlsl::MAT_HAS_MR;
 			}
 
 			// AO
@@ -573,6 +582,7 @@ namespace shz
 			if (resolveTexturePath(scene, mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_AOTex", path);
+				materialFlag |= hlsl::MAT_HAS_AO;
 			}
 
 			// Emissive
@@ -580,6 +590,7 @@ namespace shz
 			if (resolveTexturePath(scene, mat, aiTextureType_EMISSIVE, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_EmissiveTex", path);
+				materialFlag |= hlsl::MAT_HAS_EMISSIVE;
 			}
 
 			// Height
@@ -587,7 +598,10 @@ namespace shz
 			if (resolveTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
 			{
 				BindTex2D("g_HeightTex", path);
+				materialFlag |= hlsl::MAT_HAS_HEIGHT;
 			}
+
+			outMat.SetUint("g_MaterialFlags", materialFlag);
 		}
 	}
 

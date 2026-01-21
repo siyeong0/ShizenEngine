@@ -124,8 +124,10 @@ namespace shz
 		MaterialUiCache& getOrCreateMaterialCache(uint64 key);
 		uint64 makeSelectionKey(int32 objIndex, int32 slotIndex) const;
 
-		void syncCacheFromTemplateDefaults(MaterialUiCache& cache, const MaterialTemplate& tmpl);
-		void applyCacheToInstance(MaterialInstance& inst, MaterialUiCache& cache);
+		MaterialTemplate* rebuildTemplateFromInputs();
+		void rebindSelectedMaterialToTemplate(MaterialTemplate* pNewTmpl);
+		void syncCacheFromInstance(MaterialUiCache& cache, const MaterialInstance& inst, const MaterialTemplate& tmpl);
+		void applyCacheToInstance(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl);
 
 		void drawValueEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl);
 		void drawResourceEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl);

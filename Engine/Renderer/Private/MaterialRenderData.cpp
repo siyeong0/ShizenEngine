@@ -399,7 +399,7 @@ namespace shz
 
 			if (!pView)
 			{
-				// Fall back to error texture SRV (white/normal/orm/black/cube etc.)
+				// Fall back to error texture SRV (white/normalF/orm/black/cube etc.)
 				pView = pCache->GetErrorTexture().GetSRV();
 			}
 

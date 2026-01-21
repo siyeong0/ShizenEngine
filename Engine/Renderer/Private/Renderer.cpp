@@ -328,7 +328,7 @@ namespace shz
 				const uint64 key = reinterpret_cast<uint64>(inst);
 
 				auto it = m_FrameMat.find(key);
-				if (it == m_FrameMat.end())
+				if (it == m_FrameMat.end() || inst->IsPsoDirty())
 				{
 					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, ctx, m_pMaterialStaticBinder.get());
 					it = m_FrameMat.emplace(key, hRD).first;
@@ -617,6 +617,27 @@ namespace shz
 		// PASS 3: Post
 		// ------------------------------------------------------------
 		{
+			{
+				const SwapChainDesc& scDesc = sc->GetDesc();
+
+				Viewport bbVp = {};
+				bbVp.TopLeftX = 0;
+				bbVp.TopLeftY = 0;
+				bbVp.Width = float(scDesc.Width);
+				bbVp.Height = float(scDesc.Height);
+				bbVp.MinDepth = 0.f;
+				bbVp.MaxDepth = 1.f;
+				ctx->SetViewports(1, &bbVp, 0, 0);
+			}
+
+			{
+				ASSERT(m_PostSRB, "Post SRB is null.");
+				ASSERT(m_LightingSRV, "Lighting SRV is null (post input).");
+
+				if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+					v->Set(m_LightingSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
+
 			ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
 			ASSERT(bbRtv, "Backbuffer RTV is null.");
 
@@ -797,13 +818,16 @@ namespace shz
 			ASSERT(outRtv && outSrv, "RTV/SRV is null.");
 		};
 
+		// --- Recreate GBuffers (size dependent) ---
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_GBufferTex[0], m_GBufferRtv[0], m_GBufferSrv[0]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_GBufferTex[1], m_GBufferRtv[1], m_GBufferSrv[1]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO", m_GBufferTex[2], m_GBufferRtv[2], m_GBufferSrv[2]);
 		createRtTexture2d(w, h, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_GBufferTex[3], m_GBufferRtv[3], m_GBufferSrv[3]);
 
+		// --- Recreate lighting buffer (size dependent) ---
 		createRtTexture2d(w, h, sc.ColorBufferFormat, "LightingColor", m_LightingTex, m_LightingRTV, m_LightingSRV);
 
+		// --- Recreate depth (size dependent) ---
 		{
 			TextureDesc td = {};
 			td.Name = "GBufferDepth";
@@ -823,42 +847,27 @@ namespace shz
 			device->CreateTexture(td, nullptr, &m_GBufferDepthTex);
 			ASSERT(m_GBufferDepthTex, "Failed to create GBufferDepth texture.");
 
-			{
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				vd.Format = TEX_FORMAT_D32_FLOAT;
-				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDSV);
-				ASSERT(m_GBufferDepthDSV, "Failed to create GBufferDepth DSV.");
-			}
+			TextureViewDesc vd = {};
+			vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+			vd.Format = TEX_FORMAT_D32_FLOAT;
+			m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthDSV);
+			ASSERT(m_GBufferDepthDSV, "Failed to create GBufferDepth DSV.");
 
-			{
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-				vd.Format = TEX_FORMAT_R32_FLOAT;
-				m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSRV);
-				ASSERT(m_GBufferDepthSRV, "Failed to create GBufferDepth SRV.");
-			}
+			vd = {};
+			vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+			vd.Format = TEX_FORMAT_R32_FLOAT;
+			m_GBufferDepthTex->CreateView(vd, &m_GBufferDepthSRV);
+			ASSERT(m_GBufferDepthSRV, "Failed to create GBufferDepth SRV.");
 		}
 
-		// Size-dependent pipeline objects should be re-created.
-		m_RenderPassGBuffer.Release();
 		m_FrameBufferGBuffer.Release();
-		m_RenderPassLighting.Release();
 		m_FrameBufferLighting.Release();
-		m_RenderPassPost.Release();
-
-		m_LightingPSO.Release();
-		m_PostPSO.Release();
-
-		m_LightingSRB.Release();
-		m_PostSRB.Release();
-
-		// Swapchain-backed fb is per-frame.
-		m_FrameBufferPostCurrent.Release();
+		m_FrameBufferPostCurrent.Release(); // swapchain-backed is per-frame anyway
 
 		m_DeferredDirty = false;
 		return true;
 	}
+
 
 	bool Renderer::createShadowRenderPasses()
 	{
@@ -927,34 +936,31 @@ namespace shz
 		const SwapChainDesc& scDesc = swapChain->GetDesc();
 
 		// ----------------------------
-		// GBuffer render pass + FB
+		// GBuffer RenderPass (once)
 		// ----------------------------
-		if (!m_RenderPassGBuffer || !m_FrameBufferGBuffer)
+		if (!m_RenderPassGBuffer)
 		{
 			RenderPassAttachmentDesc attachments[5] = {};
 
-			// GBuffer color attachments.
+			// 4 color + 1 depth (formats are fixed by your choices)
+			attachments[0].Format = TEX_FORMAT_RGBA8_UNORM;
+			attachments[1].Format = TEX_FORMAT_RGBA16_FLOAT;
+			attachments[2].Format = TEX_FORMAT_RGBA8_UNORM;
+			attachments[3].Format = TEX_FORMAT_RGBA16_FLOAT;
+
 			for (uint32 i = 0; i < 4; ++i)
 			{
-				ASSERT(m_GBufferTex[i], "createDeferredRenderPasses(): GBuffer texture is null.");
-
-				attachments[i].Format = m_GBufferTex[i]->GetDesc().Format;
 				attachments[i].SampleCount = 1;
 				attachments[i].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 				attachments[i].StoreOp = ATTACHMENT_STORE_OP_STORE;
-				attachments[i].StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
-				attachments[i].StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
 				attachments[i].InitialState = RESOURCE_STATE_RENDER_TARGET;
 				attachments[i].FinalState = RESOURCE_STATE_RENDER_TARGET;
 			}
 
-			// Depth attachment.
 			attachments[4].Format = TEX_FORMAT_D32_FLOAT;
 			attachments[4].SampleCount = 1;
 			attachments[4].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[4].StoreOp = ATTACHMENT_STORE_OP_STORE;
-			attachments[4].StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
-			attachments[4].StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
 			attachments[4].InitialState = RESOURCE_STATE_DEPTH_WRITE;
 			attachments[4].FinalState = RESOURCE_STATE_DEPTH_WRITE;
 
@@ -981,51 +987,20 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RenderPassGBuffer.Release();
 			device->CreateRenderPass(rpDesc, &m_RenderPassGBuffer);
-			if (!m_RenderPassGBuffer)
-			{
-				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_GBuffer) failed.");
-				return false;
-			}
-
-			ITextureView* atch[5] =
-			{
-				m_GBufferRtv[0],
-				m_GBufferRtv[1],
-				m_GBufferRtv[2],
-				m_GBufferRtv[3],
-				m_GBufferDepthDSV
-			};
-
-			FramebufferDesc fbDesc = {};
-			fbDesc.Name = "FB_GBuffer";
-			fbDesc.pRenderPass = m_RenderPassGBuffer;
-			fbDesc.AttachmentCount = 5;
-			fbDesc.ppAttachments = atch;
-
-			m_FrameBufferGBuffer.Release();
-			device->CreateFramebuffer(fbDesc, &m_FrameBufferGBuffer);
-			if (!m_FrameBufferGBuffer)
-			{
-				ASSERT(false, "createDeferredRenderPasses(): CreateFramebuffer(FB_GBuffer) failed.");
-				return false;
-			}
+			ASSERT(m_RenderPassGBuffer, "CreateRenderPass(RP_GBuffer) failed.");
 		}
 
 		// ----------------------------
-		// Lighting render pass + FB
+		// Lighting RenderPass (once)
 		// ----------------------------
-		if (!m_RenderPassLighting || !m_FrameBufferLighting)
+		if (!m_RenderPassLighting)
 		{
-			ASSERT(m_LightingTex, "createDeferredRenderPasses(): Lighting texture is null.");
-
 			RenderPassAttachmentDesc attachments[1] = {};
-			attachments[0].Format = m_LightingTex->GetDesc().Format;
+			attachments[0].Format = scDesc.ColorBufferFormat;
 			attachments[0].SampleCount = 1;
 			attachments[0].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[0].StoreOp = ATTACHMENT_STORE_OP_STORE;
-
 			attachments[0].InitialState = RESOURCE_STATE_RENDER_TARGET;
 			attachments[0].FinalState = RESOURCE_STATE_RENDER_TARGET;
 
@@ -1044,33 +1019,12 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RenderPassLighting.Release();
 			device->CreateRenderPass(rpDesc, &m_RenderPassLighting);
-			if (!m_RenderPassLighting)
-			{
-				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_Lighting) failed.");
-				return false;
-			}
-
-			ITextureView* atch[1] = { m_LightingRTV };
-
-			FramebufferDesc fbDesc = {};
-			fbDesc.Name = "FB_Lighting";
-			fbDesc.pRenderPass = m_RenderPassLighting;
-			fbDesc.AttachmentCount = 1;
-			fbDesc.ppAttachments = atch;
-
-			m_FrameBufferLighting.Release();
-			device->CreateFramebuffer(fbDesc, &m_FrameBufferLighting);
-			if (!m_FrameBufferLighting)
-			{
-				ASSERT(false, "createDeferredRenderPasses(): CreateFramebuffer(FB_Lighting) failed.");
-				return false;
-			}
+			ASSERT(m_RenderPassLighting, "CreateRenderPass(RP_Lighting) failed.");
 		}
 
 		// ----------------------------
-		// Post render pass (FB is rebuilt per-frame using current backbuffer RTV)
+		// Post RenderPass (once)
 		// ----------------------------
 		if (!m_RenderPassPost)
 		{
@@ -1079,7 +1033,6 @@ namespace shz
 			attachments[0].SampleCount = 1;
 			attachments[0].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[0].StoreOp = ATTACHMENT_STORE_OP_STORE;
-
 			attachments[0].InitialState = RESOURCE_STATE_RENDER_TARGET;
 			attachments[0].FinalState = RESOURCE_STATE_RENDER_TARGET;
 
@@ -1098,17 +1051,65 @@ namespace shz
 			rpDesc.SubpassCount = 1;
 			rpDesc.pSubpasses = &subpass;
 
-			m_RenderPassPost.Release();
 			device->CreateRenderPass(rpDesc, &m_RenderPassPost);
-			if (!m_RenderPassPost)
-			{
-				ASSERT(false, "createDeferredRenderPasses(): CreateRenderPass(RP_Post) failed.");
-				return false;
-			}
+			ASSERT(m_RenderPassPost, "CreateRenderPass(RP_Post) failed.");
 		}
 
 		return true;
 	}
+
+	bool Renderer::recreateDeferredFramebuffers()
+	{
+		IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(device, "recreateDeferredFramebuffers(): device is null.");
+
+		// GBuffer FB
+		{
+			ASSERT(m_RenderPassGBuffer, "RP_GBuffer is null.");
+			ASSERT(m_GBufferRtv[0] && m_GBufferRtv[1] && m_GBufferRtv[2] && m_GBufferRtv[3] && m_GBufferDepthDSV, "GBuffer views are null.");
+
+			ITextureView* atch[5] =
+			{
+				m_GBufferRtv[0],
+				m_GBufferRtv[1],
+				m_GBufferRtv[2],
+				m_GBufferRtv[3],
+				m_GBufferDepthDSV
+			};
+
+			FramebufferDesc fbDesc = {};
+			fbDesc.Name = "FB_GBuffer";
+			fbDesc.pRenderPass = m_RenderPassGBuffer;
+			fbDesc.AttachmentCount = 5;
+			fbDesc.ppAttachments = atch;
+
+			m_FrameBufferGBuffer.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferGBuffer);
+			ASSERT(m_FrameBufferGBuffer, "CreateFramebuffer(FB_GBuffer) failed.");
+		}
+
+		// Lighting FB
+		{
+			ASSERT(m_RenderPassLighting, "RP_Lighting is null.");
+			ASSERT(m_LightingRTV, "Lighting RTV is null.");
+
+			ITextureView* atch[1] = { m_LightingRTV };
+
+			FramebufferDesc fbDesc = {};
+			fbDesc.Name = "FB_Lighting";
+			fbDesc.pRenderPass = m_RenderPassLighting;
+			fbDesc.AttachmentCount = 1;
+			fbDesc.ppAttachments = atch;
+
+			m_FrameBufferLighting.Release();
+			device->CreateFramebuffer(fbDesc, &m_FrameBufferLighting);
+			ASSERT(m_FrameBufferLighting, "CreateFramebuffer(FB_Lighting) failed.");
+		}
+
+		return true;
+	}
+
+
 
 	// ============================================================
 	// PSO
@@ -1667,6 +1668,34 @@ namespace shz
 		return true;
 	}
 
+	void Renderer::updateSizeDependentSRBs()
+	{
+		if (m_LightingSRB)
+		{
+			auto setTex = [&](const char* name, ITextureView* srv)
+			{
+				if (auto var = m_LightingSRB->GetVariableByName(SHADER_TYPE_PIXEL, name))
+				{
+					var->Set(srv, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+			};
+
+			setTex("g_GBuffer0", m_GBufferSrv[0]);
+			setTex("g_GBuffer1", m_GBufferSrv[1]);
+			setTex("g_GBuffer2", m_GBufferSrv[2]);
+			setTex("g_GBuffer3", m_GBufferSrv[3]);
+			setTex("g_GBufferDepth", m_GBufferDepthSRV);
+			setTex("g_ShadowMap", m_ShadowMapSrv);
+		}
+
+		if (m_PostSRB)
+		{
+			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+				v->Set(m_LightingSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+		}
+	}
+
+
 	bool Renderer::recreateShadowResources()
 	{
 		if (!createShadowTargets())
@@ -1686,22 +1715,26 @@ namespace shz
 		if (!m_CreateInfo.pDevice || !m_CreateInfo.pImmediateContext || !m_CreateInfo.pSwapChain)
 			return false;
 
-		if (!createDeferredTargets())
-			return false;
-
 		if (!createDeferredRenderPasses())
 			return false;
 
-		if (!createLightingPso())
+		if (!createDeferredTargets())
 			return false;
 
-		if (!createPostPso())
+		if (!recreateDeferredFramebuffers())
 			return false;
 
-		m_pCache->Clear();
+		updateSizeDependentSRBs();
+
+		if (m_PostSRB)
+		{
+			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+				v->Set(m_LightingSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+		}
 
 		return true;
 	}
+
 
 	bool Renderer::buildPostFramebufferForCurrentBackBuffer()
 	{
@@ -1734,13 +1767,6 @@ namespace shz
 		{
 			ASSERT(false, "Failed to create post framebuffer for current backbuffer.");
 			return false;
-		}
-
-		// Bind post SRB input here (per-frame is ok).
-		if (m_PostSRB)
-		{
-			if (auto* v = m_PostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
-				v->Set(m_LightingSRV);
 		}
 
 		return true;

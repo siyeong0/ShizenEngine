@@ -21,6 +21,7 @@ Texture2D g_NormalTex;
 Texture2D g_MetallicRoughnessTex;
 Texture2D g_AOTex;
 Texture2D g_EmissiveTex;
+Texture2D g_HeightTex;
 
 SamplerState g_LinearWrapSampler;
 

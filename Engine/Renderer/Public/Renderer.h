@@ -97,9 +97,13 @@ namespace shz
 		bool createShadowRenderPasses();
 		bool createDeferredRenderPasses();
 
+		bool recreateDeferredFramebuffers();
+
 		bool createShadowPso();
 		bool createLightingPso();
 		bool createPostPso();
+
+		void updateSizeDependentSRBs();
 
 		bool recreateShadowResources();
 		bool recreateSizeDependentResources();
