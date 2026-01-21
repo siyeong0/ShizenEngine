@@ -17,6 +17,7 @@
 #include "Engine/AssetRuntime/AssetManager/Public/IAssetManager.h"
 #include "Engine/AssetRuntime/AssetManager/Public/AssetRegistry.h"
 #include "Engine/AssetRuntime/AssetManager/Public/AssetRecord.h"
+#include "Engine/AssetRuntime/AssetManager/Public/AssetMeta.h"
 
 namespace shz
 {
@@ -28,6 +29,13 @@ namespace shz
 		AllowFallback = 1u << 2,
 	};
 
+	enum class EAssetSaveFlags : uint32
+	{
+		None = 0,
+		HighPriority = 1u << 0,
+		Force = 1u << 1, // save even if not dirty
+	};
+
 	class AssetManager final : public IAssetManager
 	{
 	public:
@@ -37,9 +45,17 @@ namespace shz
 			uint64* pOutResidentBytes,
 			std::string* pOutError)>;
 
+		using ExporterFn = std::function<bool(
+			AssetManager& assetManager,
+			const AssetMeta& meta,
+			const AssetObject* pObject,
+			const std::string& outPath,
+			std::string* pOutError)>;
+
 	public:
 		AssetManager() = default;
-		~AssetManager() override = default;
+		~AssetManager() { Shutdown(); }
+		void Shutdown() noexcept;
 
 		AssetManager(const AssetManager&) = delete;
 		AssetManager& operator=(const AssetManager&) = delete;
@@ -49,9 +65,7 @@ namespace shz
 		{
 			ASSERT(ref, "Cannot acquire null AssetRef.");
 			AssetPtr<T> ptr(this, ref.GetID());
-
 			this->RequestLoad(ref.GetID(), AssetTypeTraits<T>::TypeID, static_cast<uint32>(flags));
-
 			return ptr;
 		}
 
@@ -71,34 +85,29 @@ namespace shz
 		}
 
 		template<typename T>
-		EAssetStatus GetStatus(const AssetRef<T>& ref) const noexcept
+		void MarkDirty(const AssetRef<T>& ref) noexcept
 		{
-			ASSERT(ref, "Cannot get status of null AssetRef.");
-			return this->GetStatusByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
+			ASSERT(ref, "Cannot MarkDirty null AssetRef.");
+			MarkDirtyByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
 		}
 
 		template<typename T>
-		[[nodiscard]] T* TryGet(const AssetRef<T>& ref) noexcept
+		void RequestSave(const AssetRef<T>& ref, const std::string& outPath = {}, EAssetSaveFlags flags = EAssetSaveFlags::None)
 		{
-			ASSERT(ref, "Cannot TryGet null AssetRef.");
-
-			AssetObject* obj = this->TryGetByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
-			if (!obj) return nullptr;
-
-			return AssetObjectCast<T>(obj);
+			ASSERT(ref, "Cannot RequestSave null AssetRef.");
+			this->RequestSave(ref.GetID(), AssetTypeTraits<T>::TypeID, outPath, static_cast<uint32>(flags));
 		}
 
 		template<typename T>
-		[[nodiscard]] const T* TryGet(const AssetRef<T>& ref) const noexcept
+		void SaveBlocking(const AssetRef<T>& ref, const std::string& outPath = {}, EAssetSaveFlags flags = EAssetSaveFlags::None)
 		{
-			ASSERT(ref, "Cannot TryGet null AssetRef.");
-
-			const AssetObject* obj = this->TryGetByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
-			if (!obj) return nullptr;
-
-			return AssetObjectCast<T>(obj);
+			RequestSave(ref, outPath, flags);
+			WaitSaveByID(ref.GetID(), AssetTypeTraits<T>::TypeID);
 		}
 
+		// -------------------------
+		// Registry
+		// -------------------------
 		template <typename T>
 		AssetRef<T> RegisterAsset(const std::string& sourcePath)
 		{
@@ -108,7 +117,8 @@ namespace shz
 		AssetID RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath);
 		void UnregisterAsset(const AssetID& id);
 
-		void RegisterLoader(AssetTypeID typeId, LoaderFn loader);
+		void RegisterImporter(AssetTypeID typeId, LoaderFn loader);
+		void RegisterExporter(AssetTypeID typeId, ExporterFn exporter);
 
 		void SetBudgetBytes(uint64 bytes) noexcept { m_BudgetBytes.store(bytes, std::memory_order_relaxed); }
 		uint64 GetBudgetBytes() const noexcept { return m_BudgetBytes.load(std::memory_order_relaxed); }
@@ -116,18 +126,29 @@ namespace shz
 		uint64 GetResidentBytes() const noexcept { return m_ResidentBytes.load(std::memory_order_relaxed); }
 		uint64 GetFrameIndex() const noexcept { return m_FrameIndex.load(std::memory_order_relaxed); }
 
+		void MarkDirtyByID(const AssetID& id, AssetTypeID typeId) noexcept;
+
+		// -------------------------
+		// IAssetManager
+		// -------------------------
 		void AddStrongRef(const AssetID& id, AssetTypeID typeId) noexcept override;
 		void ReleaseStrongRef(const AssetID& id, AssetTypeID typeId) noexcept override;
 
 		void RequestLoad(const AssetID& id, AssetTypeID typeId, uint32 flags) override;
+		void RequestSave(const AssetID& id, AssetTypeID typeId, const std::string& outPath, uint32 flags) override;
 
-		EAssetStatus GetStatusByID(const AssetID& id, AssetTypeID typeId) const noexcept override;
+		EAssetLoadStatus GetLoadStatusByID(const AssetID& id, AssetTypeID typeId) const noexcept override;
+		EAssetSaveStatus GetSaveStatusByID(const AssetID& id, AssetTypeID typeId) const noexcept override;
 
 		AssetObject* TryGetByID(const AssetID& id, AssetTypeID typeId) noexcept override;
 		const AssetObject* TryGetByID(const AssetID& id, AssetTypeID typeId) const noexcept override;
 
-		void WaitByID(const AssetID& id, AssetTypeID typeId) const override;
+		void WaitLoadByID(const AssetID& id, AssetTypeID typeId) const override;
+		void WaitSaveByID(const AssetID& id, AssetTypeID typeId) const override;
 
+		// -------------------------
+		// Eviction, tick
+		// -------------------------
 		void SetMaxEvictPerCollect(uint32 n) noexcept { m_MaxEvictPerCollect = n; }
 		uint32 GetMaxEvictPerCollect() const noexcept { return m_MaxEvictPerCollect; }
 
@@ -141,6 +162,7 @@ namespace shz
 		const AssetRecord* getRecordOrNull_NoLock(const AssetID& id) const noexcept;
 
 		void loadNow(AssetRecord& record);
+		void saveNow(AssetRecord& record);
 
 		bool isPinned_NoLock(const AssetRecord& rec) const noexcept;
 		bool unloadRecord_NoLock(AssetRecord& rec);
@@ -154,11 +176,17 @@ namespace shz
 		std::unordered_map<AssetID, std::unique_ptr<AssetRecord>> m_Records = {};
 		std::unordered_map<AssetTypeID, LoaderFn> m_Loaders = {};
 
+		// NEW
+		std::unordered_map<AssetTypeID, ExporterFn> m_Exporters = {};
+
 		std::atomic<uint64> m_FrameIndex{ 0 };
 		std::atomic<uint64> m_BudgetBytes{ 512ull * 1024ull * 1024ull };
 		std::atomic<uint64> m_ResidentBytes{ 0 };
 
 		uint32 m_MaxEvictPerCollect = 32;
+
+		// NEW
+		std::atomic<bool> m_ShuttingDown{ false };
 	};
 
 } // namespace shz

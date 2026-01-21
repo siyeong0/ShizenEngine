@@ -9,7 +9,7 @@ namespace shz
 {
 	class AssetManager;
 
-	class StaticMeshAssetImporter final
+	class MaterialAssetImporter final
 	{
 	public:
 		std::unique_ptr<AssetObject> operator()(
@@ -18,4 +18,4 @@ namespace shz
 			uint64* pOutResidentBytes,
 			std::string* pOutError) const;
 	};
-} // namespace shz
+}

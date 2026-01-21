@@ -96,7 +96,7 @@ namespace shz
 				return nullptr;
 			}
 
-			const AssetObject* obj = m_pManager->TryGetByIDConst(m_ID, AssetTypeTraits<T>::TypeID);
+			const AssetObject* obj = m_pManager->TryGetByID(m_ID, AssetTypeTraits<T>::TypeID);
 			if (!obj) return nullptr;
 
 			return AssetObjectCast<T>(obj);
@@ -131,7 +131,7 @@ namespace shz
 			return *p;
 		}
 
-		EAssetStatus GetStatus() const noexcept
+		EAssetLoadStatus GetStatus() const noexcept
 		{
 			ASSERT(m_pManager && m_ID, "Getting status from null AssetPtr.");
 			return m_pManager->GetStatusByID(m_ID, AssetTypeTraits<T>::TypeID);
@@ -140,7 +140,7 @@ namespace shz
 		void Wait() const
 		{
 			ASSERT(m_pManager && m_ID, "Waiting on null AssetPtr.");
-			m_pManager->WaitByID(m_ID, AssetTypeTraits<T>::TypeID);
+			m_pManager->WaitLoadByID(m_ID, AssetTypeTraits<T>::TypeID);
 		}
 
 		void Reset() noexcept

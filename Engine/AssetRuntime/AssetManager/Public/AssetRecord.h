@@ -20,17 +20,29 @@ namespace shz
 		std::atomic<uint32> StrongRefCount = 0;
 
 		// Guarded by Mutex:
-		EAssetStatus Status = EAssetStatus::Unloaded;
-
-		// NOTE:
-		// LoadFlags is accessed from code paths that may not hold rec.Mutex (policy/pin checks).
-		// Therefore it must be atomic to avoid data races.
+		EAssetLoadStatus Status = EAssetLoadStatus::Unloaded;
 		std::atomic<uint32> LoadFlags{ 0 };
 
+		EAssetSaveStatus SaveStatus = EAssetSaveStatus::Idle;
+		std::atomic<uint32> SaveFlags{ 0 };
+
+		// Set when modified; exporter may clear after successful save
+		std::atomic<bool> Dirty{ false };
+
+		// Guarded by Mutex: requested output path.
+		// - if empty: use meta.SourcePath during saveNow()
+		std::string PendingSavePath = {};
+
+		// Optional error for save failures (guarded by Mutex)
+		std::string SaveError = {};
+
+		// Save bookkeeping
+		uint64 LastSavedFrame = 0;
+
 		// LRU / budget
-		mutable std::atomic<uint64> LastUsedFrame = 0; // touched when asset is accessed (TryGet*)
-		uint64 LoadedFrame = 0;                        // set when load completes
-		uint64 ResidentBytes = 0;                      // estimated residency (0 = unknown)
+		mutable std::atomic<uint64> LastUsedFrame = 0;
+		uint64 LoadedFrame = 0;
+		uint64 ResidentBytes = 0;
 
 		std::unique_ptr<AssetObject> Object = nullptr;
 

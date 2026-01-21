@@ -1,21 +1,21 @@
 #pragma once
-#include <memory>
 #include <string>
 
-#include "Engine/AssetRuntime/Common/AssetObject.h"
 #include "Engine/AssetRuntime/AssetManager/Public/AssetMeta.h"
+#include "Engine/AssetRuntime/Common/AssetObject.h"
 
 namespace shz
 {
 	class AssetManager;
 
-	class StaticMeshAssetImporter final
+	class StaticMeshAssetExporter final
 	{
 	public:
-		std::unique_ptr<AssetObject> operator()(
+		bool operator()(
 			AssetManager& assetManager,
 			const AssetMeta& meta,
-			uint64* pOutResidentBytes,
+			const AssetObject* pObject,
+			const std::string& outPath,
 			std::string* pOutError) const;
 	};
-} // namespace shz
+}

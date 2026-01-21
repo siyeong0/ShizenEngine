@@ -152,7 +152,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AssetData\Public\AssimpAsset.h" />
     <ClInclude Include="AssetManager\Public\AssetMeta.h" />
+    <ClInclude Include="Pipeline\Public\MaterialExporter.h" />
+    <ClInclude Include="Pipeline\Public\MaterialImporter.h" />
+    <ClInclude Include="Pipeline\Public\StaticMeshExporter.h" />
     <ClInclude Include="Pipeline\Public\StaticMeshImporter.h" />
     <ClInclude Include="Pipeline\Public\TextureImporter.h" />
     <ClInclude Include="pch.h" />
@@ -172,6 +176,10 @@
     <ClInclude Include="AssetData\Public\TextureAsset.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AssetData\Private\AssimpAsset.cpp" />
+    <ClCompile Include="Pipeline\Private\MaterialExporter.cpp" />
+    <ClCompile Include="Pipeline\Private\MaterialImporter.cpp" />
+    <ClCompile Include="Pipeline\Private\StaticMeshExporter.cpp" />
     <ClCompile Include="Pipeline\Private\StaticMeshImporter.cpp" />
     <ClCompile Include="Pipeline\Private\TextureImporter.cpp" />
     <ClCompile Include="pch.cpp">

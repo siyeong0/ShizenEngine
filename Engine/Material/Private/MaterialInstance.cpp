@@ -153,6 +153,16 @@ namespace shz
 		}
 	}
 
+	void MaterialInstance::SetBlendMode(MATERIAL_BLEND_MODE mode)
+	{
+		if (m_Options.BlendMode == mode)
+		{
+			return;
+		}
+
+		m_Options.BlendMode = mode;
+	}
+
 	void MaterialInstance::SetCullMode(CULL_MODE mode)
 	{
 		if (m_Options.CullMode == mode)

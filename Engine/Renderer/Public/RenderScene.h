@@ -61,6 +61,12 @@ namespace shz
 		void RemoveLight(Handle<LightObject> h);
 		void UpdateLight(Handle<LightObject> h, const LightObject& light);
 
+		RenderObject* GetObjectOrNull(Handle<RenderObject> h) noexcept;
+		const RenderObject* GetObjectOrNull(Handle<RenderObject> h) const noexcept;
+
+		LightObject* GetLightOrNull(Handle<LightObject> h) noexcept;
+		const LightObject* GetLightOrNull(Handle<LightObject> h) const noexcept;
+
 		uint32 GetObjectCount() const noexcept { return static_cast<uint32>(m_Objects.size()); }
 		uint32 GetLightCount()  const noexcept { return static_cast<uint32>(m_Lights.size()); }
 

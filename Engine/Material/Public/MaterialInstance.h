@@ -61,6 +61,8 @@ namespace shz
 		// - RenderPass can be null in editor; in that case PSO creation must be deferred.
 		void SetRenderPass(IRenderPass* pRenderPass, uint32 subpassIndex);
 
+		void SetBlendMode(MATERIAL_BLEND_MODE mode);
+
 		// Raster / depth knobs
 		void SetCullMode(CULL_MODE mode);
 		void SetFrontCounterClockwise(bool v);
@@ -76,8 +78,22 @@ namespace shz
 		void SetLinearWrapSamplerName(const std::string& name);
 		void SetLinearWrapSamplerDesc(const SamplerDesc& desc);
 
-		const SamplerDesc& GetLinearWrapSamplerDesc() const { return m_Options.LinearWrapSamplerDesc; }
-		const char* GetLinearWrapSamplerName() const { return m_Options.LinearWrapSamplerName.c_str(); }
+		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_Options.BlendMode; }
+
+		CULL_MODE GetCullMode() const noexcept { return m_Options.CullMode; }
+		bool GetFrontCounterClockwise() const noexcept { return m_Options.FrontCounterClockwise; }
+
+		bool GetDepthEnable() const noexcept { return m_Options.DepthEnable; }
+		bool GetDepthWriteEnable() const noexcept { return m_Options.DepthWriteEnable; }
+		COMPARISON_FUNCTION GetDepthFunc() const noexcept { return m_Options.DepthFunc; }
+
+		MATERIAL_TEXTURE_BINDING_MODE GetTextureBindingMode() const noexcept { return m_Options.TextureBindingMode; }
+
+		const char* GetLinearWrapSamplerName() const noexcept { return m_Options.LinearWrapSamplerName.c_str(); }
+		const SamplerDesc& GetLinearWrapSamplerDesc() const noexcept { return m_Options.LinearWrapSamplerDesc; }
+
+		IRenderPass* GetRenderPass() const noexcept { return m_pRenderPass; }
+		uint32 GetSubpassIndex() const noexcept { return m_SubpassIndex; }
 
 		// Resource layout (auto-generated from template reflection)
 		SHADER_RESOURCE_VARIABLE_TYPE GetDefaultVariableType() const { return m_DefaultVariableType; }

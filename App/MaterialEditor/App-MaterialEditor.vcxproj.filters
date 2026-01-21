@@ -3,8 +3,12 @@
   <ItemGroup>
     <ClCompile Include="MaterialEditor.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="OrbitController.cpp" />
+    <ClCompile Include="AssetFacade.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MaterialEditor.h" />
+    <ClInclude Include="OrbitController.h" />
+    <ClInclude Include="AssetFacade.h" />
   </ItemGroup>
 </Project>

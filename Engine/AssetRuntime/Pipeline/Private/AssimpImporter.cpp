@@ -23,10 +23,10 @@ namespace shz
 	{
 #include "Shaders/HLSL_Structures.hlsli"
 	}
+
 	// ------------------------------------------------------------
 	// Small helpers
 	// ------------------------------------------------------------
-
 	static inline std::string makeError(const char* prefix, const char* details)
 	{
 		std::string s;
@@ -85,43 +85,25 @@ namespace shz
 	}
 
 	// Fix patterns like "c:/c:/dev/..." or "C:\C:\dev\..."
-	// This can happen when a path was already absolute but got "joined" again.
 	static std::string fixDuplicateDrivePrefix(std::string s)
 	{
-		// Work on normalized slashes form.
 		s = sanitizePathString(static_cast<std::string&&>(s));
-
 		if (s.size() < 6)
 			return s;
 
 		auto IsAlpha = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
 
-		// Pattern: "<d>:/<d>:/..."
-		if (IsAlpha(s[0]) && s[1] == ':' && s[2] == '/' &&
-			IsAlpha(s[3]) && s[4] == ':' && s[5] == '/')
+		const std::string t = s;
+		if (t.size() >= 6 && IsAlpha(t[0]) && t[1] == ':' && t[2] == '/' &&
+			IsAlpha(t[3]) && t[4] == ':' && t[5] == '/')
 		{
-			// Keep the first drive, drop the duplicated second drive.
-			// "c:/c:/dev/x" -> "c:/dev/x"
-			s.erase(0, 3); // drop first "c:/"
-			// Now s begins with "c:/dev/x". But we wanted the first drive, not the second.
-			// So instead reconstruct with first drive:
-			// original: D0 = s0 (before erase) is lost now, so do it differently.
-		}
-
-		// Implement properly with original.
-		{
-			const std::string t = s;
-			if (t.size() >= 6 && IsAlpha(t[0]) && t[1] == ':' && t[2] == '/' &&
-				IsAlpha(t[3]) && t[4] == ':' && t[5] == '/')
-			{
-				std::string out;
-				out.reserve(t.size());
-				out.push_back(t[0]);
-				out.push_back(':');
-				out.push_back('/');
-				out.append(t.substr(6)); // skip "<d>:/"
-				return out;
-			}
+			std::string out;
+			out.reserve(t.size());
+			out.push_back(t[0]);
+			out.push_back(':');
+			out.push_back('/');
+			out.append(t.substr(6)); // skip "<d>:/"
+			return out;
 		}
 
 		return s;
@@ -129,10 +111,7 @@ namespace shz
 
 	static std::string normalizeResolvedPath(const std::filesystem::path& p)
 	{
-		// Use lexically_normal (no filesystem access needed).
 		std::filesystem::path n = p.lexically_normal();
-
-		// Use generic string with forward slashes (matches your sanitizeFilePath behavior).
 		std::string out = n.generic_string();
 		out = sanitizePathString(static_cast<std::string&&>(out));
 		out = fixDuplicateDrivePrefix(static_cast<std::string&&>(out));
@@ -141,37 +120,34 @@ namespace shz
 
 	static std::filesystem::path pathFromUtf8(const std::string& s)
 	{
-		// On Windows, std::filesystem::path accepts UTF-8 in modern MSVC; assume ok.
 		return std::filesystem::path(s);
 	}
 
-	static inline uint32 makeAssimpFlags(const AssimpImportOptions& opt)
+	static inline uint32 makeAssimpFlags(const AssimpImportSettings& s)
 	{
 		uint32 flags = 0;
 
-		if (opt.Triangulate)            flags |= aiProcess_Triangulate;
-		if (opt.JoinIdenticalVertices)  flags |= aiProcess_JoinIdenticalVertices;
+		if (s.bTriangulate)           flags |= aiProcess_Triangulate;
+		if (s.bJoinIdenticalVertices) flags |= aiProcess_JoinIdenticalVertices;
 
 		// Normal generation
-		if (opt.GenNormals)
+		if (s.bGenNormals)
 		{
-			if (opt.GenSmoothNormals) flags |= aiProcess_GenSmoothNormals;
-			else                      flags |= aiProcess_GenNormals;
+			if (s.bGenSmoothNormals) flags |= aiProcess_GenSmoothNormals;
+			else                     flags |= aiProcess_GenNormals;
 		}
 
-		// Tangent space (optional)
-		if (opt.GenTangents || opt.CalcTangentSpace)
+		// Tangent space
+		if (s.bGenTangents || s.bCalcTangentSpace)
 			flags |= aiProcess_CalcTangentSpace;
 
-		// Helpful cleanup / cache locality
+		// Cleanup
 		flags |= aiProcess_ImproveCacheLocality;
 		flags |= aiProcess_RemoveRedundantMaterials;
 		flags |= aiProcess_SortByPType;
 
-		if (opt.FlipUVs) flags |= aiProcess_FlipUVs;
-
-		// D3D-style left-handed conversion (positions + winding)
-		if (opt.ConvertToLeftHanded) flags |= aiProcess_MakeLeftHanded;
+		if (s.bFlipUVs) flags |= aiProcess_FlipUVs;
+		if (s.bConvertToLeftHanded) flags |= aiProcess_MakeLeftHanded;
 
 		return flags;
 	}
@@ -179,7 +155,6 @@ namespace shz
 	// ------------------------------------------------------------
 	// Assimp matrix -> math helpers (bake node transforms)
 	// ------------------------------------------------------------
-
 	static inline float3 transformPoint(const aiMatrix4x4& m, const float3& p) noexcept
 	{
 		const float x = m.a1 * p.x + m.a2 * p.y + m.a3 * p.z + m.a4;
@@ -205,9 +180,8 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Filesystem helpers (portable)
+	// Filesystem helpers
 	// ------------------------------------------------------------
-
 	static bool writeBytesToFile(
 		const std::string& path,
 		const void* pData,
@@ -327,7 +301,6 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material import helpers
 	// ------------------------------------------------------------
-
 	static bool resolveTexturePath(
 		const aiScene* scene,
 		const aiMaterial* mat,
@@ -354,7 +327,7 @@ namespace shz
 
 		std::string raw = sanitizePathString(cstr);
 
-		// Embedded texture "*0", "*1", ...
+		// Embedded "*0" ...
 		if (!raw.empty() && raw[0] == '*')
 		{
 			bool isValid = true;
@@ -383,21 +356,14 @@ namespace shz
 			return false;
 		}
 
-		// Resolve relative paths against scene directory using std::filesystem.
 		const std::filesystem::path sceneDir = pathFromUtf8(getDirectoryOfPath(sceneFilePath));
 		const std::filesystem::path p = pathFromUtf8(raw);
 
 		std::filesystem::path resolved;
 		if (p.is_absolute() || p.has_root_name())
-		{
-			// Already absolute path. Just normalize.
 			resolved = p;
-		}
 		else
-		{
-			// Relative -> resolve against scene directory.
 			resolved = sceneDir / p;
-		}
 
 		resolved = resolved.lexically_normal();
 
@@ -405,15 +371,12 @@ namespace shz
 		if (!std::filesystem::exists(resolved, ec) || ec)
 		{
 			if (outError)
-			{
 				*outError = "Texture file does not exist: " + resolved.string();
-			}
 			return false;
 		}
 
 		outPath = normalizeResolvedPath(resolved);
 		outPath = fixDuplicateDrivePrefix(static_cast<std::string&&>(outPath));
-
 		return !outPath.empty();
 	}
 
@@ -424,7 +387,7 @@ namespace shz
 		const std::string& sceneFilePath,
 		MaterialAsset& outMat,
 		AssetManager* pAssetManager,
-		const AssimpImportOptions& opt,
+		const AssimpImportSettings& s,
 		std::string* outError)
 	{
 		auto PushErrorOnce = [&](const std::string& msg)
@@ -439,27 +402,17 @@ namespace shz
 		{
 			aiString n;
 			if (mat != nullptr && mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS)
-			{
 				outMat.SetName(n.C_Str());
-			}
 			else
-			{
 				outMat.SetName(std::string("Material_") + std::to_string(materialIndex));
-			}
 		}
 
-		// Default template key (Renderer can map this later)
 		outMat.SetTemplateKey("DefaultLit");
-
-		// ------------------------------------------------------------
-		// Values (store as overrides by shader param names)
-		// ------------------------------------------------------------
 
 		// BaseColor
 		float baseColor[4] = { 1, 1, 1, 1 };
 		{
 			aiColor4D c(1, 1, 1, 1);
-
 #if defined(AI_MATKEY_BASE_COLOR)
 			if (mat != nullptr && mat->Get(AI_MATKEY_BASE_COLOR, c) == AI_SUCCESS)
 			{
@@ -505,7 +458,6 @@ namespace shz
 			outMat.SetFloat("g_RoughnessFactor", roughness);
 		}
 
-		// Occlusion strength
 		outMat.SetFloat("g_OcclusionStrength", 1.0f);
 
 		// Opacity / cutoff
@@ -525,12 +477,7 @@ namespace shz
 			outMat.SetFloat("g_AlphaCutoff", alphaCutoff);
 		}
 
-		// Normal scale
 		outMat.SetFloat("g_NormalScale", 1.0f);
-
-		// ------------------------------------------------------------
-		// Textures (path -> AssetRef via AssetManager)
-		// ------------------------------------------------------------
 
 		auto BindTex2D = [&](const char* shaderVar, const std::string& texPath)
 		{
@@ -540,16 +487,14 @@ namespace shz
 			if (texPath.empty())
 				return;
 
-			// If we don't have AssetManager or policy disabled: skip.
-			if (!pAssetManager || !opt.RegisterTextureAssets)
+			if (!pAssetManager || !s.bRegisterTextureAssets)
 				return;
 
-			// Register texture asset by path and store AssetRef.
-			// NOTE: RegisterAssetRefByPath is expected to be deterministic.
+			// NOTE: RegisterAsset<TextureAsset>(path) 가 존재한다고 가정.
 			const AssetRef<TextureAsset> texRef = pAssetManager->RegisterAsset<TextureAsset>(texPath);
 			if (!texRef)
 			{
-				PushErrorOnce(std::string("RegisterAssetRefByPath<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);
+				PushErrorOnce(std::string("RegisterAsset<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);
 				return;
 			}
 
@@ -558,7 +503,6 @@ namespace shz
 
 		{
 			std::string path;
-
 			uint32 materialFlag = 0;
 
 			// BaseColor
@@ -579,7 +523,7 @@ namespace shz
 				materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
 
-			// Metallic/Roughness (packed)
+			// Metallic/Roughness
 			path.clear();
 			if (resolveTexturePath(scene, mat, aiTextureType_METALNESS, sceneFilePath, path, outError) ||
 				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, sceneFilePath, path, outError) ||
@@ -618,50 +562,96 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// AssimpImporter
+	// AssimpImporter::operator()
 	// ------------------------------------------------------------
+	std::unique_ptr<AssetObject> AssimpImporter::operator()(
+		AssetManager& assetManager,
+		const AssetMeta& meta,
+		uint64* pOutResidentBytes,
+		std::string* pOutError) const
+	{
+		if (pOutResidentBytes)
+			*pOutResidentBytes = 0;
+		if (pOutError)
+			pOutError->clear();
 
-	bool AssimpImporter::LoadStaticMeshAsset(
-		const std::string& filePath,
+		if (meta.SourcePath.empty())
+		{
+			if (pOutError) *pOutError = "AssimpImporter: meta.SourcePath is empty.";
+			return {};
+		}
+
+		const AssimpImportSettings s = meta.TryGetAssimpMeta() ? *meta.TryGetAssimpMeta() : AssimpImportSettings{};
+		const uint32 flags = makeAssimpFlags(s);
+
+		AssimpAsset out = {};
+		out.SourcePath = meta.SourcePath;
+		out.Importer = std::make_shared<Assimp::Importer>();
+		out.Scene = out.Importer->ReadFile(out.SourcePath.c_str(), flags);
+
+		if (out.Scene == nullptr)
+		{
+			if (pOutError) *pOutError = makeError("Assimp ReadFile failed", out.Importer->GetErrorString());
+			out.Clear();
+			return {};
+		}
+
+		if ((out.Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || out.Scene->mRootNode == nullptr)
+		{
+			if (pOutError) *pOutError = makeError("Assimp scene incomplete", out.Importer->GetErrorString());
+			out.Clear();
+			return {};
+		}
+
+		if (pOutResidentBytes)
+			*pOutResidentBytes = static_cast<uint64>(out.SourcePath.size());
+
+		return std::make_unique<TypedAssetObject<AssimpAsset>>(static_cast<AssimpAsset&&>(out));
+	}
+
+	// ------------------------------------------------------------
+	// BuildStaticMeshAsset (AssimpAsset -> StaticMeshAsset)
+	// ------------------------------------------------------------
+	bool BuildStaticMeshAsset(
+		const AssimpAsset& assimpAsset,
 		StaticMeshAsset* pOutMesh,
-		const AssimpImportOptions& options,
+		const AssimpImportSettings& s,
 		std::string* outError,
 		AssetManager* pAssetManager)
 	{
 		if (pOutMesh == nullptr)
 		{
-			if (outError) *outError = "AssimpImporter: pOutMesh is null.";
+			if (outError) *outError = "BuildStaticMeshAsset: pOutMesh is null.";
 			return false;
 		}
 
 		pOutMesh->Clear();
 
-		Assimp::Importer importer;
-		const uint32 flags = makeAssimpFlags(options);
-
-		const aiScene* scene = importer.ReadFile(filePath.c_str(), flags);
-		if (scene == nullptr)
+		if (!assimpAsset.IsValid())
 		{
-			if (outError) *outError = makeError("Assimp ReadFile failed", importer.GetErrorString());
+			if (outError) *outError = "BuildStaticMeshAsset: AssimpAsset is invalid (Scene/Importer missing).";
 			return false;
 		}
 
+		const aiScene* scene = assimpAsset.Scene;
+		const std::string& filePath = assimpAsset.SourcePath;
+
 		if ((scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene->mRootNode == nullptr)
 		{
-			if (outError) *outError = makeError("Assimp scene incomplete", importer.GetErrorString());
+			if (outError) *outError = "BuildStaticMeshAsset: scene incomplete or missing root node.";
 			return false;
 		}
 
 		if (scene->mNumMeshes == 0)
 		{
-			if (outError) *outError = "Assimp: scene has no meshes.";
+			if (outError) *outError = "BuildStaticMeshAsset: scene has no meshes.";
 			return false;
 		}
 
 		// ------------------------------------------------------------
-		// Import materials
+		// Import materials (optional)
 		// ------------------------------------------------------------
-		if (options.ImportMaterials)
+		if (s.bImportMaterials)
 		{
 			std::vector<MaterialAsset> materials;
 			materials.resize(scene->mNumMaterials);
@@ -669,7 +659,7 @@ namespace shz
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
 			{
 				const aiMaterial* mat = scene->mMaterials[i];
-				importOneMaterial(scene, mat, i, filePath, materials[i], pAssetManager, options, outError);
+				importOneMaterial(scene, mat, i, filePath, materials[i], pAssetManager, s, outError);
 			}
 
 			pOutMesh->SetMaterialSlots(static_cast<std::vector<MaterialAsset>&&>(materials));
@@ -680,7 +670,7 @@ namespace shz
 		// ------------------------------------------------------------
 		uint32 totalVertexCount = 0;
 
-		if (options.MergeMeshes)
+		if (s.bMergeMeshes)
 		{
 			for (uint32 m = 0; m < scene->mNumMeshes; ++m)
 			{
@@ -711,7 +701,7 @@ namespace shz
 		};
 
 		// ------------------------------------------------------------
-		// Import meshes by traversing nodes (BAKE node transforms)
+		// Import meshes by traversing nodes (BAKE transforms)
 		// ------------------------------------------------------------
 		std::vector<float3> positions;
 		std::vector<float3> normals;
@@ -724,7 +714,7 @@ namespace shz
 		texCoords.reserve(totalVertexCount);
 
 		std::vector<StaticMeshAsset::Section> sections;
-		sections.reserve(options.MergeMeshes ? scene->mNumMeshes : 1);
+		sections.reserve(s.bMergeMeshes ? scene->mNumMeshes : 1);
 
 		auto ImportMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global) -> bool
 		{
@@ -747,7 +737,7 @@ namespace shz
 			{
 				const aiVector3D& pA = mesh->mVertices[v];
 
-				float3 p = float3(pA.x, pA.y, pA.z) * options.UniformScale;
+				float3 p = float3(pA.x, pA.y, pA.z) * s.UniformScale;
 				p = transformPoint(global, p);
 				positions.push_back(p);
 
@@ -768,7 +758,7 @@ namespace shz
 			}
 
 			StaticMeshAsset::Section sec = {};
-			sec.BaseVertex = baseVertex;     // IMPORTANT: use baseVertex
+			sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
 			sec.MaterialSlot = mesh->mMaterialIndex;
 
 			const uint32 firstIndex = pOutMesh->GetIndexCount();
@@ -780,16 +770,9 @@ namespace shz
 				if (face.mNumIndices != 3)
 					continue;
 
-				// Chosen policy:
-				// - Indices are LOCAL [0..vertexCount)
-				// - Use BaseVertex at draw time
-				const uint32 i0 = face.mIndices[0];
-				const uint32 i1 = face.mIndices[1];
-				const uint32 i2 = face.mIndices[2];
-
-				pushIndex(i0);
-				pushIndex(i1);
-				pushIndex(i2);
+				pushIndex(face.mIndices[0]);
+				pushIndex(face.mIndices[1]);
+				pushIndex(face.mIndices[2]);
 				indexCount += 3;
 			}
 
@@ -817,7 +800,7 @@ namespace shz
 				if (!ImportMeshAsSection(mesh, global))
 					return false;
 
-				if (!options.MergeMeshes)
+				if (!s.bMergeMeshes)
 					return true;
 			}
 
@@ -826,7 +809,7 @@ namespace shz
 				if (!self(self, node->mChildren[c], global))
 					return false;
 
-				if (!options.MergeMeshes && !sections.empty())
+				if (!s.bMergeMeshes && !sections.empty())
 					return true;
 			}
 
@@ -837,20 +820,18 @@ namespace shz
 			const aiMatrix4x4 identity;
 			if (!TraverseNode(TraverseNode, scene->mRootNode, identity))
 			{
-				if (outError) *outError = "Assimp: failed to import meshes while traversing nodes (bake transforms).";
+				if (outError) *outError = "BuildStaticMeshAsset: node traversal failed.";
 				return false;
 			}
 		}
 
 		if (positions.empty() || sections.empty())
 		{
-			if (outError) *outError = "Assimp: node traversal produced empty mesh.";
+			if (outError) *outError = "BuildStaticMeshAsset: produced empty mesh.";
 			return false;
 		}
 
-		// ------------------------------------------------------------
-		// Commit to asset (SoA)
-		// ------------------------------------------------------------
+		// Commit SoA
 		pOutMesh->SetPositions(static_cast<std::vector<float3>&&>(positions));
 		pOutMesh->SetNormals(static_cast<std::vector<float3>&&>(normals));
 		pOutMesh->SetTangents(static_cast<std::vector<float3>&&>(tangents));
@@ -861,7 +842,7 @@ namespace shz
 
 		if (!pOutMesh->IsValid())
 		{
-			if (outError) *outError = "Assimp: imported mesh is invalid (empty vertices/indices or inconsistent attributes/sections/material slots).";
+			if (outError) *outError = "BuildStaticMeshAsset: StaticMeshAsset validation failed.";
 			return false;
 		}
 

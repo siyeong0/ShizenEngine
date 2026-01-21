@@ -69,6 +69,18 @@
     <ClInclude Include="AssetManager\Public\AssetMeta.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="AssetData\Public\AssimpAsset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline\Public\StaticMeshExporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline\Public\MaterialExporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline\Public\MaterialImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -93,6 +105,18 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Pipeline\Private\StaticMeshImporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AssetData\Private\AssimpAsset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline\Private\StaticMeshExporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline\Private\MaterialExporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Pipeline\Private\MaterialImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -257,4 +257,34 @@ namespace shz
 		m_Lights[denseIndex] = light;
 	}
 
+
+	RenderScene::RenderObject* RenderScene::GetObjectOrNull(Handle<RenderObject> h) noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_Objects[(size_t)dense];
+	}
+
+	const RenderScene::RenderObject* RenderScene::GetObjectOrNull(Handle<RenderObject> h) const noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_Objects[(size_t)dense];
+	}
+
+	RenderScene::LightObject* RenderScene::GetLightOrNull(Handle<LightObject> h) noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_LightSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_Lights[(size_t)dense];
+	}
+
+	const RenderScene::LightObject* RenderScene::GetLightOrNull(Handle<LightObject> h) const noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_LightSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_Lights[(size_t)dense];
+	}
+
+
 } // namespace shz

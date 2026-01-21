@@ -70,6 +70,15 @@ namespace shz
 		MATERIAL_TEXTURE_BINDING_MODE_MUTABLE,
 	};
 
+	enum MATERIAL_BLEND_MODE : uint8
+	{
+		MATERIAL_BLEND_MODE_OPAQUE = 0,        // default
+		MATERIAL_BLEND_MODE_MASKED,            // alpha test / cutout
+		MATERIAL_BLEND_MODE_TRANSLUCENT,       // standard alpha blend (SrcAlpha, InvSrcAlpha)
+		MATERIAL_BLEND_MODE_ADDITIVE,          // additive (One, One)
+		MATERIAL_BLEND_MODE_PREMULTIPLIED,     // premultiplied alpha (One, InvSrcAlpha)
+	};
+
 	// ------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------
@@ -113,6 +122,8 @@ namespace shz
 	// ------------------------------------------------------------
 	struct MaterialCommonOptions
 	{
+		MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
+
 		// Raster
 		CULL_MODE CullMode = CULL_MODE_BACK;
 		bool FrontCounterClockwise = true;
