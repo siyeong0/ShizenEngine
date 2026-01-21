@@ -399,6 +399,18 @@ namespace shz
 			resolved = sceneDir / p;
 		}
 
+		resolved = resolved.lexically_normal();
+
+		std::error_code ec;
+		if (!std::filesystem::exists(resolved, ec) || ec)
+		{
+			if (outError)
+			{
+				*outError = "Texture file does not exist: " + resolved.string();
+			}
+			return false;
+		}
+
 		outPath = normalizeResolvedPath(resolved);
 		outPath = fixDuplicateDrivePrefix(static_cast<std::string&&>(outPath));
 
