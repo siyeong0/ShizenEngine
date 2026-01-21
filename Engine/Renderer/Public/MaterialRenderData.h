@@ -1,8 +1,4 @@
-// ============================================================================
 // Engine/Renderer/Public/MaterialRenderData.h
-//   - Creates PSO from MaterialInstance (no fixed PSO input).
-//   - Creates SRB and binds immediately using instance values/resources.
-// ============================================================================
 #pragma once
 #include <vector>
 
@@ -38,30 +34,21 @@ namespace shz
 			RenderResourceCache* pCache,
 			IDeviceContext* pCtx,
 			MaterialInstance& inst,
-			IMaterialStaticBinder* pStaticBinder = nullptr);
+			IMaterialStaticBinder* pStaticBinder = nullptr,
+			IPipelineState* pShadowPSO = nullptr);
 
 		bool IsValid() const noexcept
 		{
 			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_pTemplate != nullptr);
 		}
 
-		IPipelineState* GetPSO() const noexcept
-		{
-			return m_pPSO;
-		}
-		IShaderResourceBinding* GetSRB() const noexcept
-		{
-			return m_pSRB;
-		}
+		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
+		IShaderResourceBinding* GetSRB() const noexcept { return m_pSRB; }
 
-		IBuffer* GetMaterialConstantsBuffer() const noexcept
-		{
-			return m_pMaterialConstants;
-		}
-		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept
-		{
-			return m_BoundTextures;
-		}
+		IShaderResourceBinding* GetShadowSRB() const noexcept { return m_pShadowSRB; }
+
+		IBuffer* GetMaterialConstantsBuffer() const noexcept { return m_pMaterialConstants; }
+		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
 
 		// Re-apply per-instance values/resources (e.g., after SetFloat/SetTexture changes).
 		bool Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx);
@@ -70,10 +57,16 @@ namespace shz
 		bool createPso(IRenderDevice* pDevice, const MaterialInstance& inst, IMaterialStaticBinder* pStaticBinder);
 		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst);
 
+		// Shadow SRB (optional): created from renderer-owned shadow PSO.
+		bool createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO, const MaterialInstance& inst);
+
 		bool bindAllTextures(RenderResourceCache* pCache, MaterialInstance& inst);
+		bool bindAllTexturesToShadow(RenderResourceCache* pCache, MaterialInstance& inst);
+
 		bool updateMaterialConstants(MaterialInstance& inst, IDeviceContext* pCtx);
 
 		IShaderResourceVariable* findVarAnyStage(const char* name, const MaterialInstance& inst) const;
+		IShaderResourceVariable* findVarShadowAnyStage(const char* name) const;
 
 		uint32 findMaterialCBufferIndexFallback(const MaterialTemplate* pTemplate) const;
 
@@ -83,10 +76,11 @@ namespace shz
 		RefCntAutoPtr<IBuffer>                m_pMaterialConstants = {};
 		std::vector<Handle<TextureRenderData>> m_BoundTextures = {};
 
+		RefCntAutoPtr<IShaderResourceBinding>  m_pShadowSRB = {};
+
 		const MaterialTemplate* m_pTemplate = nullptr;
 		uint32 m_MaterialCBufferIndex = 0;
 
 		uint64 m_LastConstantsUpdateFrame = 0xFFFFFFFFFFFFFFFFull;
-
 	};
 } // namespace shz

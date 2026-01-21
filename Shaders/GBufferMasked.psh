@@ -32,6 +32,8 @@ struct PSInput
     float3 WorldPos : TEXCOORD1;
     float3 WorldN : TEXCOORD2;
     float3 WorldT : TEXCOORD3;
+    
+    bool bFrontFace : SV_IsFrontFace;
 };
 
 struct PSOutput
@@ -110,19 +112,28 @@ void main(in PSInput PSIn, out PSOutput PSOut)
     }
 
     // ----------------------------
-    // Normal (World Space)
+    // Normal (World Space) - Two sided support
     // ----------------------------
     float3 N = normalize(PSIn.WorldN);
+    float3 T = normalize(PSIn.WorldT);
+
+    T = normalize(T - N * dot(N, T));
+    float3 B = normalize(cross(N, T));
+
+    if (!PSIn.bFrontFace)
+    {
+        N = -N;
+        T = -T;
+        B = -B;
+    }
 
     if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
     {
-        float3 T = normalize(PSIn.WorldT);
-        float3 B = normalize(cross(N, T));
-
         float3 nTS = unpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
         nTS.xy *= g_NormalScale;
 
         float3x3 TBN = float3x3(T, B, N);
+
         N = normalize(mul(nTS, TBN));
     }
 

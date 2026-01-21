@@ -21,6 +21,9 @@ namespace shz
 			std::vector<MaterialInstance> Materials = {};
 			Matrix4x4 Transform = {};
 
+			bool bCastShadow = true;
+			bool bAlphaMasked = false;
+
 			bool bMaterialDirty = true; // TODO:
 		};
 
@@ -47,10 +50,7 @@ namespace shz
 
 		void Reset();
 
-		Handle<RenderObject> AddObject(
-			Handle<StaticMeshRenderData> meshHandle, 
-			std::vector<MaterialInstance>&& materials, 
-			const Matrix4x4& transform);
+		Handle<RenderObject> AddObject(RenderObject&& obj);
 		void RemoveObject(Handle<RenderObject> h);
 		void UpdateObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
 		void UpdateObjectMaterial(Handle<RenderObject> h, uint32 materialSlot, const MaterialInstance& material);

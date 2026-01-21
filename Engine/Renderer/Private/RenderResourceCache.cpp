@@ -497,7 +497,8 @@ namespace shz
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
 		MaterialInstance* pInstance,
 		IDeviceContext* pCtx,
-		IMaterialStaticBinder* pStaticBinder)
+		IMaterialStaticBinder* pStaticBinder,
+		IPipelineState* pShadowPSO)
 	{
 		if (!m_pDevice || !pInstance)
 		{
@@ -544,7 +545,7 @@ namespace shz
 		// ------------------------------------------------------------
 		MaterialRenderData rd = {};
 		pInstance->MarkAllDirty();
-		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder))
+		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder, pShadowPSO))
 		{
 			ASSERT(false, "RenderResourceCache::GetOrCreateMaterialRenderData: failed to initialize MaterialRenderData.");
 			return {};

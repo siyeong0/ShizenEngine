@@ -46,39 +46,35 @@ namespace shz
 		RenderResourceCache* pCache,
 		IDeviceContext* pCtx,
 		MaterialInstance& inst,
-		IMaterialStaticBinder* pStaticBinder)
+		IMaterialStaticBinder* pStaticBinder,
+		IPipelineState* pShadowPSO)
 	{
 		m_pPSO.Release();
 		m_pSRB.Release();
+		m_pShadowSRB.Release();
 		m_pMaterialConstants.Release();
 		m_BoundTextures.clear();
 
 		m_pTemplate = inst.GetTemplate();
-		if (!pDevice || !m_pTemplate)
-		{
-			return false;
-		}
+		if (!pDevice || !m_pTemplate) { return false; }
 
 		m_MaterialCBufferIndex = findMaterialCBufferIndexFallback(m_pTemplate);
 
-		if (!createPso(pDevice, inst, pStaticBinder))
-		{
-			return false;
-		}
+		if (!createPso(pDevice, inst, pStaticBinder)) { return false; }
+		if (!createSrbAndBindMaterialCBuffer(pDevice, inst)) { return false; }
 
-		if (!createSrbAndBindMaterialCBuffer(pDevice, inst))
+		// Optional: shadow SRB (renderer-owned PSO).
+		if (pShadowPSO != nullptr) 
 		{
-			return false;
+			if (!createShadowSrbAndBindMaterialCBuffer(pShadowPSO, inst)) { return false; }
 		}
 
 		// Immediate initial binding
-		if (!Apply(pCache, inst, pCtx))
-		{
-			return false;
-		}
+		if (!Apply(pCache, inst, pCtx)) { return false; }
 
 		return true;
 	}
+
 
 	bool MaterialRenderData::createPso(
 		IRenderDevice* pDevice,
@@ -273,6 +269,41 @@ namespace shz
 		return true;
 	}
 
+	bool MaterialRenderData::createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO, const MaterialInstance& inst)
+	{
+		if (!pShadowPSO || !m_pTemplate) { return false; }
+
+		pShadowPSO->CreateShaderResourceBinding(&m_pShadowSRB, true);
+		if (!m_pShadowSRB) { return false; }
+
+		if (!m_pMaterialConstants) { return true; }
+
+		// Bind material cbuffer by name for common stages used in shadow pass.
+		{
+			IShaderResourceVariable* v = nullptr;
+
+			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, MaterialTemplate::MATERIAL_CBUFFER_NAME);
+			if (v) 
+			{ 
+				v->Set(m_pMaterialConstants); 
+			}
+
+			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, MaterialTemplate::MATERIAL_CBUFFER_NAME);
+			if (v) 
+			{
+				v->Set(m_pMaterialConstants); 
+			}
+
+			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_GEOMETRY, MaterialTemplate::MATERIAL_CBUFFER_NAME);
+			if (v)
+			{ 
+				v->Set(m_pMaterialConstants); 
+			}
+		}
+
+		return true;
+	}
+
 
 	IShaderResourceVariable* MaterialRenderData::findVarAnyStage(const char* name, const MaterialInstance& inst) const
 	{
@@ -299,6 +330,64 @@ namespace shz
 
 		return nullptr;
 	}
+	IShaderResourceVariable* MaterialRenderData::findVarShadowAnyStage(const char* name) const
+	{
+		if (!m_pShadowSRB || !name || name[0] == '\0') { return nullptr; }
+
+		// Shadow pass usually uses VS(+PS for alpha test).
+		IShaderResourceVariable* v = nullptr;
+
+		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, name);
+		if (v) { return v; }
+
+		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, name);
+		if (v) { return v; }
+
+		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_GEOMETRY, name);
+		if (v) { return v; }
+
+		return nullptr;
+	}
+
+	bool MaterialRenderData::bindAllTexturesToShadow(RenderResourceCache* pCache, MaterialInstance& inst)
+	{
+		if (!m_pTemplate || !m_pShadowSRB || !pCache) { return true; }
+
+		const uint32 resCount = m_pTemplate->GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
+		{
+			const MaterialResourceDesc& res = m_pTemplate->GetResource(i);
+
+			if (res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
+				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
+				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE) {
+				continue;
+			}
+
+			// Use same dirty bit policy as main SRB.
+			if (!inst.IsTextureDirty(i)) { continue; }
+
+			const TextureBinding& b = inst.GetTextureBinding(i);
+
+			ITextureView* pView = nullptr;
+
+			if (b.TextureRef.has_value() && b.TextureRef->IsValid()) {
+				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(*b.TextureRef);
+				const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
+				if (texRD) { pView = texRD->GetSRV(); }
+			}
+
+			if (!pView) { pView = pCache->GetErrorTexture().GetSRV(); }
+
+			IShaderResourceVariable* pVar = findVarShadowAnyStage(res.Name.c_str());
+			if (pVar) { pVar->Set(pView); }
+
+			// NOTE: do not clear dirty here; main SRB binder clears it.
+		}
+
+		return true;
+	}
+
 
 	bool MaterialRenderData::updateMaterialConstants(MaterialInstance& inst, IDeviceContext* pCtx)
 	{
@@ -417,23 +506,20 @@ namespace shz
 
 	bool MaterialRenderData::Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx)
 	{
-		if (!IsValid())
-		{
-			return false;
+		if (!IsValid()) { return false; }
+
+		if (!updateMaterialConstants(inst, pCtx)) { return false; }
+
+		// Bind shadow textures first (because bindAllTextures clears dirty).
+		if (m_pShadowSRB) {
+			if (!bindAllTexturesToShadow(pCache, inst)) { return false; }
 		}
 
-		if (!updateMaterialConstants(inst, pCtx))
-		{
-			return false;
-		}
-
-		if (!bindAllTextures(pCache, inst))
-		{
-			return false;
-		}
+		if (!bindAllTextures(pCache, inst)) { return false; }
 
 		return true;
 	}
+
 
 
 } // namespace shz

@@ -77,7 +77,7 @@ namespace shz
 			{
 				return m_RenderPassGBuffer;
 			}
-			
+
 			return nullptr;
 		}
 
@@ -100,6 +100,7 @@ namespace shz
 		bool recreateDeferredFramebuffers();
 
 		bool createShadowPso();
+		bool createShadowMaskedPso();
 		bool createLightingPso();
 		bool createPostPso();
 
@@ -153,7 +154,7 @@ namespace shz
 		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
 
 		// Targets
-		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
+		static constexpr uint32 SHADOW_MAP_SIZE = 4096 * 4;
 
 		RefCntAutoPtr<ITexture>     m_ShadowMapTex;
 		RefCntAutoPtr<ITextureView> m_ShadowMapDsv;
@@ -187,8 +188,10 @@ namespace shz
 		RefCntAutoPtr<IFramebuffer> m_FrameBufferPostCurrent;
 
 		// PSO/SRB
-		RefCntAutoPtr<IPipelineState>         m_ShadowPSO;
+		RefCntAutoPtr<IPipelineState> m_ShadowPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
+
+		RefCntAutoPtr<IPipelineState> m_ShadowMaskedPSO;
 
 		RefCntAutoPtr<IPipelineState>         m_LightingPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;

@@ -62,10 +62,7 @@ namespace shz
 	// RenderObjects
 	// ------------------------------------------------------------
 
-	Handle<RenderScene::RenderObject> RenderScene::AddObject(
-		Handle<StaticMeshRenderData> meshHandle,
-		std::vector<MaterialInstance>&& materials,
-		const Matrix4x4& transform)
+	Handle<RenderScene::RenderObject> RenderScene::AddObject(RenderObject&& obj)
 	{
 		UniqueHandle<RenderObject> owner = UniqueHandle<RenderObject>::Make();
 		const Handle<RenderObject> h = owner.Get();
@@ -80,15 +77,9 @@ namespace shz
 
 		const uint32 denseIndex = static_cast<uint32>(m_Objects.size());
 
-		RenderObject obj = {};
-		obj.MeshHandle = meshHandle;
-		obj.Materials = std::move(materials); 
-		obj.Transform = transform;
-		obj.bMaterialDirty = true;
-
 		// Store dense
-		m_Objects.push_back(std::move(obj));
-		m_ObjectHandles.push_back(h);
+		m_Objects.emplace_back(std::move(obj));
+		m_ObjectHandles.emplace_back(h);
 
 		// Bind sparse/slot
 		slot.Owner = std::move(owner);

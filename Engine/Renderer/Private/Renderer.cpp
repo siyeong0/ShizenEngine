@@ -172,6 +172,7 @@ namespace shz
 		if (!createDeferredRenderPasses()) return;
 
 		if (!createShadowPso())            return;
+		if (!createShadowMaskedPso())      return;
 		if (!createLightingPso())          return;
 		if (!createPostPso())              return;
 
@@ -330,7 +331,8 @@ namespace shz
 				auto it = m_FrameMat.find(key);
 				if (it == m_FrameMat.end() || inst->IsPsoDirty())
 				{
-					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, ctx, m_pMaterialStaticBinder.get());
+					IPipelineState* pShadowPso = obj.bCastShadow && obj.bAlphaMasked ? m_ShadowMaskedPSO : nullptr;
+					Handle<MaterialRenderData> hRD = m_pCache->GetOrCreateMaterialRenderData(inst, ctx, m_pMaterialStaticBinder.get(), pShadowPso);
 					it = m_FrameMat.emplace(key, hRD).first;
 					m_FrameMatKeys.push_back(key);
 				}
@@ -408,13 +410,24 @@ namespace shz
 
 			ctx->BeginRenderPass(rp);
 
-			ctx->SetPipelineState(m_ShadowPSO);
-			ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-
 			const auto& objs = scene.GetObjects();
 			for (uint32 objIndex = 0; objIndex < static_cast<uint32>(objs.size()); ++objIndex)
 			{
 				const auto& obj = objs[objIndex];
+
+				if (!obj.bCastShadow)
+				{
+					continue;
+				}
+
+				if (!obj.bAlphaMasked)
+				{
+					ctx->SetPipelineState(m_ShadowPSO);
+				}
+				else
+				{
+					ctx->SetPipelineState(m_ShadowMaskedPSO);
+				}
 
 				const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 				if (!mesh || !mesh->IsValid())
@@ -437,6 +450,28 @@ namespace shz
 				{
 					if (sec.IndexCount == 0)
 						continue;
+
+					if (!obj.bAlphaMasked)
+					{
+						ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					}
+					else
+					{
+						const MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
+						if (!inst)
+							continue;
+
+						const uint64 key = reinterpret_cast<uint64>(inst);
+						auto it = m_FrameMat.find(key);
+						if (it == m_FrameMat.end())
+							continue;
+
+						MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
+						if (!rd || !rd->GetPSO() || !rd->GetShadowSRB())
+							continue;
+
+						ctx->CommitShaderResources(rd->GetShadowSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					}
 
 					DrawIndexedAttribs dia = {};
 					dia.NumIndices = sec.IndexCount;
@@ -1235,145 +1270,142 @@ namespace shz
 		return true;
 	}
 
-	//bool Renderer::createGBufferPso()
-	//{
-	//	IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
-	//	ASSERT(device, "Device is null.");
+	bool Renderer::createShadowMaskedPso()
+	{
+		IRenderDevice* device = m_CreateInfo.pDevice.RawPtr();
+		ASSERT(device, "Device is null.");
 
-	//	if (m_GBufferPSO)
-	//	{
-	//		return true;
-	//	}
+		// If you want both opaque shadow + masked shadow, keep separate PSO/SRB members:
+		// RefCntAutoPtr<IPipelineState>              m_ShadowMaskedPSO;
+		// RefCntAutoPtr<IShaderResourceBinding>      m_ShadowMaskedSRB;
+		if (m_ShadowMaskedPSO)
+		{
+			return true;
+		}
 
-	//	GraphicsPipelineStateCreateInfo psoCi = {};
-	//	psoCi.PSODesc.Name = "GBuffer PSO";
-	//	psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+		GraphicsPipelineStateCreateInfo psoCi = {};
+		psoCi.PSODesc.Name = "Shadow Masked PSO";
+		psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-	//	GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
+		GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
 
-	//	gp.pRenderPass = m_RenderPassGBuffer;
-	//	gp.SubpassIndex = 0;
+		gp.pRenderPass = m_RenderPassShadow;
+		gp.SubpassIndex = 0;
 
-	//	gp.NumRenderTargets = 0;
-	//	gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
-	//	gp.RTVFormats[1] = TEX_FORMAT_UNKNOWN;
-	//	gp.RTVFormats[2] = TEX_FORMAT_UNKNOWN;
-	//	gp.RTVFormats[3] = TEX_FORMAT_UNKNOWN;
-	//	gp.DSVFormat = TEX_FORMAT_UNKNOWN;
+		// Depth-only pass (RenderPass determines depth format)
+		gp.NumRenderTargets = 0;
+		gp.DSVFormat = TEX_FORMAT_UNKNOWN;
 
-	//	gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	//	gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
-	//	gp.RasterizerDesc.FrontCounterClockwise = true;
+		gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+		gp.RasterizerDesc.FrontCounterClockwise = true;
 
-	//	gp.DepthStencilDesc.DepthEnable = true;
-	//	gp.DepthStencilDesc.DepthWriteEnable = true;
-	//	gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+		gp.DepthStencilDesc.DepthEnable = true;
+		gp.DepthStencilDesc.DepthWriteEnable = true;
+		gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-	//	LayoutElement layoutElems[] =
-	//	{
-	//		LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position
-	//		LayoutElement{1, 0, 2, VT_FLOAT32, false}, // ATTRIB1 UV
-	//		LayoutElement{2, 0, 3, VT_FLOAT32, false}, // ATTRIB2 Normal
-	//		LayoutElement{3, 0, 3, VT_FLOAT32, false}, // ATTRIB3 Tangent
+		// Input layout:
+		// - Vertex stream: Pos(ATTRIB0), UV(ATTRIB1)  <-- masked needs UV
+		// - Instance stream: ObjectIndex(ATTRIB4)
+		LayoutElement layoutElems[] =
+		{
+			LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
+			LayoutElement{1, 0, 2, VT_FLOAT32, false}, // ATTRIB1 UV (vertex stream)
+			LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ATTRIB4 ObjectIndex (instance stream)
+		};
 
-	//		LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ATTRIB4 ObjectIndex (instance stream)
-	//	};
-	//	layoutElems[4].Stride = sizeof(uint32);
+		// NOTE:
+		// Your mesh VB is interleaved with stride 11 floats.
+		// Keep the same stride for ALL vertex-stream elements.
+		layoutElems[0].Stride = sizeof(float) * 11;
+		layoutElems[1].Stride = sizeof(float) * 11;
+		layoutElems[2].Stride = sizeof(uint32);
 
-	//	gp.InputLayout.LayoutElements = layoutElems;
-	//	gp.InputLayout.NumElements = _countof(layoutElems);
+		gp.InputLayout.LayoutElements = layoutElems;
+		gp.InputLayout.NumElements = _countof(layoutElems);
 
-	//	ShaderCreateInfo sci = {};
-	//	sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-	//	sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-	//	sci.EntryPoint = "main";
-	//	sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+		ShaderCreateInfo sci = {};
+		sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
+		sci.EntryPoint = "main";
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
-	//	RefCntAutoPtr<IShader> vs;
-	//	{
-	//		sci.Desc = {};
-	//		sci.Desc.Name = "GBuffer VS";
-	//		sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-	//		sci.FilePath = "GBuffer.vsh";
-	//		sci.Desc.UseCombinedTextureSamplers = false;
+		RefCntAutoPtr<IShader> vs;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "Shadow Masked VS";
+			sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
+			sci.FilePath = "ShadowMasked.vsh"; // <- 위에서 만든 masked VS
+			sci.Desc.UseCombinedTextureSamplers = false;
 
-	//		device->CreateShader(sci, &vs);
-	//		if (!vs)
-	//		{
-	//			ASSERT(false, "Failed to create GBuffer VS.");
-	//			return false;
-	//		}
-	//	}
+			device->CreateShader(sci, &vs);
+			if (!vs)
+			{
+				ASSERT(false, "Failed to create ShadowMasked VS.");
+				return false;
+			}
+		}
 
-	//	RefCntAutoPtr<IShader> ps;
-	//	{
-	//		sci.Desc = {};
-	//		sci.Desc.Name = "GBuffer PS";
-	//		sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-	//		sci.FilePath = "GBuffer.psh";
-	//		sci.Desc.UseCombinedTextureSamplers = false;
+		RefCntAutoPtr<IShader> ps;
+		{
+			sci.Desc = {};
+			sci.Desc.Name = "Shadow Masked PS";
+			sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
+			sci.FilePath = "ShadowMasked.psh"; 
+			sci.Desc.UseCombinedTextureSamplers = false;
 
-	//		device->CreateShader(sci, &ps);
-	//		if (!ps)
-	//		{
-	//			ASSERT(false, "Failed to create GBuffer PS.");
-	//			return false;
-	//		}
-	//	}
+			device->CreateShader(sci, &ps);
+			if (!ps)
+			{
+				ASSERT(false, "Failed to create ShadowMasked PS.");
+				return false;
+			}
+		}
 
-	//	psoCi.pVS = vs;
-	//	psoCi.pPS = ps;
+		psoCi.pVS = vs;
+		psoCi.pPS = ps;
 
-	//	psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-	//	ShaderResourceVariableDesc vars[] =
-	//	{
-	//		{ SHADER_TYPE_PIXEL,  "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+		ShaderResourceVariableDesc vars[] =
+		{
+			{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+			{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+		};
+		psoCi.PSODesc.ResourceLayout.Variables = vars;
+		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
 
-	//		{ SHADER_TYPE_PIXEL,  "g_BaseColorTex",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-	//		{ SHADER_TYPE_PIXEL,  "g_NormalTex",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-	//		{ SHADER_TYPE_PIXEL,  "g_MetallicRoughnessTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-	//		{ SHADER_TYPE_PIXEL,  "g_AOTex",                SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-	//		{ SHADER_TYPE_PIXEL,  "g_EmissiveTex",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-	//	};
-	//	psoCi.PSODesc.ResourceLayout.Variables = vars;
-	//	psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+		SamplerDesc linearWrap =
+		{
+			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+		};
 
-	//	SamplerDesc linearWrap =
-	//	{
-	//		FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-	//		TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-	//	};
+		ImmutableSamplerDesc samplers[] =
+		{
+			{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap }
+		};
+		psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+		psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-	//	ImmutableSamplerDesc samplers[] =
-	//	{
-	//		{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap }
-	//	};
-	//	psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-	//	psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+		device->CreateGraphicsPipelineState(psoCi, &m_ShadowMaskedPSO);
+		if (!m_ShadowMaskedPSO)
+		{
+			ASSERT(false, "Failed to create ShadowMasked PSO.");
+			return false;
+		}
 
-	//	device->CreateGraphicsPipelineState(psoCi, &m_GBufferPSO);
-	//	if (!m_GBufferPSO)
-	//	{
-	//		ASSERT(false, "Failed to create GBuffer PSO.");
-	//		return false;
-	//	}
+		// Bind statics
+		{
+			// VS
+			if (auto* var = m_ShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+				var->Set(m_pShadowCB);
 
-	//	// Bind statics (once)
-	//	{
-	//		if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
-	//			var->Set(m_pFrameCB);
-	//		if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
-	//			var->Set(m_pFrameCB);
+			if (auto* var = m_ShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+		}
 
-	//		// OBJECT_INDEX cbuffer is removed.
-
-	//		if (auto* var = m_GBufferPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-	//			var->Set(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
-	//	}
-
-	//	return true;
-	//}
+		return true;
+	}
 
 
 	bool Renderer::createLightingPso()
