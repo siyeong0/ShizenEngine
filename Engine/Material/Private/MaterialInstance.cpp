@@ -18,10 +18,6 @@ namespace shz
 		m_TextureBindings.clear();
 		m_bTextureDirties.clear();
 
-		// Defaults (reasonable for editor)
-		m_pRenderPass = nullptr;
-		m_SubpassIndex = 0;
-
 		m_Options = {};
 
 		// ------------------------------------------------------------
@@ -33,10 +29,6 @@ namespace shz
 		if (m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
 			m_PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-			// RenderPass can be null: editor can set it later.
-			m_GraphicsPipeline.pRenderPass = m_pRenderPass;
-			m_GraphicsPipeline.SubpassIndex = m_SubpassIndex;
 
 			// Policy: formats come from RenderPass/subpass.
 			m_GraphicsPipeline.NumRenderTargets = 0;
@@ -135,22 +127,9 @@ namespace shz
 	// Setters (mark dirty)
 	// --------------------------------------------------------------------
 
-	void MaterialInstance::SetRenderPass(IRenderPass* pRenderPass, uint32 subpassIndex)
+	void MaterialInstance::SetRenderPass(const std::string& renderPassName)
 	{
-		if (m_pRenderPass == pRenderPass && m_SubpassIndex == subpassIndex)
-		{
-			return;
-		}
-
-		m_pRenderPass = pRenderPass;
-		m_SubpassIndex = subpassIndex;
-
-		if (m_pTemplate && m_pTemplate->GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
-		{
-			m_GraphicsPipeline.pRenderPass = m_pRenderPass;
-			m_GraphicsPipeline.SubpassIndex = m_SubpassIndex;
-			markPsoDirty();
-		}
+		m_RenderPassName = renderPassName;
 	}
 
 	void MaterialInstance::SetBlendMode(MATERIAL_BLEND_MODE mode)

@@ -7,6 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
+#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
 #include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
 #include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
@@ -64,7 +66,7 @@ namespace shz
 	}
 
 	std::unique_ptr<AssetObject> StaticMeshAssetImporter::operator()(
-		AssetManager& /*assetManager*/,
+		AssetManager& assetManager,
 		const AssetMeta& meta,
 		uint64* pOutResidentBytes,
 		std::string* pOutError) const
@@ -182,6 +184,7 @@ namespace shz
 				MaterialAsset m;
 				m.SetName(mj.value("Name", ""));
 				m.SetTemplateKey(mj.value("TemplateKey", ""));
+				m.SetRenderPassName(mj.value("RenderPassName", ""));
 
 				// Options
 				if (mj.contains("Options"))
@@ -230,6 +233,7 @@ namespace shz
 						const std::string rname = rj.value("Name", "");
 						const auto rtype = (MATERIAL_RESOURCE_TYPE)rj.value("Type", (int)MATERIAL_RESOURCE_TYPE_UNKNOWN);
 						const uint64 stable = rj.value("StableID", 0ull);
+						const std::string sourcePath = rj.value("SourcePath", "");
 
 						AssetID texId = {};
 						if (rj.contains("TextureAssetID"))
@@ -239,9 +243,9 @@ namespace shz
 							texId.Lo = idj.value("Lo", 0ull);
 						}
 
-						if (!rname.empty() && texId)
+						if (!rname.empty() && !sourcePath.empty())
 						{
-							m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<TextureAsset>(texId), stable);
+							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<TextureAsset>(sourcePath), stable);
 						}
 
 						const bool hasS = rj.value("HasSamplerOverride", false);

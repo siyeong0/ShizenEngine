@@ -95,16 +95,7 @@ namespace shz
 		ASSERT(typeID != 0, "Invalid AssetTypeID.");
 		ASSERT(!sourcePath.empty(), "Path is empty.");
 
-		const std::string relativeSourcePath = std::filesystem::relative(sourcePath).string();
-
-		// Make deterministic asset ID from path.
-		const size_t h0 = std::hash<std::string>{}(relativeSourcePath);
-		const size_t h1 = std::hash<std::string>{}(relativeSourcePath + std::to_string(static_cast<uint64>(typeID)));
-
-		const uint64 hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeID) * 0x9E3779B185EBCA87ull);
-		const uint64 lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeID) * 0xC2B2AE3D27D4EB4Full);
-
-		const AssetID id(hi, lo);
+		const AssetID id(typeID, sourcePath);
 
 		ASSERT(id, "Invalid AssetID.");
 		ASSERT(typeID != 0, "Invalid AssetTypeID.");

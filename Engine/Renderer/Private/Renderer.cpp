@@ -319,6 +319,7 @@ namespace shz
 					continue;
 
 				MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
+				inst->GetGraphicsPipelineDesc().pRenderPass = GetRenderPassOrNull(inst->GetRenderPass());
 				if (!inst)
 					continue;
 

@@ -13,6 +13,10 @@
 #include "Engine/ImGui/Public/ImGuiUtils.hpp"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
+#include "Engine/AssetRuntime/Pipeline/Public/AssimpImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/MaterialExporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/MaterialImporter.h"
+#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshExporter.h"
 #include "Engine/AssetRuntime/Pipeline/Public/StaticMeshImporter.h"
 #include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
 #include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
@@ -128,8 +132,16 @@ namespace shz
 	{
 		ASSERT(m_pAssetManager, "AssetManager is null.");
 
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshImporter{});
-		m_pAssetManager->RegisterLoader(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetImporter{});
+		m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetExporter{});
+
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
+		// (Texture exporter는 필요하면 추가)
+
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetImporter{});
+		m_pAssetManager->RegisterExporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetExporter{});
+
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<AssimpAsset>::TypeID, AssimpImporter{});
 	}
 
 	AssetRef<StaticMeshAsset> MaterialEditor::RegisterStaticMeshPath(const std::string& path)
@@ -162,16 +174,99 @@ namespace shz
 
 	std::string MaterialEditor::MakeTemplateKeyFromInputs() const
 	{
-		std::string k;
-		k.reserve(256);
+		auto trim = [](std::string s) -> std::string
+			{
+				auto isSpace = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+				while (!s.empty() && isSpace((unsigned char)s.front())) s.erase(s.begin());
+				while (!s.empty() && isSpace((unsigned char)s.back()))  s.pop_back();
+				return s;
+			};
 
-		k += "VS:";   k += m_ShaderVS;
-		k += "|VSE:"; k += m_VSEntry;
-		k += "|PS:";  k += m_ShaderPS;
-		k += "|PSE:"; k += m_PSEntry;
+		auto stripQuotes = [](std::string s) -> std::string
+			{
+				if (!s.empty() && (s.front() == '"' || s.front() == '\'')) s.erase(s.begin());
+				if (!s.empty() && (s.back() == '"' || s.back() == '\''))  s.pop_back();
+				return s;
+			};
 
-		return k;
+		auto normalizePathLike = [&](std::string s) -> std::string
+			{
+				s = trim(stripQuotes(std::move(s)));
+
+				// slash unify
+				for (char& c : s)
+				{
+					if (c == '\\') c = '/';
+				}
+
+				// remove redundant "./" segments (simple)
+				// NOTE: we keep absolute paths and drive letters as-is; this is just to stabilize relative forms.
+				while (s.size() >= 2 && s[0] == '.' && s[1] == '/')
+					s.erase(0, 2);
+
+				// to lower (Windows-like stability)
+				for (char& c : s)
+				{
+					if (c >= 'A' && c <= 'Z')
+						c = (char)(c - 'A' + 'a');
+				}
+
+				return s;
+			};
+
+		auto normalizeEntry = [&](std::string s) -> std::string
+			{
+				s = trim(stripQuotes(std::move(s)));
+
+				// entry names are usually case-sensitive in HLSL, but in practice you use "main".
+				// If you want strict behavior, remove this lowercasing.
+				for (char& c : s)
+				{
+					if (c >= 'A' && c <= 'Z')
+						c = (char)(c - 'A' + 'a');
+				}
+
+				return s;
+			};
+
+		const std::string vs = normalizePathLike(m_ShaderVS);
+		const std::string ps = normalizePathLike(m_ShaderPS);
+		const std::string vse = normalizeEntry(m_VSEntry);
+		const std::string pse = normalizeEntry(m_PSEntry);
+
+		// Canonical, stable string
+		std::string canonical;
+		canonical.reserve(vs.size() + ps.size() + vse.size() + pse.size() + 64);
+
+		canonical += "vs=";  canonical += vs;
+		canonical += "|vse="; canonical += vse;
+		canonical += "|ps=";  canonical += ps;
+		canonical += "|pse="; canonical += pse;
+
+		// Optional: append short stable hash for compactness / debugging
+		auto fnv1a64 = [](const char* data, size_t len) -> uint64
+			{
+				const uint64 FNV_OFFSET = 1469598103934665603ull;
+				const uint64 FNV_PRIME = 1099511628211ull;
+
+				uint64 h = FNV_OFFSET;
+				for (size_t i = 0; i < len; ++i)
+				{
+					h ^= (uint64)(uint8)data[i];
+					h *= FNV_PRIME;
+				}
+				return h;
+			};
+
+		const uint64 h = fnv1a64(canonical.data(), canonical.size());
+
+		char buf[32] = {};
+		std::snprintf(buf, sizeof(buf), "|h=%016llx", (unsigned long long)h);
+		canonical += buf;
+
+		return canonical;
 	}
+
 
 	MaterialTemplate* MaterialEditor::GetOrCreateTemplateFromInputs()
 	{
@@ -567,6 +662,37 @@ namespace shz
 
 		ImGui::Spacing();
 		ImGui::Separator();
+		ImGui::Text("Save Main Object");
+		ImGui::Separator();
+
+		InputTextStdString("Out Path", m_MainMeshSavePath);
+
+		static bool s_Force = false;
+		ImGui::Checkbox("Force", &s_Force);
+
+		if (ImGui::Button("Save Main as StaticMeshAsset"))
+		{
+			const std::string outPath = SanitizeFilePath(m_MainMeshSavePath);
+
+			std::string err;
+			const bool ok = SaveMainObject(
+				outPath,
+				s_Force ? EAssetSaveFlags::Force : EAssetSaveFlags::None,
+				&err);
+
+			if (!ok)
+			{
+				ASSERT(false, err.empty() ? "SaveMainObject failed." : err.c_str());
+			}
+			else
+			{
+				const bool importOk = ImportMainFromSavedPath(outPath);
+				ASSERT(importOk, "ImportMainFromSavedPath failed.");
+			}
+		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
 
 		if (LoadedMesh* main = GetMainMeshOrNull())
 		{
@@ -831,6 +957,21 @@ namespace shz
 
 	void MaterialEditor::SyncCacheFromInstance(MaterialUiCache& cache, const MaterialInstance& inst, const MaterialTemplate& tmpl)
 	{
+		// -----------------------------
+	   // ? Pipeline / options sync (추가)
+	   // -----------------------------
+		cache.CullMode = inst.GetCullMode();
+		cache.FrontCounterClockwise = inst.GetFrontCounterClockwise();
+
+		cache.DepthEnable = inst.GetDepthEnable();
+		cache.DepthWriteEnable = inst.GetDepthWriteEnable();
+		cache.DepthFunc = inst.GetDepthFunc();
+
+		cache.TextureBindingMode = inst.GetTextureBindingMode();
+
+		cache.LinearWrapSamplerName = inst.GetLinearWrapSamplerName();
+		cache.LinearWrapSamplerDesc = inst.GetLinearWrapSamplerDesc();
+
 		auto oldValues = std::move(cache.ValueBytes);
 		auto oldTextures = std::move(cache.TexturePaths);
 
@@ -932,10 +1073,8 @@ namespace shz
 		if (inst.GetPipelineType() == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
 			IRenderPass* rp = nullptr;
-			if (m_pRenderer && !cache.RenderPassName.empty())
-				rp = m_pRenderer->GetRenderPassOrNull(cache.RenderPassName);
 
-			inst.SetRenderPass(rp, cache.SubpassIndex);
+			inst.SetRenderPass(cache.RenderPassName);
 
 			inst.SetCullMode(cache.CullMode);
 			inst.SetFrontCounterClockwise(cache.FrontCounterClockwise);
@@ -1047,10 +1186,8 @@ namespace shz
 			cache.SubpassIndex = (uint32)std::max(0, subpass);
 
 		IRenderPass* rp = nullptr;
-		if (m_pRenderer && !cache.RenderPassName.empty())
-			rp = m_pRenderer->GetRenderPassOrNull(cache.RenderPassName);
 
-		inst.SetRenderPass(rp, cache.SubpassIndex);
+		inst.SetRenderPass(cache.RenderPassName);
 
 		{
 			int idx = 2;
@@ -1130,6 +1267,228 @@ namespace shz
 		inst.SetLinearWrapSamplerDesc(cache.LinearWrapSamplerDesc);
 	}
 
+	bool MaterialEditor::RebuildMainSaveObjectFromScene(std::string* outError)
+	{
+		if (outError) outError->clear();
+
+		if (!m_pRenderScene)
+		{
+			if (outError) *outError = "RenderScene is null.";
+			return false;
+		}
+
+		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
+		if (!obj)
+		{
+			if (outError) *outError = "Main RenderObject is null.";
+			return false;
+		}
+
+		// 베이스 CPU 메시(슬롯/지오메트리 포함)는 기존 save-cache에서 가져온다.
+		if (!m_pMainBuiltObjForSave)
+		{
+			if (outError) *outError = "Save base mesh is missing. Load Main first.";
+			return false;
+		}
+
+		const StaticMeshAsset* pBaseMesh = AssetObjectCast<StaticMeshAsset>(m_pMainBuiltObjForSave.get());
+		if (!pBaseMesh)
+		{
+			if (outError) *outError = "AssetObjectCast<StaticMeshAsset> failed.";
+			return false;
+		}
+
+		// 새 메시로 복사 후, MaterialSlot만 현재 인스턴스로 다시 굽기
+		StaticMeshAsset bakedMesh = *pBaseMesh;
+
+		MaterialTemplate* pTmpl = GetOrCreateTemplateFromInputs();
+		if (!pTmpl)
+		{
+			if (outError) *outError = "MaterialTemplate is null.";
+			return false;
+		}
+
+		const uint32 slotCount = (uint32)bakedMesh.GetMaterialSlots().size();
+		const uint32 instCount = (uint32)obj->Materials.size();
+		const uint32 count = (slotCount < instCount) ? slotCount : instCount;
+
+		// 각 슬롯에 대해: MaterialAsset.Clear() -> Options -> Values -> Resources
+		for (uint32 slot = 0; slot < count; ++slot)
+		{
+			MaterialAsset& dst = bakedMesh.GetMaterialSlot(slot);
+			const MaterialInstance& src = obj->Materials[slot];
+
+			dst.Clear();
+
+			// -------------------------
+			// Metadata (선택)
+			// -------------------------
+			dst.SetTemplateKey(MakeTemplateKeyFromInputs());
+			dst.SetRenderPassName(src.GetRenderPass());
+			// 이름이 필요하면 슬롯 이름/경로 등으로 세팅 가능:
+			// dst.SetName(...);
+
+			// -------------------------
+			// Options: MaterialInstance의 공통 옵션을 그대로 반영
+			// -------------------------
+			dst.SetCullMode(src.GetCullMode());
+			dst.SetFrontCounterClockwise(src.GetFrontCounterClockwise());
+
+			dst.SetDepthEnable(src.GetDepthEnable());
+			dst.SetDepthWriteEnable(src.GetDepthWriteEnable());
+			dst.SetDepthFunc(src.GetDepthFunc());
+
+			dst.SetTextureBindingMode(src.GetTextureBindingMode());
+
+			dst.SetLinearWrapSamplerName(src.GetLinearWrapSamplerName());
+			dst.SetLinearWrapSamplerDesc(src.GetLinearWrapSamplerDesc());
+
+			// TwoSided / CastShadow는 현재 MaterialInstance에 직접 getter가 없으니
+			// (RenderObject 또는 별도 UI 상태에서 굽고 싶다면 여기서 세팅)
+			// dst.SetTwoSided(...);
+			// dst.SetCastShadow(...);
+
+			// -------------------------
+			// Values: 템플릿 리플렉션을 기준으로 CBuffer blob에서 읽어 override 저장
+			// - MaterialAsset은 SetRaw로 override를 만들 수 있음
+			// -------------------------
+			for (uint32 i = 0; i < pTmpl->GetValueParamCount(); ++i)
+			{
+				const MaterialValueParamDesc& desc = pTmpl->GetValueParam(i);
+				if (desc.Name.empty())
+					continue;
+
+				uint32 sz = desc.ByteSize;
+				if (sz == 0)
+				{
+					switch (desc.Type)
+					{
+					case MATERIAL_VALUE_TYPE_FLOAT:    sz = sizeof(float); break;
+					case MATERIAL_VALUE_TYPE_FLOAT2:   sz = sizeof(float) * 2; break;
+					case MATERIAL_VALUE_TYPE_FLOAT3:   sz = sizeof(float) * 3; break;
+					case MATERIAL_VALUE_TYPE_FLOAT4:   sz = sizeof(float) * 4; break;
+
+					case MATERIAL_VALUE_TYPE_INT:      sz = sizeof(int32); break;
+					case MATERIAL_VALUE_TYPE_INT2:     sz = sizeof(int32) * 2; break;
+					case MATERIAL_VALUE_TYPE_INT3:     sz = sizeof(int32) * 3; break;
+					case MATERIAL_VALUE_TYPE_INT4:     sz = sizeof(int32) * 4; break;
+
+					case MATERIAL_VALUE_TYPE_UINT:     sz = sizeof(uint32); break;
+					case MATERIAL_VALUE_TYPE_UINT2:    sz = sizeof(uint32) * 2; break;
+					case MATERIAL_VALUE_TYPE_UINT3:    sz = sizeof(uint32) * 3; break;
+					case MATERIAL_VALUE_TYPE_UINT4:    sz = sizeof(uint32) * 4; break;
+
+					case MATERIAL_VALUE_TYPE_FLOAT4X4: sz = sizeof(float) * 16; break;
+					default:                           sz = 0; break;
+					}
+				}
+
+				if (sz == 0)
+					continue;
+
+				const uint32 cbIndex = desc.CBufferIndex;
+				if (cbIndex >= src.GetCBufferBlobCount())
+					continue;
+
+				const uint8* pCB = src.GetCBufferBlobData(cbIndex);
+				const uint32 cbSize = src.GetCBufferBlobSize(cbIndex);
+				if (!pCB || desc.ByteOffset + sz > cbSize)
+					continue;
+
+				dst.SetRaw(desc.Name.c_str(), desc.Type, pCB + desc.ByteOffset, sz);
+			}
+
+			// -------------------------
+			// Resources: MaterialInstance의 TextureBinding을 그대로 MaterialAsset에 저장
+			// -------------------------
+			for (uint32 t = 0; t < src.GetTextureBindingCount(); ++t)
+			{
+				const TextureBinding& tb = src.GetTextureBinding(t);
+				if (tb.Name.empty())
+					continue;
+
+				// 템플릿에서 이 리소스의 타입을 찾아 expectedType으로 전달 (정확도/검증용)
+				MATERIAL_RESOURCE_TYPE expectedType = MATERIAL_RESOURCE_TYPE_UNKNOWN;
+				{
+					for (uint32 r = 0; r < pTmpl->GetResourceCount(); ++r)
+					{
+						const MaterialResourceDesc& resDesc = pTmpl->GetResource(r);
+						if (resDesc.Name == tb.Name)
+						{
+							expectedType = resDesc.Type;
+							break;
+						}
+					}
+				}
+
+				if (!tb.TextureRef.has_value() || !tb.TextureRef.value())
+				{
+					// 현재 바인딩이 비어있으면, 저장에서도 제거 상태 유지
+					dst.RemoveResourceBinding(tb.Name.c_str());
+					continue;
+				}
+
+				dst.SetTextureAssetRef(
+					tb.Name.c_str(),
+					expectedType,
+					tb.TextureRef.value());
+				// SamplerOverride는 현재 MaterialInstance에 ISampler*만 있어서
+				// desc로 직렬화하려면 별도 매핑/캐시가 필요(지금은 패스)
+			}
+		}
+
+		// bakedMesh를 새 TypedAssetObject로 감싸서 Save-cache를 최신으로 교체
+		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(std::move(bakedMesh));
+		return true;
+	}
+
+	bool MaterialEditor::SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError)
+	{
+		if (outError) outError->clear();
+
+		ASSERT(m_pAssetManager, "AssetManager is null.");
+
+		if (outPath.empty())
+		{
+			if (outError) *outError = "Out path is empty.";
+			return false;
+		}
+
+		// ? Save 직전에 현재 UI/Scene 상태를 CPU mesh에 반영
+		{
+			std::string err;
+			if (!RebuildMainSaveObjectFromScene(&err))
+			{
+				if (outError) *outError = err;
+				return false;
+			}
+		}
+
+		StaticMeshAssetExporter exporter = {};
+
+		AssetMeta meta = {};
+		meta.TypeID = AssetTypeTraits<StaticMeshAsset>::TypeID;
+		meta.SourcePath = m_MainMeshPath;
+
+		std::string err;
+		const bool ok = exporter(
+			*m_pAssetManager,
+			meta,
+			m_pMainBuiltObjForSave.get(),
+			outPath,
+			&err);
+
+		if (!ok)
+		{
+			if (outError) *outError = err;
+			return false;
+		}
+
+		return true;
+	}
+
+
+
 	void MaterialEditor::DrawValueEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl)
 	{
 		ImGui::TextDisabled("Reflection-driven (Template -> Values).");
@@ -1146,11 +1505,11 @@ namespace shz
 		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
 
 		auto passFilter = [&](const std::string& name) -> bool
-		{
-			if (s_Filter[0] == 0)
-				return true;
-			return name.find(s_Filter) != std::string::npos;
-		};
+			{
+				if (s_Filter[0] == 0)
+					return true;
+				return name.find(s_Filter) != std::string::npos;
+			};
 
 		for (uint32 i = 0; i < count; ++i)
 		{
@@ -1331,11 +1690,11 @@ namespace shz
 		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
 
 		auto passFilter = [&](const std::string& name) -> bool
-		{
-			if (s_Filter[0] == 0)
-				return true;
-			return name.find(s_Filter) != std::string::npos;
-		};
+			{
+				if (s_Filter[0] == 0)
+					return true;
+				return name.find(s_Filter) != std::string::npos;
+			};
 
 		for (uint32 i = 0; i < count; ++i)
 		{
@@ -1430,6 +1789,22 @@ namespace shz
 	// Scene load
 	// ------------------------------------------------------------
 
+	static bool isAssimpSourceExt(const std::string& path)
+	{
+		std::string lower = path;
+		for (char& c : lower) c = (char)tolower(c);
+
+		auto endsWith = [&](const char* ext)
+			{
+				const size_t n = std::strlen(ext);
+				return lower.size() >= n && lower.compare(lower.size() - n, n, ext) == 0;
+			};
+
+		// Assimp inputs only
+		return endsWith(".fbx") || endsWith(".gltf") || endsWith(".glb") || endsWith(".obj");
+	}
+
+
 	bool MaterialEditor::LoadPreviewMesh(
 		EPreviewObject which,
 		const char* path,
@@ -1442,6 +1817,10 @@ namespace shz
 	{
 		if (!path || path[0] == '\0')
 			return false;
+
+		ASSERT(m_pAssetManager, "AssetManager is null.");
+		ASSERT(m_pRenderScene, "RenderScene is null.");
+		ASSERT(m_pRenderer, "Renderer is null.");
 
 		LoadedMesh* target = (which == EPreviewObject::Floor) ? &m_Floor : &m_Main;
 
@@ -1457,17 +1836,66 @@ namespace shz
 		entry.bCastShadow = bCastShadow;
 		entry.bAlphaMasked = bAlphaMasked;
 
-		entry.MeshRef = RegisterStaticMeshPath(entry.Path);
-		entry.MeshPtr = LoadStaticMeshBlocking(entry.MeshRef);
+		// ------------------------------------------------------------
+		// CPU mesh 준비 (Assimp source -> BuildStaticMeshAsset / else StaticMeshAsset load)
+		// ------------------------------------------------------------
+		std::unique_ptr<StaticMeshAsset> builtCpuMesh;
+		const StaticMeshAsset* pCpuMesh = nullptr;
 
-		const StaticMeshAsset* cpuMesh = entry.MeshPtr.Get();
-		if (!cpuMesh)
-			return false;
+		std::string err;
 
+		const std::string srcPath = entry.Path;
+		if (isAssimpSourceExt(srcPath))
+		{
+			// 1) load AssimpAsset
+			const AssetRef<AssimpAsset> assimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>(srcPath);
+			AssetPtr<AssimpAsset> assimpPtr = m_pAssetManager->LoadBlocking(assimpRef);
+
+			const AssimpAsset* pAssimp = assimpPtr.Get();
+			if (!pAssimp)
+				return false;
+
+			// 2) build StaticMeshAsset (temporary in-memory)
+			builtCpuMesh = std::make_unique<StaticMeshAsset>();
+
+			if (!BuildStaticMeshAsset(*pAssimp, builtCpuMesh.get(), m_MainImportSettings, &err, m_pAssetManager.get()))
+			{
+				ASSERT(false, err.empty() ? "BuildStaticMeshAsset failed." : err.c_str());
+				return false;
+			}
+
+			pCpuMesh = builtCpuMesh.get();
+
+			// (Save용) Main일 때만 보관
+			if (which == EPreviewObject::Main)
+				m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(*builtCpuMesh);
+		}
+		else
+		{
+			// 이미 내 포맷(.json+.bin 등)으로 저장된 StaticMeshAsset을 로드
+			entry.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshAsset>(srcPath);
+			entry.MeshPtr = m_pAssetManager->LoadBlocking(entry.MeshRef);
+
+			pCpuMesh = entry.MeshPtr.Get();
+			if (!pCpuMesh)
+				return false;
+
+			// Main이 내 포맷으로 로드된 케이스: Save는 그냥 “재저장”만 하면 되지만
+			// 지금 최소 구현은 exporter 직접 호출이라 CPU mesh 확보가 필요 -> 복사 보관
+			if (which == EPreviewObject::Main)
+			{
+				m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(*pCpuMesh);
+			}
+		}
+
+		ASSERT(pCpuMesh, "CPU mesh is null.");
+
+		// ------------------------------------------------------------
 		// Scale
+		// ------------------------------------------------------------
 		if (bUniformScale)
 		{
-			const float s = ComputeUniformScaleToFitUnitCube(cpuMesh->GetBounds(), 1.0f);
+			const float s = ComputeUniformScaleToFitUnitCube(pCpuMesh->GetBounds(), 1.0f);
 			entry.Scale = float3(s, s, s);
 		}
 		else
@@ -1478,14 +1906,16 @@ namespace shz
 		entry.Position = position;
 		entry.BaseRotation = rotation;
 
+		// ------------------------------------------------------------
 		// GPU mesh
-		entry.MeshHandle = m_pRenderer ? m_pRenderer->CreateStaticMesh(*cpuMesh) : Handle<StaticMeshRenderData>{};
+		// ------------------------------------------------------------
+		entry.MeshHandle = m_pRenderer->CreateStaticMesh(*pCpuMesh);
 		if (!entry.MeshHandle.IsValid())
 			return false;
 
-		// Materials (one per CPU slot)
-		std::vector<MaterialInstance> mats = BuildMaterialsForCpuMeshSlots(*cpuMesh);
-		if (mats.empty() && !cpuMesh->GetMaterialSlots().empty())
+		// Materials
+		std::vector<MaterialInstance> mats = BuildMaterialsForCpuMeshSlots(*pCpuMesh);
+		if (mats.empty() && !pCpuMesh->GetMaterialSlots().empty())
 			return false;
 
 		RenderScene::RenderObject obj = {};
@@ -1495,16 +1925,45 @@ namespace shz
 		obj.bCastShadow = entry.bCastShadow;
 		obj.bAlphaMasked = entry.bAlphaMasked;
 
-		entry.ObjectId = m_pRenderScene ? m_pRenderScene->AddObject(std::move(obj)) : Handle<RenderScene::RenderObject>{};
+		entry.ObjectId = m_pRenderScene->AddObject(std::move(obj));
 		if (!entry.ObjectId.IsValid())
 			return false;
 
-		// Fallback index (avoid relying on it!)
 		entry.SceneObjectIndex = (int32)m_pRenderScene->GetObjects().size() - 1;
 
 		*target = std::move(entry);
 		return true;
 	}
+
+	bool MaterialEditor::ImportMainFromSavedPath(const std::string& savedPath)
+	{
+		const std::string p = SanitizeFilePath(savedPath);
+		if (p.empty())
+			return false;
+
+		// UI에 보이는 경로도 갱신 (다음에 다시 로드하기 쉽게)
+		m_MainMeshPath = p;
+
+		// 지금 Main에 설정돼 있는 트랜스폼/옵션 그대로 사용해서 교체 로드
+		const bool ok = LoadPreviewMesh(
+			EPreviewObject::Main,
+			p.c_str(),
+			m_MainMeshPos,
+			m_MainMeshRot,
+			m_MainMeshScale,
+			m_MainMeshUniformScale,
+			m_MainMeshCastShadow,
+			m_MainMeshAlphaMasked);
+
+		if (ok)
+		{
+			m_SelectedMaterialSlot = 0;
+			m_MaterialUi[MakeSelectionKeyForMain(m_SelectedMaterialSlot)].Dirty = true;
+		}
+		return ok;
+	}
+
+
 
 	std::vector<MaterialInstance> MaterialEditor::BuildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh)
 	{
@@ -1516,64 +1975,41 @@ namespace shz
 
 		for (uint32 i = 0; i < (uint32)cpuMesh.GetMaterialSlots().size(); ++i)
 		{
+			const MaterialAsset& slot = cpuMesh.GetMaterialSlot(i);
+
 			MaterialInstance mat = {};
 			{
 				const bool ok = mat.Initialize(pTemplate, "MaterialEditor Instance");
 				ASSERT(ok, "MaterialInstance::Initialize failed.");
 			}
 
-			IRenderPass* renderPass = m_pRenderer ? m_pRenderer->GetRenderPassOrNull("GBuffer") : nullptr;
-
-			mat.SetRenderPass(renderPass, 0);
-			mat.SetCullMode(CULL_MODE_BACK);
-			mat.SetFrontCounterClockwise(true);
-			mat.SetDepthEnable(true);
-			mat.SetDepthWriteEnable(true);
-			mat.SetDepthFunc(COMPARISON_FUNC_LESS_EQUAL);
-			mat.SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC);
-
-			const MaterialAsset& slot = cpuMesh.GetMaterialSlot(i);
-
-			// Resources
-			for (uint32 resIndex = 0; resIndex < pTemplate->GetResourceCount(); ++resIndex)
+			// ------------------------------------------------------------
+			// 1) 슬롯에 저장된 '진짜' 머터리얼 데이터 적용
+			//    - Options (Cull/Depth/BindingMode/SamplerName/Desc, etc)
+			//    - ValueOverrides
+			//    - ResourceBindings(TextureRef + optional sampler override desc)
+			// ------------------------------------------------------------
 			{
-				const MaterialResourceDesc& resDesc = pTemplate->GetResource(resIndex);
-				const std::string& varName = resDesc.Name;
-
-				for (uint32 bindingIndex = 0; bindingIndex < slot.GetResourceBindingCount(); ++bindingIndex)
-				{
-					const MaterialAsset::ResourceBinding& b = slot.GetResourceBinding(bindingIndex);
-					if (b.Name == varName)
-					{
-						mat.SetTextureAssetRef(varName.c_str(), b.TextureRef);
-						break;
-					}
-				}
+				const bool ok = slot.ApplyToInstance(&mat);
+				ASSERT(ok, "MaterialAsset::ApplyToInstance failed.");
 			}
 
-			// Values
-			for (uint32 valIndex = 0; valIndex < pTemplate->GetValueParamCount(); ++valIndex)
-			{
-				const MaterialValueParamDesc& valDesc = pTemplate->GetValueParam(valIndex);
-				const std::string& varName = valDesc.Name;
+			// ------------------------------------------------------------
+			// 2) 에디터/파이프라인 정책 보정
+			//    - RenderPass는 Asset에 저장돼있지 않으니 기본값을 지정
+			//    - (slot 옵션으로 subpass를 저장하는 구조가 있다면 여기서 반영)
+			// ------------------------------------------------------------
+			mat.SetRenderPass(slot.GetRenderPassName());
 
-				for (uint32 bindingIndex = 0; bindingIndex < slot.GetValueOverrideCount(); ++bindingIndex)
-				{
-					const MaterialAsset::ValueOverride& ov = slot.GetValueOverride(bindingIndex);
-					if (ov.Name == varName)
-					{
-						mat.SetValue(varName.c_str(), ov.Data.data(), ov.Type);
-						break;
-					}
-				}
-			}
-
+			// RenderScene/MaterialRenderData가 재빌드하도록
 			mat.MarkAllDirty();
+
 			materials.push_back(std::move(mat));
 		}
 
 		return materials;
 	}
+
 
 	// ------------------------------------------------------------
 	// Utils

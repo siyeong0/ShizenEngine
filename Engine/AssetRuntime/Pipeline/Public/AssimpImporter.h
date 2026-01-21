@@ -4,7 +4,7 @@
 
 #include "Primitives/BasicTypes.h"
 
-#include "Engine/AssetRuntime/AssetManager/Public/AssetMeta.h" // <- 여기의 AssimpImportSettings 사용
+#include "Engine/AssetRuntime/AssetManager/Public/AssetMeta.h"
 #include "Engine/AssetRuntime/Common/AssetObject.h"
 
 #include "Engine/AssetRuntime/AssetData/Public/AssimpAsset.h"

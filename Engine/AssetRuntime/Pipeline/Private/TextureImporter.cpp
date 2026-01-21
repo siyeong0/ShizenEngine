@@ -88,7 +88,6 @@ namespace shz
 
 		if (!pLoader)
 		{
-			ASSERT(false, "TextureImporter: CreateTextureLoaderFromFile failed.");
 			setError(pOutError, "TextureImporter: Failed to create texture loader.");
 			return {};
 		}

@@ -9,6 +9,7 @@
 
 #include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
 #include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
+#include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
 namespace shz
 {
@@ -71,7 +72,9 @@ namespace shz
 		}
 
 		std::filesystem::path jsonPath(outPath);
-		std::filesystem::path binPath(jsonPath.replace_extension(".shzmesh.bin"));
+		ASSERT(jsonPath.extension() == ".json", "OutPath must have .shzmesh.json extension.");
+		std::filesystem::path binPath(jsonPath);
+		binPath.replace_extension(".bin");
 
 		std::filesystem::create_directories(std::filesystem::path(jsonPath).parent_path());
 
@@ -136,6 +139,7 @@ namespace shz
 			json mj;
 			mj["Name"] = m.GetName();
 			mj["TemplateKey"] = m.GetTemplateKey();
+			mj["RenderPassName"] = m.GetRenderPassName();
 
 			// Options (MaterialCommonOptions + extra)
 			const auto& o = m.GetOptions();
@@ -193,6 +197,7 @@ namespace shz
 				rj["StableID"] = r.StableID;
 				rj["Name"] = r.Name;
 				rj["Type"] = (int)r.Type;
+				rj["SourcePath"] = r.TextureRef.GetID().SourcePath;
 
 				const AssetID tid = r.TextureRef.GetID();
 				rj["TextureAssetID"] = json{ {"Hi", tid.Hi}, {"Lo", tid.Lo} };

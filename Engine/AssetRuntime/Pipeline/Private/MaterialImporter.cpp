@@ -72,6 +72,7 @@ namespace shz
 		MaterialAsset m;
 		m.SetName(j.value("Name", ""));
 		m.SetTemplateKey(j.value("TemplateKey", ""));
+		m.SetRenderPassName(j.value("RenderPassName", ""));
 
 		// Options
 		if (j.contains("Options"))

@@ -67,6 +67,9 @@ namespace shz
 		void SetTemplateKey(const std::string& key) { m_TemplateKey = key; }
 		const std::string& GetTemplateKey() const noexcept { return m_TemplateKey; }
 
+		void SetRenderPassName(const std::string& name) { m_RenderPassName = name; }
+		const std::string& GetRenderPassName() const noexcept { return m_RenderPassName; }
+
 		// Options
 		Options& GetOptions() noexcept { return m_Options; }
 		const Options& GetOptions() const noexcept { return m_Options; }
@@ -155,6 +158,7 @@ namespace shz
 	private:
 		std::string m_Name = {};
 		std::string m_TemplateKey = {};
+		std::string m_RenderPassName = "GBuffer";
 
 		Options m_Options = {};
 

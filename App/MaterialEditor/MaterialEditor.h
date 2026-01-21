@@ -136,6 +136,7 @@ namespace shz
 			bool bCastShadow,
 			bool bAlphaMasked);
 
+		bool ImportMainFromSavedPath(const std::string& savedPath);
 		std::vector<MaterialInstance> BuildMaterialsForCpuMeshSlots(const StaticMeshAsset& CpuMesh);
 
 		LoadedMesh* GetMainMeshOrNull() noexcept;
@@ -164,6 +165,8 @@ namespace shz
 		void DrawResourceEditor(MaterialInstance& Inst, MaterialUiCache& Cache, const MaterialTemplate& Tmpl);
 		void DrawPipelineEditor(MaterialInstance& Inst, MaterialUiCache& Cache);
 
+		bool RebuildMainSaveObjectFromScene(std::string* outError);
+		bool SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
 		// Utility
 		static std::string SanitizeFilePath(std::string S);
 
@@ -210,5 +213,11 @@ namespace shz
 		bool m_MainMeshUniformScale = true;
 		bool m_MainMeshCastShadow = true;
 		bool m_MainMeshAlphaMasked = false;
+
+		// Main save UI
+		std::string m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
+		AssimpImportSettings m_MainImportSettings = {};
+
+		std::unique_ptr<AssetObject> m_pMainBuiltObjForSave = nullptr;
 	};
 } // namespace shz

@@ -74,6 +74,7 @@ namespace shz
 
 		j["Name"] = mat->GetName();
 		j["TemplateKey"] = mat->GetTemplateKey();
+		j["RenderPassName"] = mat->GetRenderPassName();
 
 		const auto& o = mat->GetOptions();
 		j["Options"] = json{
@@ -112,7 +113,7 @@ namespace shz
 			rj["StableID"] = r.StableID;
 			rj["Name"] = r.Name;
 			rj["Type"] = (int)r.Type;
-			rj["TextureAssetID"] = json{ {"Hi", tid.Hi}, {"Lo", tid.Lo} };
+			rj["SourcePath"] = r.TextureRef.GetID().SourcePath;
 			rj["HasSamplerOverride"] = r.bHasSamplerOverride;
 			if (r.bHasSamplerOverride)
 				rj["SamplerOverrideDesc"] = samplerToJson(r.SamplerOverrideDesc);

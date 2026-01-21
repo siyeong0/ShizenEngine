@@ -55,12 +55,13 @@ namespace shz
 
 		const PipelineStateDesc& GetPSODesc() const { return m_PSODesc; }
 		const GraphicsPipelineDesc& GetGraphicsPipelineDesc() const { return m_GraphicsPipeline; }
+		PipelineStateDesc& GetPSODesc() { return m_PSODesc; }
+		GraphicsPipelineDesc& GetGraphicsPipelineDesc() { return m_GraphicsPipeline; }
 
 		// RenderPass policy:
 		// - RenderPass determines formats. So NumRenderTargets=0 and formats are UNKNOWN.
 		// - RenderPass can be null in editor; in that case PSO creation must be deferred.
-		void SetRenderPass(IRenderPass* pRenderPass, uint32 subpassIndex);
-
+		void SetRenderPass(const std::string& renderPassName);
 		void SetBlendMode(MATERIAL_BLEND_MODE mode);
 
 		// Raster / depth knobs
@@ -78,6 +79,7 @@ namespace shz
 		void SetLinearWrapSamplerName(const std::string& name);
 		void SetLinearWrapSamplerDesc(const SamplerDesc& desc);
 
+		const std::string& GetRenderPass() const noexcept { return m_RenderPassName; }
 		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_Options.BlendMode; }
 
 		CULL_MODE GetCullMode() const noexcept { return m_Options.CullMode; }
@@ -91,9 +93,6 @@ namespace shz
 
 		const char* GetLinearWrapSamplerName() const noexcept { return m_Options.LinearWrapSamplerName.c_str(); }
 		const SamplerDesc& GetLinearWrapSamplerDesc() const noexcept { return m_Options.LinearWrapSamplerDesc; }
-
-		IRenderPass* GetRenderPass() const noexcept { return m_pRenderPass; }
-		uint32 GetSubpassIndex() const noexcept { return m_SubpassIndex; }
 
 		// Resource layout (auto-generated from template reflection)
 		SHADER_RESOURCE_VARIABLE_TYPE GetDefaultVariableType() const { return m_DefaultVariableType; }
@@ -181,8 +180,7 @@ namespace shz
 		GraphicsPipelineDesc m_GraphicsPipeline = {};
 
 		// RenderPass selection
-		IRenderPass* m_pRenderPass = nullptr;
-		uint32 m_SubpassIndex = 0;
+		std::string m_RenderPassName = "GBuffer";
 
 		// Auto layout
 		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
