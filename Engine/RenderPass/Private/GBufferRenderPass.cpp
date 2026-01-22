@@ -56,6 +56,7 @@ namespace shz
 	void GBufferRenderPass::BeginFrame(RenderPassContext& ctx)
 	{
 		(void)ctx;
+		m_DrawCallCount = 0;
 	}
 
 	bool GBufferRenderPass::createTargets(RenderPassContext& ctx, uint32 width, uint32 height)
@@ -325,6 +326,10 @@ namespace shz
 #endif
 
 				pContext->DrawIndexed(dia);
+#ifdef PROFILING
+				++m_DrawCallCount;
+#endif
+
 			}
 
 			pContext->EndRenderPass();

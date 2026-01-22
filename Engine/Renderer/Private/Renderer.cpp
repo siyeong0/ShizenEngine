@@ -766,6 +766,19 @@ namespace shz
 		return m_pCache->DestroyStaticMeshRenderData(hMesh);
 	}
 
+	const std::unordered_map<std::string, uint64> Renderer::GetPassDrawCallCountTable() const
+	{
+		std::unordered_map<std::string, uint64> drawCallTable;
+		for (auto& passPair : m_Passes)
+		{
+			const std::string& name = passPair.first;
+			uint64 drawCallCount = passPair.second->GetDrawCallCount();
+
+			drawCallTable[name] = drawCallCount;
+		}
+		return drawCallTable;
+	}
+
 	void Renderer::uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex)
 	{
 		ASSERT(pCtx, "Context is null.");

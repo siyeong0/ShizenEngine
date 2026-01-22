@@ -79,6 +79,8 @@ namespace shz
 		ITextureView* GetDepthSRV() const noexcept { return m_PassCtx.pDepthSrv; }
 		ITextureView* GetShadowMapSRV() const noexcept { return m_PassCtx.pShadowMapSrv; }
 
+		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
+
 	private:
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
 		void wirePassOutputs();

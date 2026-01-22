@@ -48,6 +48,7 @@
 			<PreprocessorDefinitions>
 				PLATFORM_WIN32;
 				D3D12_SUPPORTED;
+				PROFILING;
 				NOMINMAX;
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>

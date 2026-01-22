@@ -344,6 +344,7 @@ namespace shz
 	void ShadowRenderPass::BeginFrame(RenderPassContext& ctx)
 	{
 		(void)ctx;
+		m_DrawCallCount = 0;
 	}
 
 	void ShadowRenderPass::Execute(RenderPassContext& ctx)
@@ -447,6 +448,9 @@ namespace shz
 #endif
 
 			pCtx->DrawIndexed(dia);
+#ifdef PROFILING
+			++m_DrawCallCount;
+#endif
 		}
 
 		pCtx->EndRenderPass();

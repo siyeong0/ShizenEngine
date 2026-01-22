@@ -1,7 +1,3 @@
-// ============================================================================
-// GrassViewer.cpp
-// ============================================================================
-
 #include "GrassViewer.h"
 
 #include <algorithm>
@@ -235,6 +231,9 @@ namespace shz
 
 	void GrassViewer::UpdateUI()
 	{
+		// ------------------------------------------------------------
+		// Settings window
+		// ------------------------------------------------------------
 		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -247,11 +246,38 @@ namespace shz
 			ImGui::TextDisabled("FPS: %.1f", ImGui::GetIO().Framerate);
 		}
 		ImGui::End();
+
+		// ------------------------------------------------------------
+		// Profiling window (Draw calls per pass)
+		// ------------------------------------------------------------
+		ImGui::SetNextWindowPos(ImVec2(10, 220), ImGuiCond_FirstUseEver);
+
+		if (ImGui::Begin("Profiling", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			// Renderer might be null during startup/shutdown
+			std::unordered_map<std::string, uint64> passDrawCallCountTable = {};
+			passDrawCallCountTable = m_pRenderer->GetPassDrawCallCountTable();
+
+			uint64 total = 0;
+			for (const auto& kv : passDrawCallCountTable)
+			{
+				total += kv.second;
+			}
+
+			ImGui::Text("Total Draw Calls: %llu", static_cast<unsigned long long>(total));
+			ImGui::Separator();
+
+			for (const auto& kv : passDrawCallCountTable)
+			{
+				ImGui::Text("%s: %llu", kv.first.c_str(), static_cast<unsigned long long>(kv.second));
+			}
+		}
+		ImGui::End();
 	}
 
 
 	// ------------------------------------------------------------
-	// Templates: fixed + cache
+	// Templates
 	// ------------------------------------------------------------
 
 	bool GrassViewer::buildInitialTemplateCache()

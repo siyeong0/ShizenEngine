@@ -28,5 +28,10 @@ namespace shz
 		virtual void OnResize(RenderPassContext& ctx, uint32 width, uint32 height) = 0;
 
 		virtual IRenderPass* GetRHIRenderPass() = 0;
+
+		uint64_t GetDrawCallCount() const { return m_DrawCallCount; }
+
+	protected:
+		uint64_t m_DrawCallCount = 0;;
 	};
 } // namespace shz
