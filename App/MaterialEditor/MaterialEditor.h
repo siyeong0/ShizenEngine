@@ -97,7 +97,7 @@ namespace shz
 			bool                DepthWriteEnable = true;
 			COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-			MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
+			MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
 
 			std::string LinearWrapSamplerName = "g_LinearWrapSampler";
 			SamplerDesc LinearWrapSamplerDesc =

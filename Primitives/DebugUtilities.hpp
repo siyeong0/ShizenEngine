@@ -58,6 +58,7 @@ namespace shz
         }                                                                   \
     } while (false)
 #else
+#define ASSERTION_FAILED(...)do{}while(false)
 #define ASSERT(...)do{}while(false)
 #endif
 

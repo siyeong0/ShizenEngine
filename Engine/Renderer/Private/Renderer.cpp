@@ -49,7 +49,7 @@ namespace shz
 
 		// Object table (StructuredBuffer<ObjectConstants>)
 		m_ObjectTableCapacity = 0;
-		if (!ensureObjectTableCapacity(256))
+		if (!ensureObjectTableCapacity(1024 * 1024))
 			return false;
 
 		m_pMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
@@ -227,7 +227,7 @@ namespace shz
 			const float3 lightForward = lightDirWs;
 			const float3 centerWs = view.CameraPosition;
 
-			const float shadowDistance = 20.0f;
+			const float shadowDistance = 50.0f;
 			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
 
 			float3 up = float3(0, 1, 0);
@@ -236,8 +236,13 @@ namespace shz
 
 			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
-			const float r = 25.0f;
-			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(-r, +r, -r, +r, -r, +r);
+			const float radiusXY = 25.0f;
+			const float nearZ = 0.1f; 
+			const float farZ = 200.0f; 
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+				-radiusXY, +radiusXY,
+				-radiusXY, +radiusXY,
+				nearZ, farZ);
 
 			lightViewProj = lightView * lightProj;
 
@@ -380,8 +385,8 @@ namespace shz
 			ctx->TransitionResourceStates(static_cast<uint32>(m_PreBarriers.size()), m_PreBarriers.data());
 
 		// ------------------------------------------------------------
-		// PASS 0: Shadow
-		// ------------------------------------------------------------
+// PASS 0: Shadow (commit batching)
+// ------------------------------------------------------------
 		{
 			StateTransitionDesc tr =
 			{
@@ -411,23 +416,29 @@ namespace shz
 
 			ctx->BeginRenderPass(rp);
 
+			// ------------------------------------------------------------
+			// Commit batching state
+			// ------------------------------------------------------------
+			IPipelineState* lastPSO = nullptr;
+			IShaderResourceBinding* lastSRB = nullptr;
+
 			const auto& objs = scene.GetObjects();
 			for (uint32 objIndex = 0; objIndex < static_cast<uint32>(objs.size()); ++objIndex)
 			{
 				const auto& obj = objs[objIndex];
 
 				if (!obj.bCastShadow)
-				{
 					continue;
-				}
 
-				if (!obj.bAlphaMasked)
+				IPipelineState* pso = obj.bAlphaMasked ? m_ShadowMaskedPSO.RawPtr() : m_ShadowPSO.RawPtr();
+				if (!pso)
+					continue;
+
+				if (lastPSO != pso)
 				{
-					ctx->SetPipelineState(m_ShadowPSO);
-				}
-				else
-				{
-					ctx->SetPipelineState(m_ShadowMaskedPSO);
+					lastPSO = pso;
+					lastSRB = nullptr; // PSO 바뀌면 SRB 커밋도 다시 해야 안전
+					ctx->SetPipelineState(pso);
 				}
 
 				const StaticMeshRenderData* mesh = m_pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
@@ -439,7 +450,8 @@ namespace shz
 
 				IBuffer* vbs[] = { mesh->GetVertexBuffer(), m_pObjectIndexVB.RawPtr() };
 				uint64 offs[] = { 0, 0 };
-				ctx->SetVertexBuffers(0, 2, vbs, offs,
+				ctx->SetVertexBuffers(
+					0, 2, vbs, offs,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
@@ -447,14 +459,20 @@ namespace shz
 
 				const VALUE_TYPE indexType = mesh->GetIndexType();
 
+				// ------------------------------------------------------------
+				// 섹션 루프: SRB를 "필요할 때만" Commit
+				// ------------------------------------------------------------
 				for (const auto& sec : mesh->GetSections())
 				{
 					if (sec.IndexCount == 0)
 						continue;
 
+					IShaderResourceBinding* srb = nullptr;
+
 					if (!obj.bAlphaMasked)
 					{
-						ctx->CommitShaderResources(m_ShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						// Opaque shadow는 항상 동일 SRB
+						srb = m_ShadowSRB.RawPtr();
 					}
 					else
 					{
@@ -468,10 +486,20 @@ namespace shz
 							continue;
 
 						MaterialRenderData* rd = m_pCache->TryGetMaterialRenderData(it->second);
-						if (!rd || !rd->GetPSO() || !rd->GetShadowSRB())
+						if (!rd)
 							continue;
 
-						ctx->CommitShaderResources(rd->GetShadowSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						// 주의: ShadowMaskedPSO는 전역 PSO고, 머터리얼 shadow SRB를 쓰는 구조
+						// rd->GetShadowSRB()가 실제로 ShadowMaskedPSO와 호환되는 SRB여야 함
+						srb = rd->GetShadowSRB();
+						if (!srb)
+							continue;
+					}
+
+					if (lastSRB != srb)
+					{
+						lastSRB = srb;
+						ctx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 					}
 
 					DrawIndexedAttribs dia = {};
@@ -499,6 +527,7 @@ namespace shz
 
 			setViewportFromView(view);
 		}
+
 
 		// ------------------------------------------------------------
 		// PASS 1: GBuffer (material batching)
@@ -1369,8 +1398,8 @@ namespace shz
 
 		ShaderResourceVariableDesc vars[] =
 		{
-			{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
-			{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC },
+			{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		psoCi.PSODesc.ResourceLayout.Variables = vars;
 		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);

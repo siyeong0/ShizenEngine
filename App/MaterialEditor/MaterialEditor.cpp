@@ -1253,7 +1253,8 @@ namespace shz
 		}
 
 		{
-			int mode = (cache.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
+			// int mode = (cache.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
+			int mode = 1; // TODO: Set MUTABLE now. Dynamic or Mutable
 			const char* items[] = { "DYNAMIC", "MUTABLE" };
 
 			if (ImGui::Combo("TexBinding", &mode, items, 2))

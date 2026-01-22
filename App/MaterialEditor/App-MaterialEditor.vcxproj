@@ -19,15 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AssetFacade.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MaterialEditor.cpp" />
-    <ClCompile Include="OrbitController.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AssetFacade.h" />
     <ClInclude Include="MaterialEditor.h" />
-    <ClInclude Include="OrbitController.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Engine\AssetRuntime\Engine-AssetRuntime.vcxproj">

@@ -281,7 +281,7 @@ namespace shz
 			ShaderResourceVariableDesc v = {};
 			v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex may require material constants depending on shader.
 			v.Name = MaterialTemplate::MATERIAL_CBUFFER_NAME;
-			v.Type = SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC;
+			v.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
 			m_Variables.push_back(v);
 		}
 

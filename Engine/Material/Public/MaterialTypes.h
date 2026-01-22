@@ -134,7 +134,7 @@ namespace shz
 		COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
 		// Texture resource variable type policy
-		MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC;
+		MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
 
 		// Fixed immutable sampler
 		std::string LinearWrapSamplerName = "g_LinearWrapSampler";

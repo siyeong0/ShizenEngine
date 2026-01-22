@@ -25,12 +25,12 @@ namespace shz
 		// Object indirection table (StructuredBuffer<ObjectConstants>).
 		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 		{
-			var->Set(m_pObjectTableSRV);
+			var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 		}
 
 		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_ObjectTable"))
 		{
-			var->Set(m_pObjectTableSRV);
+			var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 		}
 
 
