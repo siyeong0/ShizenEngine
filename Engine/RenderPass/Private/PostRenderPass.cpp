@@ -1,4 +1,3 @@
-// Engine/RenderPass/Private/PostRenderPass.cpp
 #include "pch.h"
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 #include "Engine/RenderPass/Public/RenderPassContext.h"
@@ -10,17 +9,6 @@
 
 namespace shz
 {
-	namespace
-	{
-		static void drawFullScreenTriangle(IDeviceContext* ctx)
-		{
-			DrawAttribs da = {};
-			da.NumVertices = 3;
-			da.Flags = DRAW_FLAG_VERIFY_ALL;
-			ctx->Draw(da);
-		}
-	}
-
 	bool PostRenderPass::Initialize(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
@@ -52,10 +40,8 @@ namespace shz
 		(void)buildFramebufferForCurrentBackBuffer(ctx);
 	}
 
-	void PostRenderPass::Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily)
+	void PostRenderPass::Execute(RenderPassContext& ctx)
 	{
-		(void)scene;
-
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(m_pRenderPass, "Post RenderPass is null.");
@@ -121,7 +107,12 @@ namespace shz
 		devCtx->BeginRenderPass(rp);
 		devCtx->SetPipelineState(m_pPSO);
 		devCtx->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-		drawFullScreenTriangle(devCtx);
+
+		DrawAttribs da = {};
+		da.NumVertices = 3;
+		da.Flags = DRAW_FLAG_VERIFY_ALL;
+		devCtx->Draw(da);
+
 		devCtx->EndRenderPass();
 	}
 

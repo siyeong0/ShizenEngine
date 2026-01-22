@@ -228,26 +228,29 @@ namespace shz
 		return true;
 	}
 
-	void GBufferRenderPass::Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily)
+	void GBufferRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pCache, "Cache is null.");
 
-		uint drawCallCount = 0;
-
-		(void)viewFamily;
-
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
-		// PASS 1: GBuffer (material batching) - 그대로
+		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("GBuffer");
+		if (packets.empty())
+		{
+			// 그래도 GBuffer/Depth는 클리어하고 싶다면 여기서 Clear만 수행해도 됨.
+			return;
+		}
+
+		// PASS 1: GBuffer
 		{
 			StateTransitionDesc tr[] =
 			{
-				{ m_pGBufferTex[0],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[1],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[2],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[3],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pDepthTex,        RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[1], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[2], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pCtx->TransitionResourceStates(_countof(tr), tr);
 
@@ -270,93 +273,79 @@ namespace shz
 
 			pCtx->BeginRenderPass(rp);
 
-			const MaterialRenderData* currMat = nullptr;
+			IPipelineState* lastPSO = nullptr;
+			IShaderResourceBinding* lastSRB = nullptr;
+			IBuffer* lastVB = nullptr;
+			IBuffer* lastIB = nullptr;
+			VALUE_TYPE               lastIndexType = VT_UNDEFINED; // Diligent VALUE_TYPE
+			bool                     boundObjectIndexVB = false;
 
-			const auto& objs = scene.GetObjects();
-
-			// ---- NEW: use visible indices ----
-			const uint32 visibleCount = ctx.VisibleObjectCount; // or (uint32)ctx.VisibleObjectIndices.size()
-			for (uint32 vis = 0; vis < visibleCount; ++vis)
+			for (const DrawPacket& pkt : packets)
 			{
-				const uint32 objIndex = ctx.VisibleObjectIndices[vis];
-				if (objIndex >= static_cast<uint32>(objs.size()))
+				if (!pkt.PSO || !pkt.SRB || !pkt.VertexBuffer || !pkt.IndexBuffer)
 					continue;
 
-				const auto& obj = objs[objIndex];
-
-				const StaticMeshRenderData* mesh = ctx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
-				if (!mesh || !mesh->IsValid())
-					continue;
-
-				// Upload per-draw instance index (still 1 instance per draw)
-				ctx.UploadObjectIndexInstance(objIndex);
-
-				IBuffer* vbs[] = { mesh->GetVertexBuffer(), ctx.pObjectIndexVB };
-				uint64 offs[] = { 0, 0 };
-				pCtx->SetVertexBuffers(
-					0, 2, vbs, offs,
-					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-					SET_VERTEX_BUFFERS_FLAG_RESET);
-
-				pCtx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-				const VALUE_TYPE indexType = mesh->GetIndexType();
-
-				for (const auto& sec : mesh->GetSections())
+				// 1) PSO / SRB batching
+				if (lastPSO != pkt.PSO)
 				{
-					if (sec.IndexCount == 0)
-						continue;
-
-					const MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
-					if (!inst)
-						continue;
-
-					const uint64 key = reinterpret_cast<uint64>(inst);
-					auto it = ctx.FrameMat.find(key);
-					if (it == ctx.FrameMat.end())
-						continue;
-
-					MaterialRenderData* rd = ctx.pCache->TryGetMaterialRenderData(it->second);
-					if (!rd || !rd->GetPSO() || !rd->GetSRB())
-						continue;
-
-					if (currMat != rd)
-					{
-						currMat = rd;
-
-						pCtx->SetPipelineState(rd->GetPSO());
-						pCtx->CommitShaderResources(rd->GetSRB(), RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					}
-
-					DrawIndexedAttribs dia = {};
-					dia.NumIndices = sec.IndexCount;
-					dia.IndexType = indexType;
-					dia.Flags = DRAW_FLAG_VERIFY_ALL;
-					dia.FirstIndexLocation = sec.FirstIndex;
-					dia.BaseVertex = static_cast<int32>(sec.BaseVertex);
-					dia.NumInstances = 1;
-
-					pCtx->DrawIndexed(dia);
-
-					drawCallCount++;
+					lastPSO = pkt.PSO;
+					lastSRB = nullptr;
+					pCtx->SetPipelineState(lastPSO);
 				}
+
+				if (lastSRB != pkt.SRB)
+				{
+					lastSRB = pkt.SRB;
+					pCtx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				}
+
+				// 2) VB/IB binding (two streams: mesh VB + objectIndex VB)
+				//    - objectIndex VB는 매 draw마다 MapDiscard하지만, binding 자체는 한번만 해도 OK.
+				if (lastVB != pkt.VertexBuffer || !boundObjectIndexVB)
+				{
+					IBuffer* vbs[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
+					uint64   offs[] = { 0, 0 };
+
+					pCtx->SetVertexBuffers(
+						0, 2, vbs, offs,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+						SET_VERTEX_BUFFERS_FLAG_RESET);
+
+					lastVB = pkt.VertexBuffer;
+					boundObjectIndexVB = true;
+				}
+
+				if (lastIB != pkt.IndexBuffer)
+				{
+					pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					lastIB = pkt.IndexBuffer;
+				}
+
+				// 3) per-draw instance index upload (ObjectTableSB fetch index)
+				ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
+
+				// 4) draw
+				DrawIndexedAttribs dia = pkt.DrawAttribs;
+				if (dia.Flags == DRAW_FLAG_NONE)
+					dia.Flags = DRAW_FLAG_VERIFY_ALL;
+
+				pCtx->DrawIndexed(dia);
 			}
 
-
-			std::cout << drawCallCount << std::endl;
 			pCtx->EndRenderPass();
 
+			// GBuffer outputs -> SRV
 			StateTransitionDesc tr2[] =
 			{
-				{ m_pGBufferTex[0],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[1],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[2],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[3],   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pDepthTex,        RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[1], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[2], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pCtx->TransitionResourceStates(_countof(tr2), tr2);
 		}
 	}
-
 
 	void GBufferRenderPass::EndFrame(RenderPassContext& ctx)
 	{

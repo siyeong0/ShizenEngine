@@ -21,7 +21,7 @@ namespace shz
 		virtual void Cleanup() = 0;
 
 		virtual void BeginFrame(RenderPassContext& ctx) = 0;
-		virtual void Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily) = 0;
+		virtual void Execute(RenderPassContext& ctx) = 0;
 		virtual void EndFrame(RenderPassContext& ctx) = 0;
 
 		virtual void ReleaseSwapChainBuffers(RenderPassContext& ctx) = 0;

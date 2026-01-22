@@ -303,11 +303,8 @@ namespace shz
 		}
 	}
 
-	void LightingRenderPass::Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily)
+	void LightingRenderPass::Execute(RenderPassContext& ctx)
 	{
-		(void)scene;
-		(void)viewFamily;
-
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 
 		bindInputs(ctx);

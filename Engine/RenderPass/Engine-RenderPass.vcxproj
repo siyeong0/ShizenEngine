@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\DrawPacket.h" />
     <ClInclude Include="Public\GBufferRenderPass.h" />
     <ClInclude Include="Public\LightingRenderPass.h" />
     <ClInclude Include="Public\PostRenderPass.h" />

@@ -15,6 +15,8 @@
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 
+#include "Engine/RenderPass/Public/DrawPacket.h"
+
 namespace shz
 {
 	namespace hlsl
@@ -202,16 +204,28 @@ namespace shz
 	{
 		ASSERT(m_PassCtx.pImmediateContext, "Context is invalid.");
 		ASSERT(!viewFamily.Views.empty(), "No view.");
+		ASSERT(m_PassCtx.pCache, "Cache is null.");
+		ASSERT(m_PassCtx.pMaterialStaticBinder, "MaterialStaticBinder is null.");
 
 		IDeviceContext* context = m_PassCtx.pImmediateContext;
 
+		// ------------------------------------------------------------
+		// 0) Reset per-frame (NEW)
+		// ------------------------------------------------------------
+		m_PassCtx.ResetFrame();
+
+		// ------------------------------------------------------------
+		// 0.5) Ensure object table capacity
+		// ------------------------------------------------------------
 		const uint32 objectCount = static_cast<uint32>(scene.GetObjects().size());
 		if (!ensureObjectTableCapacity(objectCount))
 		{
 			return;
 		}
 
-		// Upload object table
+		// ------------------------------------------------------------
+		// 0.75) Upload object table (world matrices) - 그대로
+		// ------------------------------------------------------------
 		{
 			ASSERT(context, "Context is null.");
 			ASSERT(m_pObjectTableSB, "Object table is null.");
@@ -236,280 +250,509 @@ namespace shz
 			}
 		}
 
+		// ------------------------------------------------------------
+		// 1) Update frame/shadow constants (old logic)
+		// ------------------------------------------------------------
+		IDeviceContext* ctx = m_PassCtx.pImmediateContext;
+		const View& view = viewFamily.Views[0];
+
+		Matrix4x4 lightViewProj = {};
 		{
-			ASSERT(m_PassCtx.pImmediateContext, "Context is invalid.");
-			ASSERT(m_PassCtx.pCache, "Cache is null.");
-			ASSERT(m_PassCtx.pMaterialStaticBinder, "MaterialStaticBinder is null.");
-			ASSERT(!viewFamily.Views.empty(), "No view.");
+			MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
-			IDeviceContext* ctx = m_PassCtx.pImmediateContext;
-			const View& view = viewFamily.Views[0];
+			cb->View = view.ViewMatrix;
+			cb->Proj = view.ProjMatrix;
+			cb->ViewProj = view.ViewMatrix * view.ProjMatrix;
+			cb->InvViewProj = cb->ViewProj.Inversed();
 
-			// ------------------------------------------------------------
-			// 1) Update frame/shadow constants (old logic 그대로)
-			// ------------------------------------------------------------
-			Matrix4x4 lightViewProj = {};
+			cb->CameraPosition = view.CameraPosition;
+
+			cb->ViewportSize =
 			{
-				MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				static_cast<float>(view.Viewport.right - view.Viewport.left),
+				static_cast<float>(view.Viewport.bottom - view.Viewport.top)
+			};
 
-				cb->View = view.ViewMatrix;
-				cb->Proj = view.ProjMatrix;
-				cb->ViewProj = view.ViewMatrix * view.ProjMatrix;
-				cb->InvViewProj = cb->ViewProj.Inversed();
+			cb->InvViewportSize =
+			{
+				1.f / cb->ViewportSize.x,
+				1.f / cb->ViewportSize.y
+			};
 
-				cb->CameraPosition = view.CameraPosition;
+			cb->NearPlane = view.NearPlane;
+			cb->FarPlane = view.FarPlane;
+			cb->DeltaTime = viewFamily.DeltaTime;
+			cb->CurrTime = viewFamily.CurrentTime;
 
-				cb->ViewportSize =
-				{
-					static_cast<float>(view.Viewport.right - view.Viewport.left),
-					static_cast<float>(view.Viewport.bottom - view.Viewport.top)
-				};
-
-				cb->InvViewportSize =
-				{
-					1.f / cb->ViewportSize.x,
-					1.f / cb->ViewportSize.y
-				};
-
-				cb->NearPlane = view.NearPlane;
-				cb->FarPlane = view.FarPlane;
-				cb->DeltaTime = viewFamily.DeltaTime;
-				cb->CurrTime = viewFamily.CurrentTime;
-
-				// -----------------------------
-				// Shadow (simple fixed ortho)
-				// -----------------------------
-				const RenderScene::LightObject* globalLight = nullptr;
-				for (const auto& l : scene.GetLights())
-				{
-					globalLight = &l;
-					break;
-				}
-
-				float3 lightDirWs = globalLight ? globalLight->Direction.Normalized() : float3(0, -1, 0);
-				float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
-				float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
-
-				const float3 lightForward = lightDirWs;
-				const float3 centerWs = view.CameraPosition;
-
-				const float shadowDistance = 50.0f;
-				const float3 lightPosWs = centerWs - lightForward * shadowDistance;
-
-				float3 up = float3(0, 1, 0);
-				if (Abs(Vector3::Dot(up, lightForward)) > 0.99f)
-					up = float3(0, 0, 1);
-
-				const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
-
-				const float radiusXY = 25.0f;
-				const float nearZ = 0.1f;
-				const float farZ = 200.0f;
-				const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
-					-radiusXY, +radiusXY,
-					-radiusXY, +radiusXY,
-					nearZ, farZ);
-
-				lightViewProj = lightView * lightProj;
-
-				cb->LightViewProj = lightViewProj;
-				cb->LightDirWS = lightDirWs;
-				cb->LightColor = lightColor;
-				cb->LightIntensity = lightIntensity;
-				cb->LightViewProj = lightViewProj;
+			// -----------------------------
+			// Shadow (simple fixed ortho)
+			// -----------------------------
+			const RenderScene::LightObject* globalLight = nullptr;
+			for (const auto& l : scene.GetLights())
+			{
+				globalLight = &l;
+				break;
 			}
 
+			float3 lightDirWs = globalLight ? globalLight->Direction.Normalized() : float3(0, -1, 0);
+			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
+			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
+
+			const float3 lightForward = lightDirWs;
+			const float3 centerWs = view.CameraPosition;
+
+			const float shadowDistance = 50.0f;
+			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
+
+			float3 up = float3(0, 1, 0);
+			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f)
+				up = float3(0, 0, 1);
+
+			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+
+			const float radiusXY = 25.0f;
+			const float nearZ = 0.1f;
+			const float farZ = 200.0f;
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+				-radiusXY, +radiusXY,
+				-radiusXY, +radiusXY,
+				nearZ, farZ);
+
+			lightViewProj = lightView * lightProj;
+
+			cb->LightViewProj = lightViewProj;
+			cb->LightDirWS = lightDirWs;
+			cb->LightColor = lightColor;
+			cb->LightIntensity = lightIntensity;
+			cb->LightViewProj = lightViewProj;
+		}
+
+		{
+			MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			cb->LightViewProj = lightViewProj;
+		}
+
+		// ------------------------------------------------------------
+		// 1.5) Build visibility (NEW) -> store in ctx
+		// ------------------------------------------------------------
+
+		// Build view frustum from current view-projection.
+		// D3D/Vulkan clip space: near = 0 -> bIsOpenGL = false
+		ViewFrustumExt viewFrustum = {};
+		{
+			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+			ExtractViewFrustumPlanesFromMatrix(viewProj, viewFrustum /*, bIsOpenGL=false*/);
+		}
+
+		// TODO(선택): shadow frustum / ortho volume 기반 visibility도 별도 계산 가능
+		// 일단은 main visibility만 만들고, shadow는 동일 리스트를 쓰거나 bCastShadow로 필터링.
+		m_PassCtx.Visible_Main.clear();
+		m_PassCtx.Visible_Shadow.clear();
+
+		{
+			const auto& objs = scene.GetObjects();
+			const uint32 count = static_cast<uint32>(objs.size());
+
+			m_PassCtx.Visible_Main.reserve(count);
+			m_PassCtx.Visible_Shadow.reserve(count);
+
+			for (uint32 i = 0; i < count; ++i)
 			{
-				MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
-				cb->LightViewProj = lightViewProj;
-			}
+				const RenderScene::RenderObject& obj = objs[i];
 
-			// ------------------------------------------------------------
-			// 1.5) Build view frustum + visibility list (NEW)
-			// ------------------------------------------------------------
-
-			// Build frustum from current view-projection.
-			// D3D/Vulkan clip space: near = 0 -> bIsOpenGL = false
-			ViewFrustumExt frustum = {};
-			{
-				const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-				ExtractViewFrustumPlanesFromMatrix(viewProj, frustum);
-			}
-
-			// Build visible object index list.
-			// NOTE: we keep ObjectTableSB full (all objects), and only update ObjectIndexVB.
-			m_PassCtx.VisibleObjectIndices.clear();
-			m_PassCtx.VisibleObjectCount = 0;
-
-			{
-				const auto& objs = scene.GetObjects();
-				const uint32 count = static_cast<uint32>(objs.size());
-				m_PassCtx.VisibleObjectIndices.reserve(count);
-
-				for (uint32 i = 0; i < count; ++i)
-				{
-					const RenderScene::RenderObject& obj = objs[i];
-
-					// Decide local bounds:
-					// Option A) object has local bounds already:
-					//   const BoundBox& localBounds = obj.LocalBounds;
-					//
-					// Option B) mesh has bounds (recommended):
-					const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
-					if (!mesh || !mesh->IsValid())
-						continue;
-
-					const Box& localBounds = mesh->GetLocalBounds(); // <-- 너 엔진 실제 함수명에 맞춰 바꿔줘
-
-					// Frustum test using (local AABB + world transform) => OBB => plane tests
-					if (IntersectsFrustum(frustum, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-					{
-						m_PassCtx.VisibleObjectIndices.push_back(i);
-					}
-				}
-
-				m_PassCtx.VisibleObjectCount = static_cast<uint32>(m_PassCtx.VisibleObjectIndices.size());
-			}
-
-			// ------------------------------------------------------------
-			// 2) Build FrameMat + Pre-Transition Barriers (old logic 그대로)
-			//    - RenderPass가 실행되기 전에 "필요한 RD 생성 + 리소스 상태" 준비
-			// ------------------------------------------------------------
-			m_PassCtx.ResetPerFrameCaches();
-
-			// ShadowMaskedPSO는 FrameMat 생성 시 전달되므로 ShadowRenderPass에서 꺼내온다.
-			IPipelineState* shadowMaskedPSO = nullptr;
-			{
-				auto it = m_Passes.find("Shadow");
-				if (it != m_Passes.end())
-				{
-					if (auto* shadowPass = static_cast<ShadowRenderPass*>(it->second.get()))
-					{
-						shadowMaskedPSO = shadowPass->GetShadowMaskedPSO();
-					}
-				}
-			}
-
-			// push common
-			m_PassCtx.PushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-			m_PassCtx.PushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-
-			// Object indirection resources
-			m_PassCtx.PushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			m_PassCtx.PushBarrier(m_pObjectIndexVB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-
-			// Env
-			m_PassCtx.PushBarrier(m_EnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			m_PassCtx.PushBarrier(m_EnvDiffuseTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			m_PassCtx.PushBarrier(m_EnvSpecularTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			m_PassCtx.PushBarrier(m_EnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-
-			// Error texture
-			if (m_PassCtx.pCache)
-			{
-				m_PassCtx.PushBarrier(m_PassCtx.pCache->GetErrorTexture().GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			}
-
-			// Per-object: mesh buffers + material RD creation + material resources barriers
-			for (RenderScene::RenderObject& obj : scene.GetObjects())
-			{
 				const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
 				if (!mesh || !mesh->IsValid())
 					continue;
 
-				m_PassCtx.PushBarrier(mesh->GetVertexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-				m_PassCtx.PushBarrier(mesh->GetIndexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+				const Box& localBounds = mesh->GetLocalBounds(); // TODO: 실제 함수명으로
+
+				// Frustum test (local bounds + world transform)
+				if (IntersectsFrustum(viewFrustum, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+				{
+					m_PassCtx.Visible_Main.push_back(i);
+
+					// Shadow visibility policy (임시): view에 보이는 것 중, shadow caster만
+					if (obj.bCastShadow)
+					{
+						m_PassCtx.Visible_Shadow.push_back(i);
+					}
+				}
+			}
+		}
+
+		// ------------------------------------------------------------
+		// 2) Build FrameMat + Barriers (MUST be BEFORE DrawPackets)
+		// ------------------------------------------------------------
+
+		// ShadowMaskedPSO는 FrameMat 생성 시 전달되므로 ShadowRenderPass에서 꺼내온다.
+		IPipelineState* shadowMaskedPSO = nullptr;
+		{
+			auto it = m_Passes.find("Shadow");
+			if (it != m_Passes.end())
+			{
+				if (auto* shadowPass = static_cast<ShadowRenderPass*>(it->second.get()))
+				{
+					shadowMaskedPSO = shadowPass->GetShadowMaskedPSO();
+				}
+			}
+		}
+
+		// push common barriers
+		m_PassCtx.PushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		m_PassCtx.PushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+
+		// Object indirection resources
+		m_PassCtx.PushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_pObjectIndexVB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+
+		// Env
+		m_PassCtx.PushBarrier(m_EnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_EnvDiffuseTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_EnvSpecularTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_EnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+
+		// Error texture
+		if (m_PassCtx.pCache)
+		{
+			m_PassCtx.PushBarrier(m_PassCtx.pCache->GetErrorTexture().GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		}
+
+		auto& objsMutable = scene.GetObjects(); // packets 만들 때도 필요
+
+		// Per-visible-object: mesh buffers + material RD creation + material resources barriers
+		for (uint32 objIndex : m_PassCtx.Visible_Main)
+		{
+			if (objIndex >= static_cast<uint32>(objsMutable.size()))
+				continue;
+
+			RenderScene::RenderObject& obj = objsMutable[objIndex];
+
+			const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+			if (!mesh || !mesh->IsValid())
+				continue;
+
+			m_PassCtx.PushBarrier(mesh->GetVertexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			m_PassCtx.PushBarrier(mesh->GetIndexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
+			for (const auto& sec : mesh->GetSections())
+			{
+				if (sec.IndexCount == 0)
+					continue;
+
+				const uint32 slot = sec.MaterialSlot;
+				if (slot >= static_cast<uint32>(obj.Materials.size()))
+					continue;
+
+				MaterialInstance* inst = &obj.Materials[slot];
+				if (!inst)
+					continue;
+
+				const MaterialTemplate* tmpl = inst->GetTemplate();
+				if (!tmpl)
+					continue;
+
+				const uint64 key = reinterpret_cast<uint64>(inst);
+
+				auto it = m_PassCtx.FrameMat.find(key);
+				if (it == m_PassCtx.FrameMat.end() || inst->IsPsoDirty())
+				{
+					IPipelineState* pShadowPsoForMat =
+						(obj.bCastShadow && obj.bAlphaMasked) ? shadowMaskedPSO : nullptr;
+
+					// NOTE: inst->GetRenderPass() must map to a registered pass
+					auto passIt = m_Passes.find(inst->GetRenderPass());
+					if (passIt == m_Passes.end() || !passIt->second)
+						continue;
+
+					inst->GetGraphicsPipelineDesc().pRenderPass = passIt->second.get()->GetRHIRenderPass();
+
+					Handle<MaterialRenderData> hRD =
+						m_PassCtx.pCache->GetOrCreateMaterialRenderData(
+							inst,
+							ctx,
+							m_PassCtx.pMaterialStaticBinder,
+							pShadowPsoForMat);
+
+					it = m_PassCtx.FrameMat.emplace(key, hRD).first;
+					m_PassCtx.FrameMatKeys.push_back(key);
+				}
+
+				MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(it->second);
+				if (!rd)
+					continue;
+
+				if (auto* matCB = rd->GetMaterialConstantsBuffer())
+					m_PassCtx.PushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+
+				for (auto texHandle : rd->GetBoundTextures())
+				{
+					auto texRD = m_PassCtx.pCache->TryGetTextureRenderData(texHandle);
+					if (texRD)
+						m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+				}
+			}
+		}
+
+		// Apply RD and re-push texture barriers
+		for (uint64 key : m_PassCtx.FrameMatKeys)
+		{
+			auto it = m_PassCtx.FrameMat.find(key);
+			if (it == m_PassCtx.FrameMat.end())
+				continue;
+
+			MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(it->second);
+			if (!rd)
+				continue;
+
+			MaterialInstance* inst = reinterpret_cast<MaterialInstance*>(key);
+			if (!inst)
+				continue;
+
+			rd->Apply(m_PassCtx.pCache, *inst, ctx);
+
+			for (const auto& hTexRD : rd->GetBoundTextures())
+			{
+				if (auto* texRD = m_PassCtx.pCache->TryGetTextureRenderData(hTexRD))
+					m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+			}
+		}
+
+		// Apply transitions once
+		if (!m_PassCtx.PreBarriers.empty())
+		{
+			ctx->TransitionResourceStates(
+				static_cast<uint32>(m_PassCtx.PreBarriers.size()),
+				m_PassCtx.PreBarriers.data());
+		}
+
+		// ------------------------------------------------------------
+		// 3) Build DrawPackets (AFTER FrameMat ready) + sort (NEW)
+		// ------------------------------------------------------------
+
+		// Example: build GBuffer packets (you can split per pass later)
+		{
+			auto& packets = m_PassCtx.GetPassPackets("GBuffer");
+			packets.clear();
+			packets.reserve(m_PassCtx.Visible_Main.size() * 2); // 섹션 고려 여유
+
+			for (uint32 objIndex : m_PassCtx.Visible_Main)
+			{
+				if (objIndex >= static_cast<uint32>(objsMutable.size()))
+					continue;
+
+				RenderScene::RenderObject& obj = objsMutable[objIndex];
+
+				const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+				if (!mesh || !mesh->IsValid())
+					continue;
+
+				IBuffer* vb = mesh->GetVertexBuffer();
+				IBuffer* ib = mesh->GetIndexBuffer();
+				if (!vb || !ib)
+					continue;
+
+				const VALUE_TYPE indexType = mesh->GetIndexType();
 
 				for (const auto& sec : mesh->GetSections())
 				{
 					if (sec.IndexCount == 0)
 						continue;
 
-					MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
+					const uint32 slot = sec.MaterialSlot;
+					if (slot >= static_cast<uint32>(obj.Materials.size()))
+						continue;
+
+					MaterialInstance* inst = &obj.Materials[slot];
 					if (!inst)
 						continue;
 
-					const MaterialTemplate* tmpl = inst->GetTemplate();
-					if (!tmpl)
-						continue;
-
 					const uint64 key = reinterpret_cast<uint64>(inst);
-
 					auto it = m_PassCtx.FrameMat.find(key);
-					if (it == m_PassCtx.FrameMat.end() || inst->IsPsoDirty())
-					{
-						IPipelineState* pShadowPsoForMat =
-							(obj.bCastShadow && obj.bAlphaMasked) ? shadowMaskedPSO : nullptr;
-
-						inst->GetGraphicsPipelineDesc().pRenderPass = m_Passes[inst->GetRenderPass()].get()->GetRHIRenderPass();
-						Handle<MaterialRenderData> hRD =
-							m_PassCtx.pCache->GetOrCreateMaterialRenderData(
-								inst,
-								ctx,
-								m_PassCtx.pMaterialStaticBinder,
-								pShadowPsoForMat);
-
-						it = m_PassCtx.FrameMat.emplace(key, hRD).first;
-						m_PassCtx.FrameMatKeys.push_back(key);
-					}
+					if (it == m_PassCtx.FrameMat.end())
+						continue;
 
 					MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(it->second);
-					if (!rd)
+					if (!rd || !rd->GetPSO() || !rd->GetSRB())
 						continue;
 
-					if (auto* matCB = rd->GetMaterialConstantsBuffer())
-						m_PassCtx.PushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+					DrawPacket pkt = {};
+					pkt.VertexBuffer = vb;
+					pkt.IndexBuffer = ib;
+					pkt.PSO = rd->GetPSO();
+					pkt.SRB = rd->GetSRB();
+					pkt.ObjectIndex = objIndex;
 
-					for (auto texHandle : rd->GetBoundTextures())
+					pkt.DrawAttribs = {};
+					pkt.DrawAttribs.NumIndices = sec.IndexCount;
+					pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+					pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+					pkt.DrawAttribs.IndexType = indexType;
+					pkt.DrawAttribs.NumInstances = 1;
+					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+					// Basic sort keys (stable enough)
 					{
-						auto texRD = m_PassCtx.pCache->TryGetTextureRenderData(texHandle);
-						if (texRD)
-							m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+						const uint64 psoKey = reinterpret_cast<uint64>(pkt.PSO);
+						const uint64 srbKey = reinterpret_cast<uint64>(pkt.SRB);
+						const uint64 vbKey = reinterpret_cast<uint64>(pkt.VertexBuffer);
+						const uint64 ibKey = reinterpret_cast<uint64>(pkt.IndexBuffer);
+
+						pkt.SortKey0 = (psoKey >> 4) ^ (srbKey << 1);
+						pkt.SortKey1 = (vbKey >> 4) ^ (ibKey << 1) ^ (static_cast<uint64>(sec.FirstIndex) << 16);
 					}
+
+					packets.push_back(pkt);
 				}
 			}
 
-			// Apply RD and re-push texture barriers exactly like old code
-			for (uint64 key : m_PassCtx.FrameMatKeys)
-			{
-				auto it = m_PassCtx.FrameMat.find(key);
-				if (it == m_PassCtx.FrameMat.end())
-					continue;
-
-				MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(it->second);
-				if (!rd)
-					continue;
-
-				MaterialInstance* inst = reinterpret_cast<MaterialInstance*>(key);
-				if (!inst)
-					continue;
-
-				rd->Apply(m_PassCtx.pCache, *inst, ctx);
-
-				for (const auto& hTexRD : rd->GetBoundTextures())
+			std::sort(packets.begin(), packets.end(),
+				[](const DrawPacket& a, const DrawPacket& b)
 				{
-					if (auto* texRD = m_PassCtx.pCache->TryGetTextureRenderData(hTexRD))
-						m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-				}
-			}
-
-			if (!m_PassCtx.PreBarriers.empty())
-			{
-				ctx->TransitionResourceStates(
-					static_cast<uint32>(m_PassCtx.PreBarriers.size()),
-					m_PassCtx.PreBarriers.data());
-			}
+					if (a.SortKey0 != b.SortKey0) return a.SortKey0 < b.SortKey0;
+					return a.SortKey1 < b.SortKey1;
+				});
 		}
 
+		// ------------------------------------------------------------
+// Build Shadow draw packets (NEW)
+// - ctx.Visible_Shadow 기반
+// - Opaque : ShadowPSO + ShadowSRB(공용)
+// - Masked : ShadowMaskedPSO + MaterialRenderData::GetShadowSRB()
+// ------------------------------------------------------------
+		{
+			auto itPass = m_Passes.find("Shadow");
+			ASSERT(itPass != m_Passes.end(), "Shadow pass not found.");
+
+			auto* shadowPass = static_cast<ShadowRenderPass*>(itPass->second.get());
+			ASSERT(shadowPass, "Shadow pass cast failed.");
+
+			IPipelineState* shadowPSO = shadowPass->GetShadowPSO();
+			IPipelineState* shadowMaskedPSO = shadowPass->GetShadowMaskedPSO();
+			IShaderResourceBinding* shadowSRB = shadowPass->GetOpaqueShadowSRB();
+
+			ASSERT(shadowPSO, "ShadowPSO is null.");
+			ASSERT(shadowMaskedPSO, "ShadowMaskedPSO is null.");
+			ASSERT(shadowSRB, "ShadowSRB is null.");
+
+			std::vector<DrawPacket>& packets = m_PassCtx.GetPassPackets("Shadow");
+			packets.clear();
+			packets.reserve(m_PassCtx.Visible_Shadow.size() * 2); // 섹션 고려
+
+			auto& objs = scene.GetObjects();
+
+			for (uint32 objIndex : m_PassCtx.Visible_Shadow)
+			{
+				if (objIndex >= static_cast<uint32>(objs.size()))
+					continue;
+
+				RenderScene::RenderObject& obj = objs[objIndex];
+
+				if (!obj.bCastShadow)
+					continue;
+
+				const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+				if (!mesh || !mesh->IsValid())
+					continue;
+
+				IBuffer* vb = mesh->GetVertexBuffer();
+				IBuffer* ib = mesh->GetIndexBuffer();
+				if (!vb || !ib)
+					continue;
+
+				const VALUE_TYPE indexType = mesh->GetIndexType();
+
+				for (const auto& sec : mesh->GetSections())
+				{
+					if (sec.IndexCount == 0)
+						continue;
+
+					DrawPacket pkt = {};
+					pkt.VertexBuffer = vb;
+					pkt.IndexBuffer = ib;
+					pkt.ObjectIndex = objIndex;
+
+					pkt.DrawAttribs = {};
+					pkt.DrawAttribs.NumIndices = sec.IndexCount;
+					pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+					pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+					pkt.DrawAttribs.IndexType = indexType;
+					pkt.DrawAttribs.NumInstances = 1;
+					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+					// --- choose PSO/SRB ---
+					if (!obj.bAlphaMasked)
+					{
+						// Opaque shadow caster
+						pkt.PSO = shadowPSO;
+						pkt.SRB = shadowSRB;
+					}
+					else
+					{
+						// Masked shadow caster (needs material-driven alpha texture)
+						const uint32 slot = sec.MaterialSlot;
+						if (slot >= static_cast<uint32>(obj.Materials.size()))
+							continue;
+
+						MaterialInstance* inst = &obj.Materials[slot];
+						if (!inst)
+							continue;
+
+						const uint64 key = reinterpret_cast<uint64>(inst);
+						auto itMat = m_PassCtx.FrameMat.find(key);
+						if (itMat == m_PassCtx.FrameMat.end())
+							continue;
+
+						MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(itMat->second);
+						if (!rd)
+							continue;
+
+						IShaderResourceBinding* maskedShadowSRB = rd->GetShadowSRB();
+						if (!maskedShadowSRB)
+							continue;
+
+						pkt.PSO = shadowMaskedPSO;
+						pkt.SRB = maskedShadowSRB;
+					}
+
+					if (!pkt.PSO || !pkt.SRB)
+						continue;
+
+					// --- sort keys (PSO -> SRB -> VB/IB -> draw range) ---
+					{
+						const uint64 psoKey = reinterpret_cast<uint64>(pkt.PSO);
+						const uint64 srbKey = reinterpret_cast<uint64>(pkt.SRB);
+						const uint64 vbKey = reinterpret_cast<uint64>(pkt.VertexBuffer);
+						const uint64 ibKey = reinterpret_cast<uint64>(pkt.IndexBuffer);
+
+						pkt.SortKey0 = (psoKey >> 4) ^ (srbKey << 1);
+						pkt.SortKey1 = (vbKey >> 4) ^ (ibKey << 1) ^ (static_cast<uint64>(sec.FirstIndex) << 16);
+					}
+
+					packets.push_back(pkt);
+				}
+			}
+
+			std::sort(packets.begin(), packets.end(),
+				[](const DrawPacket& a, const DrawPacket& b)
+				{
+					if (a.SortKey0 != b.SortKey0) return a.SortKey0 < b.SortKey0;
+					return a.SortKey1 < b.SortKey1;
+				});
+		}
+
+		// ------------------------------------------------------------
+		// 4) Execute passes (scene 전달 X)
+		// ------------------------------------------------------------
 		for (const std::string& name : m_PassOrder)
 		{
 			RenderPassBase* pass = m_Passes[name].get();
 			ASSERT(pass, "Pass is null.");
-			pass->Execute(m_PassCtx, scene, viewFamily);
+			pass->Execute(m_PassCtx);
 		}
 
 		wirePassOutputs();
 	}
+
 
 	void Renderer::EndFrame()
 	{

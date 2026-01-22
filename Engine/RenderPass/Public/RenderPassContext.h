@@ -1,6 +1,7 @@
 #pragma once
 #include <unordered_map>
 #include <vector>
+#include <string>
 
 #include "Primitives/BasicTypes.h"
 
@@ -17,6 +18,7 @@
 
 #include "Primitives/Handle.hpp"
 #include "Engine/Renderer/Public/MaterialRenderData.h"
+#include "Engine/RenderPass/Public/DrawPacket.h"
 
 namespace shz
 {
@@ -36,9 +38,21 @@ namespace shz
 		RenderResourceCache* pCache = nullptr;
 		RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 
-		uint32 VisibleObjectCount = 0;
-		std::vector<uint32> VisibleObjectIndices = {};
+		// ---------------------------------------------------------------------
+		// Visibility (computed by Renderer)
+		// ---------------------------------------------------------------------
+		std::vector<uint32> Visible_Main = {};
+		std::vector<uint32> Visible_Shadow = {};
 
+		// ---------------------------------------------------------------------
+		// Passº° DrawPackets (computed by Renderer)
+		//  - Key: pass name in m_PassOrder, e.g. "Shadow", "GBuffer", ...
+		// ---------------------------------------------------------------------
+		std::unordered_map<std::string, std::vector<DrawPacket>> DrawPacketsPerPass = {};
+
+		// ---------------------------------------------------------------------
+		// Common resources wired by Renderer
+		// ---------------------------------------------------------------------
 		IBuffer* pFrameCB = nullptr;
 		IBuffer* pShadowCB = nullptr;
 
@@ -63,14 +77,19 @@ namespace shz
 		ITextureView* pLightingSrv = nullptr;
 
 		// ---------------------------------------------------------------------
-		// Per-frame caches (moved from old Renderer members)
+		// Per-frame caches (RD/barriers)
 		// ---------------------------------------------------------------------
 		std::vector<StateTransitionDesc> PreBarriers = {};
 		std::unordered_map<uint64, Handle<MaterialRenderData>> FrameMat = {};
 		std::vector<uint64> FrameMatKeys = {};
 
-		void ResetPerFrameCaches()
+		void ResetFrame()
 		{
+			Visible_Main.clear();
+			Visible_Shadow.clear();
+
+			DrawPacketsPerPass.clear();
+
 			PreBarriers.clear();
 			FrameMat.clear();
 			FrameMatKeys.clear();
@@ -96,6 +115,16 @@ namespace shz
 
 			MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
 			*map = objectIndex;
+		}
+
+		std::vector<DrawPacket>& GetPassPackets(const std::string& passName)
+		{
+			auto it = DrawPacketsPerPass.find(passName);
+			if (it == DrawPacketsPerPass.end())
+			{
+				DrawPacketsPerPass.insert(std::make_pair(passName, std::vector<DrawPacket>{}));
+			}
+			return DrawPacketsPerPass[passName];
 		}
 	};
 } // namespace shz

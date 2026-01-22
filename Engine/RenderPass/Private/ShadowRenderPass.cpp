@@ -16,7 +16,7 @@ namespace shz
 {
 	namespace
 	{
-		static constexpr uint32 SHADOW_MAP_SIZE = 1024;
+		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16;
 
 		static void setViewportFromView(RenderPassContext& ctx, const View& view)
 		{
@@ -350,18 +350,14 @@ namespace shz
 		(void)ctx;
 	}
 
-	void ShadowRenderPass::Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily)
+	void ShadowRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pCache, "Cache is null.");
-
-		if (viewFamily.Views.empty())
-			return;
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
-		const View& view = viewFamily.Views[0];
+		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("Shadow");
 
-		// PASS 0: Shadow (commit batching) - 그대로
+		// 0) to DEPTH_WRITE (always)
 		{
 			StateTransitionDesc tr =
 			{
@@ -371,119 +367,92 @@ namespace shz
 				STATE_TRANSITION_FLAG_UPDATE_STATE
 			};
 			pCtx->TransitionResourceStates(1, &tr);
+		}
 
-			Viewport vp = {};
-			vp.Width = float(m_Width);
-			vp.Height = float(m_Height);
-			vp.MinDepth = 0.f;
-			vp.MaxDepth = 1.f;
-			pCtx->SetViewports(1, &vp, 0, 0);
+		Viewport vp = {};
+		vp.Width = float(m_Width);
+		vp.Height = float(m_Height);
+		vp.MinDepth = 0.f;
+		vp.MaxDepth = 1.f;
+		pCtx->SetViewports(1, &vp, 0, 0);
 
-			OptimizedClearValue clearVals[1] = {};
-			clearVals[0].DepthStencil.Depth = 1.f;
-			clearVals[0].DepthStencil.Stencil = 0;
+		OptimizedClearValue clearVals[1] = {};
+		clearVals[0].DepthStencil.Depth = 1.f;
+		clearVals[0].DepthStencil.Stencil = 0;
 
-			BeginRenderPassAttribs rp = {};
-			rp.pRenderPass = m_pRenderPass;
-			rp.pFramebuffer = m_pFramebuffer;
-			rp.ClearValueCount = 1;
-			rp.pClearValues = clearVals;
+		BeginRenderPassAttribs rp = {};
+		rp.pRenderPass = m_pRenderPass;
+		rp.pFramebuffer = m_pFramebuffer;
+		rp.ClearValueCount = 1;
+		rp.pClearValues = clearVals;
 
-			pCtx->BeginRenderPass(rp);
+		pCtx->BeginRenderPass(rp);
 
+		// 1) draw (only if packets exist)
+		if (!packets.empty())
+		{
 			IPipelineState* lastPSO = nullptr;
 			IShaderResourceBinding* lastSRB = nullptr;
+			IBuffer* lastVB = nullptr;
+			IBuffer* lastIB = nullptr;
+			bool                    boundObjectIndexVB = false;
 
-			const auto& objs = scene.GetObjects();
-			for (uint32 objIndex = 0; objIndex < static_cast<uint32>(objs.size()); ++objIndex)
+			for (const DrawPacket& pkt : packets)
 			{
-				auto& obj = objs[objIndex];
-
-				if (!obj.bCastShadow)
+				if (!pkt.PSO || !pkt.VertexBuffer || !pkt.IndexBuffer)
 					continue;
 
-				IPipelineState* pso = obj.bAlphaMasked ? m_pShadowMaskedPSO.RawPtr() : m_pShadowPSO.RawPtr();
-				if (!pso)
-					continue;
-
-				if (lastPSO != pso)
+				if (lastPSO != pkt.PSO)
 				{
-					lastPSO = pso;
+					lastPSO = pkt.PSO;
 					lastSRB = nullptr;
-					pCtx->SetPipelineState(pso);
+					pCtx->SetPipelineState(lastPSO);
 				}
 
-				const StaticMeshRenderData* mesh = ctx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
-				if (!mesh || !mesh->IsValid())
+				IShaderResourceBinding* srbToUse = pkt.SRB ? pkt.SRB : m_pSRB.RawPtr();
+				if (!srbToUse)
 					continue;
 
-				// Upload per-draw ObjectIndex (instance ATTRIB4)
-				ctx.UploadObjectIndexInstance(objIndex);
-
-				IBuffer* vbs[] = { mesh->GetVertexBuffer(), ctx.pObjectIndexVB };
-				uint64 offs[] = { 0, 0 };
-				pCtx->SetVertexBuffers(
-					0, 2, vbs, offs,
-					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-					SET_VERTEX_BUFFERS_FLAG_RESET);
-
-				pCtx->SetIndexBuffer(mesh->GetIndexBuffer(), 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-
-				const VALUE_TYPE indexType = mesh->GetIndexType();
-
-				for (const auto& sec : mesh->GetSections())
+				if (lastSRB != srbToUse)
 				{
-					if (sec.IndexCount == 0)
-						continue;
+					lastSRB = srbToUse;
 
-					IShaderResourceBinding* srb = nullptr;
-
-					if (!obj.bAlphaMasked)
-					{
-						srb = m_pSRB.RawPtr();
-					}
-					else
-					{
-						const MaterialInstance* inst = &obj.Materials[sec.MaterialSlot];
-						if (!inst)
-							continue;
-
-						const uint64 key = reinterpret_cast<uint64>(inst);
-						auto it = ctx.FrameMat.find(key);
-						if (it == ctx.FrameMat.end())
-							continue;
-
-						MaterialRenderData* rd = ctx.pCache->TryGetMaterialRenderData(it->second);
-						if (!rd)
-							continue;
-
-						// 주의: ShadowMaskedPSO는 전역 PSO고, 머터리얼 shadow SRB를 쓰는 구조
-						// rd->GetShadowSRB()가 실제로 ShadowMaskedPSO와 호환되는 SRB여야 함
-						srb = rd->GetShadowSRB();
-						if (!srb)
-							continue;
-					}
-
-					if (lastSRB != srb)
-					{
-						lastSRB = srb;
-						pCtx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					}
-
-					DrawIndexedAttribs dia = {};
-					dia.NumIndices = sec.IndexCount;
-					dia.IndexType = indexType;
-					dia.Flags = DRAW_FLAG_VERIFY_ALL;
-					dia.FirstIndexLocation = sec.FirstIndex;
-					dia.BaseVertex = static_cast<int32>(sec.BaseVertex);
-					dia.NumInstances = 1;
-
-					pCtx->DrawIndexed(dia);
+					// ★ 안전하게: shadow map 샘플하는 SRB들이 있다면 이쪽도 TRANSITION 권장
+					pCtx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 				}
+
+				if (lastVB != pkt.VertexBuffer || !boundObjectIndexVB)
+				{
+					IBuffer* vbs[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
+					uint64 offs[] = { 0, 0 };
+					pCtx->SetVertexBuffers(0, 2, vbs, offs,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+						SET_VERTEX_BUFFERS_FLAG_RESET);
+
+					lastVB = pkt.VertexBuffer;
+					boundObjectIndexVB = true;
+				}
+
+				if (lastIB != pkt.IndexBuffer)
+				{
+					pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					lastIB = pkt.IndexBuffer;
+				}
+
+				ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
+
+				DrawIndexedAttribs dia = pkt.DrawAttribs;
+				if (dia.Flags == DRAW_FLAG_NONE)
+					dia.Flags = DRAW_FLAG_VERIFY_ALL;
+
+				pCtx->DrawIndexed(dia);
 			}
+		}
 
-			pCtx->EndRenderPass();
+		pCtx->EndRenderPass();
 
+		// 2) to SHADER_RESOURCE (always)
+		{
 			StateTransitionDesc tr2 =
 			{
 				m_pShadowMap,
@@ -492,10 +461,9 @@ namespace shz
 				STATE_TRANSITION_FLAG_UPDATE_STATE
 			};
 			pCtx->TransitionResourceStates(1, &tr2);
-
-			setViewportFromView(ctx, view);
 		}
 	}
+
 
 	void ShadowRenderPass::EndFrame(RenderPassContext& ctx)
 	{

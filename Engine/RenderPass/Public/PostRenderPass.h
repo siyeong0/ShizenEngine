@@ -22,7 +22,7 @@ namespace shz
 		void Cleanup() override;
 
 		void BeginFrame(RenderPassContext& ctx) override;
-		void Execute(RenderPassContext& ctx, RenderScene& scene, const ViewFamily& viewFamily) override;
+		void Execute(RenderPassContext& ctx) override;
 		void EndFrame(RenderPassContext& ctx) override;
 
 		void ReleaseSwapChainBuffers(RenderPassContext& ctx) override;
