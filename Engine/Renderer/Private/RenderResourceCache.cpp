@@ -392,6 +392,7 @@ namespace shz
 		outRD.SetVertexCount(asset.GetVertexCount());
 		outRD.SetIndexCount(asset.GetIndexCount());
 		outRD.SetIndexType(asset.GetIndexType());
+		outRD.SetLocalBounds(asset.GetBounds());
 
 		std::vector<StaticMeshRenderData::Section> secs;
 		const auto& srcSecs = asset.GetSections();
@@ -404,6 +405,7 @@ namespace shz
 			d.IndexCount = s.IndexCount;
 			d.BaseVertex = s.BaseVertex;
 			d.MaterialSlot = s.MaterialSlot;
+			d.LocalBounds = s.LocalBounds;
 			secs.push_back(d);
 		}
 

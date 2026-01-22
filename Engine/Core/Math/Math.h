@@ -11,12 +11,14 @@
 #include "Engine/Core/Math/Public/Matrix4x3.h"
 #include "Engine/Core/Math/Public/Matrix4x4.h"
 
-#include "Engine/Core/Math/Public/Quaternion.h"
-
 #include "Engine/Core/Math/Public/XVector.h"
 #include "Engine/Core/Math/Public/XMatrix.h"
 
+#include "Engine/Core/Math/Public/Quaternion.h"
 #include "Engine/Core/Math/Public/Box.h"
+#include "Engine/Core/Math/Public/OrientedBox.h"
+#include "Engine/Core/Math/Public/Plane.h"
+#include "Engine/Core/Math/Public/ViewFrustum.h"
 
 #define MATH_STATIC_ASSERT_PODLIKE(T) \
     static_assert(std::is_standard_layout_v<T>,      #T " must have standard layout."); \
@@ -101,6 +103,25 @@ namespace shz
 			Result += Range;
 
 		return Result + Min;
+	}
+
+	template <bool bAllowTouch>
+	bool CheckBox2DBox2DOverlap(
+		const Vector2& Box0Min,
+		const Vector2& Box0Max,
+		const Vector2& Box1Min,
+		const Vector2& Box1Max)
+	{
+		ASSERT_EXPR(Box0Max.x >= Box0Min.x && Box0Max.y >= Box0Min.y &&
+			Box1Max.x >= Box1Min.x && Box1Max.y >= Box1Min.y);
+		if (bAllowTouch)
+		{
+			return !(Box0Min.x > Box1Max.x || Box1Min.x > Box0Max.x || Box0Min.y > Box1Max.y || Box1Min.y > Box0Max.y);
+		}
+		else
+		{
+			return !(Box0Min.x >= Box1Max.x || Box1Min.x >= Box0Max.x || Box0Min.y >= Box1Max.y || Box1Min.y >= Box0Max.y);
+		}
 	}
 
 } // namespace shz

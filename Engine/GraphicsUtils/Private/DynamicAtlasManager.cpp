@@ -28,7 +28,7 @@
 #include "pch.h"
 #include "DynamicAtlasManager.hpp"
 
-#include "Engine/Core/Math/AdvancedMath.h"
+#include "Engine/Core/Math/Math.h"
 
 namespace shz
 {

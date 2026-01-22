@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "Engine/Renderer/Public/Renderer.h"
 
+#include "Engine/Core/Math/Math.h"
 #include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
@@ -321,6 +322,53 @@ namespace shz
 			{
 				MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
 				cb->LightViewProj = lightViewProj;
+			}
+
+			// ------------------------------------------------------------
+			// 1.5) Build view frustum + visibility list (NEW)
+			// ------------------------------------------------------------
+
+			// Build frustum from current view-projection.
+			// D3D/Vulkan clip space: near = 0 -> bIsOpenGL = false
+			ViewFrustumExt frustum = {};
+			{
+				const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+				ExtractViewFrustumPlanesFromMatrix(viewProj, frustum);
+			}
+
+			// Build visible object index list.
+			// NOTE: we keep ObjectTableSB full (all objects), and only update ObjectIndexVB.
+			m_PassCtx.VisibleObjectIndices.clear();
+			m_PassCtx.VisibleObjectCount = 0;
+
+			{
+				const auto& objs = scene.GetObjects();
+				const uint32 count = static_cast<uint32>(objs.size());
+				m_PassCtx.VisibleObjectIndices.reserve(count);
+
+				for (uint32 i = 0; i < count; ++i)
+				{
+					const RenderScene::RenderObject& obj = objs[i];
+
+					// Decide local bounds:
+					// Option A) object has local bounds already:
+					//   const BoundBox& localBounds = obj.LocalBounds;
+					//
+					// Option B) mesh has bounds (recommended):
+					const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+					if (!mesh || !mesh->IsValid())
+						continue;
+
+					const Box& localBounds = mesh->GetLocalBounds(); // <-- 너 엔진 실제 함수명에 맞춰 바꿔줘
+
+					// Frustum test using (local AABB + world transform) => OBB => plane tests
+					if (IntersectsFrustum(frustum, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+					{
+						m_PassCtx.VisibleObjectIndices.push_back(i);
+					}
+				}
+
+				m_PassCtx.VisibleObjectCount = static_cast<uint32>(m_PassCtx.VisibleObjectIndices.size());
 			}
 
 			// ------------------------------------------------------------

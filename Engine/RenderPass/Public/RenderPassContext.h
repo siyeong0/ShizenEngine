@@ -36,6 +36,9 @@ namespace shz
 		RenderResourceCache* pCache = nullptr;
 		RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 
+		uint32 VisibleObjectCount = 0;
+		std::vector<uint32> VisibleObjectIndices = {};
+
 		IBuffer* pFrameCB = nullptr;
 		IBuffer* pShadowCB = nullptr;
 
