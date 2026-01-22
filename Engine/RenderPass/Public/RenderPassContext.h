@@ -41,8 +41,8 @@ namespace shz
 		// ---------------------------------------------------------------------
 		// Visibility (computed by Renderer)
 		// ---------------------------------------------------------------------
-		std::vector<uint32> Visible_Main = {};
-		std::vector<uint32> Visible_Shadow = {};
+		std::vector<uint32> VisibleObjectIndexMain = {};
+		std::vector<uint32> VisibleObjectIndexShadow = {};
 
 		// ---------------------------------------------------------------------
 		// Passº° DrawPackets (computed by Renderer)
@@ -85,8 +85,8 @@ namespace shz
 
 		void ResetFrame()
 		{
-			Visible_Main.clear();
-			Visible_Shadow.clear();
+			VisibleObjectIndexMain.clear();
+			VisibleObjectIndexShadow.clear();
 
 			DrawPacketsPerPass.clear();
 

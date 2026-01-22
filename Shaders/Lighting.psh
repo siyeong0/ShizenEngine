@@ -209,7 +209,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
     {
-        float bias = 0.001;
+        float bias = 0.0001;
         shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
     }
     else

@@ -21,14 +21,15 @@ namespace shz
 		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
 		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
 
-		if (!createTargets(ctx, w, h))
-			return false;
+		bool ok = false;
+		ok = createTargets(ctx, w, h);
+		ASSERT(ok, "Failed to create ligting pass render targets.");
 
-		if (!createPassObjects(ctx))
-			return false;
+		ok = createPassObjects(ctx);
+		ASSERT(ok, "Failed to create ligting pass objects.");
 
-		if (!createPSO(ctx))
-			return false;
+		ok = createPSO(ctx);
+		ASSERT(ok, "Failed to create ligting pass PSO.");
 
 		bindInputs(ctx);
 		return true;
@@ -59,12 +60,6 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
-
-		const bool needRebuild =
-			(m_Width != width) || (m_Height != height) || !m_pLightingTex;
-
-		if (!needRebuild)
-			return true;
 
 		m_Width = width;
 		m_Height = height;
@@ -105,7 +100,7 @@ namespace shz
 		const SwapChainDesc& scDesc = ctx.pSwapChain->GetDesc();
 
 		// RenderPass (once)
-		if (!m_pRenderPass)
+		if (m_pRenderPass == nullptr)
 		{
 			RenderPassAttachmentDesc attachments[1] = {};
 			attachments[0].Format = scDesc.ColorBufferFormat;
@@ -158,8 +153,8 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 
-		if (m_pPSO && m_pSRB)
-			return true;
+		ASSERT(!m_pPSO, "PSO is already initialized.");
+		ASSERT(!m_pSRB, "SRB is already initialized.");
 
 		GraphicsPipelineStateCreateInfo psoCi = {};
 		psoCi.PSODesc.Name = "Lighting PSO";
@@ -255,7 +250,9 @@ namespace shz
 
 		// Bind FRAME_CONSTANTS static
 		if (auto* var = m_pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+		{
 			var->Set(ctx.pFrameCB);
+		}
 
 		m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 		ASSERT(m_pSRB, "Lighting SRB create failed.");
@@ -265,41 +262,50 @@ namespace shz
 
 	void LightingRenderPass::bindInputs(RenderPassContext& ctx)
 	{
-		if (!m_pSRB)
-			return;
+		ASSERT(m_pSRB, "SRB is null");
 
-		auto setTex = [&](const char* name, ITextureView* srv)
+		auto bindGBufferTexture = [&](const char* name, ITextureView* srv)
 		{
 			if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, name))
+			{
 				var->Set(srv, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		};
 
-		setTex("g_GBuffer0", ctx.pGBufferSrv[0]);
-		setTex("g_GBuffer1", ctx.pGBufferSrv[1]);
-		setTex("g_GBuffer2", ctx.pGBufferSrv[2]);
-		setTex("g_GBuffer3", ctx.pGBufferSrv[3]);
-		setTex("g_GBufferDepth", ctx.pDepthSrv);
-		setTex("g_ShadowMap", ctx.pShadowMapSrv);
+		bindGBufferTexture("g_GBuffer0", ctx.pGBufferSrv[0]);
+		bindGBufferTexture("g_GBuffer1", ctx.pGBufferSrv[1]);
+		bindGBufferTexture("g_GBuffer2", ctx.pGBufferSrv[2]);
+		bindGBufferTexture("g_GBuffer3", ctx.pGBufferSrv[3]);
+		bindGBufferTexture("g_GBufferDepth", ctx.pDepthSrv);
+		bindGBufferTexture("g_ShadowMap", ctx.pShadowMapSrv);
 
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_EnvMapTex"))
 		{
 			if (ctx.pEnvTex)
+			{
 				var->Set(ctx.pEnvTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 		{
 			if (ctx.pEnvDiffuseTex)
+			{
 				var->Set(ctx.pEnvDiffuseTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
 		{
 			if (ctx.pEnvSpecularTex)
+			{
 				var->Set(ctx.pEnvSpecularTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
 		{
 			if (ctx.pEnvBrdfTex)
+			{
 				var->Set(ctx.pEnvBrdfTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 	}
 
@@ -311,7 +317,8 @@ namespace shz
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
-		// ensure inputs are current (wirePassOutputs가 매 프레임 뒤에 불려도, 안전하게 한 번 더)
+		// Ensure inputs are current. 
+		// TODO: ???
 		bindInputs(ctx);
 
 		auto drawFullScreenTriangle = [&]()
@@ -322,7 +329,6 @@ namespace shz
 			pCtx->Draw(da);
 		};
 
-		// PASS 2: Lighting - 그대로
 		{
 			StateTransitionDesc tr =
 			{
@@ -377,7 +383,9 @@ namespace shz
 		ASSERT(width != 0 && height != 0, "Invalid size.");
 
 		if (!createTargets(ctx, width, height))
-			return;
+		{
+			ASSERT(false, "Failed to recreate lighting pass render targets.");
+		}
 
 		(void)createPassObjects(ctx);
 	}

@@ -30,10 +30,7 @@ namespace shz
 
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
 	private:
-		bool createRenderPass(RenderPassContext& ctx);
 		bool buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx);
-		bool createPSO(RenderPassContext& ctx);
-		void bindInputs(RenderPassContext& ctx);
 
 	private:
 		RefCntAutoPtr<IRenderPass> m_pRenderPass;

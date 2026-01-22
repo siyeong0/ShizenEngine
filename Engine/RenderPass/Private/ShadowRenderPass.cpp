@@ -16,19 +16,7 @@ namespace shz
 {
 	namespace
 	{
-		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16;
-
-		static void setViewportFromView(RenderPassContext& ctx, const View& view)
-		{
-			Viewport vp = {};
-			vp.TopLeftX = float(view.Viewport.left);
-			vp.TopLeftY = float(view.Viewport.top);
-			vp.Width = float(view.Viewport.right - view.Viewport.left);
-			vp.Height = float(view.Viewport.bottom - view.Viewport.top);
-			vp.MinDepth = 0.f;
-			vp.MaxDepth = 1.f;
-			ctx.pImmediateContext->SetViewports(1, &vp, 0, 0);
-		}
+		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16; // TODO: Runtime setting?
 	}
 
 	bool ShadowRenderPass::Initialize(RenderPassContext& ctx)
@@ -211,10 +199,14 @@ namespace shz
 			// Bind statics (same as old)
 			{
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+				{
 					var->Set(ctx.pShadowCB);
+				}
 
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				{
 					var->Set(ctx.pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+				}
 			}
 
 			m_pSRB.Release();
@@ -317,10 +309,14 @@ namespace shz
 			// Bind statics (same as old)
 			{
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+				{
 					var->Set(ctx.pShadowCB);
+				}
 
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				{
 					var->Set(ctx.pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+				}
 			}
 		}
 
@@ -355,7 +351,12 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
+
 		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("Shadow");
+		if (packets.empty())
+		{
+			return;
+		}
 
 		// 0) to DEPTH_WRITE (always)
 		{
@@ -388,70 +389,68 @@ namespace shz
 
 		pCtx->BeginRenderPass(rp);
 
-		// 1) draw (only if packets exist)
-		if (!packets.empty())
+		IPipelineState* pLastPSO = nullptr;
+		IShaderResourceBinding* pLastSRB = nullptr;
+		IBuffer* pLastVB = nullptr;
+		IBuffer* pLastIB = nullptr;
+		bool bBoundObjectIndexVB = false;
+
+		for (const DrawPacket& pkt : packets)
 		{
-			IPipelineState* lastPSO = nullptr;
-			IShaderResourceBinding* lastSRB = nullptr;
-			IBuffer* lastVB = nullptr;
-			IBuffer* lastIB = nullptr;
-			bool                    boundObjectIndexVB = false;
+			ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
 
-			for (const DrawPacket& pkt : packets)
+			// Bind PSO
+			if (pLastPSO != pkt.PSO)
 			{
-				if (!pkt.PSO || !pkt.VertexBuffer || !pkt.IndexBuffer)
-					continue;
-
-				if (lastPSO != pkt.PSO)
-				{
-					lastPSO = pkt.PSO;
-					lastSRB = nullptr;
-					pCtx->SetPipelineState(lastPSO);
-				}
-
-				IShaderResourceBinding* srbToUse = pkt.SRB ? pkt.SRB : m_pSRB.RawPtr();
-				if (!srbToUse)
-					continue;
-
-				if (lastSRB != srbToUse)
-				{
-					lastSRB = srbToUse;
-
-					// ★ 안전하게: shadow map 샘플하는 SRB들이 있다면 이쪽도 TRANSITION 권장
-					pCtx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-				}
-
-				if (lastVB != pkt.VertexBuffer || !boundObjectIndexVB)
-				{
-					IBuffer* vbs[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
-					uint64 offs[] = { 0, 0 };
-					pCtx->SetVertexBuffers(0, 2, vbs, offs,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
-
-					lastVB = pkt.VertexBuffer;
-					boundObjectIndexVB = true;
-				}
-
-				if (lastIB != pkt.IndexBuffer)
-				{
-					pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					lastIB = pkt.IndexBuffer;
-				}
-
-				ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
-
-				DrawIndexedAttribs dia = pkt.DrawAttribs;
-				if (dia.Flags == DRAW_FLAG_NONE)
-					dia.Flags = DRAW_FLAG_VERIFY_ALL;
-
-				pCtx->DrawIndexed(dia);
+				pLastPSO = pkt.PSO;
+				pLastSRB = nullptr;
+				pCtx->SetPipelineState(pLastPSO);
 			}
+
+			IShaderResourceBinding* pSRB = pkt.SRB ? pkt.SRB : m_pSRB.RawPtr();
+			ASSERT(pSRB, "SRB is null.");
+
+			if (pLastSRB != pSRB)
+			{
+				pLastSRB = pSRB;
+
+				pCtx->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+			}
+
+			if (pLastVB != pkt.VertexBuffer || !bBoundObjectIndexVB)
+			{
+				IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
+				uint64 pOffsets[] = { 0, 0 };
+				pCtx->SetVertexBuffers(
+					0,
+					2, 
+					ppVertexBuffers, 
+					pOffsets,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
+
+				pLastVB = pkt.VertexBuffer;
+				bBoundObjectIndexVB = true;
+			}
+
+			if (pLastIB != pkt.IndexBuffer)
+			{
+				pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pLastIB = pkt.IndexBuffer;
+			}
+
+			ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
+
+			DrawIndexedAttribs dia = pkt.DrawAttribs;
+#ifdef SHZ_DEBUG
+			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
+#endif
+
+			pCtx->DrawIndexed(dia);
 		}
 
 		pCtx->EndRenderPass();
 
-		// 2) to SHADER_RESOURCE (always)
 		{
 			StateTransitionDesc tr2 =
 			{

@@ -80,7 +80,6 @@ namespace shz
 		ITextureView* GetShadowMapSRV() const noexcept { return m_PassCtx.pShadowMapSrv; }
 
 	private:
-		bool ensureObjectTableCapacity(uint32 objectCount);
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
 		void wirePassOutputs();
 		void addPass(std::unique_ptr<RenderPassBase> pass);
@@ -104,7 +103,6 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
 		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
-		uint32 m_ObjectTableCapacity = 0;
 
 		RefCntAutoPtr<ITexture> m_EnvTex;
 		RefCntAutoPtr<ITexture> m_EnvDiffuseTex;

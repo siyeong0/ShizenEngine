@@ -22,11 +22,13 @@ namespace shz
 		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
 		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
 
-		if (!createTargets(ctx, w, h))
-			return false;
+		bool ok = false;
 
-		if (!createPassObjects(ctx))
-			return false;
+		ok = createTargets(ctx, w, h);
+		ASSERT(ok, "Failed to create g-buffer render targets.");
+
+		ok = createPassObjects(ctx);
+		ASSERT(ok, "Failed to create g-buffer pass objects.");
 
 		return true;
 	}
@@ -61,18 +63,10 @@ namespace shz
 		IRenderDevice* device = ctx.pDevice;
 		ASSERT(device, "Device is null.");
 
-		const bool needRebuild =
-			(m_Width != width) || (m_Height != height) ||
-			!m_pGBufferTex[0] || !m_pGBufferTex[1] || !m_pGBufferTex[2] || !m_pGBufferTex[3] ||
-			!m_pDepthTex;
-
-		if (!needRebuild)
-			return true;
-
 		m_Width = width;
 		m_Height = height;
 
-		auto createRtTexture2d = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name,
+		auto createRTTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name,
 			RefCntAutoPtr<ITexture>& outTex, ITextureView*& outRtv, ITextureView*& outSrv)
 		{
 			TextureDesc td = {};
@@ -99,10 +93,10 @@ namespace shz
 		};
 
 		// same formats as old
-		createRtTexture2d(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_pGBufferTex[0], m_pGBufferRTV[0], m_pGBufferSRV[0]);
-		createRtTexture2d(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_pGBufferTex[1], m_pGBufferRTV[1], m_pGBufferSRV[1]);
-		createRtTexture2d(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO", m_pGBufferTex[2], m_pGBufferRTV[2], m_pGBufferSRV[2]);
-		createRtTexture2d(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_pGBufferTex[3], m_pGBufferRTV[3], m_pGBufferSRV[3]);
+		createRTTexture(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_pGBufferTex[0], m_pGBufferRTV[0], m_pGBufferSRV[0]);
+		createRTTexture(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_pGBufferTex[1], m_pGBufferRTV[1], m_pGBufferSRV[1]);
+		createRTTexture(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO", m_pGBufferTex[2], m_pGBufferRTV[2], m_pGBufferSRV[2]);
+		createRTTexture(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_pGBufferTex[3], m_pGBufferRTV[3], m_pGBufferSRV[3]);
 
 		// Depth
 		{
@@ -233,16 +227,14 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pCache, "Cache is null.");
 
-		IDeviceContext* pCtx = ctx.pImmediateContext;
+		IDeviceContext* pContext = ctx.pImmediateContext;
 
 		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("GBuffer");
 		if (packets.empty())
 		{
-			// 그래도 GBuffer/Depth는 클리어하고 싶다면 여기서 Clear만 수행해도 됨.
 			return;
 		}
 
-		// PASS 1: GBuffer
 		{
 			StateTransitionDesc tr[] =
 			{
@@ -252,7 +244,7 @@ namespace shz
 				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
-			pCtx->TransitionResourceStates(_countof(tr), tr);
+			pContext->TransitionResourceStates(_countof(tr), tr);
 
 			OptimizedClearValue clearVals[5] = {};
 			for (int i = 0; i < 4; ++i)
@@ -271,68 +263,71 @@ namespace shz
 			rp.ClearValueCount = 5;
 			rp.pClearValues = clearVals;
 
-			pCtx->BeginRenderPass(rp);
+			pContext->BeginRenderPass(rp);
 
-			IPipelineState* lastPSO = nullptr;
-			IShaderResourceBinding* lastSRB = nullptr;
-			IBuffer* lastVB = nullptr;
-			IBuffer* lastIB = nullptr;
-			VALUE_TYPE               lastIndexType = VT_UNDEFINED; // Diligent VALUE_TYPE
-			bool                     boundObjectIndexVB = false;
+			IPipelineState* pLastPSO = nullptr;
+			IShaderResourceBinding* pLastSRB = nullptr;
+			IBuffer* pLastVB = nullptr;
+			IBuffer* pLastIB = nullptr;
+			VALUE_TYPE lastIndexType = VT_UNDEFINED; // Diligent VALUE_TYPE
+			bool bBoundObjectIndexVB = false;
 
 			for (const DrawPacket& pkt : packets)
 			{
-				if (!pkt.PSO || !pkt.SRB || !pkt.VertexBuffer || !pkt.IndexBuffer)
-					continue;
+				ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
 
-				// 1) PSO / SRB batching
-				if (lastPSO != pkt.PSO)
+				// Bind PSO
+				if (pLastPSO != pkt.PSO)
 				{
-					lastPSO = pkt.PSO;
-					lastSRB = nullptr;
-					pCtx->SetPipelineState(lastPSO);
+					pLastPSO = pkt.PSO;
+					pLastSRB = nullptr;
+					pContext->SetPipelineState(pLastPSO);
 				}
 
-				if (lastSRB != pkt.SRB)
+				// Bind SRB
+				if (pLastSRB != pkt.SRB)
 				{
-					lastSRB = pkt.SRB;
-					pCtx->CommitShaderResources(lastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					pLastSRB = pkt.SRB;
+					pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 				}
 
-				// 2) VB/IB binding (two streams: mesh VB + objectIndex VB)
-				//    - objectIndex VB는 매 draw마다 MapDiscard하지만, binding 자체는 한번만 해도 OK.
-				if (lastVB != pkt.VertexBuffer || !boundObjectIndexVB)
+				// VB/IB binding (Two streams: mesh VB + objectIndex VB)
+				if (pLastVB != pkt.VertexBuffer || !bBoundObjectIndexVB)
 				{
-					IBuffer* vbs[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
-					uint64   offs[] = { 0, 0 };
+					IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
+					uint64 pOffsets[] = { 0, 0 };
 
-					pCtx->SetVertexBuffers(
-						0, 2, vbs, offs,
+					pContext->SetVertexBuffers(
+						0,
+						2,
+						ppVertexBuffers,
+						pOffsets,
 						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 						SET_VERTEX_BUFFERS_FLAG_RESET);
 
-					lastVB = pkt.VertexBuffer;
-					boundObjectIndexVB = true;
+					pLastVB = pkt.VertexBuffer;
+					bBoundObjectIndexVB = true;
 				}
 
-				if (lastIB != pkt.IndexBuffer)
+				if (pLastIB != pkt.IndexBuffer)
 				{
-					pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					lastIB = pkt.IndexBuffer;
+					pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					pLastIB = pkt.IndexBuffer;
 				}
 
-				// 3) per-draw instance index upload (ObjectTableSB fetch index)
+				// Per-draw instance index upload (ObjectTableSB fetch index)
 				ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
 
-				// 4) draw
+				// Draw
 				DrawIndexedAttribs dia = pkt.DrawAttribs;
-				if (dia.Flags == DRAW_FLAG_NONE)
-					dia.Flags = DRAW_FLAG_VERIFY_ALL;
+#ifdef SHZ_DEBUG
+				if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
+#endif
 
-				pCtx->DrawIndexed(dia);
+				pContext->DrawIndexed(dia);
 			}
 
-			pCtx->EndRenderPass();
+			pContext->EndRenderPass();
 
 			// GBuffer outputs -> SRV
 			StateTransitionDesc tr2[] =
@@ -343,7 +338,7 @@ namespace shz
 				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
-			pCtx->TransitionResourceStates(_countof(tr2), tr2);
+			pContext->TransitionResourceStates(_countof(tr2), tr2);
 		}
 	}
 
