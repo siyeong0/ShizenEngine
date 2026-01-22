@@ -359,7 +359,9 @@ namespace shz
 		ASSERT(width != 0 && height != 0, "Invalid size.");
 
 		if (!createTargets(ctx, width, height))
-			return;
+		{
+			ASSERT(false, "Failed to recreate render targets.");
+		}
 
 		// FB rebind
 		(void)createPassObjects(ctx);

@@ -310,6 +310,8 @@ namespace shz
 
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 
+		bindInputs(ctx);
+
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
 		// ensure inputs are current (wirePassOutputs가 매 프레임 뒤에 불려도, 안전하게 한 번 더)
@@ -381,6 +383,5 @@ namespace shz
 			return;
 
 		(void)createPassObjects(ctx);
-		bindInputs(ctx);
 	}
 } // namespace shz

@@ -95,7 +95,7 @@ namespace shz
 
 		// Hard-coded objects
 		{
-			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Terrain.shzmesh.json";
+			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Ground.shzmesh.json";
 			(void)loadStaticMeshObject(
 				m_Floor,
 				floorPath,
@@ -112,10 +112,17 @@ namespace shz
 			// "C:/Dev/ShizenEngine/Assets/Exported/Grass01.shzmesh.json",
 		};
 
+#ifdef SHZ_DEBUG
+		const int32 countX = 10;
+		const int32 countZ = 10;
+		const float spacing = 0.35f;
+		const float3 origin = { -5.0f, -0.1f, 2.0f };
+#else
 		const int32 countX = 100;
 		const int32 countZ = 100;
 		const float spacing = 0.35f;
 		const float3 origin = { -10.0f, -0.1f, -10.0f };
+#endif
 
 		m_Grasses.clear();
 		m_Grasses.reserve((size_t)countX * (size_t)countZ);
