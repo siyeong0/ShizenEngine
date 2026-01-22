@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <string>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -30,6 +31,9 @@
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
+
+#include "Engine/RenderPass/Public/RenderPassContext.h"
+#include "Engine/RenderPass/Public/RenderPassBase.h"
 
 namespace shz
 {
@@ -70,148 +74,45 @@ namespace shz
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
-		IRenderPass* GetRenderPassOrNull(const std::string& passName) const
-		{
-			// TODO: unordered map
-			if (passName == "GBuffer")
-			{
-				return m_RenderPassGBuffer;
-			}
-
-			return nullptr;
-		}
-
-		ITextureView* GetLightingSRV() const noexcept { return m_LightingSRV.RawPtr(); }
-		ITextureView* GetGBufferSRV(uint32 index) const noexcept
-		{
-			if (index >= NUM_GBUFFERS) return nullptr;
-			return m_GBufferSrv[index].RawPtr();
-		}
-		ITextureView* GetDepthSRV() const noexcept { return m_GBufferDepthSRV.RawPtr(); }
-
+		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
+		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
+		ITextureView* GetDepthSRV() const noexcept { return m_PassCtx.pDepthSrv; }
+		ITextureView* GetShadowMapSRV() const noexcept { return m_PassCtx.pShadowMapSrv; }
 
 	private:
-		bool createShadowTargets();
-		bool createDeferredTargets();
-
-		bool createShadowRenderPasses();
-		bool createDeferredRenderPasses();
-
-		bool recreateDeferredFramebuffers();
-
-		bool createShadowPso();
-		bool createShadowMaskedPso();
-		bool createLightingPso();
-		bool createPostPso();
-
-		void updateSizeDependentSRBs();
-
-		bool recreateShadowResources();
-		bool recreateSizeDependentResources();
-
-		bool buildPostFramebufferForCurrentBackBuffer();
-
-		void setViewportFromView(const View& view);
-
-		// ------------------------------------------------------------
-		// Object table (GPU Scene-lite)
-		// ------------------------------------------------------------
 		bool ensureObjectTableCapacity(uint32 objectCount);
-		void uploadObjectTable(IDeviceContext* pCtx, const RenderScene& scene);
-
-		// ------------------------------------------------------------
-		// Per-draw object indirection (ATTRIB4 as PER_INSTANCE)
-		// ------------------------------------------------------------
-		bool ensureObjectIndexInstanceBuffer();
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
+		void wirePassOutputs();
+		void addPass(std::unique_ptr<RenderPassBase> pass);
 
 	private:
+		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1 << 16;
+
 		RendererCreateInfo m_CreateInfo = {};
 		AssetManager* m_pAssetManager = nullptr;
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;
 
-		uint32 m_DeferredWidth = 0;
-		uint32 m_DeferredHeight = 0;
-
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
 		std::unique_ptr<RenderResourceCache> m_pCache;
+		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
 
-		// Frame/Shadow CBs
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
 		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
-		// Object indirection:
-		// - Object table: StructuredBuffer<ObjectConstants> (SRV)
-		// - Object index: 1x uint instance VB (ATTRIB4, PER_INSTANCE)
 		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
 		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
-
 		uint32 m_ObjectTableCapacity = 0;
 
-		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
-
-		// Targets
-		static constexpr uint32 SHADOW_MAP_SIZE = 4096 * 4;
-
-		RefCntAutoPtr<ITexture>     m_ShadowMapTex;
-		RefCntAutoPtr<ITextureView> m_ShadowMapDsv;
-		RefCntAutoPtr<ITextureView> m_ShadowMapSrv;
-
-		RefCntAutoPtr<ITexture>     m_GBufferDepthTex;
-		RefCntAutoPtr<ITextureView> m_GBufferDepthDSV;
-		RefCntAutoPtr<ITextureView> m_GBufferDepthSRV;
-
-		static constexpr uint32 NUM_GBUFFERS = 4;
-		RefCntAutoPtr<ITexture>     m_GBufferTex[NUM_GBUFFERS];
-		RefCntAutoPtr<ITextureView> m_GBufferRtv[NUM_GBUFFERS];
-		RefCntAutoPtr<ITextureView> m_GBufferSrv[NUM_GBUFFERS];
-
-		RefCntAutoPtr<ITexture>     m_LightingTex;
-		RefCntAutoPtr<ITextureView> m_LightingRTV;
-		RefCntAutoPtr<ITextureView> m_LightingSRV;
-
-		// RenderPass/FB
-		RefCntAutoPtr<IRenderPass>  m_RenderPassShadow;
-		RefCntAutoPtr<IFramebuffer> m_FrameBufferShadow;
-
-		RefCntAutoPtr<IRenderPass>  m_RenderPassGBuffer;
-		RefCntAutoPtr<IFramebuffer> m_FrameBufferGBuffer;
-
-		RefCntAutoPtr<IRenderPass>  m_RenderPassLighting;
-		RefCntAutoPtr<IFramebuffer> m_FrameBufferLighting;
-
-		RefCntAutoPtr<IRenderPass>  m_RenderPassPost;
-
-		RefCntAutoPtr<IFramebuffer> m_FrameBufferPostCurrent;
-
-		// PSO/SRB
-		RefCntAutoPtr<IPipelineState> m_ShadowPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_ShadowSRB;
-
-		RefCntAutoPtr<IPipelineState> m_ShadowMaskedPSO;
-
-		RefCntAutoPtr<IPipelineState>         m_LightingPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_LightingSRB;
-
-		RefCntAutoPtr<IPipelineState>         m_PostPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_PostSRB;
-
-		// Env mapping
 		RefCntAutoPtr<ITexture> m_EnvTex;
 		RefCntAutoPtr<ITexture> m_EnvDiffuseTex;
 		RefCntAutoPtr<ITexture> m_EnvSpecularTex;
 		RefCntAutoPtr<ITexture> m_EnvBrdfTex;
 
-		// Per-frame data
-		std::vector<StateTransitionDesc> m_PreBarriers;
-		std::vector<uint64> m_FrameMatKeys;
-		std::unordered_map<uint64, Handle<MaterialRenderData>> m_FrameMat;
-
-		bool m_ShadowDirty = true;
-		bool m_DeferredDirty = true;
+		RenderPassContext m_PassCtx = {};
+		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
+		std::vector<std::string> m_PassOrder;
 	};
-
 } // namespace shz

@@ -95,7 +95,7 @@ namespace shz
 
 		// Hard-coded objects
 		{
-			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Ground.shzmesh.json";
+			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Terrain.shzmesh.json";
 			(void)loadStaticMeshObject(
 				m_Floor,
 				floorPath,
