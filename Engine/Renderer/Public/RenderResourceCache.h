@@ -62,6 +62,7 @@ namespace shz
 			bool bCastShadow,
 			bool bAlphaMasked,
 			IDeviceContext* pCtx,
+			PipelineStateManager* pPSOManager,
 			IMaterialStaticBinder* pStaticBinder,
 			IPipelineState* pShadowPSO = nullptr);
 

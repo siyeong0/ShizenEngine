@@ -40,6 +40,9 @@ namespace shz
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : scDesc.Height;
 
+		m_pPipelineStateManager = std::make_unique<PipelineStateManager>();
+		m_pPipelineStateManager->Initialize(m_CreateInfo.pDevice);
+
 		m_pCache = std::make_unique<RenderResourceCache>();
 		m_pCache->Initialize(m_CreateInfo.pDevice.RawPtr(), m_pAssetManager);
 		m_pCache->SetErrorTexture("C:/Dev/ShizenEngine/Assets/Error.jpg");
@@ -159,6 +162,7 @@ namespace shz
 		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
 		m_PassCtx.pAssetManager = m_pAssetManager;
 		m_PassCtx.pCache = m_pCache.get();
+		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
 		m_PassCtx.pMaterialStaticBinder = m_pMaterialStaticBinder.get();
 
 		m_PassCtx.pFrameCB = m_pFrameCB.RawPtr();
@@ -236,6 +240,8 @@ namespace shz
 
 		m_pShaderSourceFactory.Release();
 		m_pAssetManager = nullptr;
+		m_pPipelineStateManager->Clear();
+		m_pPipelineStateManager.reset();
 
 		m_CreateInfo = {};
 		m_PassCtx = {};
@@ -842,16 +848,16 @@ namespace shz
 		wirePassOutputs();
 	}
 
-	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
+	Handle<TextureRenderData> Renderer::CreateTexture(const TextureAsset& asset)
 	{
 		ASSERT(m_pCache, "Cache is null.");
-		return m_pCache->GetOrCreateStaticMeshRenderData(asset, m_CreateInfo.pImmediateContext.RawPtr());
+		return m_pCache->GetOrCreateTextureRenderData(asset);
 	}
 
-	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh)
+	bool Renderer::DestroyTexture(Handle<TextureRenderData> hTex)
 	{
 		ASSERT(m_pCache, "Cache is null.");
-		return m_pCache->DestroyStaticMeshRenderData(hMesh);
+		return m_pCache->DestroyTextureRenderData(hTex);
 	}
 
 	Handle<MaterialRenderData> Renderer::CreateMaterial(MaterialInstance& inst, bool bCastShadow, bool bAlphaMasked)
@@ -882,6 +888,7 @@ namespace shz
 			bCastShadow,
 			bAlphaMasked,
 			m_CreateInfo.pImmediateContext.RawPtr(),
+			m_pPipelineStateManager.get(),
 			m_pMaterialStaticBinder.get(),
 			pShadowPsoForMat);
 	}
@@ -890,6 +897,18 @@ namespace shz
 	{
 		ASSERT(m_pCache, "Cache is null.");
 		return m_pCache->DestroyMaterialRenderData(hMesh);
+	}
+
+	Handle<StaticMeshRenderData> Renderer::CreateStaticMesh(const StaticMeshAsset& asset)
+	{
+		ASSERT(m_pCache, "Cache is null.");
+		return m_pCache->GetOrCreateStaticMeshRenderData(asset, m_CreateInfo.pImmediateContext.RawPtr());
+	}
+
+	bool Renderer::DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh)
+	{
+		ASSERT(m_pCache, "Cache is null.");
+		return m_pCache->DestroyStaticMeshRenderData(hMesh);
 	}
 
 	const std::unordered_map<std::string, uint64> Renderer::GetPassDrawCallCountTable() const

@@ -195,7 +195,7 @@ namespace shz
 			psoCi.PSODesc.ResourceLayout.NumVariables = 0;
 
 			m_pShadowPSO.Release();
-			ctx.pDevice->CreateGraphicsPipelineState(psoCi, &m_pShadowPSO);
+			m_pShadowPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
 			ASSERT(m_pShadowPSO, "Shadow PSO create failed.");
 
 			// Bind statics (same as old)
@@ -308,7 +308,7 @@ namespace shz
 			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
 			m_pShadowMaskedPSO.Release();
-			ctx.pDevice->CreateGraphicsPipelineState(psoCi, &m_pShadowMaskedPSO);
+			m_pShadowMaskedPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
 			ASSERT(m_pShadowMaskedPSO, "Shadow Masked PSO create failed.");
 
 			// Bind statics (same as old)

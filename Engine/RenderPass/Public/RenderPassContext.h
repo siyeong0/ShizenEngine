@@ -18,6 +18,7 @@
 
 #include "Primitives/Handle.hpp"
 #include "Engine/Renderer/Public/MaterialRenderData.h"
+#include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
 namespace shz
@@ -36,6 +37,7 @@ namespace shz
 
 		AssetManager* pAssetManager = nullptr;
 		RenderResourceCache* pCache = nullptr;
+		PipelineStateManager* pPipelineStateManager = nullptr;
 		RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 
 		// ---------------------------------------------------------------------

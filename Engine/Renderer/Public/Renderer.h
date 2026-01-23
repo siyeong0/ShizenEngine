@@ -31,6 +31,7 @@
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
+#include "Engine/Renderer/Public/PipelineStateManager.h"
 
 #include "Engine/RenderPass/Public/RenderPassContext.h"
 #include "Engine/RenderPass/Public/RenderPassBase.h"
@@ -71,10 +72,12 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
-		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
-		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
+		Handle<TextureRenderData> CreateTexture(const TextureAsset& asset);
+		bool DestroyTexture(Handle<TextureRenderData> hTex);
 		Handle<MaterialRenderData> CreateMaterial(MaterialInstance& inst, bool bCastShadow, bool bAlphaMasked);
 		bool DestroyMaterial(Handle<MaterialRenderData> hMesh);
+		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
+		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
@@ -101,6 +104,7 @@ namespace shz
 
 		std::unique_ptr<RenderResourceCache> m_pCache;
 		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
+		std::unique_ptr< PipelineStateManager> m_pPipelineStateManager;
 
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
 		RefCntAutoPtr<IBuffer> m_pDrawCB;

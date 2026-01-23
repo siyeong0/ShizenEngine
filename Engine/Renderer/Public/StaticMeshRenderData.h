@@ -7,6 +7,8 @@
 
 #include "Engine/RHI/Interface/IBuffer.h"
 
+#include "Engine/Renderer/Public/MaterialRenderData.h"
+
 namespace shz
 {
 	class StaticMeshRenderData final

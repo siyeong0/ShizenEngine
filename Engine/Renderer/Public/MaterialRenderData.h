@@ -17,6 +17,7 @@
 
 #include "Engine/Renderer/Public/TextureRenderData.h"
 #include "Engine/Renderer/Public/IMaterialStaticBinder.h"
+#include "Engine/Renderer/Public/PipelineStateManager.h"
 
 namespace shz
 {
@@ -31,6 +32,7 @@ namespace shz
 		bool Initialize(
 			IRenderDevice* pDevice,
 			RenderResourceCache* pCache,
+			PipelineStateManager* pPSOManager,
 			IDeviceContext* pCtx,
 			MaterialInstance& inst,
 			IMaterialStaticBinder* pStaticBinder = nullptr,

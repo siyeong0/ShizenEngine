@@ -501,6 +501,7 @@ namespace shz
 		bool bCastShadow,
 		bool bAlphaMasked,
 		IDeviceContext* pCtx,
+		PipelineStateManager* pPSOManager,
 		IMaterialStaticBinder* pStaticBinder,
 		IPipelineState* pShadowPSO)
 	{
@@ -523,7 +524,7 @@ namespace shz
 		MaterialInstance tmp = Instance;
 		tmp.MarkAllDirty();
 
-		if (!rd.Initialize(m_pDevice, this, pCtx, tmp, pStaticBinder, pShadowPSO))
+		if (!rd.Initialize(m_pDevice, this, pPSOManager, pCtx, tmp, pStaticBinder, pShadowPSO))
 			return {};
 
 		UniqueHandle<MaterialRenderData> owner = UniqueHandle<MaterialRenderData>::Make();

@@ -245,7 +245,7 @@ namespace shz
 		psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 		psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-		ctx.pDevice->CreateGraphicsPipelineState(psoCi, &m_pPSO);
+		m_pPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
 		ASSERT(m_pPSO, "Lighting PSO create failed.");
 
 		// Bind FRAME_CONSTANTS static

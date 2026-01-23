@@ -13,6 +13,7 @@ namespace shz
 	bool MaterialRenderData::Initialize(
 		IRenderDevice* pDevice,
 		RenderResourceCache* pCache,
+		PipelineStateManager* pPSOManager,
 		IDeviceContext* pCtx,
 		MaterialInstance& inst,
 		IMaterialStaticBinder* pStaticBinder,
@@ -95,8 +96,7 @@ namespace shz
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount() > 0 ? m_SourceInstance.GetImmutableSamplers() : nullptr;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount();
 
-				RefCntAutoPtr<IPipelineState> pPSO;
-				pDevice->CreateGraphicsPipelineState(psoCi, &pPSO);
+				RefCntAutoPtr<IPipelineState> pPSO = pPSOManager->AcquireGraphics(psoCi);
 
 				ASSERT(pPSO, "Failed to create PSO.");
 				m_pPSO = pPSO;
@@ -127,8 +127,7 @@ namespace shz
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount() > 0 ? m_SourceInstance.GetImmutableSamplers() : nullptr;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount();
 
-				RefCntAutoPtr<IPipelineState> pPSO;
-				pDevice->CreateComputePipelineState(psoCi, &pPSO);
+				RefCntAutoPtr<IPipelineState> pPSO = pPSOManager->AcquireCompute(psoCi);
 
 				ASSERT(pPSO, "Failed to create PSO.");
 				m_pPSO = pPSO;

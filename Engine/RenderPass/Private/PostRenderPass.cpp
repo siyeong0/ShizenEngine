@@ -134,7 +134,7 @@ namespace shz
 			psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-			ctx.pDevice->CreateGraphicsPipelineState(psoCi, &m_pPSO);
+			m_pPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
 			if (!m_pPSO)
 			{
 				ASSERT(false, "Failed to create Post PSO.");
