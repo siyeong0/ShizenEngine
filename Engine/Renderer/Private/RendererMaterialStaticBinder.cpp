@@ -43,14 +43,6 @@ namespace shz
 			var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 		}
 
-
-		//// Typically referenced in PS; bind both stages just in case.
-		//if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_LinearWrapSampler"))
-		//	var->Set(m_pLinearWrapSampler);
-
-		//if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_LinearWrapSampler"))
-		//	var->Set(m_pLinearWrapSampler);
-
 		return true;
 	}
 

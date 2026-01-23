@@ -1,4 +1,3 @@
-// Engine/Renderer/Public/MaterialRenderData.h
 #pragma once
 #include <vector>
 
@@ -37,10 +36,7 @@ namespace shz
 			IMaterialStaticBinder* pStaticBinder = nullptr,
 			IPipelineState* pShadowPSO = nullptr);
 
-		bool IsValid() const noexcept
-		{
-			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_SourceInstance.GetTemplate() != nullptr);
-		}
+		bool Apply(RenderResourceCache* pCach, IDeviceContext* pCtx);
 
 		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
 		IShaderResourceBinding* GetSRB() const noexcept { return m_pSRB; }
@@ -50,11 +46,7 @@ namespace shz
 		IBuffer* GetMaterialConstantsBuffer() const noexcept { return m_pMaterialConstants; }
 		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
 
-		// Re-apply per-instance values/resources (e.g., after SetFloat/SetTexture changes).
-		bool Apply(RenderResourceCache* pCach, IDeviceContext* pCtx);
-
 	private:
-		bool createPso(IRenderDevice* pDevice, IMaterialStaticBinder* pStaticBinder);
 		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice);
 
 		// Shadow SRB (optional): created from renderer-owned shadow PSO.
