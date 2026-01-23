@@ -183,7 +183,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-	
+    
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
 

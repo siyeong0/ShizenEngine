@@ -7,4 +7,7 @@
   <ItemGroup>
     <ClInclude Include="MaterialEditor.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

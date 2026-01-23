@@ -207,13 +207,15 @@ namespace shz
 
 				// Detect maximum  shader model.
 				{
-					// Direct3D12 supports shader model 5.1 on all feature levels.
+					// Direct3D12 supports shader model 6.9 on all feature levels.
 					// https://docs.microsoft.com/en-us/windows/win32/direct3d12/hardware-feature-levels#feature-level-support
-					D3D_SHADER_MODEL MaxShaderModel = D3D_SHADER_MODEL_5_1;
+					D3D_SHADER_MODEL MaxShaderModel = D3D_HIGHEST_SHADER_MODEL;
 
 					// Header may not have constants for D3D_SHADER_MODEL_6_1 and above.
 					const D3D_SHADER_MODEL Models[] = //
 					{
+						static_cast<D3D_SHADER_MODEL>(0x69),
+						static_cast<D3D_SHADER_MODEL>(0x68),
 						static_cast<D3D_SHADER_MODEL>(0x67),
 						static_cast<D3D_SHADER_MODEL>(0x66),
 						static_cast<D3D_SHADER_MODEL>(0x65), // minimum required for mesh shader and DXR 1.1

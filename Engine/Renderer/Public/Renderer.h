@@ -73,6 +73,8 @@ namespace shz
 
 		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
 		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
+		Handle<MaterialRenderData> CreateMaterial(MaterialInstance& inst, bool bCastShadow, bool bAlphaMasked);
+		bool DestroyMaterial(Handle<MaterialRenderData> hMesh);
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
@@ -87,7 +89,7 @@ namespace shz
 		void addPass(std::unique_ptr<RenderPassBase> pass);
 
 	private:
-		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1 << 16;
+		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1 << 20;
 
 		RendererCreateInfo m_CreateInfo = {};
 		AssetManager* m_pAssetManager = nullptr;
@@ -101,9 +103,11 @@ namespace shz
 		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
 
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
+		RefCntAutoPtr<IBuffer> m_pDrawCB;
 		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
 		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
+		RefCntAutoPtr<IBuffer> m_pObjectTableSBShadow;
 		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
 
 		RefCntAutoPtr<ITexture> m_EnvTex;

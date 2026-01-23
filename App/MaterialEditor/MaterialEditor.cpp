@@ -1,7 +1,3 @@
-// ============================================================================
-// MaterialEditor.cpp
-// ============================================================================
-
 #include "MaterialEditor.h"
 
 #include <cmath>
@@ -175,59 +171,59 @@ namespace shz
 	std::string MaterialEditor::MakeTemplateKeyFromInputs() const
 	{
 		auto trim = [](std::string s) -> std::string
-			{
-				auto isSpace = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
-				while (!s.empty() && isSpace((unsigned char)s.front())) s.erase(s.begin());
-				while (!s.empty() && isSpace((unsigned char)s.back()))  s.pop_back();
-				return s;
-			};
+		{
+			auto isSpace = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+			while (!s.empty() && isSpace((unsigned char)s.front())) s.erase(s.begin());
+			while (!s.empty() && isSpace((unsigned char)s.back()))  s.pop_back();
+			return s;
+		};
 
 		auto stripQuotes = [](std::string s) -> std::string
-			{
-				if (!s.empty() && (s.front() == '"' || s.front() == '\'')) s.erase(s.begin());
-				if (!s.empty() && (s.back() == '"' || s.back() == '\''))  s.pop_back();
-				return s;
-			};
+		{
+			if (!s.empty() && (s.front() == '"' || s.front() == '\'')) s.erase(s.begin());
+			if (!s.empty() && (s.back() == '"' || s.back() == '\''))  s.pop_back();
+			return s;
+		};
 
 		auto normalizePathLike = [&](std::string s) -> std::string
+		{
+			s = trim(stripQuotes(std::move(s)));
+
+			// slash unify
+			for (char& c : s)
 			{
-				s = trim(stripQuotes(std::move(s)));
+				if (c == '\\') c = '/';
+			}
 
-				// slash unify
-				for (char& c : s)
-				{
-					if (c == '\\') c = '/';
-				}
+			// remove redundant "./" segments (simple)
+			// NOTE: we keep absolute paths and drive letters as-is; this is just to stabilize relative forms.
+			while (s.size() >= 2 && s[0] == '.' && s[1] == '/')
+				s.erase(0, 2);
 
-				// remove redundant "./" segments (simple)
-				// NOTE: we keep absolute paths and drive letters as-is; this is just to stabilize relative forms.
-				while (s.size() >= 2 && s[0] == '.' && s[1] == '/')
-					s.erase(0, 2);
+			// to lower (Windows-like stability)
+			for (char& c : s)
+			{
+				if (c >= 'A' && c <= 'Z')
+					c = (char)(c - 'A' + 'a');
+			}
 
-				// to lower (Windows-like stability)
-				for (char& c : s)
-				{
-					if (c >= 'A' && c <= 'Z')
-						c = (char)(c - 'A' + 'a');
-				}
-
-				return s;
-			};
+			return s;
+		};
 
 		auto normalizeEntry = [&](std::string s) -> std::string
+		{
+			s = trim(stripQuotes(std::move(s)));
+
+			// entry names are usually case-sensitive in HLSL, but in practice you use "main".
+			// If you want strict behavior, remove this lowercasing.
+			for (char& c : s)
 			{
-				s = trim(stripQuotes(std::move(s)));
+				if (c >= 'A' && c <= 'Z')
+					c = (char)(c - 'A' + 'a');
+			}
 
-				// entry names are usually case-sensitive in HLSL, but in practice you use "main".
-				// If you want strict behavior, remove this lowercasing.
-				for (char& c : s)
-				{
-					if (c >= 'A' && c <= 'Z')
-						c = (char)(c - 'A' + 'a');
-				}
-
-				return s;
-			};
+			return s;
+		};
 
 		const std::string vs = normalizePathLike(m_ShaderVS);
 		const std::string ps = normalizePathLike(m_ShaderPS);
@@ -245,18 +241,18 @@ namespace shz
 
 		// Optional: append short stable hash for compactness / debugging
 		auto fnv1a64 = [](const char* data, size_t len) -> uint64
-			{
-				const uint64 FNV_OFFSET = 1469598103934665603ull;
-				const uint64 FNV_PRIME = 1099511628211ull;
+		{
+			const uint64 FNV_OFFSET = 1469598103934665603ull;
+			const uint64 FNV_PRIME = 1099511628211ull;
 
-				uint64 h = FNV_OFFSET;
-				for (size_t i = 0; i < len; ++i)
-				{
-					h ^= (uint64)(uint8)data[i];
-					h *= FNV_PRIME;
-				}
-				return h;
-			};
+			uint64 h = FNV_OFFSET;
+			for (size_t i = 0; i < len; ++i)
+			{
+				h ^= (uint64)(uint8)data[i];
+				h *= FNV_PRIME;
+			}
+			return h;
+		};
 
 		const uint64 h = fnv1a64(canonical.data(), canonical.size());
 
@@ -277,9 +273,9 @@ namespace shz
 
 		auto it = m_TemplateCache.find(key);
 		if (it != m_TemplateCache.end())
-			return &it->second;
+			return it->second.get();
 
-		MaterialTemplate tmpl = {};
+		auto tmpl = std::make_unique<MaterialTemplate>();
 
 		MaterialTemplateCreateInfo tci = {};
 		tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
@@ -309,17 +305,18 @@ namespace shz
 		tci.ShaderStages.push_back(vs);
 		tci.ShaderStages.push_back(ps);
 
-		const bool ok = tmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
+		const bool ok = tmpl->Initialize(m_pDevice, m_pShaderSourceFactory, tci);
 		ASSERT(ok, "MaterialTemplate::Initialize failed.");
 
-		auto [insIt, _] = m_TemplateCache.emplace(key, std::move(tmpl));
+		MaterialTemplate* outPtr = tmpl.get();
+		m_TemplateCache.emplace(key, std::move(tmpl));
 
-		// Mark current slot cache dirty (MAIN only)
+		// mark current slot cache dirty
 		const uint64 selKey = MakeSelectionKeyForMain(m_SelectedMaterialSlot);
 		if (auto itCache = m_MaterialUi.find(selKey); itCache != m_MaterialUi.end())
 			itCache->second.Dirty = true;
 
-		return &insIt->second;
+		return outPtr;
 	}
 
 	MaterialTemplate* MaterialEditor::RebuildTemplateFromInputs()
@@ -333,30 +330,86 @@ namespace shz
 		return GetOrCreateTemplateFromInputs();
 	}
 
-	void MaterialEditor::RebindMainMaterialToTemplate(MaterialTemplate* pNewTmpl)
+	bool MaterialEditor::EnsureMainMaterialStorageForSlots(uint32 slotCount)
 	{
-		if (!pNewTmpl)
-			return;
+		if (slotCount == 0)
+		{
+			m_MainMaterialInstances.clear();
+			return true;
+		}
+
+		if (m_MainMaterialInstances.size() == (size_t)slotCount)
+			return true;
+
+		m_MainMaterialInstances.clear();
+		m_MainMaterialInstances.resize((size_t)slotCount);
+
+		return true;
+	}
+
+	void MaterialEditor::RebuildMainMaterialsFromCpuMesh(const StaticMeshAsset& cpuMesh)
+	{
+		MaterialTemplate* pTemplate = GetOrCreateTemplateFromInputs();
+		ASSERT(pTemplate, "Template is null.");
+
+		const uint32 slotCount = (uint32)cpuMesh.GetMaterialSlots().size();
+		EnsureMainMaterialStorageForSlots(slotCount);
+
+		for (uint32 i = 0; i < slotCount; ++i)
+		{
+			const MaterialAsset& slot = cpuMesh.GetMaterialSlot(i);
+
+			MaterialInstance inst = {};
+			{
+				const bool ok = inst.Initialize(pTemplate, "MaterialEditor Main Instance");
+				ASSERT(ok, "MaterialInstance::Initialize failed.");
+			}
+
+			// Apply "real" material data from asset slot
+			{
+				const bool ok = slot.ApplyToInstance(&inst);
+				ASSERT(ok, "MaterialAsset::ApplyToInstance failed.");
+			}
+
+			// RenderPass policy (slot may have it)
+			inst.SetRenderPass(slot.GetRenderPassName());
+
+			inst.MarkAllDirty();
+			m_MainMaterialInstances[(size_t)i] = std::move(inst);
+
+			// mark UI cache dirty
+			m_MaterialUi[MakeSelectionKeyForMain((int32)i)].Dirty = true;
+		}
+	}
+
+	bool MaterialEditor::RebuildMainMaterialHandle(int32 slotIndex)
+	{
+		if (!m_pRenderer || !m_pRenderScene)
+			return false;
 
 		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
 		if (!obj)
-			return;
+			return false;
 
-		if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj->Materials.size())
-			return;
+		if (slotIndex < 0)
+			return false;
 
-		MaterialUiCache& cache = GetOrCreateMaterialCache(MakeSelectionKeyForMain(m_SelectedMaterialSlot));
+		if ((size_t)slotIndex >= m_MainMaterialInstances.size())
+			return false;
 
-		MaterialInstance newInst = {};
-		{
-			const bool ok = newInst.Initialize(pNewTmpl, "MaterialEditor Instance");
-			ASSERT(ok, "MaterialInstance::Initialize failed.");
-		}
+		if ((size_t)slotIndex >= obj->Materials.size())
+			return false;
 
-		ApplyCacheToInstance(newInst, cache, *pNewTmpl);
+		MaterialInstance& inst = m_MainMaterialInstances[(size_t)slotIndex];
 
-		obj->Materials[(size_t)m_SelectedMaterialSlot] = std::move(newInst);
-		obj->Materials[(size_t)m_SelectedMaterialSlot].MarkAllDirty();
+		const Handle<MaterialRenderData> hRD =
+			m_pRenderer->CreateMaterial(inst, m_MainMeshCastShadow, m_MainMeshAlphaMasked);
+
+		if (!hRD.IsValid())
+			return false;
+
+		obj->Materials[(size_t)slotIndex] = hRD;
+		return true;
 	}
 
 	// ------------------------------------------------------------
@@ -401,6 +454,41 @@ namespace shz
 		return nullptr;
 	}
 
+	void MaterialEditor::RebindMainMaterialToTemplate(MaterialTemplate* pNewTmpl, int32 slotIndex)
+	{
+		if (!pNewTmpl)
+			return;
+
+		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
+		if (!obj)
+			return;
+
+		if (slotIndex < 0)
+			return;
+
+		if ((size_t)slotIndex >= m_MainMaterialInstances.size())
+			return;
+
+		if ((size_t)slotIndex >= obj->Materials.size())
+			return;
+
+		MaterialUiCache& cache = GetOrCreateMaterialCache(MakeSelectionKeyForMain(slotIndex));
+
+		MaterialInstance newInst = {};
+		{
+			const bool ok = newInst.Initialize(pNewTmpl, "MaterialEditor Main Instance");
+			ASSERT(ok, "MaterialInstance::Initialize failed.");
+		}
+
+		ApplyCacheToInstance(newInst, cache, *pNewTmpl);
+		newInst.MarkAllDirty();
+
+		m_MainMaterialInstances[(size_t)slotIndex] = std::move(newInst);
+
+		(void)RebuildMainMaterialHandle(slotIndex);
+	}
+
+
 	// ------------------------------------------------------------
 	// Initialize / render / update
 	// ------------------------------------------------------------
@@ -440,6 +528,9 @@ namespace shz
 			(float)rendererCI.BackBufferWidth / (float)rendererCI.BackBufferHeight,
 			PI / 4.0f,
 			SURFACE_TRANSFORM_IDENTITY);
+
+		m_Camera.SetPos({ 0,0,-2.f });
+		m_Camera.SetLookAt({ 0,0,0 });
 
 		m_ViewFamily.Views.clear();
 		m_ViewFamily.Views.push_back({});
@@ -605,7 +696,7 @@ namespace shz
 						(void)RebuildTemplateFromInputs();
 						const uint64 key = MakeSelectionKeyForMain(m_SelectedMaterialSlot);
 						m_MaterialUi[key].Dirty = true;
-						RebindMainMaterialToTemplate(GetOrCreateTemplateFromInputs());
+						RebindMainMaterialToTemplate(GetOrCreateTemplateFromInputs(), m_SelectedMaterialSlot);
 					}
 					ImGui::EndMenu();
 				}
@@ -707,7 +798,6 @@ namespace shz
 				if (RenderScene::RenderObject* obj = GetMainRenderObjectOrNull())
 				{
 					obj->bCastShadow = castShadow;
-					for (auto& m : obj->Materials) m.MarkAllDirty();
 				}
 			}
 
@@ -719,7 +809,6 @@ namespace shz
 				if (RenderScene::RenderObject* obj = GetMainRenderObjectOrNull())
 				{
 					obj->bAlphaMasked = alphaMasked;
-					for (auto& m : obj->Materials) m.MarkAllDirty();
 				}
 			}
 		}
@@ -828,8 +917,9 @@ namespace shz
 				const uint64 key = MakeSelectionKeyForMain(m_SelectedMaterialSlot);
 				m_MaterialUi[key].Dirty = true;
 
-				RebindMainMaterialToTemplate(pNew);
+				RebindMainMaterialToTemplate(pNew, m_SelectedMaterialSlot);
 			}
+
 		}
 
 		ImGui::Spacing();
@@ -941,15 +1031,26 @@ namespace shz
 
 	MaterialInstance* MaterialEditor::GetMainMaterialOrNull()
 	{
-		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
-		if (!obj)
+		if (m_SelectedMaterialSlot < 0)
 			return nullptr;
 
-		if (m_SelectedMaterialSlot < 0 || m_SelectedMaterialSlot >= (int32)obj->Materials.size())
+		if ((size_t)m_SelectedMaterialSlot >= m_MainMaterialInstances.size())
 			return nullptr;
 
-		return &obj->Materials[(size_t)m_SelectedMaterialSlot];
+		return &m_MainMaterialInstances[(size_t)m_SelectedMaterialSlot];
 	}
+
+	const MaterialInstance* MaterialEditor::GetMainMaterialOrNull() const
+	{
+		if (m_SelectedMaterialSlot < 0)
+			return nullptr;
+
+		if ((size_t)m_SelectedMaterialSlot >= m_MainMaterialInstances.size())
+			return nullptr;
+
+		return &m_MainMaterialInstances[(size_t)m_SelectedMaterialSlot];
+	}
+
 
 	// ------------------------------------------------------------
 	// Reflection-driven cache init / apply
@@ -1176,17 +1277,19 @@ namespace shz
 		if (inst.GetPipelineType() != MATERIAL_PIPELINE_TYPE_GRAPHICS)
 			return;
 
+		bool anyChanged = false;
+
 		if (InputTextStdString("RenderPass", cache.RenderPassName))
-		{
-			// live apply
-		}
+			anyChanged = true;
 
 		int subpass = (int)cache.SubpassIndex;
 		if (ImGui::InputInt("Subpass", &subpass))
+		{
 			cache.SubpassIndex = (uint32)std::max(0, subpass);
+			anyChanged = true;
+		}
 
-		IRenderPass* rp = nullptr;
-
+		// Apply to instance (always keep in sync)
 		inst.SetRenderPass(cache.RenderPassName);
 
 		{
@@ -1197,25 +1300,24 @@ namespace shz
 
 			const char* items[] = { "None", "Front", "Back" };
 			if (ImGui::Combo("Cull", &idx, items, 3))
+			{
 				cache.CullMode = (idx == 0) ? CULL_MODE_NONE : (idx == 1) ? CULL_MODE_FRONT : CULL_MODE_BACK;
-
+				anyChanged = true;
+			}
 			inst.SetCullMode(cache.CullMode);
 		}
 
 		if (ImGui::Checkbox("FrontCCW", &cache.FrontCounterClockwise))
-			inst.SetFrontCounterClockwise(cache.FrontCounterClockwise);
-		else
-			inst.SetFrontCounterClockwise(cache.FrontCounterClockwise);
+			anyChanged = true;
+		inst.SetFrontCounterClockwise(cache.FrontCounterClockwise);
 
 		if (ImGui::Checkbox("DepthEnable", &cache.DepthEnable))
-			inst.SetDepthEnable(cache.DepthEnable);
-		else
-			inst.SetDepthEnable(cache.DepthEnable);
+			anyChanged = true;
+		inst.SetDepthEnable(cache.DepthEnable);
 
 		if (ImGui::Checkbox("DepthWrite", &cache.DepthWriteEnable))
-			inst.SetDepthWriteEnable(cache.DepthWriteEnable);
-		else
-			inst.SetDepthWriteEnable(cache.DepthWriteEnable);
+			anyChanged = true;
+		inst.SetDepthWriteEnable(cache.DepthWriteEnable);
 
 		{
 			int sel = 3;
@@ -1248,24 +1350,34 @@ namespace shz
 					COMPARISON_FUNC_ALWAYS,
 				};
 				cache.DepthFunc = map[sel];
+				anyChanged = true;
 			}
 			inst.SetDepthFunc(cache.DepthFunc);
 		}
 
 		{
-			// int mode = (cache.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
-			int mode = 1; // TODO: Set MUTABLE now. Dynamic or Mutable
+			int mode = (cache.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
 			const char* items[] = { "DYNAMIC", "MUTABLE" };
 
 			if (ImGui::Combo("TexBinding", &mode, items, 2))
+			{
 				cache.TextureBindingMode = (mode == 0) ? MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC : MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
-
+				anyChanged = true;
+			}
 			inst.SetTextureBindingMode(cache.TextureBindingMode);
 		}
 
-		InputTextStdString("LinearWrapName", cache.LinearWrapSamplerName);
+		if (InputTextStdString("LinearWrapName", cache.LinearWrapSamplerName))
+			anyChanged = true;
+
 		inst.SetLinearWrapSamplerName(cache.LinearWrapSamplerName);
 		inst.SetLinearWrapSamplerDesc(cache.LinearWrapSamplerDesc);
+
+		if (anyChanged)
+		{
+			inst.MarkAllDirty();
+			(void)RebuildMainMaterialHandle(m_SelectedMaterialSlot);
+		}
 	}
 
 	bool MaterialEditor::RebuildMainSaveObjectFromScene(std::string* outError)
@@ -1278,6 +1390,7 @@ namespace shz
 			return false;
 		}
 
+		// Main RenderObject는 슬롯 수/옵션(bCastShadow 등) 확인용으로만 사용
 		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
 		if (!obj)
 		{
@@ -1309,15 +1422,23 @@ namespace shz
 			return false;
 		}
 
+		// 이제 src는 RenderObject가 아니라 MaterialEditor가 가진 MaterialInstance가 "정답"
 		const uint32 slotCount = (uint32)bakedMesh.GetMaterialSlots().size();
-		const uint32 instCount = (uint32)obj->Materials.size();
+		const uint32 instCount = (uint32)m_MainMaterialInstances.size();
 		const uint32 count = (slotCount < instCount) ? slotCount : instCount;
+
+		if (count == 0)
+		{
+			// 슬롯이 없으면 그대로 save-cache만 갱신
+			m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(std::move(bakedMesh));
+			return true;
+		}
 
 		// 각 슬롯에 대해: MaterialAsset.Clear() -> Options -> Values -> Resources
 		for (uint32 slot = 0; slot < count; ++slot)
 		{
 			MaterialAsset& dst = bakedMesh.GetMaterialSlot(slot);
-			const MaterialInstance& src = obj->Materials[slot];
+			const MaterialInstance& src = m_MainMaterialInstances[(size_t)slot];
 
 			dst.Clear();
 
@@ -1326,7 +1447,6 @@ namespace shz
 			// -------------------------
 			dst.SetTemplateKey(MakeTemplateKeyFromInputs());
 			dst.SetRenderPassName(src.GetRenderPass());
-			// 이름이 필요하면 슬롯 이름/경로 등으로 세팅 가능:
 			// dst.SetName(...);
 
 			// -------------------------
@@ -1344,14 +1464,14 @@ namespace shz
 			dst.SetLinearWrapSamplerName(src.GetLinearWrapSamplerName());
 			dst.SetLinearWrapSamplerDesc(src.GetLinearWrapSamplerDesc());
 
-			// TwoSided / CastShadow는 현재 MaterialInstance에 직접 getter가 없으니
-			// (RenderObject 또는 별도 UI 상태에서 굽고 싶다면 여기서 세팅)
+			// TwoSided / CastShadow는 MaterialInstance에 getter가 없다면
+			// 별도 UI 상태/RenderObject에서 굽고 싶을 때 여기서 세팅.
+			// 예: RenderObject의 플래그를 굽고 싶으면:
+			// dst.SetCastShadow(obj->bCastShadow);
 			// dst.SetTwoSided(...);
-			// dst.SetCastShadow(...);
 
 			// -------------------------
-			// Values: 템플릿 리플렉션을 기준으로 CBuffer blob에서 읽어 override 저장
-			// - MaterialAsset은 SetRaw로 override를 만들 수 있음
+			// Values: 템플릿 리플렉션 기준으로 CBuffer blob에서 읽어 override 저장
 			// -------------------------
 			for (uint32 i = 0; i < pTmpl->GetValueParamCount(); ++i)
 			{
@@ -1410,21 +1530,18 @@ namespace shz
 
 				// 템플릿에서 이 리소스의 타입을 찾아 expectedType으로 전달 (정확도/검증용)
 				MATERIAL_RESOURCE_TYPE expectedType = MATERIAL_RESOURCE_TYPE_UNKNOWN;
+				for (uint32 r = 0; r < pTmpl->GetResourceCount(); ++r)
 				{
-					for (uint32 r = 0; r < pTmpl->GetResourceCount(); ++r)
+					const MaterialResourceDesc& resDesc = pTmpl->GetResource(r);
+					if (resDesc.Name == tb.Name)
 					{
-						const MaterialResourceDesc& resDesc = pTmpl->GetResource(r);
-						if (resDesc.Name == tb.Name)
-						{
-							expectedType = resDesc.Type;
-							break;
-						}
+						expectedType = resDesc.Type;
+						break;
 					}
 				}
 
 				if (!tb.TextureRef.has_value() || !tb.TextureRef.value())
 				{
-					// 현재 바인딩이 비어있으면, 저장에서도 제거 상태 유지
 					dst.RemoveResourceBinding(tb.Name.c_str());
 					continue;
 				}
@@ -1433,6 +1550,7 @@ namespace shz
 					tb.Name.c_str(),
 					expectedType,
 					tb.TextureRef.value());
+
 				// SamplerOverride는 현재 MaterialInstance에 ISampler*만 있어서
 				// desc로 직렬화하려면 별도 매핑/캐시가 필요(지금은 패스)
 			}
@@ -1442,6 +1560,7 @@ namespace shz
 		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(std::move(bakedMesh));
 		return true;
 	}
+
 
 	bool MaterialEditor::SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError)
 	{
@@ -1506,11 +1625,13 @@ namespace shz
 		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
 
 		auto passFilter = [&](const std::string& name) -> bool
-			{
-				if (s_Filter[0] == 0)
-					return true;
-				return name.find(s_Filter) != std::string::npos;
-			};
+		{
+			if (s_Filter[0] == 0)
+				return true;
+			return name.find(s_Filter) != std::string::npos;
+		};
+
+		bool anyChanged = false;
 
 		for (uint32 i = 0; i < count; ++i)
 		{
@@ -1669,11 +1790,18 @@ namespace shz
 			{
 				inst.SetValue(desc.Name.c_str(), bytes.data(), desc.Type);
 				inst.MarkAllDirty();
+				anyChanged = true;
 			}
 
 			ImGui::PopID();
 		}
+
+		if (anyChanged)
+		{
+			(void)RebuildMainMaterialHandle(m_SelectedMaterialSlot);
+		}
 	}
+
 
 	void MaterialEditor::DrawResourceEditor(MaterialInstance& inst, MaterialUiCache& cache, const MaterialTemplate& tmpl)
 	{
@@ -1691,11 +1819,13 @@ namespace shz
 		ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
 
 		auto passFilter = [&](const std::string& name) -> bool
-			{
-				if (s_Filter[0] == 0)
-					return true;
-				return name.find(s_Filter) != std::string::npos;
-			};
+		{
+			if (s_Filter[0] == 0)
+				return true;
+			return name.find(s_Filter) != std::string::npos;
+		};
+
+		bool anyChanged = false;
 
 		for (uint32 i = 0; i < count; ++i)
 		{
@@ -1753,6 +1883,7 @@ namespace shz
 
 				inst.ClearTextureAssetRef(desc.Name.c_str());
 				inst.MarkAllDirty();
+				anyChanged = true;
 			}
 
 			if (applyPressed && !clearPressed)
@@ -1778,13 +1909,20 @@ namespace shz
 					}
 
 					inst.MarkAllDirty();
+					anyChanged = true;
 				}
 			}
 
 			ImGui::PopID();
 			ImGui::Separator();
 		}
+
+		if (anyChanged)
+		{
+			(void)RebuildMainMaterialHandle(m_SelectedMaterialSlot);
+		}
 	}
+
 
 	// ------------------------------------------------------------
 	// Scene load
@@ -1796,10 +1934,10 @@ namespace shz
 		for (char& c : lower) c = (char)tolower(c);
 
 		auto endsWith = [&](const char* ext)
-			{
-				const size_t n = std::strlen(ext);
-				return lower.size() >= n && lower.compare(lower.size() - n, n, ext) == 0;
-			};
+		{
+			const size_t n = std::strlen(ext);
+			return lower.size() >= n && lower.compare(lower.size() - n, n, ext) == 0;
+		};
 
 		// Assimp inputs only
 		return endsWith(".fbx") || endsWith(".gltf") || endsWith(".glb") || endsWith(".obj");
@@ -1830,6 +1968,13 @@ namespace shz
 		{
 			m_pRenderScene->RemoveObject(target->ObjectId);
 			*target = {};
+		}
+
+		// If replacing MAIN, also clear main material instances/caches (safe default)
+		if (which == EPreviewObject::Main)
+		{
+			m_MainMaterialInstances.clear();
+			// caches are per-slot; keep map but mark dirty when new slots created
 		}
 
 		LoadedMesh entry = {};
@@ -1873,7 +2018,7 @@ namespace shz
 		}
 		else
 		{
-			// 이미 내 포맷(.json+.bin 등)으로 저장된 StaticMeshAsset을 로드
+			// already saved StaticMeshAsset load
 			entry.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshAsset>(srcPath);
 			entry.MeshPtr = m_pAssetManager->LoadBlocking(entry.MeshRef);
 
@@ -1881,12 +2026,8 @@ namespace shz
 			if (!pCpuMesh)
 				return false;
 
-			// Main이 내 포맷으로 로드된 케이스: Save는 그냥 “재저장”만 하면 되지만
-			// 지금 최소 구현은 exporter 직접 호출이라 CPU mesh 확보가 필요 -> 복사 보관
 			if (which == EPreviewObject::Main)
-			{
 				m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(*pCpuMesh);
-			}
 		}
 
 		ASSERT(pCpuMesh, "CPU mesh is null.");
@@ -1914,14 +2055,68 @@ namespace shz
 		if (!entry.MeshHandle.IsValid())
 			return false;
 
+		// ------------------------------------------------------------
 		// Materials
-		std::vector<MaterialInstance> mats = BuildMaterialsForCpuMeshSlots(*pCpuMesh);
-		if (mats.empty() && !pCpuMesh->GetMaterialSlots().empty())
-			return false;
+		// RenderScene stores Handle<MaterialRenderData>
+		// Main MaterialInstance is owned by MaterialEditor
+		// ------------------------------------------------------------
+		std::vector<Handle<MaterialRenderData>> materialHandles;
+		materialHandles.clear();
+
+		MaterialTemplate* pTemplate = GetOrCreateTemplateFromInputs();
+		ASSERT(pTemplate, "Template is null.");
+
+		const uint32 slotCount = (uint32)pCpuMesh->GetMaterialSlots().size();
+
+		if (which == EPreviewObject::Main)
+		{
+			RebuildMainMaterialsFromCpuMesh(*pCpuMesh);
+
+			materialHandles.reserve(slotCount);
+			for (uint32 i = 0; i < slotCount; ++i)
+			{
+				MaterialInstance& inst = m_MainMaterialInstances[(size_t)i];
+				const Handle<MaterialRenderData> hRD =
+					m_pRenderer->CreateMaterial(inst, bCastShadow, bAlphaMasked);
+
+				ASSERT(hRD.IsValid(), "CreateMaterial failed.");
+				materialHandles.push_back(hRD);
+			}
+		}
+		else
+		{
+			// Floor: create temporary instances and immediately bake into handles (editor does not own them)
+			materialHandles.reserve(slotCount);
+
+			for (uint32 i = 0; i < slotCount; ++i)
+			{
+				const MaterialAsset& slot = pCpuMesh->GetMaterialSlot(i);
+
+				MaterialInstance inst = {};
+				{
+					const bool ok = inst.Initialize(pTemplate, "MaterialEditor Floor Instance");
+					ASSERT(ok, "MaterialInstance::Initialize failed.");
+				}
+
+				{
+					const bool ok = slot.ApplyToInstance(&inst);
+					ASSERT(ok, "MaterialAsset::ApplyToInstance failed.");
+				}
+
+				inst.SetRenderPass(slot.GetRenderPassName());
+				inst.MarkAllDirty();
+
+				const Handle<MaterialRenderData> hRD =
+					m_pRenderer->CreateMaterial(inst, bCastShadow, bAlphaMasked);
+
+				ASSERT(hRD.IsValid(), "CreateMaterial failed.");
+				materialHandles.push_back(hRD);
+			}
+		}
 
 		RenderScene::RenderObject obj = {};
 		obj.MeshHandle = entry.MeshHandle;
-		obj.Materials = std::move(mats);
+		obj.Materials = std::move(materialHandles);
 		obj.Transform = Matrix4x4::TRS(entry.Position, entry.BaseRotation, entry.Scale);
 		obj.bCastShadow = entry.bCastShadow;
 		obj.bAlphaMasked = entry.bAlphaMasked;
@@ -1933,8 +2128,17 @@ namespace shz
 		entry.SceneObjectIndex = (int32)m_pRenderScene->GetObjects().size() - 1;
 
 		*target = std::move(entry);
+
+		// ensure selected slot is valid for MAIN
+		if (which == EPreviewObject::Main)
+		{
+			m_SelectedMaterialSlot = std::max(0, std::min(m_SelectedMaterialSlot, (int32)slotCount - 1));
+			m_MaterialUi[MakeSelectionKeyForMain(m_SelectedMaterialSlot)].Dirty = true;
+		}
+
 		return true;
 	}
+
 
 	bool MaterialEditor::ImportMainFromSavedPath(const std::string& savedPath)
 	{
@@ -1962,53 +2166,6 @@ namespace shz
 			m_MaterialUi[MakeSelectionKeyForMain(m_SelectedMaterialSlot)].Dirty = true;
 		}
 		return ok;
-	}
-
-
-
-	std::vector<MaterialInstance> MaterialEditor::BuildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh)
-	{
-		MaterialTemplate* pTemplate = GetOrCreateTemplateFromInputs();
-		ASSERT(pTemplate, "Template is null.");
-
-		std::vector<MaterialInstance> materials;
-		materials.reserve(cpuMesh.GetMaterialSlots().size());
-
-		for (uint32 i = 0; i < (uint32)cpuMesh.GetMaterialSlots().size(); ++i)
-		{
-			const MaterialAsset& slot = cpuMesh.GetMaterialSlot(i);
-
-			MaterialInstance mat = {};
-			{
-				const bool ok = mat.Initialize(pTemplate, "MaterialEditor Instance");
-				ASSERT(ok, "MaterialInstance::Initialize failed.");
-			}
-
-			// ------------------------------------------------------------
-			// 1) 슬롯에 저장된 '진짜' 머터리얼 데이터 적용
-			//    - Options (Cull/Depth/BindingMode/SamplerName/Desc, etc)
-			//    - ValueOverrides
-			//    - ResourceBindings(TextureRef + optional sampler override desc)
-			// ------------------------------------------------------------
-			{
-				const bool ok = slot.ApplyToInstance(&mat);
-				ASSERT(ok, "MaterialAsset::ApplyToInstance failed.");
-			}
-
-			// ------------------------------------------------------------
-			// 2) 에디터/파이프라인 정책 보정
-			//    - RenderPass는 Asset에 저장돼있지 않으니 기본값을 지정
-			//    - (slot 옵션으로 subpass를 저장하는 구조가 있다면 여기서 반영)
-			// ------------------------------------------------------------
-			mat.SetRenderPass(slot.GetRenderPassName());
-
-			// RenderScene/MaterialRenderData가 재빌드하도록
-			mat.MarkAllDirty();
-
-			materials.push_back(std::move(mat));
-		}
-
-		return materials;
 	}
 
 

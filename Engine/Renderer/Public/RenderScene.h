@@ -8,7 +8,7 @@
 
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/Material/Public/MaterialInstance.h"
+#include "Engine/Renderer/Public/MaterialRenderData.h"
 
 namespace shz
 {
@@ -18,7 +18,7 @@ namespace shz
 		struct RenderObject final
 		{
 			Handle<StaticMeshRenderData> MeshHandle = {};
-			std::vector<MaterialInstance> Materials = {};
+			std::vector<Handle<MaterialRenderData>> Materials = {};
 			Matrix4x4 Transform = {};
 
 			bool bCastShadow = true;

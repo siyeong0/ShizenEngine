@@ -185,5 +185,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Private\GraphicsUtilitiesMtl.mm" />
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

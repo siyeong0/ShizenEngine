@@ -325,6 +325,7 @@
     <None Include="Common\Public\SearchRecursive.inl">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Runtime\Resources\directx11-logo.bmp">

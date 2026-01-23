@@ -13,8 +13,6 @@ struct VSInput
     float2 UV : ATTRIB1;
     float3 Normal : ATTRIB2;
     float3 Tangent : ATTRIB3;
-
-    uint ObjectIndex : ATTRIB4; // from instance buffer (PER_INSTANCE)
 };
 
 struct VSOutput
@@ -26,9 +24,14 @@ struct VSOutput
     float3 WorldT : TEXCOORD3;
 };
 
-void main(in VSInput VSIn, out VSOutput VSOut)
+cbuffer DRAW_CONSTANTS
 {
-    ObjectConstants oc = g_ObjectTable[VSIn.ObjectIndex];
+    DrawConstants g_DrawCB;
+};
+
+void main(in VSInput VSIn, out VSOutput VSOut, uint instanceID : SV_InstanceID)
+{
+    ObjectConstants oc = g_ObjectTable[g_DrawCB.StartInstanceLocation + instanceID];
 
     float4 worldPos4 = mul(float4(VSIn.Pos, 1.0), oc.World);
     VSOut.WorldPos = worldPos4.xyz;

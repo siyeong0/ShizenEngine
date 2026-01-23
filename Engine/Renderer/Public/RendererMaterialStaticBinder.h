@@ -25,6 +25,7 @@ namespace shz
 		RendererMaterialStaticBinder& operator=(const RendererMaterialStaticBinder&) = delete;
 
 		void SetFrameConstants(IBuffer* pFrameCB) noexcept { m_pFrameCB = pFrameCB; }
+		void SetDrawConstants(IBuffer* pDrawCB) noexcept { m_pDrawCB = pDrawCB; }
 		void SetObjectTableSRV(IBufferView* pObjectTableSRV) noexcept { m_pObjectTableSRV = pObjectTableSRV; }
 		void SetLinearWrapSampler(ISampler* pSampler) noexcept { m_pLinearWrapSampler = pSampler; }
 
@@ -32,6 +33,7 @@ namespace shz
 
 	private:
 		RefCntAutoPtr<IBuffer>     m_pFrameCB = {};
+		RefCntAutoPtr<IBuffer>     m_pDrawCB = {};
 		RefCntAutoPtr<IBufferView> m_pObjectTableSRV = {};
 		RefCntAutoPtr<ISampler>    m_pLinearWrapSampler = {};
 	};

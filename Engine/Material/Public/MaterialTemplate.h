@@ -69,8 +69,8 @@ namespace shz
 		MaterialTemplate() = default;
 		~MaterialTemplate() = default;
 
-		MaterialTemplate(const MaterialTemplate&) = delete;
-		MaterialTemplate& operator=(const MaterialTemplate&) = delete;
+		MaterialTemplate(const MaterialTemplate&) = default;
+		MaterialTemplate& operator=(const MaterialTemplate&) = default;
 
 		MaterialTemplate(MaterialTemplate&&) noexcept = default;
 		MaterialTemplate& operator=(MaterialTemplate&&) noexcept = default;

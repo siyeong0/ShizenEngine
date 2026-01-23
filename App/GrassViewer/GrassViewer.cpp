@@ -114,8 +114,8 @@ namespace shz
 		const float spacing = 0.35f;
 		const float3 origin = { -5.0f, -0.1f, 2.0f };
 #else
-		const int32 countX = 100;
-		const int32 countZ = 100;
+		const int32 countX = 1000;
+		const int32 countZ = 1000;
 		const float spacing = 0.35f;
 		const float3 origin = { -10.0f, -0.1f, -10.0f };
 #endif
@@ -493,10 +493,14 @@ namespace shz
 			return false;
 
 		std::vector<MaterialInstance> mats = buildMaterialsForCpuMeshSlots(*pCpu);
-
+		std::vector<Handle<MaterialRenderData>> matRDs(mats.size());
+		for (uint32 i = 0; i < mats.size(); ++i)
+		{
+			matRDs[i] = m_pRenderer->CreateMaterial(mats[i], bCastShadow, bAlphaMasked);
+		}
 		RenderScene::RenderObject obj = {};
 		obj.MeshHandle = inout.MeshHandle;
-		obj.Materials = std::move(mats);
+		obj.Materials = matRDs;
 		obj.Transform = Matrix4x4::TRS(position, rotation, scale);
 		obj.bCastShadow = bCastShadow;
 		obj.bAlphaMasked = bAlphaMasked;

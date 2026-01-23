@@ -9,9 +9,15 @@
 #include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	}
+
 	bool GBufferRenderPass::Initialize(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
@@ -227,6 +233,7 @@ namespace shz
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pCache, "Cache is null.");
+		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
@@ -236,6 +243,7 @@ namespace shz
 			return;
 		}
 
+		// RT/DS transitions
 		{
 			StateTransitionDesc tr[] =
 			{
@@ -265,76 +273,77 @@ namespace shz
 			rp.pClearValues = clearVals;
 
 			pContext->BeginRenderPass(rp);
+		}
 
-			IPipelineState* pLastPSO = nullptr;
-			IShaderResourceBinding* pLastSRB = nullptr;
-			IBuffer* pLastVB = nullptr;
-			IBuffer* pLastIB = nullptr;
-			VALUE_TYPE lastIndexType = VT_UNDEFINED; // Diligent VALUE_TYPE
-			bool bBoundObjectIndexVB = false;
+		IPipelineState* pLastPSO = nullptr;
+		IShaderResourceBinding* pLastSRB = nullptr;
+		IBuffer* pLastVB = nullptr;
+		IBuffer* pLastIB = nullptr;
 
-			for (const DrawPacket& pkt : packets)
+		for (const DrawPacket& pkt : packets)
+		{
+			ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
+
+			// Bind PSO
+			if (pLastPSO != pkt.PSO)
 			{
-				ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
-
-				// Bind PSO
-				if (pLastPSO != pkt.PSO)
-				{
-					pLastPSO = pkt.PSO;
-					pLastSRB = nullptr;
-					pContext->SetPipelineState(pLastPSO);
-				}
-
-				// Bind SRB
-				if (pLastSRB != pkt.SRB)
-				{
-					pLastSRB = pkt.SRB;
-					pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-				}
-
-				// VB/IB binding (Two streams: mesh VB + objectIndex VB)
-				if (pLastVB != pkt.VertexBuffer || !bBoundObjectIndexVB)
-				{
-					IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
-					uint64 pOffsets[] = { 0, 0 };
-
-					pContext->SetVertexBuffers(
-						0,
-						2,
-						ppVertexBuffers,
-						pOffsets,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
-
-					pLastVB = pkt.VertexBuffer;
-					bBoundObjectIndexVB = true;
-				}
-
-				if (pLastIB != pkt.IndexBuffer)
-				{
-					pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					pLastIB = pkt.IndexBuffer;
-				}
-
-				// Per-draw instance index upload (ObjectTableSB fetch index)
-				ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
-
-				// Draw
-				DrawIndexedAttribs dia = pkt.DrawAttribs;
-#ifdef SHZ_DEBUG
-				if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
-#endif
-
-				pContext->DrawIndexed(dia);
-#ifdef PROFILING
-				++m_DrawCallCount;
-#endif
-
+				pLastPSO = pkt.PSO;
+				pLastSRB = nullptr;
+				pContext->SetPipelineState(pLastPSO);
 			}
 
-			pContext->EndRenderPass();
+			// Bind SRB
+			if (pLastSRB != pkt.SRB)
+			{
+				pLastSRB = pkt.SRB;
+				pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+			}
 
-			// GBuffer outputs -> SRV
+			// VB/IB binding (ONLY mesh VB)
+			if (pLastVB != pkt.VertexBuffer)
+			{
+				IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
+				uint64 pOffsets[] = { 0 };
+
+				pContext->SetVertexBuffers(
+					0,
+					1,
+					ppVertexBuffers,
+					pOffsets,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
+
+				pLastVB = pkt.VertexBuffer;
+			}
+
+			if (pLastIB != pkt.IndexBuffer)
+			{
+				pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pLastIB = pkt.IndexBuffer;
+			}
+
+			// Per-draw: StartInstanceLocation -> DrawCB
+			DrawIndexedAttribs dia = pkt.DrawAttribs;
+#ifdef SHZ_DEBUG
+			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
+#endif
+			{
+				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pDrawCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::DrawConstants* dst = map;
+
+				dst->StartInstanceLocation = dia.FirstInstanceLocation;
+			}
+
+			pContext->DrawIndexed(dia);
+#ifdef PROFILING
+			++m_DrawCallCount;
+#endif
+		}
+
+		pContext->EndRenderPass();
+
+		// Outputs -> SRV
+		{
 			StateTransitionDesc tr2[] =
 			{
 				{ m_pGBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },

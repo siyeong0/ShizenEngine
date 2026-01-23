@@ -10,20 +10,14 @@ namespace shz
 {
 	struct DrawPacket final
 	{
-		// Geometry
 		IBuffer* VertexBuffer = nullptr;
 		IBuffer* IndexBuffer = nullptr;
+
+		IPipelineState* PSO = nullptr;
+		IShaderResourceBinding* SRB = nullptr;
 
 		uint32 ObjectIndex = std::numeric_limits<uint32>::max();
 
 		DrawIndexedAttribs DrawAttribs = {};
-
-		// Material binding
-		IPipelineState* PSO = nullptr;
-		IShaderResourceBinding* SRB = nullptr;
-
-		// Sorting keys (optional cache)
-		uint64 SortKey0 = 0;
-		uint64 SortKey1 = 0;
 	};
 }

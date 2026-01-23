@@ -112,7 +112,7 @@ namespace shz
 
 	void RenderResourceCache::ClearMaterials()
 	{
-		m_MaterialInstToRD.clear();
+		m_MaterialKeyToRD.clear();
 		for (auto& s : m_MaterialRDSlots) { s.Value.reset(); s.Owner.Reset(); }
 		m_MaterialRDSlots.clear();
 	}
@@ -497,61 +497,34 @@ namespace shz
 	// MaterialRenderData (instance-based caching)
 	// ------------------------------------------------------------
 	Handle<MaterialRenderData> RenderResourceCache::GetOrCreateMaterialRenderData(
-		MaterialInstance* pInstance,
+		const MaterialInstance& Instance,
+		bool bCastShadow,
+		bool bAlphaMasked,
 		IDeviceContext* pCtx,
 		IMaterialStaticBinder* pStaticBinder,
 		IPipelineState* pShadowPSO)
 	{
-		if (!m_pDevice || !pInstance)
-		{
+		if (!m_pDevice)
 			return {};
-		}
 
-		const uint64 key = ptrKey(pInstance);
+		const size_t key = Instance.ComputeKey(bCastShadow, bAlphaMasked).Hash;
 
-		// ------------------------------------------------------------
-		// Cache hit
-		// ------------------------------------------------------------
-		if (auto it = m_MaterialInstToRD.find(key); it != m_MaterialInstToRD.end())
+		if (auto it = m_MaterialKeyToRD.find(key); it != m_MaterialKeyToRD.end())
 		{
 			const Handle<MaterialRenderData> cached = it->second;
-
 			if (FindSlot<MaterialRenderData>(cached, m_MaterialRDSlots) != nullptr)
 			{
-				// Rebuild if instance dirties require it.
-				if (!pInstance->IsPsoDirty() && !pInstance->IsLayoutDirty())
-				{
-					return cached;
-				}
-
-				// Destroy cached
-				const uint32 idx = cached.GetIndex();
-				if (idx < static_cast<uint32>(m_MaterialRDSlots.size()))
-				{
-					auto& slot = m_MaterialRDSlots[idx];
-					slot.Value.reset();
-					slot.Owner.Reset();
-				}
-
-				m_MaterialInstToRD.erase(key);
+				return cached;
 			}
-			else
-			{
-				// Stale handle -> remove mapping and recreate
-				m_MaterialInstToRD.erase(it);
-			}
+			m_MaterialKeyToRD.erase(it);
 		}
 
-		// ------------------------------------------------------------
-		// Cache miss / rebuild: create new MaterialRenderData
-		// ------------------------------------------------------------
 		MaterialRenderData rd = {};
-		pInstance->MarkAllDirty();
-		if (!rd.Initialize(m_pDevice, this, pCtx, *pInstance, pStaticBinder, pShadowPSO))
-		{
-			ASSERT(false, "RenderResourceCache::GetOrCreateMaterialRenderData: failed to initialize MaterialRenderData.");
+		MaterialInstance tmp = Instance;
+		tmp.MarkAllDirty();
+
+		if (!rd.Initialize(m_pDevice, this, pCtx, tmp, pStaticBinder, pShadowPSO))
 			return {};
-		}
 
 		UniqueHandle<MaterialRenderData> owner = UniqueHandle<MaterialRenderData>::Make();
 		const Handle<MaterialRenderData> hRD = owner.Get();
@@ -559,18 +532,10 @@ namespace shz
 		EnsureSlotCapacity<MaterialRenderData>(hRD.GetIndex(), m_MaterialRDSlots);
 
 		auto& slot = m_MaterialRDSlots[hRD.GetIndex()];
-		ASSERT(!slot.Value.has_value() && !slot.Owner.Get().IsValid(), "Slot collision detected for MaterialRenderData.");
-
 		slot.Owner = std::move(owner);
 		slot.Value.emplace(std::move(rd));
 
-		m_MaterialInstToRD.emplace(key, hRD);
-
-		// IMPORTANT:
-		// We just rebuilt PSO/SRB layout from this instance state.
-		pInstance->ClearPsoDirty();
-		pInstance->ClearLayoutDirty();
-
+		m_MaterialKeyToRD.emplace(key, hRD);
 		return hRD;
 	}
 
@@ -593,31 +558,16 @@ namespace shz
 		if (!slot)
 			return false;
 
-		for (auto it = m_MaterialInstToRD.begin(); it != m_MaterialInstToRD.end(); )
+		// Remove reverse mapping (key -> handle)
+		for (auto it = m_MaterialKeyToRD.begin(); it != m_MaterialKeyToRD.end(); )
 		{
-			if (it->second == h) { it = m_MaterialInstToRD.erase(it); break; }
+			if (it->second == h) { it = m_MaterialKeyToRD.erase(it); break; }
 			else { ++it; }
 		}
 
 		slot->Value.reset();
 		slot->Owner.Reset();
 		return true;
-	}
-
-	void RenderResourceCache::InvalidateMaterialByInstance(const MaterialInstance* pInstance)
-	{
-		if (!pInstance)
-			return;
-
-		const uint64 key = ptrKey(pInstance);
-
-		auto it = m_MaterialInstToRD.find(key);
-		if (it == m_MaterialInstToRD.end())
-			return;
-
-		const Handle<MaterialRenderData> hRD = it->second;
-		m_MaterialInstToRD.erase(it);
-		DestroyMaterialRenderData(hRD);
 	}
 
 	void RenderResourceCache::SetErrorTexture(const std::string& path)

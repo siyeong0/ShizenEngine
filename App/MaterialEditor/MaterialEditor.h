@@ -54,10 +54,10 @@ namespace shz
 			std::string Path = {};
 
 			AssetRef<StaticMeshAsset> MeshRef = {};
-			AssetPtr<StaticMeshAsset> MeshPtr = {}; // keeps resident
+			AssetPtr<StaticMeshAsset> MeshPtr = {}; // keeps resident (if loaded from StaticMeshAsset)
 
-			Handle<StaticMeshRenderData>      MeshHandle = {};
-			Handle<RenderScene::RenderObject> ObjectId = {}; // authoritative handle
+			Handle<StaticMeshRenderData>       MeshHandle = {};
+			Handle<RenderScene::RenderObject>  ObjectId = {}; // authoritative handle
 
 			// Fallback only (avoid depending on array index!)
 			int32 SceneObjectIndex = -1;
@@ -120,10 +120,15 @@ namespace shz
 		AssetPtr<TextureAsset>    LoadTextureBlocking(AssetRef<TextureAsset> Ref, EAssetLoadFlags Flags = EAssetLoadFlags::None);
 
 		// Template / instance
-		std::string      MakeTemplateKeyFromInputs() const;
+		std::string       MakeTemplateKeyFromInputs() const;
 		MaterialTemplate* GetOrCreateTemplateFromInputs();
 		MaterialTemplate* RebuildTemplateFromInputs();
-		void             RebindMainMaterialToTemplate(MaterialTemplate* pNewTmpl);
+
+		// Main material ownership (MaterialEditor owns MaterialInstance)
+		void              RebuildMainMaterialsFromCpuMesh(const StaticMeshAsset& CpuMesh);
+		bool              EnsureMainMaterialStorageForSlots(uint32 SlotCount);
+
+		void              RebindMainMaterialToTemplate(MaterialTemplate* pNewTmpl, int32 SlotIndex);
 
 		// Scene helpers
 		bool LoadPreviewMesh(
@@ -137,8 +142,8 @@ namespace shz
 			bool bAlphaMasked);
 
 		bool ImportMainFromSavedPath(const std::string& savedPath);
-		std::vector<MaterialInstance> BuildMaterialsForCpuMeshSlots(const StaticMeshAsset& CpuMesh);
 
+		// RenderScene object/material bridge
 		LoadedMesh* GetMainMeshOrNull() noexcept;
 		const LoadedMesh* GetMainMeshOrNull() const noexcept;
 
@@ -146,6 +151,10 @@ namespace shz
 		const RenderScene::RenderObject* GetMainRenderObjectOrNull() const;
 
 		MaterialInstance* GetMainMaterialOrNull();
+		const MaterialInstance* GetMainMaterialOrNull() const;
+
+		// Build MaterialRenderData handle from Main MaterialInstance
+		bool RebuildMainMaterialHandle(int32 SlotIndex);
 
 		// UI framework
 		void UiDockspace();
@@ -155,7 +164,7 @@ namespace shz
 		void UiStatsPanel();
 
 		// Material UI
-		uint64          MakeSelectionKeyForMain(int32 SlotIndex) const;
+		uint64           MakeSelectionKeyForMain(int32 SlotIndex) const;
 		MaterialUiCache& GetOrCreateMaterialCache(uint64 Key);
 
 		void SyncCacheFromInstance(MaterialUiCache& Cache, const MaterialInstance& Inst, const MaterialTemplate& Tmpl);
@@ -167,6 +176,7 @@ namespace shz
 
 		bool RebuildMainSaveObjectFromScene(std::string* outError);
 		bool SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
+
 		// Utility
 		static std::string SanitizeFilePath(std::string S);
 
@@ -177,18 +187,22 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		ViewFamily         m_ViewFamily = {};
-		FirstPersonCamera  m_Camera = {};
+		ViewFamily        m_ViewFamily = {};
+		FirstPersonCamera m_Camera = {};
 
-		RenderScene::LightObject      m_GlobalLight = {};
-		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
+		RenderScene::LightObject           m_GlobalLight = {};
+		Handle<RenderScene::LightObject>   m_GlobalLightHandle = {};
 
-		std::unordered_map<std::string, MaterialTemplate> m_TemplateCache = {};
+		// IMPORTANT: stable template storage
+		std::unordered_map<std::string, std::unique_ptr<MaterialTemplate>> m_TemplateCache = {};
 
 		LoadedMesh m_Floor = {};
 		LoadedMesh m_Main = {};
 
-		int32 m_SelectedMaterialSlot = 0;
+		// Main materials are owned by editor now (NOT by RenderScene/StaticMeshRenderData)
+		std::vector<MaterialInstance> m_MainMaterialInstances = {};
+
+		int32         m_SelectedMaterialSlot = 0;
 		ViewportState m_Viewport = {};
 
 		// Shader inputs (Template selection)
@@ -207,17 +221,18 @@ namespace shz
 		// Main object settings
 		std::string m_MainMeshPath = {};
 		float3 m_MainMeshPos = { 0.0f, -0.5f, 3.0f };
-		float3 m_MainMeshRot = { 0.0f, 0.0f, 0.0f };
-		float3 m_MainMeshScale = { 1.0f, 1.0f, 1.0f };
+		float3 m_MainMeshRot = { 0.0f,  0.0f, 0.0f };
+		float3 m_MainMeshScale = { 1.0f,  1.0f, 1.0f };
 
 		bool m_MainMeshUniformScale = true;
 		bool m_MainMeshCastShadow = true;
 		bool m_MainMeshAlphaMasked = false;
 
 		// Main save UI
-		std::string m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
+		std::string          m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
 		AssimpImportSettings m_MainImportSettings = {};
 
+		// Save cache (CPU mesh baked before export)
 		std::unique_ptr<AssetObject> m_pMainBuiltObjForSave = nullptr;
 	};
 } // namespace shz

@@ -14,6 +14,10 @@
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	}
 	namespace
 	{
 		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16; // TODO: Runtime setting?
@@ -149,10 +153,8 @@ namespace shz
 			LayoutElement layoutElems[] =
 			{
 				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
-				LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ATTRIB4 ObjectIndex
 			};
 			layoutElems[0].Stride = sizeof(float) * 11;
-			layoutElems[1].Stride = sizeof(uint32);
 
 			gp.InputLayout.LayoutElements = layoutElems;
 			gp.InputLayout.NumElements = _countof(layoutElems);
@@ -203,9 +205,14 @@ namespace shz
 					var->Set(ctx.pShadowCB);
 				}
 
+				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
+				{
+					var->Set(ctx.pDrawCB);
+				}
+
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(ctx.pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+					var->Set(ctx.pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 				}
 			}
 
@@ -241,11 +248,9 @@ namespace shz
 			{
 				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
 				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-				LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1}, // ObjectIndex
 			};
 			layoutElems[0].Stride = sizeof(float) * 11;
 			layoutElems[1].Stride = sizeof(float) * 11;
-			layoutElems[2].Stride = sizeof(uint32);
 
 			gp.InputLayout.LayoutElements = layoutElems;
 			gp.InputLayout.NumElements = _countof(layoutElems);
@@ -313,6 +318,11 @@ namespace shz
 					var->Set(ctx.pShadowCB);
 				}
 
+				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
+				{
+					var->Set(ctx.pDrawCB);
+				}
+
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
 					var->Set(ctx.pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
@@ -350,6 +360,7 @@ namespace shz
 	void ShadowRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
+		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -359,7 +370,7 @@ namespace shz
 			return;
 		}
 
-		// 0) to DEPTH_WRITE (always)
+		// To DEPTH_WRITE
 		{
 			StateTransitionDesc tr =
 			{
@@ -394,7 +405,6 @@ namespace shz
 		IShaderResourceBinding* pLastSRB = nullptr;
 		IBuffer* pLastVB = nullptr;
 		IBuffer* pLastIB = nullptr;
-		bool bBoundObjectIndexVB = false;
 
 		for (const DrawPacket& pkt : packets)
 		{
@@ -408,30 +418,28 @@ namespace shz
 				pCtx->SetPipelineState(pLastPSO);
 			}
 
-			IShaderResourceBinding* pSRB = pkt.SRB ? pkt.SRB : m_pSRB.RawPtr();
-			ASSERT(pSRB, "SRB is null.");
-
-			if (pLastSRB != pSRB)
+			// Bind SRB
+			if (pLastSRB != pkt.SRB)
 			{
-				pLastSRB = pSRB;
-
+				pLastSRB = pkt.SRB;
 				pCtx->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			}
 
-			if (pLastVB != pkt.VertexBuffer || !bBoundObjectIndexVB)
+			// VB/IB binding (ONLY mesh VB)
+			if (pLastVB != pkt.VertexBuffer)
 			{
-				IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer, ctx.pObjectIndexVB };
-				uint64 pOffsets[] = { 0, 0 };
+				IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
+				uint64 pOffsets[] = { 0 };
+
 				pCtx->SetVertexBuffers(
 					0,
-					2, 
-					ppVertexBuffers, 
+					1,
+					ppVertexBuffers,
 					pOffsets,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pLastVB = pkt.VertexBuffer;
-				bBoundObjectIndexVB = true;
 			}
 
 			if (pLastIB != pkt.IndexBuffer)
@@ -440,12 +448,17 @@ namespace shz
 				pLastIB = pkt.IndexBuffer;
 			}
 
-			ctx.UploadObjectIndexInstance(pkt.ObjectIndex);
-
+			// Per-draw: StartInstanceLocation -> DrawCB
 			DrawIndexedAttribs dia = pkt.DrawAttribs;
 #ifdef SHZ_DEBUG
 			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
 #endif
+			{
+				MapHelper<hlsl::DrawConstants> map(pCtx, ctx.pDrawCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::DrawConstants* dst = map;
+
+				dst->StartInstanceLocation = dia.FirstInstanceLocation;
+			}
 
 			pCtx->DrawIndexed(dia);
 #ifdef PROFILING
@@ -455,6 +468,7 @@ namespace shz
 
 		pCtx->EndRenderPass();
 
+		// Shadow -> SRV
 		{
 			StateTransitionDesc tr2 =
 			{
@@ -466,7 +480,6 @@ namespace shz
 			pCtx->TransitionResourceStates(1, &tr2);
 		}
 	}
-
 
 	void ShadowRenderPass::EndFrame(RenderPassContext& ctx)
 	{

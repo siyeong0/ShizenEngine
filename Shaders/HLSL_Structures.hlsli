@@ -29,6 +29,11 @@ struct FrameConstants
     float LightIntensity;
 };
 
+struct DrawConstants
+{
+    uint StartInstanceLocation;
+};
+
 struct ShadowConstants
 {
     float4x4 LightViewProj;

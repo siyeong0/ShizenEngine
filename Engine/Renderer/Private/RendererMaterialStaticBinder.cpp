@@ -22,6 +22,16 @@ namespace shz
 			var->Set(m_pFrameCB);
 		}
 
+		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
+		{
+			var->Set(m_pDrawCB);
+		}
+
+		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "DRAW_CONSTANTS"))
+		{
+			var->Set(m_pDrawCB);
+		}
+
 		// Object indirection table (StructuredBuffer<ObjectConstants>).
 		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 		{

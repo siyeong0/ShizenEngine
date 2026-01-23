@@ -1,8 +1,92 @@
 #include "pch.h"
 #include "Engine/Material/Public/MaterialInstance.h"
+#include "Engine/Core/Common/Public/HashUtils.hpp"
 
 namespace shz
 {
+	static inline uint64 ptrKey64(const void* p) noexcept
+	{
+		return static_cast<uint64>(reinterpret_cast<uintptr_t>(p));
+	}
+
+	MaterialInstanceKey MaterialInstance::ComputeKey(bool bCastShadow, bool bAlphaMasked) const
+	{
+		DefaultHasher Hasher;
+
+		// ------------------------------------------------------------
+		// Template identity (TODO: replace with Template AssetID/StableID)
+		// ------------------------------------------------------------
+		Hasher(ptrKey64(m_pTemplate));
+
+		// Render pass name
+		Hasher(HashMapStringKey{ m_RenderPassName.c_str(), false });
+
+		// Pipeline knobs (PSO 영향)
+		Hasher(
+			m_Options.BlendMode,
+			m_Options.CullMode,
+			m_Options.FrontCounterClockwise,
+			m_Options.DepthEnable,
+			m_Options.DepthWriteEnable,
+			m_Options.DepthFunc,
+			m_Options.TextureBindingMode
+		);
+
+		// immutable sampler policy (네 Options에 있는 것들)
+		Hasher(HashMapStringKey{ m_Options.LinearWrapSamplerName.c_str(), false });
+		Hasher(m_Options.LinearWrapSamplerDesc); // 네 HashCombiner<SamplerDesc>가 이미 “필드별”로 안전하게 처리함
+
+		// Shadow/Masked variant flags
+		Hasher(bCastShadow, bAlphaMasked);
+
+		// ------------------------------------------------------------
+		// CBuffer blobs (content 기반)
+		// ------------------------------------------------------------
+		const uint32 cbCount = GetCBufferBlobCount();
+		Hasher(cbCount);
+
+		for (uint32 i = 0; i < cbCount; ++i)
+		{
+			const uint8* p = GetCBufferBlobData(i);
+			const uint32 sz = GetCBufferBlobSize(i);
+
+			Hasher(i, sz);
+			if (p != nullptr && sz != 0)
+			{
+				Hasher.UpdateRaw(p, sz);
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Texture bindings (resource identity)
+		// ------------------------------------------------------------
+		const uint32 texCount = GetTextureBindingCount();
+		Hasher(texCount);
+
+		for (uint32 i = 0; i < texCount; ++i)
+		{
+			const TextureBinding& tb = GetTextureBinding(i);
+
+			Hasher(i);
+			Hasher(HashMapStringKey{ tb.Name.c_str(), false });
+
+			if (tb.TextureRef.has_value() && tb.TextureRef.value())
+			{
+				// AssetID는 std::hash<AssetID>가 네 프로젝트에 이미 정의돼 있으니 그대로 사용 가능
+				Hasher(tb.TextureRef.value().GetID());
+			}
+			else
+			{
+				Hasher(uint64{ 0 });
+			}
+
+			// Sampler override identity (추후 desc 기반으로 개선 가능)
+			Hasher(ptrKey64(tb.pSamplerOverride));
+		}
+
+		return MaterialInstanceKey{ Hasher.Get() };
+	}
+
 	bool MaterialInstance::Initialize(const MaterialTemplate* pTemplate, const std::string& instanceName)
 	{
 		ASSERT(pTemplate, "Template is null.");
@@ -52,11 +136,7 @@ namespace shz
 				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
 				LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
 				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
-
-				LayoutElement{4, 1, 1, VT_UINT32,  false, LAYOUT_ELEMENT_AUTO_OFFSET, sizeof(uint32), INPUT_ELEMENT_FREQUENCY_PER_INSTANCE, 1},
 			};
-
-			kLayoutElems[4].Stride = sizeof(uint32);
 
 			m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
 			m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);

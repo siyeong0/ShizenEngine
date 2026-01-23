@@ -12,14 +12,9 @@
 
 namespace shz
 {
-	uint32 MaterialRenderData::findMaterialCBufferIndexFallback(const MaterialTemplate* pTemplate) const
+	uint32 MaterialRenderData::findMaterialCBufferIndexFallback() const
 	{
-		if (!pTemplate)
-		{
-			return 0;
-		}
-
-		const uint32 cbCount = pTemplate->GetCBufferCount();
+		const uint32 cbCount = m_SourceInstance.GetTemplate()->GetCBufferCount();
 		if (cbCount == 0)
 		{
 			return 0;
@@ -31,7 +26,7 @@ namespace shz
 
 		for (uint32 i = 0; i < cbCount; ++i)
 		{
-			const auto& cb = pTemplate->GetCBuffer(i);
+			const auto& cb = m_SourceInstance.GetTemplate()->GetCBuffer(i);
 			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
 			{
 				return i;
@@ -55,44 +50,41 @@ namespace shz
 		m_pMaterialConstants.Release();
 		m_BoundTextures.clear();
 
-		m_pTemplate = inst.GetTemplate();
-		if (!pDevice || !m_pTemplate) { return false; }
+		m_SourceInstance = inst;
+		if (!pDevice) { return false; }
 
-		m_MaterialCBufferIndex = findMaterialCBufferIndexFallback(m_pTemplate);
+		m_MaterialCBufferIndex = findMaterialCBufferIndexFallback();
 
-		if (!createPso(pDevice, inst, pStaticBinder)) { return false; }
-		if (!createSrbAndBindMaterialCBuffer(pDevice, inst)) { return false; }
+		if (!createPso(pDevice, pStaticBinder)) { return false; }
+		if (!createSrbAndBindMaterialCBuffer(pDevice)) { return false; }
 
 		// Optional: shadow SRB (renderer-owned PSO).
-		if (pShadowPSO != nullptr) 
+		if (pShadowPSO != nullptr)
 		{
-			if (!createShadowSrbAndBindMaterialCBuffer(pShadowPSO, inst)) { return false; }
+			if (!createShadowSrbAndBindMaterialCBuffer(pShadowPSO)) { return false; }
 		}
 
 		// Immediate initial binding
-		if (!Apply(pCache, inst, pCtx)) { return false; }
+		if (!Apply(pCache, pCtx)) { return false; }
 
 		return true;
 	}
 
 
-	bool MaterialRenderData::createPso(
-		IRenderDevice* pDevice,
-		const MaterialInstance& inst,
-		IMaterialStaticBinder* pStaticBinder)
+	bool MaterialRenderData::createPso(IRenderDevice* pDevice, IMaterialStaticBinder* pStaticBinder)
 	{
 		ASSERT(pDevice, "Device is null.");
 
-		const MATERIAL_PIPELINE_TYPE pt = inst.GetPipelineType();
+		const MATERIAL_PIPELINE_TYPE pt = m_SourceInstance.GetPipelineType();
 
 		if (pt == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
 			GraphicsPipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc = inst.GetPSODesc();
+			psoCi.PSODesc = m_SourceInstance.GetPSODesc();
 
 			// IMPORTANT: psoCi.PSODesc.Name points to string storage owned by MaterialInstance.
 			// This must remain valid during CreateGraphicsPipelineState().
-			psoCi.GraphicsPipeline = inst.GetGraphicsPipelineDesc();
+			psoCi.GraphicsPipeline = m_SourceInstance.GetGraphicsPipelineDesc();
 
 			if (psoCi.GraphicsPipeline.pRenderPass == nullptr)
 			{
@@ -104,7 +96,7 @@ namespace shz
 				bool hasMeshStages = false;
 				bool hasLegacyStages = false;
 
-				for (const RefCntAutoPtr<IShader>& s : inst.GetShaders())
+				for (const RefCntAutoPtr<IShader>& s : m_SourceInstance.GetShaders())
 				{
 					if (!s)
 						continue;
@@ -133,13 +125,13 @@ namespace shz
 
 			// Auto-generated resource layout from instance
 			{
-				psoCi.PSODesc.ResourceLayout.DefaultVariableType = inst.GetDefaultVariableType();
+				psoCi.PSODesc.ResourceLayout.DefaultVariableType = m_SourceInstance.GetDefaultVariableType();
 
-				psoCi.PSODesc.ResourceLayout.Variables = inst.GetLayoutVarCount() > 0 ? inst.GetLayoutVars() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumVariables = inst.GetLayoutVarCount();
+				psoCi.PSODesc.ResourceLayout.Variables = m_SourceInstance.GetLayoutVarCount() > 0 ? m_SourceInstance.GetLayoutVars() : nullptr;
+				psoCi.PSODesc.ResourceLayout.NumVariables = m_SourceInstance.GetLayoutVarCount();
 
-				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = inst.GetImmutableSamplerCount() > 0 ? inst.GetImmutableSamplers() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = inst.GetImmutableSamplerCount();
+				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount() > 0 ? m_SourceInstance.GetImmutableSamplers() : nullptr;
+				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount();
 			}
 
 			RefCntAutoPtr<IPipelineState> pPSO;
@@ -167,9 +159,9 @@ namespace shz
 		else if (pt == MATERIAL_PIPELINE_TYPE_COMPUTE)
 		{
 			ComputePipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc = inst.GetPSODesc();
+			psoCi.PSODesc = m_SourceInstance.GetPSODesc();
 
-			for (const RefCntAutoPtr<IShader>& s : inst.GetShaders())
+			for (const RefCntAutoPtr<IShader>& s : m_SourceInstance.GetShaders())
 			{
 				if (!s)
 					continue;
@@ -179,13 +171,13 @@ namespace shz
 			}
 
 			{
-				psoCi.PSODesc.ResourceLayout.DefaultVariableType = inst.GetDefaultVariableType();
+				psoCi.PSODesc.ResourceLayout.DefaultVariableType = m_SourceInstance.GetDefaultVariableType();
 
-				psoCi.PSODesc.ResourceLayout.Variables = inst.GetLayoutVarCount() > 0 ? inst.GetLayoutVars() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumVariables = inst.GetLayoutVarCount();
+				psoCi.PSODesc.ResourceLayout.Variables = m_SourceInstance.GetLayoutVarCount() > 0 ? m_SourceInstance.GetLayoutVars() : nullptr;
+				psoCi.PSODesc.ResourceLayout.NumVariables = m_SourceInstance.GetLayoutVarCount();
 
-				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = inst.GetImmutableSamplerCount() > 0 ? inst.GetImmutableSamplers() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = inst.GetImmutableSamplerCount();
+				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount() > 0 ? m_SourceInstance.GetImmutableSamplers() : nullptr;
+				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = m_SourceInstance.GetImmutableSamplerCount();
 			}
 
 			RefCntAutoPtr<IPipelineState> pPSO;
@@ -216,13 +208,8 @@ namespace shz
 	}
 
 
-	bool MaterialRenderData::createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst)
+	bool MaterialRenderData::createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice)
 	{
-		if (!m_pPSO || !m_pTemplate)
-		{
-			return false;
-		}
-
 		m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 		if (!m_pSRB)
 		{
@@ -230,10 +217,10 @@ namespace shz
 		}
 
 		// Create dynamic material constants buffer if template has cbuffers.
-		const uint32 cbCount = m_pTemplate->GetCBufferCount();
+		const uint32 cbCount = m_SourceInstance.GetTemplate()->GetCBufferCount();
 		if (cbCount > 0)
 		{
-			const auto& cb = m_pTemplate->GetCBuffer(m_MaterialCBufferIndex);
+			const auto& cb = m_SourceInstance.GetTemplate()->GetCBuffer(m_MaterialCBufferIndex);
 
 			BufferDesc desc = {};
 			desc.Name = "MaterialConstants";
@@ -250,7 +237,7 @@ namespace shz
 			if (m_pMaterialConstants)
 			{
 				// Bind by name for first stage that exposes it.
-				for (const RefCntAutoPtr<IShader>& s : inst.GetShaders())
+				for (const RefCntAutoPtr<IShader>& s : m_SourceInstance.GetShaders())
 				{
 					if (!s)
 						continue;
@@ -269,10 +256,8 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialRenderData::createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO, const MaterialInstance& inst)
+	bool MaterialRenderData::createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO)
 	{
-		if (!pShadowPSO || !m_pTemplate) { return false; }
-
 		pShadowPSO->CreateShaderResourceBinding(&m_pShadowSRB, true);
 		if (!m_pShadowSRB) { return false; }
 
@@ -283,21 +268,21 @@ namespace shz
 			IShaderResourceVariable* v = nullptr;
 
 			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, MaterialTemplate::MATERIAL_CBUFFER_NAME);
-			if (v) 
-			{ 
-				v->Set(m_pMaterialConstants); 
+			if (v)
+			{
+				v->Set(m_pMaterialConstants);
 			}
 
 			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, MaterialTemplate::MATERIAL_CBUFFER_NAME);
-			if (v) 
+			if (v)
 			{
-				v->Set(m_pMaterialConstants); 
+				v->Set(m_pMaterialConstants);
 			}
 
 			v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_GEOMETRY, MaterialTemplate::MATERIAL_CBUFFER_NAME);
 			if (v)
-			{ 
-				v->Set(m_pMaterialConstants); 
+			{
+				v->Set(m_pMaterialConstants);
 			}
 		}
 
@@ -305,14 +290,14 @@ namespace shz
 	}
 
 
-	IShaderResourceVariable* MaterialRenderData::findVarAnyStage(const char* name, const MaterialInstance& inst) const
+	IShaderResourceVariable* MaterialRenderData::findVarAnyStage(const char* name) const
 	{
 		if (!m_pSRB || !name || name[0] == '\0')
 		{
 			return nullptr;
 		}
 
-		for (const RefCntAutoPtr<IShader>& s : inst.GetShaders())
+		for (const RefCntAutoPtr<IShader>& s : m_SourceInstance.GetShaders())
 		{
 			if (!s)
 			{
@@ -349,14 +334,12 @@ namespace shz
 		return nullptr;
 	}
 
-	bool MaterialRenderData::bindAllTexturesToShadow(RenderResourceCache* pCache, MaterialInstance& inst)
+	bool MaterialRenderData::bindAllTexturesToShadow(RenderResourceCache* pCache)
 	{
-		if (!m_pTemplate || !m_pShadowSRB || !pCache) { return true; }
-
-		const uint32 resCount = m_pTemplate->GetResourceCount();
+		const uint32 resCount = m_SourceInstance.GetTemplate()->GetResourceCount();
 		for (uint32 i = 0; i < resCount; ++i)
 		{
-			const MaterialResourceDesc& res = m_pTemplate->GetResource(i);
+			const MaterialResourceDesc& res = m_SourceInstance.GetTemplate()->GetResource(i);
 
 			if (res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
 				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
@@ -365,9 +348,9 @@ namespace shz
 			}
 
 			// Use same dirty bit policy as main SRB.
-			if (!inst.IsTextureDirty(i)) { continue; }
+			if (!m_SourceInstance.IsTextureDirty(i)) { continue; }
 
-			const TextureBinding& b = inst.GetTextureBinding(i);
+			const TextureBinding& b = m_SourceInstance.GetTextureBinding(i);
 
 			ITextureView* pView = nullptr;
 
@@ -389,14 +372,14 @@ namespace shz
 	}
 
 
-	bool MaterialRenderData::updateMaterialConstants(MaterialInstance& inst, IDeviceContext* pCtx)
+	bool MaterialRenderData::updateMaterialConstants(IDeviceContext* pCtx)
 	{
 		if (!m_pMaterialConstants || !pCtx)
 		{
 			return true;
 		}
 
-		const uint32 cbCount = inst.GetCBufferBlobCount();
+		const uint32 cbCount = m_SourceInstance.GetCBufferBlobCount();
 		if (m_MaterialCBufferIndex >= cbCount)
 		{
 			return true;
@@ -405,15 +388,15 @@ namespace shz
 		const uint64 frameIndex = pCtx->GetFrameNumber();
 
 		const bool bFirstUseThisFrame = (m_LastConstantsUpdateFrame != frameIndex);
-		const bool bDirty = inst.IsCBufferDirty(m_MaterialCBufferIndex);
+		const bool bDirty = m_SourceInstance.IsCBufferDirty(m_MaterialCBufferIndex);
 
 		if (!bFirstUseThisFrame && !bDirty)
 		{
 			return true;
 		}
 
-		const uint8* pBlob = inst.GetCBufferBlobData(m_MaterialCBufferIndex);
-		const uint32 blobSize = inst.GetCBufferBlobSize(m_MaterialCBufferIndex);
+		const uint8* pBlob = m_SourceInstance.GetCBufferBlobData(m_MaterialCBufferIndex);
+		const uint32 blobSize = m_SourceInstance.GetCBufferBlobSize(m_MaterialCBufferIndex);
 
 		if (!pBlob || blobSize == 0)
 		{
@@ -432,7 +415,7 @@ namespace shz
 
 		if (bDirty)
 		{
-			inst.ClearCBufferDirty(m_MaterialCBufferIndex);
+			m_SourceInstance.ClearCBufferDirty(m_MaterialCBufferIndex);
 		}
 
 		return true;
@@ -440,19 +423,15 @@ namespace shz
 
 
 
-	bool MaterialRenderData::bindAllTextures(RenderResourceCache* pCache, MaterialInstance& inst)
+	bool MaterialRenderData::bindAllTextures(RenderResourceCache* pCache)
 	{
-		if (!m_pTemplate || !m_pSRB || !pCache)
-		{
-			return false;
-		}
 
 		m_BoundTextures.clear();
 
-		const uint32 resCount = m_pTemplate->GetResourceCount();
+		const uint32 resCount = m_SourceInstance.GetTemplate()->GetResourceCount();
 		for (uint32 i = 0; i < resCount; ++i)
 		{
-			const MaterialResourceDesc& res = m_pTemplate->GetResource(i);
+			const MaterialResourceDesc& res = m_SourceInstance.GetTemplate()->GetResource(i);
 
 			if (res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
 				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
@@ -461,12 +440,12 @@ namespace shz
 				continue;
 			}
 
-			if (!inst.IsTextureDirty(i))
+			if (!m_SourceInstance.IsTextureDirty(i))
 			{
 				continue;
 			}
 
-			const TextureBinding& b = inst.GetTextureBinding(i);
+			const TextureBinding& b = m_SourceInstance.GetTextureBinding(i);
 
 			ITextureView* pView = nullptr;
 
@@ -492,30 +471,33 @@ namespace shz
 				pView = pCache->GetErrorTexture().GetSRV();
 			}
 
-			IShaderResourceVariable* pVar = findVarAnyStage(res.Name.c_str(), inst);
+			IShaderResourceVariable* pVar = findVarAnyStage(res.Name.c_str());
 			if (pVar)
 			{
 				pVar->Set(pView);
 			}
 
-			inst.ClearTextureDirty(i);
+			m_SourceInstance.ClearTextureDirty(i);
 		}
 
 		return true;
 	}
 
-	bool MaterialRenderData::Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx)
+	bool MaterialRenderData::Apply(RenderResourceCache* pCache, IDeviceContext* pCtx)
 	{
 		if (!IsValid()) { return false; }
 
-		if (!updateMaterialConstants(inst, pCtx)) { return false; }
+		if (!updateMaterialConstants(pCtx))
+		{
+			return false;
+		}
 
 		// Bind shadow textures first (because bindAllTextures clears dirty).
 		if (m_pShadowSRB) {
-			if (!bindAllTexturesToShadow(pCache, inst)) { return false; }
+			if (!bindAllTexturesToShadow(pCache)) { return false; }
 		}
 
-		if (!bindAllTextures(pCache, inst)) { return false; }
+		if (!bindAllTextures(pCache)) { return false; }
 
 		return true;
 	}

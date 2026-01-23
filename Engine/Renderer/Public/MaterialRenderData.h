@@ -39,7 +39,7 @@ namespace shz
 
 		bool IsValid() const noexcept
 		{
-			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_pTemplate != nullptr);
+			return (m_pSRB != nullptr) && (m_pPSO != nullptr) && (m_SourceInstance.GetTemplate() != nullptr);
 		}
 
 		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
@@ -51,24 +51,24 @@ namespace shz
 		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
 
 		// Re-apply per-instance values/resources (e.g., after SetFloat/SetTexture changes).
-		bool Apply(RenderResourceCache* pCache, MaterialInstance& inst, IDeviceContext* pCtx);
+		bool Apply(RenderResourceCache* pCach, IDeviceContext* pCtx);
 
 	private:
-		bool createPso(IRenderDevice* pDevice, const MaterialInstance& inst, IMaterialStaticBinder* pStaticBinder);
-		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice, const MaterialInstance& inst);
+		bool createPso(IRenderDevice* pDevice, IMaterialStaticBinder* pStaticBinder);
+		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice);
 
 		// Shadow SRB (optional): created from renderer-owned shadow PSO.
-		bool createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO, const MaterialInstance& inst);
+		bool createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO);
 
-		bool bindAllTextures(RenderResourceCache* pCache, MaterialInstance& inst);
-		bool bindAllTexturesToShadow(RenderResourceCache* pCache, MaterialInstance& inst);
+		bool bindAllTextures(RenderResourceCache* pCache);
+		bool bindAllTexturesToShadow(RenderResourceCache* pCache);
 
-		bool updateMaterialConstants(MaterialInstance& inst, IDeviceContext* pCtx);
+		bool updateMaterialConstants(IDeviceContext* pCtx);
 
-		IShaderResourceVariable* findVarAnyStage(const char* name, const MaterialInstance& inst) const;
+		IShaderResourceVariable* findVarAnyStage(const char* name) const;
 		IShaderResourceVariable* findVarShadowAnyStage(const char* name) const;
 
-		uint32 findMaterialCBufferIndexFallback(const MaterialTemplate* pTemplate) const;
+		uint32 findMaterialCBufferIndexFallback() const;
 
 	private:
 		RefCntAutoPtr<IPipelineState>          m_pPSO = {};
@@ -78,7 +78,7 @@ namespace shz
 
 		RefCntAutoPtr<IShaderResourceBinding>  m_pShadowSRB = {};
 
-		const MaterialTemplate* m_pTemplate = nullptr;
+		MaterialInstance m_SourceInstance = {};
 		uint32 m_MaterialCBufferIndex = 0;
 
 		uint64 m_LastConstantsUpdateFrame = 0xFFFFFFFFFFFFFFFFull;

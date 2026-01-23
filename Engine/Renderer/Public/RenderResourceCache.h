@@ -57,13 +57,18 @@ namespace shz
 		bool DestroyStaticMeshRenderData(Handle<StaticMeshRenderData> h);
 		void InvalidateStaticMeshByAsset(const StaticMeshAsset& asset);
 
-		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(MaterialInstance* pInstance, IDeviceContext* pCtx, IMaterialStaticBinder* pStaticBinder, IPipelineState* pShadowPSO = nullptr);
+		Handle<MaterialRenderData> GetOrCreateMaterialRenderData(
+			const MaterialInstance& Instance,
+			bool bCastShadow,
+			bool bAlphaMasked,
+			IDeviceContext* pCtx,
+			IMaterialStaticBinder* pStaticBinder,
+			IPipelineState* pShadowPSO = nullptr);
 
 		const MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) const noexcept;
 		MaterialRenderData* TryGetMaterialRenderData(Handle<MaterialRenderData> h) noexcept;
 
 		bool DestroyMaterialRenderData(Handle<MaterialRenderData> h);
-		void InvalidateMaterialByInstance(const MaterialInstance* pInstance);
 
 		void SetErrorTexture(const std::string& path);
 		const TextureRenderData& GetErrorTexture() const noexcept;
@@ -154,7 +159,7 @@ namespace shz
 		std::unordered_map<uint64, Handle<StaticMeshRenderData>> m_MeshAssetToRD = {};
 		std::vector<Slot<StaticMeshRenderData>> m_MeshRDSlots = {};
 
-		std::unordered_map<uint64, Handle<MaterialRenderData>> m_MaterialInstToRD = {};
+		std::unordered_map<size_t, Handle<MaterialRenderData>> m_MaterialKeyToRD = {};
 		std::vector<Slot<MaterialRenderData>> m_MaterialRDSlots = {};
 
 		TextureRenderData m_ErrorTex = {};

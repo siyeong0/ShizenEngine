@@ -30,14 +30,23 @@ namespace shz
 		ISampler* pSamplerOverride = nullptr;
 	};
 
+	struct MaterialInstanceKey final
+	{
+		size_t Hash = 0;
+		bool operator==(const MaterialInstanceKey& rhs) const noexcept { return Hash == rhs.Hash; }
+		bool operator!=(const MaterialInstanceKey& rhs) const noexcept { return !(*this == rhs); }
+	};
+
 	class MaterialInstance final
 	{
+	public:
+		MaterialInstanceKey ComputeKey(bool bCastShadow, bool bAlphaMasked) const;
 	public:
 		MaterialInstance() = default;
 		~MaterialInstance() = default;
 
-		MaterialInstance(const MaterialInstance&) = delete;
-		MaterialInstance& operator=(const MaterialInstance&) = delete;
+		MaterialInstance(const MaterialInstance&) = default;
+		MaterialInstance& operator=(const MaterialInstance&) = default;
 
 		MaterialInstance(MaterialInstance&&) noexcept = default;
 		MaterialInstance& operator=(MaterialInstance&&) noexcept = default;

@@ -54,9 +54,11 @@ namespace shz
 		// Common resources wired by Renderer
 		// ---------------------------------------------------------------------
 		IBuffer* pFrameCB = nullptr;
+		IBuffer* pDrawCB = nullptr;
 		IBuffer* pShadowCB = nullptr;
 
 		IBuffer* pObjectTableSB = nullptr;
+		IBuffer* pObjectTableSBShadow = nullptr;
 		IBuffer* pObjectIndexVB = nullptr;
 
 		ITexture* pEnvTex = nullptr;
@@ -80,8 +82,6 @@ namespace shz
 		// Per-frame caches (RD/barriers)
 		// ---------------------------------------------------------------------
 		std::vector<StateTransitionDesc> PreBarriers = {};
-		std::unordered_map<uint64, Handle<MaterialRenderData>> FrameMat = {};
-		std::vector<uint64> FrameMatKeys = {};
 
 		void ResetFrame()
 		{
@@ -91,8 +91,6 @@ namespace shz
 			DrawPacketsPerPass.clear();
 
 			PreBarriers.clear();
-			FrameMat.clear();
-			FrameMatKeys.clear();
 		}
 
 		void PushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
