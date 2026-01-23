@@ -1,4 +1,5 @@
 #pragma once
+#pragma once
 #include <vector>
 
 #include "Primitives/BasicTypes.h"
@@ -47,16 +48,6 @@ namespace shz
 		const std::vector<Handle<TextureRenderData>>& GetBoundTextures() const noexcept { return m_BoundTextures; }
 
 	private:
-		bool createSrbAndBindMaterialCBuffer(IRenderDevice* pDevice);
-
-		// Shadow SRB (optional): created from renderer-owned shadow PSO.
-		bool createShadowSrbAndBindMaterialCBuffer(IPipelineState* pShadowPSO);
-
-		bool bindAllTextures(RenderResourceCache* pCache);
-		bool bindAllTexturesToShadow(RenderResourceCache* pCache);
-
-		bool updateMaterialConstants(IDeviceContext* pCtx);
-
 		IShaderResourceVariable* findVarAnyStage(const char* name) const;
 		IShaderResourceVariable* findVarShadowAnyStage(const char* name) const;
 

@@ -299,7 +299,61 @@ namespace shz
 			}
 		}
 
-		if (!bindAllTextures(pCache)) { return false; }
+		// Bind all textures
+		{
+			m_BoundTextures.clear();
+
+			const uint32 resCount = m_SourceInstance.GetTemplate()->GetResourceCount();
+			for (uint32 i = 0; i < resCount; ++i)
+			{
+				const MaterialResourceDesc& resDesc = m_SourceInstance.GetTemplate()->GetResource(i);
+
+				if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
+					resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
+					resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
+				{
+					continue;
+				}
+
+				if (!m_SourceInstance.IsTextureDirty(i))
+				{
+					continue;
+				}
+
+				const TextureBinding& b = m_SourceInstance.GetTextureBinding(i);
+
+				ITextureView* pView = nullptr;
+
+				// ------------------------------------------------------------
+				// 1) If user provided a texture ref, bind it.
+				// 2) Otherwise, bind a error texture for this slot.
+				// ------------------------------------------------------------
+				if (b.TextureRef.has_value() && b.TextureRef->IsValid())
+				{
+					const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(*b.TextureRef);
+					const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
+
+					if (texRD)
+					{
+						pView = texRD->GetSRV();
+						m_BoundTextures.push_back(hTexRD);
+					}
+				}
+				else
+				{
+					// Fall back to error texture SRV (white/normalF/orm/black/cube etc.)
+					pView = pCache->GetErrorTexture().GetSRV();
+				}
+
+				if (IShaderResourceVariable* pVar = findVarAnyStage(resDesc.Name.c_str()))
+				{
+					pVar->Set(pView);
+				}
+
+				m_SourceInstance.ClearTextureDirty(i);
+			}
+
+		}
 
 		return true;
 	}
@@ -346,67 +400,6 @@ namespace shz
 		if (v) { return v; }
 
 		return nullptr;
-	}
-
-
-	bool MaterialRenderData::bindAllTextures(RenderResourceCache* pCache)
-	{
-
-		m_BoundTextures.clear();
-
-		const uint32 resCount = m_SourceInstance.GetTemplate()->GetResourceCount();
-		for (uint32 i = 0; i < resCount; ++i)
-		{
-			const MaterialResourceDesc& res = m_SourceInstance.GetTemplate()->GetResource(i);
-
-			if (res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
-				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
-				res.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
-			{
-				continue;
-			}
-
-			if (!m_SourceInstance.IsTextureDirty(i))
-			{
-				continue;
-			}
-
-			const TextureBinding& b = m_SourceInstance.GetTextureBinding(i);
-
-			ITextureView* pView = nullptr;
-
-			// ------------------------------------------------------------
-			// 1) If user provided a texture ref, bind it.
-			// 2) Otherwise, bind a error texture for this slot.
-			// ------------------------------------------------------------
-			if (b.TextureRef.has_value() && b.TextureRef->IsValid())
-			{
-				const Handle<TextureRenderData> hTexRD = pCache->GetOrCreateTextureRenderData(*b.TextureRef);
-				const TextureRenderData* texRD = pCache->TryGetTextureRenderData(hTexRD);
-
-				if (texRD)
-				{
-					pView = texRD->GetSRV();
-					m_BoundTextures.push_back(hTexRD);
-				}
-			}
-
-			if (!pView)
-			{
-				// Fall back to error texture SRV (white/normalF/orm/black/cube etc.)
-				pView = pCache->GetErrorTexture().GetSRV();
-			}
-
-			IShaderResourceVariable* pVar = findVarAnyStage(res.Name.c_str());
-			if (pVar)
-			{
-				pVar->Set(pView);
-			}
-
-			m_SourceInstance.ClearTextureDirty(i);
-		}
-
-		return true;
 	}
 
 	uint32 MaterialRenderData::findMaterialCBufferIndexFallback() const
