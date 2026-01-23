@@ -114,8 +114,8 @@ namespace shz
 		const float spacing = 0.35f;
 		const float3 origin = { -5.0f, -0.1f, 2.0f };
 #else
-		const int32 countX = 1000;
-		const int32 countZ = 1000;
+		const int32 countX = 200;
+		const int32 countZ = 200;
 		const float spacing = 0.35f;
 		const float3 origin = { -10.0f, -0.1f, -10.0f };
 #endif
