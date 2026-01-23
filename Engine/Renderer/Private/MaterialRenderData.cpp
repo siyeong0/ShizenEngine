@@ -28,7 +28,15 @@ namespace shz
 
 		m_SourceInstance = inst;
 
-		m_MaterialCBufferIndex = findMaterialCBufferIndexFallback();
+		m_MaterialCBufferIndex = 0;
+		for (; m_MaterialCBufferIndex < m_SourceInstance.GetTemplate()->GetCBufferCount(); ++m_MaterialCBufferIndex)
+		{
+			const auto& cb = m_SourceInstance.GetTemplate()->GetCBuffer(m_MaterialCBufferIndex);
+			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
+			{
+				break;
+			}
+		}
 
 		// Create PSO
 		{
@@ -360,10 +368,8 @@ namespace shz
 
 	IShaderResourceVariable* MaterialRenderData::findVarAnyStage(const char* name) const
 	{
-		if (!m_pSRB || !name || name[0] == '\0')
-		{
-			return nullptr;
-		}
+		ASSERT(m_pSRB, "SRB is null.");
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		for (const RefCntAutoPtr<IShader>& s : m_SourceInstance.GetShaders())
 		{
@@ -385,35 +391,30 @@ namespace shz
 	}
 	IShaderResourceVariable* MaterialRenderData::findVarShadowAnyStage(const char* name) const
 	{
-		if (!m_pShadowSRB || !name || name[0] == '\0') { return nullptr; }
+		ASSERT(m_pShadowSRB, "Shadow SRB is null.");
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 
 		// Shadow pass usually uses VS(+PS for alpha test).
 		IShaderResourceVariable* v = nullptr;
 
 		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, name);
-		if (v) { return v; }
+		if (v)
+		{
+			return v;
+		}
 
 		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, name);
-		if (v) { return v; }
+		if (v)
+		{
+			return v;
+		}
 
 		v = m_pShadowSRB->GetVariableByName(SHADER_TYPE_GEOMETRY, name);
-		if (v) { return v; }
+		if (v)
+		{
+			return v;
+		}
 
 		return nullptr;
 	}
-
-	uint32 MaterialRenderData::findMaterialCBufferIndexFallback() const
-	{
-		for (uint32 i = 0; i < m_SourceInstance.GetTemplate()->GetCBufferCount(); ++i)
-		{
-			const auto& cb = m_SourceInstance.GetTemplate()->GetCBuffer(i);
-			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
-			{
-				return i;
-			}
-		}
-
-		return 0;
-	}
-
 } // namespace shz

@@ -28,7 +28,6 @@ namespace shz
 		MaterialRenderData() = default;
 		~MaterialRenderData() = default;
 
-		// Creates PSO + SRB + material constants buffer and performs initial binding immediately.
 		bool Initialize(
 			IRenderDevice* pDevice,
 			RenderResourceCache* pCache,
@@ -41,7 +40,6 @@ namespace shz
 
 		IPipelineState* GetPSO() const noexcept { return m_pPSO; }
 		IShaderResourceBinding* GetSRB() const noexcept { return m_pSRB; }
-
 		IShaderResourceBinding* GetShadowSRB() const noexcept { return m_pShadowSRB; }
 
 		IBuffer* GetMaterialConstantsBuffer() const noexcept { return m_pMaterialConstants; }
@@ -51,12 +49,10 @@ namespace shz
 		IShaderResourceVariable* findVarAnyStage(const char* name) const;
 		IShaderResourceVariable* findVarShadowAnyStage(const char* name) const;
 
-		uint32 findMaterialCBufferIndexFallback() const;
-
 	private:
-		RefCntAutoPtr<IPipelineState>          m_pPSO = {};
+		RefCntAutoPtr<IPipelineState> m_pPSO = {};
 		RefCntAutoPtr<IShaderResourceBinding>  m_pSRB = {};
-		RefCntAutoPtr<IBuffer>                m_pMaterialConstants = {};
+		RefCntAutoPtr<IBuffer> m_pMaterialConstants = {};
 		std::vector<Handle<TextureRenderData>> m_BoundTextures = {};
 
 		RefCntAutoPtr<IShaderResourceBinding>  m_pShadowSRB = {};
