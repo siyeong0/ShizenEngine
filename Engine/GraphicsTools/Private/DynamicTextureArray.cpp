@@ -34,6 +34,7 @@
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Primitives/Align.hpp"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {

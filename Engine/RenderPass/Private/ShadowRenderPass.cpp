@@ -1,4 +1,3 @@
-// Engine/RenderPass/Private/ShadowRenderPass.cpp
 #include "pch.h"
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
 #include "Engine/RenderPass/Public/RenderPassContext.h"
@@ -8,8 +7,6 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/MaterialRenderData.h"
-#include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 
 namespace shz
@@ -365,10 +362,6 @@ namespace shz
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
 		const std::vector<DrawPacket>& packets = ctx.ShadowDrawPackets;
-		if (packets.empty())
-		{
-			return;
-		}
 
 		// To DEPTH_WRITE
 		{

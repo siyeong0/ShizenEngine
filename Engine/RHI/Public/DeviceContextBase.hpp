@@ -37,6 +37,7 @@
 
 #include "Primitives/Align.hpp"
 #include "Engine/Core/Math/Math.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/Core/Common/Public/Cast.hpp"
 #include "Engine/Core/Common/Public/ObjectBase.hpp"
 

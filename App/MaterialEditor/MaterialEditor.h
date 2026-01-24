@@ -1,13 +1,8 @@
-// ============================================================================
-// MaterialEditor.h
-// ============================================================================
-
 #pragma once
-
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 #include "Engine/Core/Runtime/Public/SampleBase.h"
 
@@ -17,12 +12,15 @@
 
 #include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 #include "Engine/AssetRuntime/Common/AssetRef.hpp"
-#include "Engine/AssetRuntime/Common/AssetPtr.hpp"
+#include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 
-#include "Engine/Material/Public/MaterialInstance.h"
+#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
+#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
+
 #include "Engine/Material/Public/MaterialTemplate.h"
+#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
 
 namespace shz
 {
@@ -43,36 +41,10 @@ namespace shz
 		void UpdateUI() override final;
 
 	private:
-		enum class EPreviewObject : uint8
-		{
-			Floor = 0,
-			Main,
-		};
-
-		struct LoadedMesh final
-		{
-			std::string Path = {};
-
-			AssetRef<StaticMeshAsset> MeshRef = {};
-			AssetPtr<StaticMeshAsset> MeshPtr = {}; // keeps resident (if loaded from StaticMeshAsset)
-
-			Handle<StaticMeshRenderData>       MeshHandle = {};
-			Handle<RenderScene::RenderObject>  ObjectId = {}; // authoritative handle
-
-			// Fallback only (avoid depending on array index!)
-			int32 SceneObjectIndex = -1;
-
-			float3 Position = { 0, 0, 0 };
-			float3 BaseRotation = { 0, 0, 0 };
-			float3 Scale = { 1, 1, 1 };
-
-			bool bCastShadow = true;
-			bool bAlphaMasked = false;
-
-			bool IsValid() const noexcept { return ObjectId.IsValid(); }
-		};
-
-		struct ViewportState final
+		// ------------------------------------------------------------
+		// UI structs
+		// ------------------------------------------------------------
+		struct ViewportPanelState final
 		{
 			uint32 Width = 1;
 			uint32 Height = 1;
@@ -80,21 +52,53 @@ namespace shz
 			bool Focused = false;
 		};
 
+		struct MainObjectState final
+		{
+			std::string Path = {};
+			float3 Position = {};
+			float3 Rotation = {};
+			float3 Scale = { 1,1,1 };
+
+			bool bCastShadow = true;
+
+			// ------------------------------------------------------------
+			// Source 1) Native mesh asset (shzmesh.json)
+			// ------------------------------------------------------------
+			AssetRef<StaticMeshAsset> MeshRef = {};
+			AssetPtr<StaticMeshAsset> MeshPtr = {};
+
+			// ------------------------------------------------------------
+			// Source 2) Imported mesh via Assimp (fbx/gltf/glb/...)
+			// ------------------------------------------------------------
+			AssetRef<AssimpAsset> AssimpRef = {};
+			AssetPtr<AssimpAsset> AssimpPtr = {};
+
+			// CPU
+			StaticMeshAsset* ImportedCpuMesh = {}; // owns CPU mesh after BuildStaticMeshAsset()
+
+			// GPU
+			StaticMeshRenderData MeshRD = {};
+			Handle<RenderScene::RenderObject> ObjectId = {};
+
+			uint64 RebuildKey = 1;
+		};
+
 		struct MaterialUiCache final
 		{
-			// Reflection-driven storage (Template variable name -> raw bytes / texture path).
-			std::unordered_map<std::string, std::vector<uint8>> ValueBytes = {};
-			std::unordered_map<std::string, std::string>        TexturePaths = {};
+			bool Dirty = true;
 
-			// Pipeline knobs
+			// Metadata
+			std::string TemplateName = "DefaultLit";
 			std::string RenderPassName = "GBuffer";
-			uint32      SubpassIndex = 0;
+
+			// Options
+			MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
 			CULL_MODE CullMode = CULL_MODE_BACK;
-			bool      FrontCounterClockwise = true;
+			bool FrontCounterClockwise = true;
 
-			bool                DepthEnable = true;
-			bool                DepthWriteEnable = true;
+			bool DepthEnable = true;
+			bool DepthWriteEnable = true;
 			COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
 			MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
@@ -106,133 +110,85 @@ namespace shz
 				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
 			};
 
-			bool Dirty = true;
+			// Asset-only options
+			bool bTwoSided = false;
+			bool bCastShadow = true;
+
+			// Reflection-driven payload
+			std::unordered_map<std::string, std::vector<uint8>> ValueBytes = {};
+			std::unordered_map<std::string, std::string> TexturePaths = {};
 		};
 
 	private:
-		// Asset helpers
-		void RegisterAssetLoaders();
-
-		AssetRef<StaticMeshAsset> RegisterStaticMeshPath(const std::string& Path);
-		AssetRef<TextureAsset>    RegisterTexturePath(const std::string& Path);
-
-		AssetPtr<StaticMeshAsset> LoadStaticMeshBlocking(AssetRef<StaticMeshAsset> Ref, EAssetLoadFlags Flags = EAssetLoadFlags::None);
-		AssetPtr<TextureAsset>    LoadTextureBlocking(AssetRef<TextureAsset> Ref, EAssetLoadFlags Flags = EAssetLoadFlags::None);
-
-		// Template / instance
-		std::string       MakeTemplateKeyFromInputs() const;
-		MaterialTemplate* GetOrCreateTemplateFromInputs();
-		MaterialTemplate* RebuildTemplateFromInputs();
-
-		// Main material ownership (MaterialEditor owns MaterialInstance)
-		void              RebuildMainMaterialsFromCpuMesh(const StaticMeshAsset& CpuMesh);
-		bool              EnsureMainMaterialStorageForSlots(uint32 SlotCount);
-
-		void              RebindMainMaterialToTemplate(MaterialTemplate* pNewTmpl, int32 SlotIndex);
-
-		// Scene helpers
-		bool LoadPreviewMesh(
-			EPreviewObject Which,
+		bool loadOrReplaceMainObject(
 			const char* Path,
 			float3 Position,
 			float3 Rotation,
 			float3 Scale,
-			bool bUniformScale,
-			bool bCastShadow,
-			bool bAlphaMasked);
+			bool bCastShadow);
 
-		bool ImportMainFromSavedPath(const std::string& savedPath);
+		bool rebuildMainMeshRenderData(); // CreateStaticMesh(key++) and patch scene object
 
-		// RenderScene object/material bridge
-		LoadedMesh* GetMainMeshOrNull() noexcept;
-		const LoadedMesh* GetMainMeshOrNull() const noexcept;
+		RenderScene::RenderObject* getMainRenderObjectOrNull();
 
-		RenderScene::RenderObject* GetMainRenderObjectOrNull();
-		const RenderScene::RenderObject* GetMainRenderObjectOrNull() const;
+		MaterialUiCache& getOrCreateSlotCache(uint32 slotIndex);
+		void syncCacheFromMaterialAsset(MaterialUiCache& cache, const MaterialAsset& mat, const MaterialTemplate& tmpl);
+		void applyCacheToMaterialAsset(MaterialAsset& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl);
 
-		MaterialInstance* GetMainMaterialOrNull();
-		const MaterialInstance* GetMainMaterialOrNull() const;
+		bool rebuildMainSaveObjectFromScene(std::string* outError);
+		bool saveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
 
-		// Build MaterialRenderData handle from Main MaterialInstance
-		bool RebuildMainMaterialHandle(int32 SlotIndex);
-
-		// UI framework
-		void UiDockspace();
-		void UiScenePanel();
-		void UiViewportPanel();
-		void UiMaterialInspector();
-		void UiStatsPanel();
-
-		// Material UI
-		uint64           MakeSelectionKeyForMain(int32 SlotIndex) const;
-		MaterialUiCache& GetOrCreateMaterialCache(uint64 Key);
-
-		void SyncCacheFromInstance(MaterialUiCache& Cache, const MaterialInstance& Inst, const MaterialTemplate& Tmpl);
-		void ApplyCacheToInstance(MaterialInstance& Inst, MaterialUiCache& Cache, const MaterialTemplate& Tmpl);
-
-		void DrawValueEditor(MaterialInstance& Inst, MaterialUiCache& Cache, const MaterialTemplate& Tmpl);
-		void DrawResourceEditor(MaterialInstance& Inst, MaterialUiCache& Cache, const MaterialTemplate& Tmpl);
-		void DrawPipelineEditor(MaterialInstance& Inst, MaterialUiCache& Cache);
-
-		bool RebuildMainSaveObjectFromScene(std::string* outError);
-		bool SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
-
-		// Utility
-		static std::string SanitizeFilePath(std::string S);
+		void clearTemplateCache();
 
 	private:
+		// ------------------------------------------------------------
+		// UI panels
+		// ------------------------------------------------------------
+		void uiDockspace();
+		void uiScenePanel();
+		void uiViewportPanel();
+		void uiMaterialPanel();
+		void uiStatsPanel();
+
+	private:
+		// ------------------------------------------------------------
+		// State
+		// ------------------------------------------------------------
 		std::unique_ptr<Renderer>     m_pRenderer = nullptr;
 		std::unique_ptr<RenderScene>  m_pRenderScene = nullptr;
 		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
+		ViewportPanelState m_Viewport = {};
 		ViewFamily        m_ViewFamily = {};
 		FirstPersonCamera m_Camera = {};
 
-		RenderScene::LightObject           m_GlobalLight = {};
-		Handle<RenderScene::LightObject>   m_GlobalLightHandle = {};
+		// Light (optional)
+		RenderScene::LightObject         m_GlobalLight = {};
+		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
-		// IMPORTANT: stable template storage
-		std::unordered_map<std::string, std::unique_ptr<MaterialTemplate>> m_TemplateCache = {};
+		// Main object
+		MainObjectState m_Main = {};
+		std::string m_MainMeshPath = "C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/DamagedHelmet.gltf";
 
-		LoadedMesh m_Floor = {};
-		LoadedMesh m_Main = {};
-
-		// Main materials are owned by editor now (NOT by RenderScene/StaticMeshRenderData)
-		std::vector<MaterialInstance> m_MainMaterialInstances = {};
-
-		int32         m_SelectedMaterialSlot = 0;
-		ViewportState m_Viewport = {};
-
-		// Shader inputs (Template selection)
-		int32       m_SelectedPresetIndex = 0;
-		std::string m_ShaderVS = "GBuffer.vsh";
-		std::string m_ShaderPS = "GBuffer.psh";
-		std::string m_VSEntry = "main";
-		std::string m_PSEntry = "main";
-
-		// Material UI caches (per MAIN slot)
-		std::unordered_map<uint64, MaterialUiCache> m_MaterialUi = {};
-
-		// UI state
-		bool m_DockBuilt = false;
-
-		// Main object settings
-		std::string m_MainMeshPath = {};
-		float3 m_MainMeshPos = { 0.0f, -0.5f, 3.0f };
-		float3 m_MainMeshRot = { 0.0f,  0.0f, 0.0f };
-		float3 m_MainMeshScale = { 1.0f,  1.0f, 1.0f };
-
-		bool m_MainMeshUniformScale = true;
-		bool m_MainMeshCastShadow = true;
-		bool m_MainMeshAlphaMasked = false;
-
-		// Main save UI
-		std::string          m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
-		AssimpImportSettings m_MainImportSettings = {};
-
-		// Save cache (CPU mesh baked before export)
 		std::unique_ptr<AssetObject> m_pMainBuiltObjForSave = nullptr;
+		std::string m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
+
+		// Floor mesh
+		Handle<RenderScene::RenderObject> m_Floor = {};
+		std::string m_FloorMeshPath = "C:/Dev/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx";
+
+		// Material selection
+		int32 m_SelectedSlot = 0;
+
+		bool  m_bFitToUnitCube = true;
+		float m_FitUnitCubeSize = 1.0f; 
+
+		// Slot UI cache
+		std::unordered_map<uint32, MaterialUiCache> m_SlotUi = {};
+
+		// Dock
+		bool m_DockBuilt = false;
 	};
 } // namespace shz

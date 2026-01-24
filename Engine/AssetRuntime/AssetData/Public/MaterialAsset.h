@@ -64,8 +64,8 @@ namespace shz
 		void SetName(const std::string& name) { m_Name = name; }
 		const std::string& GetName() const noexcept { return m_Name; }
 
-		void SetTemplateKey(const std::string& key) { m_TemplateKey = key; }
-		const std::string& GetTemplateKey() const noexcept { return m_TemplateKey; }
+		void SetTemplateName(const std::string& name) { m_TemplateName = name; }
+		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
 
 		void SetRenderPassName(const std::string& name) { m_RenderPassName = name; }
 		const std::string& GetRenderPassName() const noexcept { return m_RenderPassName; }
@@ -75,6 +75,7 @@ namespace shz
 		const Options& GetOptions() const noexcept { return m_Options; }
 
 		// Convenience setters
+		void SetBlendMode(MATERIAL_BLEND_MODE mode) noexcept { m_Options.BlendMode = mode; }
 		void SetCullMode(CULL_MODE mode) noexcept { m_Options.CullMode = mode; }
 		void SetFrontCounterClockwise(bool v) noexcept { m_Options.FrontCounterClockwise = v; }
 
@@ -157,7 +158,7 @@ namespace shz
 
 	private:
 		std::string m_Name = {};
-		std::string m_TemplateKey = {};
+		std::string m_TemplateName = {};
 		std::string m_RenderPassName = "GBuffer";
 
 		Options m_Options = {};

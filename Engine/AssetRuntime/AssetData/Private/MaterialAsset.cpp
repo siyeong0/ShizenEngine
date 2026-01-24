@@ -304,7 +304,7 @@ namespace shz
 	void MaterialAsset::Clear()
 	{
 		m_Name.clear();
-		m_TemplateKey.clear();
+		m_TemplateName.clear();
 
 		m_Options = {};
 
@@ -320,6 +320,7 @@ namespace shz
 		ASSERT(pInstance, "Material instance is null.");
 
 		// Options -> instance knobs
+		pInstance->SetRenderPass(m_RenderPassName);
 		pInstance->SetCullMode(m_Options.CullMode);
 		pInstance->SetFrontCounterClockwise(m_Options.FrontCounterClockwise);
 
@@ -350,7 +351,7 @@ namespace shz
 
 			if (r.TextureRef)
 			{
-				pInstance->SetTextureAssetRef(r.Name.c_str(), r.TextureRef);
+				pInstance->SetTextureAsset(r.Name.c_str(), r.TextureRef);
 			}
 
 			if (r.bHasSamplerOverride)

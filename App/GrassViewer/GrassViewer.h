@@ -13,13 +13,9 @@
 
 #include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
 #include "Engine/AssetRuntime/Common/AssetRef.hpp"
-#include "Engine/AssetRuntime/Common/AssetPtr.hpp"
 #include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
-
-#include "Engine/Material/Public/MaterialTemplate.h"
-#include "Engine/Material/Public/MaterialInstance.h"
 
 namespace shz
 {
@@ -39,7 +35,7 @@ namespace shz
 	protected:
 		void UpdateUI() override final;
 
-	private:
+	public:
 		struct ViewportState final
 		{
 			uint32 Width = 1;
@@ -51,12 +47,9 @@ namespace shz
 			std::string Path = {};
 
 			AssetRef<StaticMeshAsset> MeshRef = {};
-			AssetPtr<StaticMeshAsset> MeshPtr = {}; // keep resident
-
-			Handle<StaticMeshRenderData> MeshHandle = {};
+			StaticMeshRenderData      Mesh = {};
 
 			Handle<RenderScene::RenderObject> ObjectId = {};
-			int32 SceneObjectIndex = -1; // fallback
 
 			bool bCastShadow = true;
 			bool bAlphaMasked = false;
@@ -65,11 +58,6 @@ namespace shz
 		};
 
 	private:
-		// Templates
-		bool buildInitialTemplateCache();
-		MaterialTemplate* getOrCreateTemplateByKey(const std::string& TemplateKey);
-		MaterialTemplate* getFallbackTemplate(bool bAlphaMasked);
-
 		// Scene building (hard-coded)
 		bool loadStaticMeshObject(
 			LoadedStaticMesh& InOut,
@@ -80,8 +68,6 @@ namespace shz
 			bool bCastShadow,
 			bool bAlphaMasked);
 
-		std::vector<MaterialInstance> buildMaterialsForCpuMeshSlots(const StaticMeshAsset& CpuMesh);
-
 	private:
 		std::unique_ptr<Renderer>     m_pRenderer = nullptr;
 		std::unique_ptr<RenderScene>  m_pRenderScene = nullptr;
@@ -89,24 +75,16 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		ViewportState      m_Viewport = {};
-		ViewFamily         m_ViewFamily = {};
-		FirstPersonCamera  m_Camera = {};
+		ViewportState     m_Viewport = {};
+		ViewFamily        m_ViewFamily = {};
+		FirstPersonCamera m_Camera = {};
 
 		// Global light (UI editable)
 		RenderScene::LightObject         m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
-		// Fixed templates + cache map
-		MaterialTemplate m_TmplGBuffer = {};
-		MaterialTemplate m_TmplGBufferMasked = {};
-		bool m_TemplatesReady = false;
-
-		// IMPORTANT: TemplateKey -> Template
-		std::unordered_map<std::string, MaterialTemplate*> m_pTemplateCache = {};
-
 		// Hard-coded scene objects
-		LoadedStaticMesh m_Floor = {};
+		LoadedStaticMesh              m_Floor = {};
 		std::vector<LoadedStaticMesh> m_Grasses = {};
 	};
 } // namespace shz

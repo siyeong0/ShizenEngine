@@ -71,7 +71,7 @@ namespace shz
 
 		MaterialAsset m;
 		m.SetName(j.value("Name", ""));
-		m.SetTemplateKey(j.value("TemplateKey", ""));
+		m.SetTemplateName(j.value("TemplateName", ""));
 		m.SetRenderPassName(j.value("RenderPassName", ""));
 
 		// Options
@@ -139,7 +139,7 @@ namespace shz
 			}
 		}
 
-		*pOutResidentBytes = (uint64)m.GetName().size() + (uint64)m.GetTemplateKey().size();
+		*pOutResidentBytes = (uint64)m.GetName().size() + (uint64)m.GetTemplateName().size();
 		return std::make_unique<TypedAssetObject<MaterialAsset>>(static_cast<MaterialAsset&&>(m));
 	}
 }

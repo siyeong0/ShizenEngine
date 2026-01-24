@@ -24,22 +24,13 @@
     <ClInclude Include="Public\RenderScene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\StaticMeshRenderData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\ViewFamily.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\RenderTarget.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\MaterialRenderData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\RenderResourceCache.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\TextureRenderData.h">
+    <ClInclude Include="Public\RenderResourceCache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\RendererMaterialStaticBinder.h">
@@ -51,6 +42,9 @@
     <ClInclude Include="Public\PipelineStateManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\RenderData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -60,18 +54,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\RenderScene.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\RenderResourceCache.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\MaterialRenderData.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\TextureRenderData.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\StaticMeshRenderData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\RendererMaterialStaticBinder.cpp">

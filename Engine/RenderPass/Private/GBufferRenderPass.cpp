@@ -6,8 +6,6 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/MaterialRenderData.h"
-#include "Engine/Renderer/Public/RenderResourceCache.h"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
@@ -22,7 +20,6 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pCache, "Cache is null.");
 		ASSERT(ctx.pObjectIndexVB, "ObjectIndexVB is null.");
 
 		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
@@ -232,7 +229,6 @@ namespace shz
 	void GBufferRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pCache, "Cache is null.");
 		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;

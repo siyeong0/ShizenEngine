@@ -26,6 +26,7 @@
 
 #include "pch.h"
 #include "DeviceMemoryBase.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {

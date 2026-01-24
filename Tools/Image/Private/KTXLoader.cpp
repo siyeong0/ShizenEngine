@@ -32,6 +32,7 @@
 #include "TextureLoaderImpl.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Primitives/Align.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 #define GL_RGBA32F            0x8814
 #define GL_RGBA32UI           0x8D70

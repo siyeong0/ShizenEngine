@@ -1,0 +1,22 @@
+{
+    "pipeline_type": 1,
+    "shader_stages": [
+        {
+            "compile_flags": 8,
+            "debug_name": "DefaultLitMasked VS",
+            "entry": "main",
+            "file": "GBufferMasked.vsh",
+            "type": "VS",
+            "use_combined_texture_samplers": false
+        },
+        {
+            "compile_flags": 8,
+            "debug_name": "DefaultLitMasked PS",
+            "entry": "main",
+            "file": "GBufferMasked.psh",
+            "type": "PS",
+            "use_combined_texture_samplers": false
+        }
+    ],
+    "version": 1
+}

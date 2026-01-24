@@ -27,6 +27,7 @@
 
 #include "pch.h"
 #include "BufferBase.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/RHI/Interface/IDeviceContext.h"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 

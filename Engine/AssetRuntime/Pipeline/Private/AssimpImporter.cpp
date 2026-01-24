@@ -407,7 +407,7 @@ namespace shz
 				outMat.SetName(std::string("Material_") + std::to_string(materialIndex));
 		}
 
-		outMat.SetTemplateKey("DefaultLit");
+		outMat.SetTemplateName("DefaultLit");
 
 		// BaseColor
 		float baseColor[4] = { 1, 1, 1, 1 };
@@ -621,7 +621,7 @@ namespace shz
 	{
 		if (pOutMesh == nullptr)
 		{
-			if (outError) *outError = "BuildStaticMeshAsset: pOutMesh is null.";
+			if (outError) *outError = "pOutMesh is null.";
 			return false;
 		}
 
@@ -629,7 +629,7 @@ namespace shz
 
 		if (!assimpAsset.IsValid())
 		{
-			if (outError) *outError = "BuildStaticMeshAsset: AssimpAsset is invalid (Scene/Importer missing).";
+			if (outError) *outError = "AssimpAsset is invalid (Scene/Importer missing).";
 			return false;
 		}
 
@@ -638,7 +638,7 @@ namespace shz
 
 		if ((scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || scene->mRootNode == nullptr)
 		{
-			if (outError) *outError = "BuildStaticMeshAsset: scene incomplete or missing root node.";
+			if (outError) *outError = "scene incomplete or missing root node.";
 			return false;
 		}
 

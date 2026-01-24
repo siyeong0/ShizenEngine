@@ -138,7 +138,7 @@ namespace shz
 		{
 			json mj;
 			mj["Name"] = m.GetName();
-			mj["TemplateKey"] = m.GetTemplateKey();
+			mj["TemplateName"] = m.GetTemplateName();
 			mj["RenderPassName"] = m.GetRenderPassName();
 
 			// Options (MaterialCommonOptions + extra)

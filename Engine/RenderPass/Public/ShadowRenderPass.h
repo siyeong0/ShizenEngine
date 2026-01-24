@@ -50,7 +50,7 @@ namespace shz
 		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
 
 		RefCntAutoPtr<IPipelineState> m_pShadowPSO;
-		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO; // if you have masked variant
+		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pSRB;
 
 		std::string m_VS = "Shadow.vsh";

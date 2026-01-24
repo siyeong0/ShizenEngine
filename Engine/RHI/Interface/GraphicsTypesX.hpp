@@ -44,6 +44,7 @@
 #include "IRenderDevice.h"
 #include "Primitives/DebugUtilities.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 
 namespace shz

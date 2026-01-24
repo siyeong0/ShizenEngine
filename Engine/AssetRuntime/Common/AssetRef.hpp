@@ -18,6 +18,7 @@ namespace shz
 		}
 
 		constexpr const AssetID& GetID() const noexcept { return m_ID; }
+		const std::string& GetSourcePath() const noexcept { return m_ID.SourcePath; }
 
 		constexpr bool IsNull() const noexcept { return m_ID.IsNull(); }
 		constexpr bool IsValid() const noexcept { return !IsNull(); }

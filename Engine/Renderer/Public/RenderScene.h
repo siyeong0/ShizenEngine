@@ -1,4 +1,3 @@
-// RenderScene.h
 #pragma once
 #include <vector>
 
@@ -7,8 +6,7 @@
 #include "Primitives/UniqueHandle.hpp"
 
 #include "Engine/Core/Math/Math.h"
-#include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/Renderer/Public/MaterialRenderData.h"
+#include "Engine/Renderer/Public/RenderData.h"
 
 namespace shz
 {
@@ -17,14 +15,10 @@ namespace shz
 	public:
 		struct RenderObject final
 		{
-			Handle<StaticMeshRenderData> MeshHandle = {};
-			std::vector<Handle<MaterialRenderData>> Materials = {};
+			StaticMeshRenderData Mesh = {};
 			Matrix4x4 Transform = {};
 
 			bool bCastShadow = true;
-			bool bAlphaMasked = false;
-
-			bool bMaterialDirty = true; // TODO:
 		};
 
 		struct LightObject final
@@ -52,9 +46,7 @@ namespace shz
 
 		Handle<RenderObject> AddObject(RenderObject&& obj);
 		void RemoveObject(Handle<RenderObject> h);
-		void UpdateObjectMesh(Handle<RenderObject> h, Handle<StaticMeshRenderData> mesh);
-		void UpdateObjectMaterial(Handle<RenderObject> h, uint32 materialSlot, const MaterialInstance& material);
-		void UpdateObjectMaterials(Handle<RenderObject> h, const std::vector<MaterialInstance>& materials);
+		void UpdateObjectMesh(Handle<RenderObject> h, const StaticMeshRenderData& mesh);
 		void UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);
 
 		Handle<LightObject> AddLight(const LightObject& light);

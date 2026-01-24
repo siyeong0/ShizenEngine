@@ -68,7 +68,7 @@ namespace shz
 			float32           FOV = PI / 4.f;
 			SURFACE_TRANSFORM PreTransform = SURFACE_TRANSFORM_IDENTITY;
 		};
-		const ProjectionAttribs& GetProjAttribs() { return m_ProjAttribs; }
+		const ProjectionAttribs& GetProjAttribs() const { return m_ProjAttribs; }
 
 		void SetReferenceAxes(const float3& ReferenceRightAxis, const float3& ReferenceUpAxis, bool IsRightHanded = false);
 

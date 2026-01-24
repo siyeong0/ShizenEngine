@@ -183,7 +183,7 @@ namespace shz
 			{
 				MaterialAsset m;
 				m.SetName(mj.value("Name", ""));
-				m.SetTemplateKey(mj.value("TemplateKey", ""));
+				m.SetTemplateName(mj.value("TemplateName", ""));
 				m.SetRenderPassName(mj.value("RenderPassName", ""));
 
 				// Options

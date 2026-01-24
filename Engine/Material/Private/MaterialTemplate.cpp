@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "Engine/Material/Public/MaterialTemplate.h"
 
+#include <fstream>
+#include <nlohmann/json.hpp>
+
 namespace shz
 {
 	// ------------------------------------------------------------
@@ -35,14 +38,14 @@ namespace shz
 	static inline MATERIAL_VALUE_TYPE convertValueType(const ShaderCodeVariableDesc& var)
 	{
 		auto isScalarOrVector = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
-		{
-			return c == SHADER_CODE_VARIABLE_CLASS_SCALAR || c == SHADER_CODE_VARIABLE_CLASS_VECTOR;
-		};
+			{
+				return c == SHADER_CODE_VARIABLE_CLASS_SCALAR || c == SHADER_CODE_VARIABLE_CLASS_VECTOR;
+			};
 
 		auto isMatrix = [](SHADER_CODE_VARIABLE_CLASS c) -> bool
-		{
-			return c == SHADER_CODE_VARIABLE_CLASS_MATRIX_ROWS || c == SHADER_CODE_VARIABLE_CLASS_MATRIX_COLUMNS;
-		};
+			{
+				return c == SHADER_CODE_VARIABLE_CLASS_MATRIX_ROWS || c == SHADER_CODE_VARIABLE_CLASS_MATRIX_COLUMNS;
+			};
 
 		if (var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT)
 		{
@@ -165,6 +168,7 @@ namespace shz
 		ASSERT(pDevice, "Device is null.");
 		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
 
+		m_CreateInfo = ci;
 		m_PipelineType = ci.PipelineType;
 
 		ASSERT(!ci.TemplateName.empty(), "Empty template name.");
@@ -241,65 +245,65 @@ namespace shz
 				uint32 baseOffset,
 				uint32 parentEndOffset,
 				const std::string& prefix)
-			{
-				ASSERT(pVars && varCount > 0, "Invalid arguments.");
-
-				for (uint32 i = 0; i < varCount; ++i)
 				{
-					const ShaderCodeVariableDesc& var = pVars[i];
-					ASSERT(var.Name && var.Name[0] != '\0', "Invalid variable name.");
+					ASSERT(pVars && varCount > 0, "Invalid arguments.");
 
-					const uint32 absOffset = baseOffset + var.Offset;
-
-					std::string fullName = prefix;
-					if (!fullName.empty())
-						fullName += ".";
-					fullName += var.Name;
-
-					if (var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT && var.NumMembers > 0 && var.pMembers)
+					for (uint32 i = 0; i < varCount; ++i)
 					{
-						const uint32 structSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
-						const uint32 structEnd = (structSize != 0) ? (absOffset + structSize) : parentEndOffset;
+						const ShaderCodeVariableDesc& var = pVars[i];
+						ASSERT(var.Name && var.Name[0] != '\0', "Invalid variable name.");
 
-						flattenVars(
-							var.pMembers,
-							var.NumMembers,
-							globalCBufferIndex,
-							absOffset,
-							structEnd,
-							fullName);
+						const uint32 absOffset = baseOffset + var.Offset;
 
-						continue;
+						std::string fullName = prefix;
+						if (!fullName.empty())
+							fullName += ".";
+						fullName += var.Name;
+
+						if (var.Class == SHADER_CODE_VARIABLE_CLASS_STRUCT && var.NumMembers > 0 && var.pMembers)
+						{
+							const uint32 structSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
+							const uint32 structEnd = (structSize != 0) ? (absOffset + structSize) : parentEndOffset;
+
+							flattenVars(
+								var.pMembers,
+								var.NumMembers,
+								globalCBufferIndex,
+								absOffset,
+								structEnd,
+								fullName);
+
+							continue;
+						}
+
+						const MATERIAL_VALUE_TYPE valueType = convertValueType(var);
+						ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Unsupported variable type in MATERIAL_CONSTANTS.");
+
+						uint32 leafSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
+						if (leafSize == 0 && parentEndOffset > absOffset)
+							leafSize = parentEndOffset - absOffset;
+
+						ASSERT(leafSize > 0, "Invalid leaf size.");
+
+						if (m_ValueParamLut.find(fullName) != m_ValueParamLut.end())
+						{
+							ASSERT(false, "Duplicate material value param name: %s", fullName.c_str());
+							continue;
+						}
+
+						MaterialValueParamDesc P = {};
+						P.Name = fullName;
+						P.Type = valueType;
+						P.CBufferIndex = globalCBufferIndex;
+						P.ByteOffset = absOffset;
+						P.ByteSize = leafSize;
+						P.Flags = MaterialParamFlags_None;
+
+						const uint32 newIndex = static_cast<uint32>(m_ValueParams.size());
+						m_ValueParams.push_back(P);
+						m_ValueParamLut.emplace(fullName, newIndex);
 					}
-
-					const MATERIAL_VALUE_TYPE valueType = convertValueType(var);
-					ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Unsupported variable type in MATERIAL_CONSTANTS.");
-
-					uint32 leafSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
-					if (leafSize == 0 && parentEndOffset > absOffset)
-						leafSize = parentEndOffset - absOffset;
-
-					ASSERT(leafSize > 0, "Invalid leaf size.");
-
-					if (m_ValueParamLut.find(fullName) != m_ValueParamLut.end())
-					{
-						ASSERT(false, "Duplicate material value param name: %s", fullName.c_str());
-						continue;
-					}
-
-					MaterialValueParamDesc P = {};
-					P.Name = fullName;
-					P.Type = valueType;
-					P.CBufferIndex = globalCBufferIndex;
-					P.ByteOffset = absOffset;
-					P.ByteSize = leafSize;
-					P.Flags = MaterialParamFlags_None;
-
-					const uint32 newIndex = static_cast<uint32>(m_ValueParams.size());
-					m_ValueParams.push_back(P);
-					m_ValueParamLut.emplace(fullName, newIndex);
-				}
-			};
+				};
 
 			for (const RefCntAutoPtr<IShader>& shaderRef : m_Shaders)
 			{
@@ -489,4 +493,127 @@ namespace shz
 		return true;
 	}
 
+	bool MaterialTemplate::Load(
+		IRenderDevice* pDevice,
+		IShaderSourceInputStreamFactory* pShaderSourceFactory,
+		const char* templateName,
+		std::string* outError)
+	{
+		if (outError) outError->clear();
+
+		const std::string path = std::string("C:/Dev/ShizenEngine/Assets/Materials/Template/") + templateName + ".json";
+
+		std::ifstream ifs(path);
+		if (!ifs.is_open())
+		{
+			if (outError) *outError = "Failed to open file: " + path;
+			ASSERT(false, "Failed to open file: %s", path.c_str());
+			return false;
+		}
+
+		nlohmann::json j;
+		try
+		{
+			ifs >> j;
+		}
+		catch (const std::exception& e)
+		{
+			if (outError) *outError = e.what();
+			ASSERT(false, "Failed to parse JSON: %s", e.what());
+			return false;
+		}
+
+		MaterialTemplateCreateInfo ci = {};
+		ci.TemplateName = templateName;
+		ci.PipelineType = (MATERIAL_PIPELINE_TYPE)j.value("pipeline_type", (int)MATERIAL_PIPELINE_TYPE_GRAPHICS);
+
+		auto& stages = j["shader_stages"];
+		if (!stages.is_array() || stages.empty())
+		{
+			if (outError) *outError = "shader_stages is empty.";
+			ASSERT(false, "shader_stages is empty.");
+			return false;
+		}
+
+		for (auto& s : stages)
+		{
+			MaterialShaderStageDesc sd = {};
+
+			const std::string type = s.value("type", "");
+			if (type == "VS") sd.ShaderType = SHADER_TYPE_VERTEX;
+			else if (type == "PS") sd.ShaderType = SHADER_TYPE_PIXEL;
+			else if (type == "CS") sd.ShaderType = SHADER_TYPE_COMPUTE;
+			else
+			{
+				if (outError) *outError = "Unknown shader type: " + type;
+				ASSERT(false, "Unknown shader type: %s", type.c_str());
+				return false;
+			}
+
+			sd.DebugName = s.value("debug_name", "");
+			sd.FilePath = s.value("file", "");
+			sd.EntryPoint = s.value("entry", "main");
+			sd.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+			sd.CompileFlags = (SHADER_COMPILE_FLAGS)s.value("compile_flags", (int)SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR);
+
+			sd.UseCombinedTextureSamplers = s.value("use_combined_texture_samplers", false);
+
+			if (sd.FilePath.empty())
+			{
+				if (outError) *outError = "Shader file path is empty.";
+				ASSERT(false, "Shader file path is empty.");
+				return false;
+			}
+
+			ci.ShaderStages.push_back(sd);
+		}
+
+		return Initialize(pDevice, pShaderSourceFactory, m_CreateInfo);
+	}
+
+	bool MaterialTemplate::Save(std::string* outError) const
+	{
+		if (outError) outError->clear();
+
+		ASSERT(!m_CreateInfo.TemplateName.empty(), "Template name is empty.");
+
+		const std::string path =std::string("C:/Dev/ShizenEngine/Assets/Materials/Template/")+ m_CreateInfo.TemplateName + ".json";
+
+		std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+
+		nlohmann::json j;
+		j["version"] = 1;
+		j["pipeline_type"] = (int)m_CreateInfo.PipelineType;
+
+		nlohmann::json stages = nlohmann::json::array();
+		for (const auto& s : m_CreateInfo.ShaderStages)
+		{
+			nlohmann::json sj;
+			sj["type"] =
+				(s.ShaderType == SHADER_TYPE_VERTEX) ? "VS" :
+				(s.ShaderType == SHADER_TYPE_PIXEL) ? "PS" :
+				(s.ShaderType == SHADER_TYPE_COMPUTE) ? "CS" : "UNKNOWN";
+
+			sj["debug_name"] = s.DebugName;
+			sj["file"] = s.FilePath;
+			sj["entry"] = s.EntryPoint;
+			sj["compile_flags"] = (int)s.CompileFlags;
+			sj["use_combined_texture_samplers"] = s.UseCombinedTextureSamplers;
+
+			stages.push_back(sj);
+		}
+
+		j["shader_stages"] = stages;
+
+		std::ofstream ofs(path, std::ios::trunc);
+		if (!ofs.is_open())
+		{
+			if (outError) *outError = "Failed to write file: " + path;
+			ASSERT(false, "Failed to write file: %s", path.c_str());
+			return false;
+		}
+
+		ofs << j.dump(4);
+		return true;
+	}
 } // namespace shz

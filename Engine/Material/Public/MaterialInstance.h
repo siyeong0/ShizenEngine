@@ -145,10 +145,10 @@ namespace shz
 		// --------------------------------------------------------------------
 		// Resources
 		// --------------------------------------------------------------------
-		bool SetTextureAssetRef(const char* textureName, const AssetRef<TextureAsset>& textureRef);
+		bool SetTextureAsset(const char* textureName, const AssetRef<TextureAsset>& textureRef);
 		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
 
-		bool ClearTextureAssetRef(const char* textureName);
+		bool ClearTextureAsset(const char* textureName);
 		bool ClearSamplerOverride(const char* textureName);
 
 		// --------------------------------------------------------------------

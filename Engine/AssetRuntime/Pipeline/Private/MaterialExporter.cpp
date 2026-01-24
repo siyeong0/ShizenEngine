@@ -73,7 +73,7 @@ namespace shz
 		j["Version"] = 1;
 
 		j["Name"] = mat->GetName();
-		j["TemplateKey"] = mat->GetTemplateKey();
+		j["TemplateName"] = mat->GetTemplateName();
 		j["RenderPassName"] = mat->GetRenderPassName();
 
 		const auto& o = mat->GetOptions();

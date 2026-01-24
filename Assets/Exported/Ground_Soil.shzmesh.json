@@ -67,7 +67,7 @@
           "Type": 1
         }
       ],
-      "TemplateKey": "vs=gbuffer.vsh|vse=main|ps=gbuffer.psh|pse=main|h=0506ee95f3dd2237",
+      "TemplateName": "DefaultLit",
       "Values": [
         {
           "Data": [

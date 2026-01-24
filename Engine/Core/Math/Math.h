@@ -126,50 +126,168 @@ namespace shz
 
 } // namespace shz
 
-#include "Engine/Core/Common/Public/HashUtils.hpp"
+namespace shz::hash
+{
+	// ------------------------------------------------------------
+	// Mix functions
+	// ------------------------------------------------------------
+	constexpr uint32_t jenkins_rev_mix32(uint32_t key) noexcept
+	{
+		key += (key << 12);
+		key ^= (key >> 22);
+		key += (key << 4);
+		key ^= (key >> 9);
+		key += (key << 10);
+		key ^= (key >> 2);
+		key += (key << 7);
+		key += (key << 12);
+		return key;
+	}
+
+	constexpr uint64_t twang_mix64(uint64_t key) noexcept
+	{
+		key = (~key) + (key << 21);
+		key = key ^ (key >> 24);
+		key = key + (key << 3) + (key << 8);
+		key = key ^ (key >> 14);
+		key = key + (key << 2) + (key << 4);
+		key = key ^ (key >> 28);
+		key = key + (key << 31);
+		return key;
+	}
+
+	static inline size_t combine(size_t seed, size_t v) noexcept
+	{
+		// boost::hash_combine style constant; use 64-bit constant even on 32-bit
+		seed ^= v + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+		return seed;
+	}
+
+	// ------------------------------------------------------------
+	// Hash one primitive value by bits (memcpy to avoid UB)
+	// ------------------------------------------------------------
+	template<class T>
+	static inline size_t hash_bits(const T& v) noexcept
+	{
+		static_assert(std::is_trivially_copyable_v<T>, "hash_bits requires trivially copyable type.");
+
+		if constexpr (sizeof(T) == 8)
+		{
+			uint64_t x = 0;
+			std::memcpy(&x, &v, sizeof(v));
+			return static_cast<size_t>(twang_mix64(x));
+		}
+		else if constexpr (sizeof(T) <= 4)
+		{
+			uint32_t x = 0;
+			std::memcpy(&x, &v, sizeof(v));
+			return static_cast<size_t>(jenkins_rev_mix32(x));
+		}
+		else
+		{
+			// Fallback: hash raw bytes (for odd sizes, still deterministic)
+			const uint8_t* p = reinterpret_cast<const uint8_t*>(&v);
+			size_t h = 0;
+			for (size_t i = 0; i < sizeof(T); ++i)
+			{
+				h = combine(h, static_cast<size_t>(p[i]));
+			}
+			return h;
+		}
+	}
+
+	// ------------------------------------------------------------
+	// Hash multiple primitives
+	// ------------------------------------------------------------
+	template<class... Ts>
+	static inline size_t hash_values(const Ts&... xs) noexcept
+	{
+		size_t h = 0;
+
+		// fold-expression 대체 (C++11 compatible)
+		using expander = int[];
+		(void)expander {0, (h = combine(h, hash_bits(xs)), 0)...};
+
+		return h;
+	}
+
+	// ------------------------------------------------------------
+	// Hash POD-like object by bytes (for simple structs if you want)
+	// NOTE: This includes padding bytes. Only use if the type is
+	//       fully initialized deterministically.
+	// ------------------------------------------------------------
+	template<class T>
+	static inline size_t hash_pod_bytes(const T& obj) noexcept
+	{
+		static_assert(std::is_standard_layout_v<T> && std::is_trivially_copyable_v<T>,
+			"hash_pod_bytes requires POD-like type.");
+
+		const uint8_t* p = reinterpret_cast<const uint8_t*>(&obj);
+		size_t h = 0;
+
+		// Chunk 8 bytes where possible for speed
+		size_t i = 0;
+		for (; i + 8 <= sizeof(T); i += 8)
+		{
+			uint64_t x = 0;
+			std::memcpy(&x, p + i, 8);
+			h = combine(h, static_cast<size_t>(twang_mix64(x)));
+		}
+		for (; i < sizeof(T); ++i)
+		{
+			h = combine(h, static_cast<size_t>(p[i]));
+		}
+		return h;
+	}
+} // namespace shz:hash
+
 namespace std
 {
 	template<>
 	struct hash<shz::Vector2>
 	{
-		size_t operator()(const shz::Vector2& v2) const
+		size_t operator()(const shz::Vector2& v) const noexcept
 		{
-			return shz::ComputeHash(v2.x, v2.y);
+			return shz::hash::hash_values(v.x, v.y);
 		}
 	};
+
 	template<>
 	struct hash<shz::Vector3>
 	{
-		size_t operator()(const shz::Vector3& v3) const
+		size_t operator()(const shz::Vector3& v) const noexcept
 		{
-			return shz::ComputeHash(v3.x, v3.y, v3.z);
+			return shz::hash::hash_values(v.x, v.y, v.z);
 		}
 	};
+
 	template<>
 	struct hash<shz::Vector4>
 	{
-		size_t operator()(const shz::Vector4& v4) const
+		size_t operator()(const shz::Vector4& v) const noexcept
 		{
-			return shz::ComputeHash(v4.x, v4.y, v4.z, v4.w);
+			return shz::hash::hash_values(v.x, v.y, v.z, v.w);
 		}
 	};
+
 	template<>
 	struct hash<shz::Matrix3x3>
 	{
-		size_t operator()(const shz::Matrix3x3& m) const
+		size_t operator()(const shz::Matrix3x3& m) const noexcept
 		{
-			return shz::ComputeHash(
+			return shz::hash::hash_values(
 				m._m00, m._m01, m._m02,
 				m._m10, m._m11, m._m12,
 				m._m20, m._m21, m._m22);
 		}
 	};
+
 	template<>
 	struct hash<shz::Matrix4x4>
 	{
-		size_t operator()(const shz::Matrix4x4& m) const
+		size_t operator()(const shz::Matrix4x4& m) const noexcept
 		{
-			return shz::ComputeHash(
+			return shz::hash::hash_values(
 				m._m00, m._m01, m._m02, m._m03,
 				m._m10, m._m11, m._m12, m._m13,
 				m._m20, m._m21, m._m22, m._m23,
@@ -177,4 +295,24 @@ namespace std
 		}
 	};
 
+	template<>
+	struct hash<shz::Quaternion>
+	{
+		size_t operator()(const shz::Quaternion& q) const noexcept
+		{
+			// 필드명이 x,y,z,w 라고 가정 (다르면 맞춰줘)
+			return shz::hash::hash_values(q.x, q.y, q.z, q.w);
+		}
+	};
+
+	template<>
+	struct hash<shz::Box>
+	{
+		size_t operator()(const shz::Box& b) const noexcept
+		{
+			return shz::hash::hash_values(
+				b.Min.x, b.Min.y, b.Min.z,
+				b.Max.x, b.Max.y, b.Max.z);
+		}
+	};
 } // namespace std

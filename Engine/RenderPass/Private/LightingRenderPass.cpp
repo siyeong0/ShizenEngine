@@ -1,4 +1,3 @@
-// Engine/RenderPass/Private/LightingRenderPass.cpp
 #include "pch.h"
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
 #include "Engine/RenderPass/Public/RenderPassContext.h"

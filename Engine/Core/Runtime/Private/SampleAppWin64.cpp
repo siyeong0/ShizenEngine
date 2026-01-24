@@ -31,6 +31,7 @@
 #include "Engine/Core/Runtime/Public/SampleApp.h"
 #include "Engine/Core/Runtime/Resources/Win64AppResource.h"
 #include "Engine/ImGui/Public/ImGuiImplWin64.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace
 {

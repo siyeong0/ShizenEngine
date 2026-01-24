@@ -50,73 +50,11 @@
 
 namespace shz
 {
-
-#if (defined(__clang__) || defined(__GNUC__))
-
-	// GCC's and Clang's implementation of std::hash for integral types is IDENTITY,
-	// which is an unbelievably poor design choice.
-
-	// https://github.com/facebook/folly/blob/main/folly/hash/Hash.h
-
-	// Robert Jenkins' reversible 32 bit mix hash function.
-	constexpr uint32_t jenkins_rev_mix32(uint32_t key) noexcept
-	{
-		key += (key << 12); // key *= (1 + (1 << 12))
-		key ^= (key >> 22);
-		key += (key << 4); // key *= (1 + (1 << 4))
-		key ^= (key >> 9);
-		key += (key << 10); // key *= (1 + (1 << 10))
-		key ^= (key >> 2);
-		// key *= (1 + (1 << 7)) * (1 + (1 << 12))
-		key += (key << 7);
-		key += (key << 12);
-		return key;
-	}
-
-	// Thomas Wang 64 bit mix hash function.
-	constexpr uint64_t twang_mix64(uint64_t key) noexcept
-	{
-		key = (~key) + (key << 21); // key *= (1 << 21) - 1; key -= 1;
-		key = key ^ (key >> 24);
-		key = key + (key << 3) + (key << 8); // key *= 1 + (1 << 3) + (1 << 8)
-		key = key ^ (key >> 14);
-		key = key + (key << 2) + (key << 4); // key *= 1 + (1 << 2) + (1 << 4)
-		key = key ^ (key >> 28);
-		key = key + (key << 31); // key *= 1 + (1 << 31)
-		return key;
-	}
-
-	template <typename T>
-	typename std::enable_if<(std::is_fundamental<T>::value || std::is_enum<T>::value) && sizeof(T) == 8, size_t>::type ComputeHash(const T& Val) noexcept
-	{
-		uint64_t Val64 = 0;
-		std::memcpy(&Val64, &Val, sizeof(Val));
-		return twang_mix64(Val64);
-	}
-
-	template <typename T>
-	typename std::enable_if<(std::is_fundamental<T>::value || std::is_enum<T>::value) && sizeof(T) <= 4, size_t>::type ComputeHash(const T& Val) noexcept
-	{
-		uint32_t Val32 = 0;
-		std::memcpy(&Val32, &Val, sizeof(Val));
-		return jenkins_rev_mix32(Val32);
-	}
-
-	template <typename T>
-	typename std::enable_if<!(std::is_fundamental<T>::value || std::is_enum<T>::value), size_t>::type ComputeHash(const T& Val) noexcept
-	{
-		return std::hash<T>{}(Val);
-	}
-
-#else
-
 	template <typename T>
 	size_t ComputeHash(const T& Val) noexcept
 	{
 		return std::hash<T>{}(Val);
 	}
-
-#endif
 
 	// http://www.boost.org/doc/libs/1_35_0/doc/html/hash/combine.html
 	template <typename T>
@@ -1413,7 +1351,6 @@ namespace std
 	DEFINE_HASH(shz::TilePipelineDesc);
 	DEFINE_HASH(shz::TilePipelineStateCreateInfo);
 	DEFINE_HASH(shz::VertexPoolElementDesc);
-
 
 #undef DEFINE_HASH
 

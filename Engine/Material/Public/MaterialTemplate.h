@@ -104,10 +104,20 @@ namespace shz
 		bool ValidateSetValue(const char* name, MATERIAL_VALUE_TYPE expectedType, MaterialValueParamDesc* pOutDesc = nullptr) const;
 		bool ValidateSetResource(const char* name, MATERIAL_RESOURCE_TYPE expectedType, MaterialResourceDesc* pOutDesc = nullptr) const;
 
+		bool Load(
+			IRenderDevice* pDevice,
+			IShaderSourceInputStreamFactory* pShaderSourceFactory,
+			const char* TemplateName,
+			std::string* outError = nullptr);
+
+		bool Save(std::string* outError = nullptr) const;
+
 	public:
 		static constexpr const char* MATERIAL_CBUFFER_NAME = "MATERIAL_CONSTANTS";
 
 	private:
+		MaterialTemplateCreateInfo m_CreateInfo = {};
+
 		MATERIAL_PIPELINE_TYPE m_PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;
 		std::string m_Name = {};
 

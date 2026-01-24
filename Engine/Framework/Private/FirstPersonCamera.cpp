@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "FirstPersonCamera.h"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include <algorithm>
 #include <cmath>
 

@@ -1,22 +1,73 @@
 #include "GrassViewer.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
 #include "Engine/AssetRuntime/Pipeline/Public/StaticMeshImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshExporter.h"
 #include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
 #include "Engine/AssetRuntime/Pipeline/Public/MaterialImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/MaterialExporter.h"
 
 namespace shz
 {
 	namespace
 	{
 #include "Shaders/HLSL_Structures.hlsli"
-	}
+
+		static constexpr const char* kShaderRoot = "C:/Dev/ShizenEngine/Shaders";
+
+		static void setupDefaultViewFamily(ViewFamily& vf)
+		{
+			vf.Views.clear();
+			vf.Views.push_back({});
+		}
+
+		static void setupCameraDefault(FirstPersonCamera& cam, float aspect)
+		{
+			cam.SetPos(float3(0.0f, 0.6f, -0.8f));
+			cam.SetRotation(0.0f, 0.0f);
+			cam.SetMoveSpeed(3.0f);
+			cam.SetRotationSpeed(0.01f);
+
+			cam.SetProjAttribs(
+				0.1f,
+				300.0f,
+				aspect,
+				PI / 4.0f,
+				SURFACE_TRANSFORM_IDENTITY);
+		}
+
+		static void setupDefaultGlobalLight(RenderScene::LightObject& light)
+		{
+			light.Direction = float3(0.4f, -1.0f, 0.3f);
+			light.Color = float3(1.0f, 1.0f, 1.0f);
+			light.Intensity = 2.0f;
+		}
+
+		static void updatePrimaryView(
+			ViewFamily& vf,
+			const GrassViewer::ViewportState& vp,
+			const FirstPersonCamera& cam)
+		{
+			ASSERT(!vf.Views.empty(), "No view.");
+
+			auto& v = vf.Views[0];
+
+			v.Viewport.left = 0;
+			v.Viewport.top = 0;
+			v.Viewport.right = vp.Width;
+			v.Viewport.bottom = vp.Height;
+
+			v.CameraPosition = cam.GetPos();
+			v.ViewMatrix = cam.GetViewMatrix();
+			v.ProjMatrix = cam.GetProjMatrix();
+
+			v.NearPlane = cam.GetProjAttribs().NearClipPlane;
+			v.FarPlane = cam.GetProjAttribs().FarClipPlane;
+		}
+	} // namespace
 
 	SampleBase* CreateSample()
 	{
@@ -31,21 +82,28 @@ namespace shz
 	{
 		SampleBase::Initialize(initInfo);
 
+		// Asset
 		m_pAssetManager = std::make_unique<AssetManager>();
 		{
 			ASSERT(m_pAssetManager, "AssetManager is null.");
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetImporter{});
-			m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetExporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetImporter{});
-			m_pAssetManager->RegisterExporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetExporter{});
 		}
 
+		// Renderer + shader factory
 		m_pRenderer = std::make_unique<Renderer>();
+		ASSERT(m_pRenderer, "Renderer is null.");
 
-		m_pEngineFactory->CreateDefaultShaderSourceStreamFactory(
-			"C:/Dev/ShizenEngine/Shaders",
-			&m_pShaderSourceFactory);
+		ASSERT(m_pEngineFactory, "EngineFactory is null.");
+		m_pEngineFactory->CreateDefaultShaderSourceStreamFactory(kShaderRoot, &m_pShaderSourceFactory);
+		ASSERT(m_pShaderSourceFactory, "ShaderSourceFactory is null.");
+
+		ASSERT(m_pSwapChain, "SwapChain is null.");
+
+		const auto scDesc = m_pSwapChain->GetDesc();
+		m_Viewport.Width = std::max(1u, scDesc.Width);
+		m_Viewport.Height = std::max(1u, scDesc.Height);
 
 		RendererCreateInfo rendererCI = {};
 		rendererCI.pEngineFactory = m_pEngineFactory;
@@ -55,44 +113,29 @@ namespace shz
 		rendererCI.pDeferredContexts = m_pDeferredContexts;
 		rendererCI.pSwapChain = m_pSwapChain;
 		rendererCI.pImGui = m_pImGui;
-		rendererCI.BackBufferWidth = m_pSwapChain->GetDesc().Width;
-		rendererCI.BackBufferHeight = m_pSwapChain->GetDesc().Height;
+		rendererCI.BackBufferWidth = m_Viewport.Width;
+		rendererCI.BackBufferHeight = m_Viewport.Height;
 		rendererCI.pAssetManager = m_pAssetManager.get();
 
 		m_pRenderer->Initialize(rendererCI);
 
+		// Scene
 		m_pRenderScene = std::make_unique<RenderScene>();
+		ASSERT(m_pRenderScene, "RenderScene is null.");
 
-		// Build fixed templates + prepare cache map
-		(void)buildInitialTemplateCache();
+		// ViewFamily + Camera
+		setupDefaultViewFamily(m_ViewFamily);
+		setupCameraDefault(m_Camera, (float)m_Viewport.Width / (float)m_Viewport.Height);
 
-		// Camera
-		m_Camera.SetPos(float3(0.0f, 0.6f, -0.8f));
-		m_Camera.SetRotation(0.0f, 0.0f);
-		m_Camera.SetMoveSpeed(3.0f);
-		m_Camera.SetRotationSpeed(0.01f);
-
-		m_Camera.SetProjAttribs(
-			0.1f,
-			300.0f,
-			(float)rendererCI.BackBufferWidth / (float)rendererCI.BackBufferHeight,
-			PI / 4.0f,
-			SURFACE_TRANSFORM_IDENTITY);
-
-		m_ViewFamily.Views.clear();
-		m_ViewFamily.Views.push_back({});
-
-		// Global light
-		m_GlobalLight.Direction = float3(0.4f, -1.0f, 0.3f);
-		m_GlobalLight.Color = float3(1.0f, 1.0f, 1.0f);
-		m_GlobalLight.Intensity = 2.0f;
-
+		// Light
+		setupDefaultGlobalLight(m_GlobalLight);
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
+		ASSERT(m_GlobalLightHandle.IsValid(), "Failed to add global light.");
 
 		// Hard-coded objects
 		{
 			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Ground.shzmesh.json";
-			(void)loadStaticMeshObject(
+			const bool ok = loadStaticMeshObject(
 				m_Floor,
 				floorPath,
 				{ 0.0f, 0.0f, 0.0f },
@@ -100,8 +143,11 @@ namespace shz
 				{ 1.0f, 1.0f, 1.0f },
 				true,
 				false);
+
+			ASSERT(ok, "Failed to load floor.");
 		}
 
+		// Grass grid
 		const char* kGrassPaths[] =
 		{
 			"C:/Dev/ShizenEngine/Assets/Exported/Grass00.shzmesh.json",
@@ -154,17 +200,20 @@ namespace shz
 					true,
 					true);
 
-				if (ok)
-					m_Grasses.push_back(std::move(g));
+				ASSERT(ok, "Failed to load grass object.");
+				m_Grasses.push_back(std::move(g));
 			}
 		}
 
-		m_Viewport.Width = std::max(1u, rendererCI.BackBufferWidth);
-		m_Viewport.Height = std::max(1u, rendererCI.BackBufferHeight);
+		// Fill first view immediately
+		updatePrimaryView(m_ViewFamily, m_Viewport, m_Camera);
 	}
 
 	void GrassViewer::Render()
 	{
+		ASSERT(m_pRenderer, "Renderer is null.");
+		ASSERT(m_pRenderScene, "RenderScene is null.");
+
 		m_ViewFamily.FrameIndex++;
 
 		m_pRenderer->BeginFrame();
@@ -176,6 +225,8 @@ namespace shz
 	{
 		SampleBase::Update(currTime, elapsedTime, doUpdateUI);
 
+		ASSERT(m_pRenderScene, "RenderScene is null.");
+
 		const float dt = (float)elapsedTime;
 		const float t = (float)currTime;
 
@@ -184,23 +235,10 @@ namespace shz
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.CurrentTime = t;
 
-		if (!m_ViewFamily.Views.empty())
-		{
-			auto& v = m_ViewFamily.Views[0];
-			v.Viewport.left = 0;
-			v.Viewport.top = 0;
-			v.Viewport.right = m_Viewport.Width;
-			v.Viewport.bottom = m_Viewport.Height;
+		updatePrimaryView(m_ViewFamily, m_Viewport, m_Camera);
 
-			v.CameraPosition = m_Camera.GetPos();
-			v.ViewMatrix = m_Camera.GetViewMatrix();
-			v.ProjMatrix = m_Camera.GetProjMatrix();
-			v.NearPlane = m_Camera.GetProjAttribs().NearClipPlane;
-			v.FarPlane = m_Camera.GetProjAttribs().FarClipPlane;
-		}
-
-		if (m_pRenderScene && m_GlobalLightHandle.IsValid())
-			m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
+		ASSERT(m_GlobalLightHandle.IsValid(), "GlobalLightHandle is invalid.");
+		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
 	}
 
 	void GrassViewer::ReleaseSwapChainBuffers()
@@ -227,6 +265,8 @@ namespace shz
 
 		if (m_pRenderer)
 			m_pRenderer->OnResize(m_Viewport.Width, m_Viewport.Height);
+
+		updatePrimaryView(m_ViewFamily, m_Viewport, m_Camera);
 	}
 
 	void GrassViewer::UpdateUI()
@@ -254,201 +294,21 @@ namespace shz
 
 		if (ImGui::Begin("Profiling", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			// Renderer might be null during startup/shutdown
-			std::unordered_map<std::string, uint64> passDrawCallCountTable = {};
-			passDrawCallCountTable = m_pRenderer->GetPassDrawCallCountTable();
+			ASSERT(m_pRenderer, "Renderer is null.");
+
+			const auto passTable = m_pRenderer->GetPassDrawCallCountTable();
 
 			uint64 total = 0;
-			for (const auto& kv : passDrawCallCountTable)
-			{
+			for (const auto& kv : passTable)
 				total += kv.second;
-			}
 
-			ImGui::Text("Total Draw Calls: %llu", static_cast<unsigned long long>(total));
+			ImGui::Text("Total Draw Calls: %llu", (unsigned long long)total);
 			ImGui::Separator();
 
-			for (const auto& kv : passDrawCallCountTable)
-			{
-				ImGui::Text("%s: %llu", kv.first.c_str(), static_cast<unsigned long long>(kv.second));
-			}
+			for (const auto& kv : passTable)
+				ImGui::Text("%s: %llu", kv.first.c_str(), (unsigned long long)kv.second);
 		}
 		ImGui::End();
-	}
-
-
-	// ------------------------------------------------------------
-	// Templates
-	// ------------------------------------------------------------
-
-	bool GrassViewer::buildInitialTemplateCache()
-	{
-		if (m_TemplatesReady)
-			return true;
-
-		ASSERT(m_pDevice, "Device is null.");
-		ASSERT(m_pShaderSourceFactory, "ShaderSourceFactory is null.");
-
-		auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
-		{
-			MaterialTemplateCreateInfo tci = {};
-			tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-			tci.TemplateName = name;
-
-			tci.ShaderStages.clear();
-			tci.ShaderStages.reserve(2);
-
-			MaterialShaderStageDesc sVS = {};
-			sVS.ShaderType = SHADER_TYPE_VERTEX;
-			sVS.DebugName = "VS";
-			sVS.FilePath = vs;
-			sVS.EntryPoint = "main";
-			sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-			sVS.UseCombinedTextureSamplers = false;
-
-			MaterialShaderStageDesc sPS = {};
-			sPS.ShaderType = SHADER_TYPE_PIXEL;
-			sPS.DebugName = "PS";
-			sPS.FilePath = ps;
-			sPS.EntryPoint = "main";
-			sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-			sPS.UseCombinedTextureSamplers = false;
-
-			tci.ShaderStages.push_back(sVS);
-			tci.ShaderStages.push_back(sPS);
-
-			return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
-		};
-
-		const bool ok0 = makeTemplate(m_TmplGBuffer, "GrassViewer_GBuffer", "GBuffer.vsh", "GBuffer.psh");
-		const bool ok1 = makeTemplate(m_TmplGBufferMasked, "GrassViewer_GBufferMasked", "GBufferMasked.vsh", "GBufferMasked.psh");
-
-		ASSERT(ok0 && ok1, "GrassViewer::BuildInitialTemplateCache failed.");
-
-		// Register into TemplateKey cache.
-		// IMPORTANT: these keys MUST match what MaterialEditor writes into MaterialAsset::SetTemplateKey().
-		//
-		// In your MaterialEditor code, you used:
-		//   dst.SetTemplateKey(MakeTemplateKeyFromInputs());
-		// which looks like: "vs=gbuffer.vsh|vse=main|ps=gbuffer.psh|pse=main|h=...."
-		//
-		// So to find them at runtime, we do NOT try to reconstruct the hash string here.
-		// Instead, we do "lazy bind": when we see an unknown key we map it to one of the fixed templates
-		// by inspecting whether it contains "gbuffermasked" or "masked".
-		//
-		// If you prefer strict mapping, you can also store a shorter canonical key in MaterialEditor
-		// (e.g. "GBuffer" / "GBufferMasked") and use that as TemplateKey.
-		m_pTemplateCache.clear();
-		m_TemplatesReady = true;
-		return true;
-	}
-
-	MaterialTemplate* GrassViewer::getFallbackTemplate(bool bAlphaMasked)
-	{
-		return bAlphaMasked ? &m_TmplGBufferMasked : &m_TmplGBuffer;
-	}
-
-	MaterialTemplate* GrassViewer::getOrCreateTemplateByKey(const std::string& templateKey)
-	{
-		if (!m_TemplatesReady)
-			(void)buildInitialTemplateCache();
-
-		// Fast path: already cached
-		if (auto it = m_pTemplateCache.find(templateKey); it != m_pTemplateCache.end())
-			return it->second;
-
-		// ------------------------------------------------------------
-		// Minimal policy (per your request):
-		// - We do NOT build arbitrary templates here.
-		// - We only route to one of the two fixed templates.
-		// - We still store a map entry so future lookups are O(1).
-		// ------------------------------------------------------------
-
-		// Heuristic mapping (robust to the long "vs=...|ps=...|h=..." key):
-		// If key suggests Masked shader, map to GBufferMasked, else GBuffer.
-		bool wantMasked = false;
-		{
-			std::string lower = templateKey;
-			for (char& c : lower)
-			{
-				if (c >= 'A' && c <= 'Z')
-					c = (char)(c - 'A' + 'a');
-			}
-
-			if (lower.find("gbuffermasked") != std::string::npos ||
-				lower.find("masked") != std::string::npos)
-			{
-				wantMasked = true;
-			}
-		}
-
-		MaterialTemplate* src = getFallbackTemplate(wantMasked);
-
-		// Copy-construct into cache under this key.
-		// If MaterialTemplate is non-copyable in your engine, change this to:
-		// - store pointers, or
-		// - store "enum kind" mapping, or
-		// - store reference_wrapper.
-		//
-		// Here we assume move/copy is allowed like your MaterialEditor cache used emplace(key, std::move(tmpl)).
-		m_pTemplateCache.emplace(templateKey, src);
-
-		return m_pTemplateCache.find(templateKey)->second;
-	}
-
-	// ------------------------------------------------------------
-	// Build materials for slots (TemplateKey-driven)
-	// ------------------------------------------------------------
-
-	std::vector<MaterialInstance> GrassViewer::buildMaterialsForCpuMeshSlots(const StaticMeshAsset& cpuMesh)
-	{
-		std::vector<MaterialInstance> materials;
-		materials.reserve(cpuMesh.GetMaterialSlots().size());
-
-		for (uint32 i = 0; i < (uint32)cpuMesh.GetMaterialSlots().size(); ++i)
-		{
-			const MaterialAsset& slot = cpuMesh.GetMaterialSlot(i);
-
-			// TemplateKey from asset (authoritative)
-			const std::string key = slot.GetTemplateKey(); // <-- MUST exist in MaterialAsset
-			MaterialTemplate* pTemplate = nullptr;
-
-			if (!key.empty())
-				pTemplate = getOrCreateTemplateByKey(key);
-
-			// If missing key in asset, fallback based on pass name or mesh alpha-masked policy.
-			if (!pTemplate)
-			{
-				// Fallback heuristic: pass name contains "Masked"
-				bool wantMasked = false;
-				{
-					std::string rp = slot.GetRenderPassName();
-					for (char& c : rp) if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
-					if (rp.find("masked") != std::string::npos)
-						wantMasked = true;
-				}
-				pTemplate = getFallbackTemplate(wantMasked);
-			}
-
-			MaterialInstance inst = {};
-			{
-				const bool ok = inst.Initialize(pTemplate, "GrassViewer Instance");
-				ASSERT(ok, "MaterialInstance::Initialize failed.");
-			}
-
-			{
-				const bool ok = slot.ApplyToInstance(&inst);
-				ASSERT(ok, "MaterialAsset::ApplyToInstance failed.");
-			}
-
-			inst.SetRenderPass(slot.GetRenderPassName());
-			inst.MarkAllDirty();
-
-			materials.push_back(std::move(inst));
-		}
-
-		return materials;
 	}
 
 	// ------------------------------------------------------------
@@ -464,13 +324,12 @@ namespace shz
 		bool bCastShadow,
 		bool bAlphaMasked)
 	{
-		if (!path || path[0] == '\0')
-			return false;
-
+		ASSERT(path && path[0] != '\0', "Invalid mesh path.");
 		ASSERT(m_pAssetManager, "AssetManager is null.");
 		ASSERT(m_pRenderScene, "RenderScene is null.");
 		ASSERT(m_pRenderer, "Renderer is null.");
 
+		// If reloading into same slot, remove previous object.
 		if (inout.ObjectId.IsValid())
 		{
 			m_pRenderScene->RemoveObject(inout.ObjectId);
@@ -482,34 +341,16 @@ namespace shz
 		inout.bAlphaMasked = bAlphaMasked;
 
 		inout.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshAsset>(inout.Path);
-		inout.MeshPtr = m_pAssetManager->LoadBlocking(inout.MeshRef, EAssetLoadFlags::KeepResident);
+		inout.Mesh = m_pRenderer->CreateStaticMesh(inout.MeshRef);
 
-		const StaticMeshAsset* pCpu = inout.MeshPtr.Get();
-		if (!pCpu)
-			return false;
-
-		inout.MeshHandle = m_pRenderer->CreateStaticMesh(*pCpu);
-		if (!inout.MeshHandle.IsValid())
-			return false;
-
-		std::vector<MaterialInstance> mats = buildMaterialsForCpuMeshSlots(*pCpu);
-		std::vector<Handle<MaterialRenderData>> matRDs(mats.size());
-		for (uint32 i = 0; i < mats.size(); ++i)
-		{
-			matRDs[i] = m_pRenderer->CreateMaterial(mats[i], bCastShadow, bAlphaMasked);
-		}
 		RenderScene::RenderObject obj = {};
-		obj.MeshHandle = inout.MeshHandle;
-		obj.Materials = matRDs;
+		obj.Mesh = inout.Mesh;
 		obj.Transform = Matrix4x4::TRS(position, rotation, scale);
 		obj.bCastShadow = bCastShadow;
-		obj.bAlphaMasked = bAlphaMasked;
 
 		inout.ObjectId = m_pRenderScene->AddObject(std::move(obj));
-		if (!inout.ObjectId.IsValid())
-			return false;
+		ASSERT(inout.ObjectId.IsValid(), "Failed to add RenderObject.");
 
-		inout.SceneObjectIndex = (int32)m_pRenderScene->GetObjects().size() - 1;
 		return true;
 	}
 } // namespace shz

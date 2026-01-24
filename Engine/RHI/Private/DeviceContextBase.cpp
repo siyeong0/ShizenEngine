@@ -27,7 +27,7 @@
 
 #include "pch.h"
 #include "DeviceContextBase.hpp"
-
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 
 namespace shz

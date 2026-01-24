@@ -25,16 +25,16 @@
 
 #include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Material/Public/MaterialInstance.h"
-#include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
-#include "Engine/Renderer/Public/RenderResourceCache.h"
+#include "Engine/Renderer/Public/RenderResourceCache.hpp"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 
 #include "Engine/RenderPass/Public/RenderPassContext.h"
 #include "Engine/RenderPass/Public/RenderPassBase.h"
+
+#include "Engine/Renderer/Public/RenderData.h"
 
 namespace shz
 {
@@ -72,12 +72,12 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
-		Handle<TextureRenderData> CreateTexture(const TextureAsset& asset);
-		bool DestroyTexture(Handle<TextureRenderData> hTex);
-		Handle<MaterialRenderData> CreateMaterial(MaterialInstance& inst, bool bCastShadow, bool bAlphaMasked);
-		bool DestroyMaterial(Handle<MaterialRenderData> hMesh);
-		Handle<StaticMeshRenderData> CreateStaticMesh(const StaticMeshAsset& asset);
-		bool DestroyStaticMesh(Handle<StaticMeshRenderData> hMesh);
+		const TextureRenderData& CreateTexture(const AssetRef<TextureAsset>& assetRef, const std::string& name = "");
+		const TextureRenderData& CreateTexture(const TextureAsset& asset, uint64 key = 0, const std::string& name = "");
+		const MaterialRenderData& CreateMaterial(const AssetRef<MaterialAsset>& assetRef, const std::string& name = "");
+		const MaterialRenderData& CreateMaterial(const MaterialAsset& asset, uint64 key = 0, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMeshAsset>& assetRef, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMesh(const StaticMeshAsset& asset, uint64 key = 0, const std::string& name = "");
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
@@ -85,6 +85,8 @@ namespace shz
 		ITextureView* GetShadowMapSRV() const noexcept { return m_PassCtx.pShadowMapSrv; }
 
 		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
+
+		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 
 	private:
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
@@ -95,16 +97,28 @@ namespace shz
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1 << 20;
 
 		RendererCreateInfo m_CreateInfo = {};
+		RefCntAutoPtr<IRenderDevice> m_pDevice;
+		RefCntAutoPtr<IDeviceContext> m_pImmediateContext;
+		std::vector<RefCntAutoPtr<IDeviceContext>> m_pDeferredContexts;
+		RefCntAutoPtr<ISwapChain> m_pSwapChain;
+
 		AssetManager* m_pAssetManager = nullptr;
+		std::unordered_map<std::string, MaterialTemplate> m_TemplateCache = {};
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		std::unique_ptr<RenderResourceCache> m_pCache;
-		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
 		std::unique_ptr< PipelineStateManager> m_pPipelineStateManager;
+
+		RenderResourceCache<TextureRenderData> m_TextureCache;
+		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
+		RenderResourceCache<MaterialRenderData> m_MaterialCache;
+
+		TextureRenderData m_ErrorTexture;
+
+		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
 
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
 		RefCntAutoPtr<IBuffer> m_pDrawCB;

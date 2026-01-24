@@ -15,11 +15,11 @@
 
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
+#include "Engine/Renderer/Public/PipelineStateManager.h"
+
 namespace shz
 {
 	class AssetManager;
-	class RenderResourceCache;
-	class PipelineStateManager;
 	class RendererMaterialStaticBinder;
 
     struct RenderPassContext final
@@ -31,7 +31,6 @@ namespace shz
         IShaderSourceInputStreamFactory* pShaderSourceFactory = nullptr;
 
         AssetManager* pAssetManager = nullptr;
-        RenderResourceCache* pCache = nullptr;
         PipelineStateManager* pPipelineStateManager = nullptr;
         RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 

@@ -131,10 +131,22 @@ namespace shz
 			return *p;
 		}
 
-		EAssetLoadStatus GetStatus() const noexcept
+		EAssetLoadStatus GetLoadStatus() const noexcept
 		{
 			ASSERT(m_pManager && m_ID, "Getting status from null AssetPtr.");
-			return m_pManager->GetStatusByID(m_ID, AssetTypeTraits<T>::TypeID);
+			return m_pManager->GetLoadStatusByID(m_ID, AssetTypeTraits<T>::TypeID);
+		}
+
+		EAssetSaveStatus GetSaveStatus() const noexcept
+		{
+			ASSERT(m_pManager && m_ID, "Getting status from null AssetPtr.");
+			return m_pManager->GetSaveStatusByID(m_ID, AssetTypeTraits<T>::TypeID);
+		}
+
+		const std::string& GetSourcePath() const noexcept
+		{
+			ASSERT(m_pManager && m_ID, "Getting source path from null AssetPtr.");
+			return m_ID.SourcePath;
 		}
 
 		void Wait() const

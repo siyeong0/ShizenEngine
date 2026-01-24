@@ -1,5 +1,5 @@
 {
-  "Bin": "Grass00.shzmesh.bin",
+  "Bin": "Main.shzmesh.bin",
   "Bounds": {
     "Max": [
       35.736881256103516,
@@ -21,9 +21,9 @@
   },
   "MaterialSlots": [
     {
-      "Name": "",
+      "Name": "02 - Default",
       "Options": {
-        "BlendMode": 0,
+        "BlendMode": 1,
         "CastShadow": true,
         "CullMode": 1,
         "DepthEnable": true,
@@ -51,7 +51,7 @@
         },
         "LinearWrapSamplerName": "g_LinearWrapSampler",
         "TextureBindingMode": 1,
-        "TwoSided": false
+        "TwoSided": true
       },
       "RenderPassName": "GBuffer",
       "Resources": [
@@ -124,23 +124,23 @@
         },
         {
           "Data": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MetallicFactor",
+          "StableID": 0,
+          "Type": 1
+        },
+        {
+          "Data": [
             208,
             203,
             91,
             63
           ],
           "Name": "g_RoughnessFactor",
-          "StableID": 0,
-          "Type": 1
-        },
-        {
-          "Data": [
-            0,
-            0,
-            128,
-            63
-          ],
-          "Name": "g_NormalScale",
           "StableID": 0,
           "Type": 1
         },
@@ -170,10 +170,10 @@
           "Data": [
             0,
             0,
-            0,
-            0
+            128,
+            63
           ],
-          "Name": "g_MetallicFactor",
+          "Name": "g_NormalScale",
           "StableID": 0,
           "Type": 1
         },

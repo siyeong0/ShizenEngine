@@ -32,6 +32,7 @@
 #include "Engine/RHI/Interface/IDeviceMemory.h"
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 #include "DeviceObjectBase.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 
 namespace shz

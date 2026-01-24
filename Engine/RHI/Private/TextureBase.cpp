@@ -33,6 +33,7 @@
 #include "Engine/RHI/Interface/IDeviceContext.h"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Primitives/Align.hpp"
+#include "Engine/Core/Common/Public/Errors.hpp"
 
 namespace shz
 {
