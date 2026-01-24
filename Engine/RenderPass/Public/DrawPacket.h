@@ -21,66 +21,63 @@ namespace shz
 		DrawIndexedAttribs DrawAttribs = {};
 	};
 
-	struct DrawPacketKey final
-	{
-		IPipelineState* PSO = nullptr;
-		IShaderResourceBinding* SRB = nullptr;
-		IBuffer* VB = nullptr;
-		IBuffer* IB = nullptr;
+    struct DrawPacketKey final
+    {
+        IPipelineState* PSO = nullptr;
+        IShaderResourceBinding* SRB = nullptr;
+        IBuffer* VB = nullptr;
+        IBuffer* IB = nullptr;
 
-		VALUE_TYPE IndexType = VT_UNDEFINED;
-		uint32 NumIndices = 0;
-		uint32 FirstIndexLocation = 0;
-		int32  BaseVertex = 0;
+        VALUE_TYPE IndexType = VT_UNDEFINED;
 
-		bool operator==(const DrawPacketKey& rhs) const
-		{
-			return PSO == rhs.PSO
-				&& SRB == rhs.SRB
-				&& VB == rhs.VB
-				&& IB == rhs.IB
-				&& IndexType == rhs.IndexType
-				&& NumIndices == rhs.NumIndices
-				&& FirstIndexLocation == rhs.FirstIndexLocation
-				&& BaseVertex == rhs.BaseVertex;
-		}
-	};
+        uint32 NumIndices = 0;
+        uint32 FirstIndexLocation = 0;
+        int32  BaseVertex = 0;
 
-	struct DrawPacketKeyHasher final
-	{
-		size_t operator()(const DrawPacketKey& k) const noexcept
-		{
-			// pointer-heavy key: simple pointer hashing + mix
-			auto hptr = [](const void* p) -> size_t
-				{
-					return std::hash<uintptr_t>{}(reinterpret_cast<uintptr_t>(p));
-				};
+        bool operator==(const DrawPacketKey& r) const noexcept
+        {
+            return PSO == r.PSO
+                && SRB == r.SRB
+                && VB == r.VB
+                && IB == r.IB
+                && IndexType == r.IndexType
+                && NumIndices == r.NumIndices
+                && FirstIndexLocation == r.FirstIndexLocation
+                && BaseVertex == r.BaseVertex;
+        }
+    };
 
-			size_t h = 1469598103934665603ull;
-			auto mix = [&](size_t v)
-				{
-					h ^= v;
-					h *= 1099511628211ull;
-				};
+    struct DrawPacketKeyHasher final
+    {
+        size_t operator()(const DrawPacketKey& k) const noexcept
+        {
+            // pointer hashing + small ints
+            size_t h = 1469598103934665603ull;
+            auto mix = [&h](size_t v)
+                {
+                    h ^= v;
+                    h *= 1099511628211ull;
+                };
 
-			mix(hptr(k.PSO));
-			mix(hptr(k.SRB));
-			mix(hptr(k.VB));
-			mix(hptr(k.IB));
+            mix(reinterpret_cast<size_t>(k.PSO));
+            mix(reinterpret_cast<size_t>(k.SRB));
+            mix(reinterpret_cast<size_t>(k.VB));
+            mix(reinterpret_cast<size_t>(k.IB));
 
-			mix(std::hash<uint32>{}(static_cast<uint32>(k.IndexType)));
-			mix(std::hash<uint32>{}(k.NumIndices));
-			mix(std::hash<uint32>{}(k.FirstIndexLocation));
-			mix(std::hash<int32>{}(k.BaseVertex));
+            mix(static_cast<size_t>(k.IndexType));
+            mix(static_cast<size_t>(k.NumIndices));
+            mix(static_cast<size_t>(k.FirstIndexLocation));
+            mix(static_cast<size_t>(static_cast<uint32>(k.BaseVertex)));
 
-			return h;
-		}
-	};
+            return h;
+        }
+    };
 
-	struct DrawPacketBatch final
-	{
-		DrawPacket Packet = {};
-		uint32 FirstInstanceLocation = 0;
-		uint32 NumInstances = 0;
-	};
-}
+    struct BatchInfo final
+    {
+        DrawPacket Packet = {};          // template packet
+        uint32 Count = 0;                // NumInstances
+        uint32 FirstInstance = 0;         // FirstInstanceLocation (prefix sum result)
+        uint32 Cursor = 0;               // write cursor inside this batch (Pass2)
+    };
+} // namespace shz

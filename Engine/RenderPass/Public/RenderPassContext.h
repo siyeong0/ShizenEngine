@@ -22,76 +22,96 @@ namespace shz
 	class PipelineStateManager;
 	class RendererMaterialStaticBinder;
 
-	struct RenderPassContext final
-	{
-		IRenderDevice* pDevice = nullptr;
-		IDeviceContext* pImmediateContext = nullptr;
-		ISwapChain* pSwapChain = nullptr;
+    struct RenderPassContext final
+    {
+        IRenderDevice* pDevice = nullptr;
+        IDeviceContext* pImmediateContext = nullptr;
+        ISwapChain* pSwapChain = nullptr;
 
-		IShaderSourceInputStreamFactory* pShaderSourceFactory = nullptr;
+        IShaderSourceInputStreamFactory* pShaderSourceFactory = nullptr;
 
-		AssetManager* pAssetManager = nullptr;
-		RenderResourceCache* pCache = nullptr;
-		PipelineStateManager* pPipelineStateManager = nullptr;
-		RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
+        AssetManager* pAssetManager = nullptr;
+        RenderResourceCache* pCache = nullptr;
+        PipelineStateManager* pPipelineStateManager = nullptr;
+        RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 
-		// ------------------------------------------------------------
-		// Fixed pass outputs (computed by Renderer)
-		// ------------------------------------------------------------
-		std::vector<DrawPacket> GBufferDrawPackets = {};
-		std::vector<DrawPacket> ShadowDrawPackets = {};
+        // ------------------------------------------------------------
+        // Visibility
+        // ------------------------------------------------------------
+        std::vector<uint32> VisibleObjectIndexMain = {};
+        std::vector<uint32> VisibleObjectIndexShadow = {};
 
-		// ------------------------------------------------------------
-		// Common resources wired by Renderer
-		// ------------------------------------------------------------
-		IBuffer* pFrameCB = nullptr;
-		IBuffer* pDrawCB = nullptr;
-		IBuffer* pShadowCB = nullptr;
+        // ------------------------------------------------------------
+        // Per-pass packets (Renderer°¡ Ã¤¿ò)
+        // ------------------------------------------------------------
+        std::vector<DrawPacket> GBufferDrawPackets = {};
+        std::vector<DrawPacket> ShadowDrawPackets = {};
 
-		IBuffer* pObjectTableSB = nullptr;        // GBuffer instance table
-		IBuffer* pObjectTableSBShadow = nullptr;  // Shadow instance table
+        // ------------------------------------------------------------
+        // Common resources wired by Renderer
+        // ------------------------------------------------------------
+        IBuffer* pFrameCB = nullptr;
+        IBuffer* pDrawCB = nullptr;
+        IBuffer* pShadowCB = nullptr;
 
-		// (Optional) if you still need it somewhere else
-		IBuffer* pObjectIndexVB = nullptr;
+        IBuffer* pObjectTableSB = nullptr;
+        IBuffer* pObjectTableSBShadow = nullptr;
+        IBuffer* pObjectIndexVB = nullptr;
 
-		ITexture* pEnvTex = nullptr;
-		ITexture* pEnvDiffuseTex = nullptr;
-		ITexture* pEnvSpecularTex = nullptr;
-		ITexture* pEnvBrdfTex = nullptr;
+        ITexture* pEnvTex = nullptr;
+        ITexture* pEnvDiffuseTex = nullptr;
+        ITexture* pEnvSpecularTex = nullptr;
+        ITexture* pEnvBrdfTex = nullptr;
 
-		uint32 BackBufferWidth = 0;
-		uint32 BackBufferHeight = 0;
+        uint32 BackBufferWidth = 0;
+        uint32 BackBufferHeight = 0;
 
-		// Pass outputs (wired by Renderer::wirePassOutputs)
-		ITextureView* pShadowMapSrv = nullptr;
+        // Pass outputs
+        ITextureView* pShadowMapSrv = nullptr;
 
-		static constexpr uint32 NUM_GBUFFERS = 4;
-		ITextureView* pGBufferSrv[NUM_GBUFFERS] = {};
-		ITextureView* pDepthSrv = nullptr;
-		ITextureView* pLightingSrv = nullptr;
+        static constexpr uint32 NUM_GBUFFERS = 4;
+        ITextureView* pGBufferSrv[NUM_GBUFFERS] = {};
+        ITextureView* pDepthSrv = nullptr;
 
-		// ------------------------------------------------------------
-		// Per-frame barriers
-		// ------------------------------------------------------------
-		std::vector<StateTransitionDesc> PreBarriers = {};
+        ITextureView* pLightingSrv = nullptr;
 
-		void ResetFrame()
-		{
-			GBufferDrawPackets.clear();
-			ShadowDrawPackets.clear();
-			PreBarriers.clear();
-		}
+        // ------------------------------------------------------------
+        // Per-frame barrier list
+        // ------------------------------------------------------------
+        std::vector<StateTransitionDesc> PreBarriers = {};
 
-		void PushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
-		{
-			ASSERT(pObj, "Device object is null.");
+        void ResetFrame()
+        {
+            VisibleObjectIndexMain.clear();
+            VisibleObjectIndexShadow.clear();
 
-			StateTransitionDesc b = {};
-			b.pResource = pObj;
-			b.OldState = from;
-			b.NewState = to;
-			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-			PreBarriers.push_back(b);
-		}
-	};
+            GBufferDrawPackets.clear();
+            ShadowDrawPackets.clear();
+
+            PreBarriers.clear();
+        }
+
+        void PushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
+        {
+            if (!pObj)
+                return;
+
+            StateTransitionDesc b = {};
+            b.pResource = pObj;
+            b.OldState = from;
+            b.NewState = to;
+            b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+            PreBarriers.push_back(b);
+        }
+
+        void UploadObjectIndexInstance(uint32 objectIndex) const
+        {
+            ASSERT(pImmediateContext, "Context is null.");
+            ASSERT(pObjectIndexVB, "ObjectIndex VB is null.");
+
+            MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
+            *map = objectIndex;
+        }
+    };
+
 } // namespace shz

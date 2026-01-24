@@ -19,6 +19,10 @@
 
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
+#include <chrono>
+#include <iostream>
+
+
 namespace shz
 {
 	namespace hlsl
@@ -263,6 +267,9 @@ namespace shz
 
     void Renderer::Render(RenderScene& scene, const ViewFamily& viewFamily)
     {
+        using Clock = std::chrono::high_resolution_clock;
+        const auto tBegin = Clock::now();
+
         ASSERT(m_PassCtx.pImmediateContext, "Context is invalid.");
         ASSERT(!viewFamily.Views.empty(), "No view.");
         ASSERT(m_PassCtx.pCache, "Cache is null.");
@@ -313,7 +320,7 @@ namespace shz
             cb->DeltaTime = viewFamily.DeltaTime;
             cb->CurrTime = viewFamily.CurrentTime;
 
-            // Shadow (simple fixed ortho)
+            // Global light (first one)
             const RenderScene::LightObject* globalLight = nullptr;
             for (const auto& l : scene.GetLights())
             {
@@ -361,7 +368,7 @@ namespace shz
         }
 
         // ------------------------------------------------------------
-        // Build frustums: Main / Shadow
+        // Build frustums: Main / Shadow (main/shadow 분리)
         // ------------------------------------------------------------
         ViewFrustumExt frMain = {};
         ViewFrustumExt frShadow = {};
@@ -372,108 +379,42 @@ namespace shz
         }
 
         // ------------------------------------------------------------
-        // Visibility lists (Mesh-level only)  [Section culling removed]
+        // Visibility (Mesh 단위, Section culling 없음)
+        //  - Shadow는 Main과 독립 (Main에 안 보여도 Shadow에 보이면 포함)
         // ------------------------------------------------------------
-        std::vector<uint32> mainVisibleObjects;
-        std::vector<uint32> shadowVisibleObjects;
-
         {
-            auto& objects = scene.GetObjects();
-            const uint32 count = static_cast<uint32>(objects.size());
+            const auto& renderObjects = scene.GetObjects();
+            const uint32 count = static_cast<uint32>(renderObjects.size());
 
-            mainVisibleObjects.reserve(count);
-            shadowVisibleObjects.reserve(count);
+            m_PassCtx.VisibleObjectIndexMain.reserve(count);
+            m_PassCtx.VisibleObjectIndexShadow.reserve(count);
 
             for (uint32 i = 0; i < count; ++i)
             {
-                const RenderScene::RenderObject& obj = objects[i];
+                const RenderScene::RenderObject& obj = renderObjects[i];
 
                 const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
                 ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
 
-                const Box& meshLocalBounds = mesh->GetLocalBounds();
+                const Box& localBounds = mesh->GetLocalBounds();
 
-                if (IntersectsFrustum(frMain, meshLocalBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+                if (IntersectsFrustum(frMain, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
                 {
-                    mainVisibleObjects.push_back(i);
+                    m_PassCtx.VisibleObjectIndexMain.push_back(i);
                 }
 
                 if (obj.bCastShadow)
                 {
-                    if (IntersectsFrustum(frShadow, meshLocalBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+                    if (IntersectsFrustum(frShadow, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
                     {
-                        shadowVisibleObjects.push_back(i);
+                        m_PassCtx.VisibleObjectIndexShadow.push_back(i);
                     }
                 }
             }
         }
 
         // ------------------------------------------------------------
-        // Collect used MaterialRenderData for this frame (Main + ShadowMasked)
-        //  - Fix for: dynamic MaterialConstants out-of-date
-        // ------------------------------------------------------------
-        std::unordered_set<MaterialRenderData*> usedMaterialRDs;
-        usedMaterialRDs.reserve((mainVisibleObjects.size() + shadowVisibleObjects.size()) * 2);
-
-        auto& objectsMutable = scene.GetObjects();
-
-        // Main pass materials
-        for (uint32 objectIndex : mainVisibleObjects)
-        {
-            RenderScene::RenderObject& obj = objectsMutable[objectIndex];
-
-            const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
-            ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
-
-            const auto& sections = mesh->GetSections();
-            for (const auto& sec : sections)
-            {
-                ASSERT(sec.IndexCount > 0, "Invalid section. Number of indices is 0.");
-
-                const uint32 slot = sec.MaterialSlot;
-                ASSERT(slot < static_cast<uint32>(obj.Materials.size()), "Material slot index out of bounds.");
-
-                Handle<MaterialRenderData> hRD = obj.Materials[slot];
-                ASSERT(hRD.IsValid(), "Material in object is no valid.");
-
-                MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
-                ASSERT(rd, "Material render data is null.");
-                usedMaterialRDs.insert(rd);
-            }
-        }
-
-        // Shadow masked materials (opaque shadow uses fixed SRB, no per-material constants needed)
-        for (uint32 objectIndex : shadowVisibleObjects)
-        {
-            RenderScene::RenderObject& obj = objectsMutable[objectIndex];
-            if (!obj.bCastShadow)
-                continue;
-
-            if (!obj.bAlphaMasked)
-                continue;
-
-            const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
-            ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
-
-            const auto& sections = mesh->GetSections();
-            for (const auto& sec : sections)
-            {
-                ASSERT(sec.IndexCount > 0, "Invalid section. Number of indices is 0.");
-
-                const uint32 slot = sec.MaterialSlot;
-                ASSERT(slot < static_cast<uint32>(obj.Materials.size()), "Material slot index out of bounds.");
-
-                Handle<MaterialRenderData> hRD = obj.Materials[slot];
-                ASSERT(hRD.IsValid(), "Material instance in object is null.");
-
-                MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
-                ASSERT(rd, "Material render data is invalid.");
-                usedMaterialRDs.insert(rd);
-            }
-        }
-
-        // ------------------------------------------------------------
-        // Common barriers
+        // Common barriers (Frame/Shadow/Env/etc.)
         // ------------------------------------------------------------
         m_PassCtx.PushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
         m_PassCtx.PushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -493,8 +434,46 @@ namespace shz
             m_PassCtx.PushBarrier(m_PassCtx.pCache->GetErrorTexture().GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
         }
 
-        // Mesh VB/IB barriers (only visible)
-        for (uint32 objectIndex : mainVisibleObjects)
+        auto& objectsMutable = scene.GetObjects();
+
+        // ------------------------------------------------------------
+        // Material RD apply (이번 프레임에 "사용될" RD는 전부 Apply)
+        //  - MainVisible의 모든 섹션 RD
+        //  - ShadowVisible 중 alpha-masked 섹션 RD (MaterialConstants out-of-date 버그의 핵심)
+        //  - 중복 Apply 방지
+        // ------------------------------------------------------------
+        std::unordered_set<MaterialRenderData*> appliedRD;
+        appliedRD.reserve(1024);
+
+        auto applyMaterialIfNeeded = [&](MaterialRenderData* rd)
+            {
+                if (!rd)
+                    return;
+
+                if (appliedRD.find(rd) != appliedRD.end())
+                    return;
+
+                appliedRD.insert(rd);
+
+                // Dynamic MaterialConstants 포함한 SRB 업데이트를 여기서 보장
+                rd->Apply(m_PassCtx.pCache, ctx);
+
+                // Barriers: mat CB / bound textures
+                if (auto* matCB = rd->GetMaterialConstantsBuffer())
+                {
+                    m_PassCtx.PushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+                }
+
+                for (auto texHandle : rd->GetBoundTextures())
+                {
+                    auto texRD = m_PassCtx.pCache->TryGetTextureRenderData(texHandle);
+                    ASSERT(texRD && texRD->IsValid(), "Texture is invalid.");
+                    m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+                }
+            };
+
+        // Mesh VB/IB barriers + material apply (Main)
+        for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
         {
             RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 
@@ -503,79 +482,82 @@ namespace shz
 
             m_PassCtx.PushBarrier(mesh->GetVertexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
             m_PassCtx.PushBarrier(mesh->GetIndexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
+            for (const auto& sec : mesh->GetSections())
+            {
+                const uint32 slot = sec.MaterialSlot;
+                ASSERT(slot < static_cast<uint32>(obj.Materials.size()), "Material slot index out of bounds.");
+
+                Handle<MaterialRenderData> hRD = obj.Materials[slot];
+                ASSERT(hRD.IsValid(), "Material in object is not valid.");
+
+                MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
+                ASSERT(rd, "Material render data is null.");
+
+                applyMaterialIfNeeded(rd);
+            }
         }
-        for (uint32 objectIndex : shadowVisibleObjects)
+
+        // Shadow: alpha-masked only (opaque shadow SRB는 보통 material constants 필요 없음)
+        for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
         {
             RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+            if (!obj.bCastShadow || !obj.bAlphaMasked)
+                continue;
 
             const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
             ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
 
             m_PassCtx.PushBarrier(mesh->GetVertexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
             m_PassCtx.PushBarrier(mesh->GetIndexBuffer(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
+            for (const auto& sec : mesh->GetSections())
+            {
+                const uint32 slot = sec.MaterialSlot;
+                ASSERT(slot < static_cast<uint32>(obj.Materials.size()), "Material slot index out of bounds.");
+
+                Handle<MaterialRenderData> hRD = obj.Materials[slot];
+                ASSERT(hRD.IsValid(), "Material in object is not valid.");
+
+                MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
+                ASSERT(rd, "Material render data is null.");
+
+                applyMaterialIfNeeded(rd);
+            }
         }
 
-        // Material barriers + Apply (guarantee dynamic MaterialConstants mapped this frame)
-        for (MaterialRenderData* rd : usedMaterialRDs)
-        {
-            ASSERT(rd, "RD is null.");
-
-            if (auto* matCB = rd->GetMaterialConstantsBuffer())
-            {
-                m_PassCtx.PushBarrier(matCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-            }
-
-            for (auto texHandle : rd->GetBoundTextures())
-            {
-                auto texRD = m_PassCtx.pCache->TryGetTextureRenderData(texHandle);
-                ASSERT(texRD && texRD->IsValid(), "Texture is invalid.");
-                m_PassCtx.PushBarrier(texRD->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-            }
-
-            // IMPORTANT: must Map(MAP_WRITE|DISCARD) inside Apply for dynamic buffers each frame
-            rd->Apply(m_PassCtx.pCache, ctx);
-        }
-
-        // Apply transitions once (after all barriers are gathered)
+        // Apply transitions once
         if (!m_PassCtx.PreBarriers.empty())
         {
             ctx->TransitionResourceStates(static_cast<uint32>(m_PassCtx.PreBarriers.size()), m_PassCtx.PreBarriers.data());
         }
 
         // ============================================================
-        //  GBuffer: build + instance pack
+        //  Build GBuffer packets + pack ObjectTableSB (2-pass batching)
         // ============================================================
         {
-            std::unordered_map<DrawPacketKey, DrawPacketBatch, DrawPacketKeyHasher> batches;
-            batches.reserve(mainVisibleObjects.size() * 4);
+            std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
+            batches.reserve(m_PassCtx.VisibleObjectIndexMain.size() * 4);
 
-            MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-            hlsl::ObjectConstants* dst = map;
+            // -------- Pass 1: count instances per batch
+            uint32 totalInstances = 0;
 
-            uint32 writeCursor = 0;
-
-            auto& outPackets = m_PassCtx.GBufferDrawPackets;
-            outPackets.clear();
-            outPackets.reserve(mainVisibleObjects.size() * 2);
-
-            for (uint32 objectIndex : mainVisibleObjects)
+            for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
             {
                 RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 
                 const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
                 ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
 
-                IBuffer* vertexBuffer = mesh->GetVertexBuffer();
-                IBuffer* indexBuffer = mesh->GetIndexBuffer();
-                ASSERT(vertexBuffer, "Vertex buffer is null.");
-                ASSERT(indexBuffer, "Index buffer is null.");
+                IBuffer* vb = mesh->GetVertexBuffer();
+                IBuffer* ib = mesh->GetIndexBuffer();
+                ASSERT(vb && ib, "Mesh buffers are invalid.");
 
                 const VALUE_TYPE indexType = mesh->GetIndexType();
 
-                const auto& sections = mesh->GetSections();
-                for (const auto& sec : sections)
+                for (const auto& sec : mesh->GetSections())
                 {
-                    ASSERT(sec.IndexCount > 0, "Invalid section. Number of indices is 0.");
+                    ASSERT(sec.IndexCount > 0, "Invalid section. IndexCount == 0.");
 
                     const uint32 slot = sec.MaterialSlot;
                     ASSERT(slot < static_cast<uint32>(obj.Materials.size()), "Material slot index out of bounds.");
@@ -589,8 +571,8 @@ namespace shz
                     DrawPacketKey key = {};
                     key.PSO = rd->GetPSO();
                     key.SRB = rd->GetSRB();
-                    key.VB = vertexBuffer;
-                    key.IB = indexBuffer;
+                    key.VB = vb;
+                    key.IB = ib;
                     key.IndexType = indexType;
                     key.NumIndices = sec.IndexCount;
                     key.FirstIndexLocation = sec.FirstIndex;
@@ -599,52 +581,111 @@ namespace shz
                     auto it = batches.find(key);
                     if (it == batches.end())
                     {
-                        DrawPacketBatch b = {};
-                        b.Packet = {};
-                        b.Packet.VertexBuffer = vertexBuffer;
-                        b.Packet.IndexBuffer = indexBuffer;
-                        b.Packet.PSO = key.PSO;
-                        b.Packet.SRB = key.SRB;
-                        b.Packet.ObjectIndex = 0;
+                        BatchInfo bi = {};
+                        bi.Packet = {};
+                        bi.Packet.VertexBuffer = vb;
+                        bi.Packet.IndexBuffer = ib;
+                        bi.Packet.PSO = key.PSO;
+                        bi.Packet.SRB = key.SRB;
+                        bi.Packet.ObjectIndex = 0; // instance table path
 
-                        b.Packet.DrawAttribs = {};
-                        b.Packet.DrawAttribs.NumIndices = key.NumIndices;
-                        b.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
-                        b.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
-                        b.Packet.DrawAttribs.IndexType = key.IndexType;
-                        b.Packet.DrawAttribs.NumInstances = 0;
-                        b.Packet.DrawAttribs.FirstInstanceLocation = 0;
-                        b.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+                        bi.Packet.DrawAttribs = {};
+                        bi.Packet.DrawAttribs.NumIndices = key.NumIndices;
+                        bi.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
+                        bi.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
+                        bi.Packet.DrawAttribs.IndexType = key.IndexType;
+                        bi.Packet.DrawAttribs.NumInstances = 0;              // finalize later
+                        bi.Packet.DrawAttribs.FirstInstanceLocation = 0;     // finalize later
+                        bi.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
-                        b.FirstInstanceLocation = writeCursor;
-                        b.NumInstances = 0;
-
-                        auto [newIt, ok] = batches.emplace(key, b);
-                        ASSERT(ok, "Failed to emplace batch.");
+                        auto [newIt, ok] = batches.emplace(key, bi);
+                        ASSERT(ok, "Failed to emplace GBuffer batch.");
                         it = newIt;
                     }
 
-                    ASSERT(writeCursor < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity for packed instances (GBuffer).");
-
-                    hlsl::ObjectConstants oc = {};
-                    oc.World = obj.Transform;
-                    oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
-                    dst[writeCursor++] = oc;
-
-                    it->second.NumInstances += 1;
+                    it->second.Count += 1;
+                    totalInstances += 1;
                 }
             }
 
-            outPackets.reserve(batches.size());
-            for (auto& kv : batches)
+            ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity (GBuffer).");
+
+            // -------- Prefix sum: assign FirstInstance per batch
             {
-                DrawPacketBatch& b = kv.second;
-                b.Packet.DrawAttribs.NumInstances = b.NumInstances;
-                b.Packet.DrawAttribs.FirstInstanceLocation = b.FirstInstanceLocation;
-                outPackets.push_back(b.Packet);
+                uint32 cursor = 0;
+                for (auto& kv : batches)
+                {
+                    BatchInfo& bi = kv.second;
+                    bi.FirstInstance = cursor;
+                    bi.Cursor = 0;
+                    cursor += bi.Count;
+                }
             }
 
-            std::sort(outPackets.begin(), outPackets.end(),
+            // -------- Pass 2: fill SB at the correct contiguous ranges
+            {
+                MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+                hlsl::ObjectConstants* dst = map;
+
+                for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
+                {
+                    const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+
+                    const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+                    ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
+
+                    IBuffer* vb = mesh->GetVertexBuffer();
+                    IBuffer* ib = mesh->GetIndexBuffer();
+                    const VALUE_TYPE indexType = mesh->GetIndexType();
+
+                    for (const auto& sec : mesh->GetSections())
+                    {
+                        const uint32 slot = sec.MaterialSlot;
+                        Handle<MaterialRenderData> hRD = obj.Materials[slot];
+
+                        MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
+
+                        DrawPacketKey key = {};
+                        key.PSO = rd->GetPSO();
+                        key.SRB = rd->GetSRB();
+                        key.VB = vb;
+                        key.IB = ib;
+                        key.IndexType = indexType;
+                        key.NumIndices = sec.IndexCount;
+                        key.FirstIndexLocation = sec.FirstIndex;
+                        key.BaseVertex = static_cast<int32>(sec.BaseVertex);
+
+                        auto it = batches.find(key);
+                        ASSERT(it != batches.end(), "Batch not found (GBuffer).");
+
+                        BatchInfo& bi = it->second;
+
+                        const uint32 writeIndex = bi.FirstInstance + bi.Cursor;
+                        bi.Cursor += 1;
+
+                        hlsl::ObjectConstants oc = {};
+                        oc.World = obj.Transform;
+                        oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
+
+                        dst[writeIndex] = oc;
+                    }
+                }
+            }
+
+            // -------- Finalize packets
+            m_PassCtx.GBufferDrawPackets.clear();
+            m_PassCtx.GBufferDrawPackets.reserve(batches.size());
+
+            for (auto& kv : batches)
+            {
+                BatchInfo& bi = kv.second;
+                bi.Packet.DrawAttribs.NumInstances = bi.Count;
+                bi.Packet.DrawAttribs.FirstInstanceLocation = bi.FirstInstance;
+                m_PassCtx.GBufferDrawPackets.push_back(bi.Packet);
+            }
+
+            // Sort packets for state change minimization (SB layout에는 영향 없음)
+            std::sort(m_PassCtx.GBufferDrawPackets.begin(), m_PassCtx.GBufferDrawPackets.end(),
                 [](const DrawPacket& a, const DrawPacket& b)
                 {
                     if (a.PSO != b.PSO) return a.PSO < b.PSO;
@@ -662,7 +703,7 @@ namespace shz
         }
 
         // ============================================================
-        //  Shadow: build + instance pack
+        //  Build Shadow packets + pack ObjectTableSBShadow (2-pass)
         // ============================================================
         {
             auto itPass = m_Passes.find("Shadow");
@@ -679,40 +720,30 @@ namespace shz
             ASSERT(shadowMaskedPSO, "ShadowMaskedPSO is null.");
             ASSERT(shadowSRB, "ShadowSRB is null.");
 
-            std::unordered_map<DrawPacketKey, DrawPacketBatch, DrawPacketKeyHasher> batches;
-            batches.reserve(shadowVisibleObjects.size() * 4);
+            std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
+            batches.reserve(m_PassCtx.VisibleObjectIndexShadow.size() * 4);
 
-            MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSBShadow, MAP_WRITE, MAP_FLAG_DISCARD);
-            hlsl::ObjectConstants* dst = map;
+            // Pass1 count
+            uint32 totalInstances = 0;
 
-            uint32 writeCursor = 0;
-
-            auto& outPackets = m_PassCtx.ShadowDrawPackets;
-            outPackets.clear();
-            outPackets.reserve(shadowVisibleObjects.size() * 2);
-
-            auto& objs = scene.GetObjects();
-
-            for (uint32 objectIndex : shadowVisibleObjects)
+            for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
             {
-                RenderScene::RenderObject& obj = objs[objectIndex];
+                RenderScene::RenderObject& obj = objectsMutable[objectIndex];
                 if (!obj.bCastShadow)
                     continue;
 
                 const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
                 ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
 
-                IBuffer* vertexBuffer = mesh->GetVertexBuffer();
-                IBuffer* indexBuffer = mesh->GetIndexBuffer();
-                ASSERT(vertexBuffer, "Vertex buffer is null.");
-                ASSERT(indexBuffer, "Index buffer is null.");
+                IBuffer* vb = mesh->GetVertexBuffer();
+                IBuffer* ib = mesh->GetIndexBuffer();
+                ASSERT(vb && ib, "Mesh buffers are invalid.");
 
                 const VALUE_TYPE indexType = mesh->GetIndexType();
 
-                const auto& sections = mesh->GetSections();
-                for (const auto& sec : sections)
+                for (const auto& sec : mesh->GetSections())
                 {
-                    ASSERT(sec.IndexCount > 0, "Invalid section. Number of indices is 0.");
+                    ASSERT(sec.IndexCount > 0, "Invalid section. IndexCount == 0.");
 
                     IPipelineState* pso = nullptr;
                     IShaderResourceBinding* srb = nullptr;
@@ -743,8 +774,8 @@ namespace shz
                     DrawPacketKey key = {};
                     key.PSO = pso;
                     key.SRB = srb;
-                    key.VB = vertexBuffer;
-                    key.IB = indexBuffer;
+                    key.VB = vb;
+                    key.IB = ib;
                     key.IndexType = indexType;
                     key.NumIndices = sec.IndexCount;
                     key.FirstIndexLocation = sec.FirstIndex;
@@ -753,52 +784,126 @@ namespace shz
                     auto it = batches.find(key);
                     if (it == batches.end())
                     {
-                        DrawPacketBatch b = {};
-                        b.Packet = {};
-                        b.Packet.VertexBuffer = vertexBuffer;
-                        b.Packet.IndexBuffer = indexBuffer;
-                        b.Packet.PSO = key.PSO;
-                        b.Packet.SRB = key.SRB;
-                        b.Packet.ObjectIndex = 0;
+                        BatchInfo bi = {};
+                        bi.Packet = {};
+                        bi.Packet.VertexBuffer = vb;
+                        bi.Packet.IndexBuffer = ib;
+                        bi.Packet.PSO = key.PSO;
+                        bi.Packet.SRB = key.SRB;
+                        bi.Packet.ObjectIndex = 0;
 
-                        b.Packet.DrawAttribs = {};
-                        b.Packet.DrawAttribs.NumIndices = key.NumIndices;
-                        b.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
-                        b.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
-                        b.Packet.DrawAttribs.IndexType = key.IndexType;
-                        b.Packet.DrawAttribs.NumInstances = 0;
-                        b.Packet.DrawAttribs.FirstInstanceLocation = 0;
-                        b.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+                        bi.Packet.DrawAttribs = {};
+                        bi.Packet.DrawAttribs.NumIndices = key.NumIndices;
+                        bi.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
+                        bi.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
+                        bi.Packet.DrawAttribs.IndexType = key.IndexType;
+                        bi.Packet.DrawAttribs.NumInstances = 0;
+                        bi.Packet.DrawAttribs.FirstInstanceLocation = 0;
+                        bi.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
-                        b.FirstInstanceLocation = writeCursor;
-                        b.NumInstances = 0;
-
-                        auto [newIt, ok] = batches.emplace(key, b);
-                        ASSERT(ok, "Failed to emplace batch.");
+                        auto [newIt, ok] = batches.emplace(key, bi);
+                        ASSERT(ok, "Failed to emplace Shadow batch.");
                         it = newIt;
                     }
 
-                    ASSERT(writeCursor < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity for packed instances (Shadow).");
-
-                    hlsl::ObjectConstants oc = {};
-                    oc.World = obj.Transform;
-                    oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
-                    dst[writeCursor++] = oc;
-
-                    it->second.NumInstances += 1;
+                    it->second.Count += 1;
+                    totalInstances += 1;
                 }
             }
 
-            outPackets.reserve(batches.size());
-            for (auto& kv : batches)
+            ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity (Shadow).");
+
+            // Prefix sum
             {
-                DrawPacketBatch& b = kv.second;
-                b.Packet.DrawAttribs.NumInstances = b.NumInstances;
-                b.Packet.DrawAttribs.FirstInstanceLocation = b.FirstInstanceLocation;
-                outPackets.push_back(b.Packet);
+                uint32 cursor = 0;
+                for (auto& kv : batches)
+                {
+                    BatchInfo& bi = kv.second;
+                    bi.FirstInstance = cursor;
+                    bi.Cursor = 0;
+                    cursor += bi.Count;
+                }
             }
 
-            std::sort(outPackets.begin(), outPackets.end(),
+            // Pass2 fill SBShadow
+            {
+                MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSBShadow, MAP_WRITE, MAP_FLAG_DISCARD);
+                hlsl::ObjectConstants* dst = map;
+
+                for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
+                {
+                    const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+                    if (!obj.bCastShadow)
+                        continue;
+
+                    const StaticMeshRenderData* mesh = m_PassCtx.pCache->TryGetStaticMeshRenderData(obj.MeshHandle);
+                    ASSERT(mesh && mesh->IsValid(), "Invalid mesh data.");
+
+                    IBuffer* vb = mesh->GetVertexBuffer();
+                    IBuffer* ib = mesh->GetIndexBuffer();
+                    const VALUE_TYPE indexType = mesh->GetIndexType();
+
+                    for (const auto& sec : mesh->GetSections())
+                    {
+                        IPipelineState* pso = nullptr;
+                        IShaderResourceBinding* srb = nullptr;
+
+                        if (!obj.bAlphaMasked)
+                        {
+                            pso = shadowPSO;
+                            srb = shadowSRB;
+                        }
+                        else
+                        {
+                            const uint32 slot = sec.MaterialSlot;
+                            Handle<MaterialRenderData> hRD = obj.Materials[slot];
+                            MaterialRenderData* rd = m_PassCtx.pCache->TryGetMaterialRenderData(hRD);
+                            IShaderResourceBinding* maskedShadowSRB = rd->GetShadowSRB();
+
+                            pso = shadowMaskedPSO;
+                            srb = maskedShadowSRB;
+                        }
+
+                        DrawPacketKey key = {};
+                        key.PSO = pso;
+                        key.SRB = srb;
+                        key.VB = vb;
+                        key.IB = ib;
+                        key.IndexType = indexType;
+                        key.NumIndices = sec.IndexCount;
+                        key.FirstIndexLocation = sec.FirstIndex;
+                        key.BaseVertex = static_cast<int32>(sec.BaseVertex);
+
+                        auto it = batches.find(key);
+                        ASSERT(it != batches.end(), "Batch not found (Shadow).");
+
+                        BatchInfo& bi = it->second;
+
+                        const uint32 writeIndex = bi.FirstInstance + bi.Cursor;
+                        bi.Cursor += 1;
+
+                        hlsl::ObjectConstants oc = {};
+                        oc.World = obj.Transform;
+                        oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
+
+                        dst[writeIndex] = oc;
+                    }
+                }
+            }
+
+            // Finalize packets
+            m_PassCtx.ShadowDrawPackets.clear();
+            m_PassCtx.ShadowDrawPackets.reserve(batches.size());
+
+            for (auto& kv : batches)
+            {
+                BatchInfo& bi = kv.second;
+                bi.Packet.DrawAttribs.NumInstances = bi.Count;
+                bi.Packet.DrawAttribs.FirstInstanceLocation = bi.FirstInstance;
+                m_PassCtx.ShadowDrawPackets.push_back(bi.Packet);
+            }
+
+            std::sort(m_PassCtx.ShadowDrawPackets.begin(), m_PassCtx.ShadowDrawPackets.end(),
                 [](const DrawPacket& a, const DrawPacket& b)
                 {
                     if (a.PSO != b.PSO) return a.PSO < b.PSO;
@@ -814,6 +919,12 @@ namespace shz
                     return a.DrawAttribs.FirstInstanceLocation < b.DrawAttribs.FirstInstanceLocation;
                 });
         }
+
+        const auto tEnd = Clock::now();
+        const double ms =
+            std::chrono::duration<double, std::milli>(tEnd - tBegin).count();
+
+        std::cout << "[Renderer::Render] " << ms << " ms\n";
 
         // ------------------------------------------------------------
         // Execute passes
