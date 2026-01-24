@@ -1,14 +1,11 @@
 #pragma once
-#include <unordered_map>
 #include <vector>
-#include <string>
 
 #include "Primitives/BasicTypes.h"
 
 #include "Engine/RHI/Interface/IRenderDevice.h"
 #include "Engine/RHI/Interface/IDeviceContext.h"
 #include "Engine/RHI/Interface/ISwapChain.h"
-#include "Engine/RHI/Interface/IShader.h"
 #include "Engine/RHI/Interface/IBuffer.h"
 #include "Engine/RHI/Interface/ITexture.h"
 #include "Engine/RHI/Interface/ITextureView.h"
@@ -16,15 +13,13 @@
 
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
-#include "Primitives/Handle.hpp"
-#include "Engine/Renderer/Public/MaterialRenderData.h"
-#include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
 namespace shz
 {
 	class AssetManager;
 	class RenderResourceCache;
+	class PipelineStateManager;
 	class RendererMaterialStaticBinder;
 
 	struct RenderPassContext final
@@ -40,27 +35,23 @@ namespace shz
 		PipelineStateManager* pPipelineStateManager = nullptr;
 		RendererMaterialStaticBinder* pMaterialStaticBinder = nullptr;
 
-		// ---------------------------------------------------------------------
-		// Visibility (computed by Renderer)
-		// ---------------------------------------------------------------------
-		std::vector<uint32> VisibleObjectIndexMain = {};
-		std::vector<uint32> VisibleObjectIndexShadow = {};
+		// ------------------------------------------------------------
+		// Fixed pass outputs (computed by Renderer)
+		// ------------------------------------------------------------
+		std::vector<DrawPacket> GBufferDrawPackets = {};
+		std::vector<DrawPacket> ShadowDrawPackets = {};
 
-		// ---------------------------------------------------------------------
-		// Passº° DrawPackets (computed by Renderer)
-		//  - Key: pass name in m_PassOrder, e.g. "Shadow", "GBuffer", ...
-		// ---------------------------------------------------------------------
-		std::unordered_map<std::string, std::vector<DrawPacket>> DrawPacketsPerPass = {};
-
-		// ---------------------------------------------------------------------
+		// ------------------------------------------------------------
 		// Common resources wired by Renderer
-		// ---------------------------------------------------------------------
+		// ------------------------------------------------------------
 		IBuffer* pFrameCB = nullptr;
 		IBuffer* pDrawCB = nullptr;
 		IBuffer* pShadowCB = nullptr;
 
-		IBuffer* pObjectTableSB = nullptr;
-		IBuffer* pObjectTableSBShadow = nullptr;
+		IBuffer* pObjectTableSB = nullptr;        // GBuffer instance table
+		IBuffer* pObjectTableSBShadow = nullptr;  // Shadow instance table
+
+		// (Optional) if you still need it somewhere else
 		IBuffer* pObjectIndexVB = nullptr;
 
 		ITexture* pEnvTex = nullptr;
@@ -77,28 +68,23 @@ namespace shz
 		static constexpr uint32 NUM_GBUFFERS = 4;
 		ITextureView* pGBufferSrv[NUM_GBUFFERS] = {};
 		ITextureView* pDepthSrv = nullptr;
-
 		ITextureView* pLightingSrv = nullptr;
 
-		// ---------------------------------------------------------------------
-		// Per-frame caches (RD/barriers)
-		// ---------------------------------------------------------------------
+		// ------------------------------------------------------------
+		// Per-frame barriers
+		// ------------------------------------------------------------
 		std::vector<StateTransitionDesc> PreBarriers = {};
 
 		void ResetFrame()
 		{
-			VisibleObjectIndexMain.clear();
-			VisibleObjectIndexShadow.clear();
-
-			DrawPacketsPerPass.clear();
-
+			GBufferDrawPackets.clear();
+			ShadowDrawPackets.clear();
 			PreBarriers.clear();
 		}
 
 		void PushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
 		{
-			if (!pObj)
-				return;
+			ASSERT(pObj, "Device object is null.");
 
 			StateTransitionDesc b = {};
 			b.pResource = pObj;
@@ -106,25 +92,6 @@ namespace shz
 			b.NewState = to;
 			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
 			PreBarriers.push_back(b);
-		}
-
-		void UploadObjectIndexInstance(uint32 objectIndex) const
-		{
-			ASSERT(pImmediateContext, "Context is null.");
-			ASSERT(pObjectIndexVB, "ObjectIndex VB is null.");
-
-			MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
-			*map = objectIndex;
-		}
-
-		std::vector<DrawPacket>& GetPassPackets(const std::string& passName)
-		{
-			auto it = DrawPacketsPerPass.find(passName);
-			if (it == DrawPacketsPerPass.end())
-			{
-				DrawPacketsPerPass.insert(std::make_pair(passName, std::vector<DrawPacket>{}));
-			}
-			return DrawPacketsPerPass[passName];
 		}
 	};
 } // namespace shz

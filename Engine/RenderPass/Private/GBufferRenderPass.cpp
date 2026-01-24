@@ -237,7 +237,7 @@ namespace shz
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
-		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("GBuffer");
+		const std::vector<DrawPacket>& packets = ctx.GBufferDrawPackets;
 		if (packets.empty())
 		{
 			return;

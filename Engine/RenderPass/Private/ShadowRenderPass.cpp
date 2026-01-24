@@ -364,7 +364,7 @@ namespace shz
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
-		const std::vector<DrawPacket>& packets = ctx.GetPassPackets("Shadow");
+		const std::vector<DrawPacket>& packets = ctx.ShadowDrawPackets;
 		if (packets.empty())
 		{
 			return;

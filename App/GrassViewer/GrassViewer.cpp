@@ -109,9 +109,9 @@ namespace shz
 		};
 
 #ifdef SHZ_DEBUG
-		const int32 countX = 10;
-		const int32 countZ = 10;
-		const float spacing = 0.35f;
+		const int32 countX = 50;
+		const int32 countZ = 50;
+		const float spacing = 3.5f;
 		const float3 origin = { -5.0f, -0.1f, 2.0f };
 #else
 		const int32 countX = 200;
