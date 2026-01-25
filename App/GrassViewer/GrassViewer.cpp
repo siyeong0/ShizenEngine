@@ -6,9 +6,9 @@
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
-#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/MaterialImporter.h"
+#include "Engine/RuntimeData/Public/StaticMeshImporter.h"
+#include "Engine/RuntimeData/Public/TextureImporter.h"
+#include "Engine/RuntimeData/Public/MaterialImporter.h"
 
 namespace shz
 {

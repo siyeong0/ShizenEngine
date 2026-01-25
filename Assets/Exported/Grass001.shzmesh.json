@@ -21,9 +21,9 @@
   },
   "MaterialSlots": [
     {
-      "Name": "02 - Default",
+      "Name": "",
       "Options": {
-        "BlendMode": 1,
+        "BlendMode": 0,
         "CastShadow": true,
         "CullMode": 1,
         "DepthEnable": true,
@@ -51,7 +51,7 @@
         },
         "LinearWrapSamplerName": "g_LinearWrapSampler",
         "TextureBindingMode": 1,
-        "TwoSided": true
+        "TwoSided": false
       },
       "RenderPassName": "GBuffer",
       "Resources": [
@@ -124,23 +124,23 @@
         },
         {
           "Data": [
-            0,
-            0,
-            0,
-            0
-          ],
-          "Name": "g_MetallicFactor",
-          "StableID": 0,
-          "Type": 1
-        },
-        {
-          "Data": [
             208,
             203,
             91,
             63
           ],
           "Name": "g_RoughnessFactor",
+          "StableID": 0,
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
           "StableID": 0,
           "Type": 1
         },
@@ -170,10 +170,10 @@
           "Data": [
             0,
             0,
-            128,
-            63
+            0,
+            0
           ],
-          "Name": "g_NormalScale",
+          "Name": "g_MetallicFactor",
           "StableID": 0,
           "Type": 1
         },

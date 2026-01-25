@@ -10,17 +10,17 @@
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 
-#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
-#include "Engine/AssetRuntime/Common/AssetRef.hpp"
-#include "Engine/AssetRuntime/Common/AssetTypeTraits.h"
+#include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/AssetManager/Public/AssetRef.hpp"
+#include "Engine/AssetManager/Public/AssetTypeTraits.h"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 
-#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
-#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
+#include "Engine/RuntimeData/Public/TextureAsset.h"
 
 #include "Engine/Material/Public/MaterialTemplate.h"
-#include "Engine/AssetRuntime/AssetData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/MaterialAsset.h"
 
 namespace shz
 {

@@ -1,7 +1,3 @@
-// ============================================================================
-// MaterialEditor.cpp
-// ============================================================================
-
 #include "MaterialEditor.h"
 
 #include <algorithm>
@@ -10,14 +6,13 @@
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
 
-// Importers
-#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/TextureImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/MaterialImporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/AssimpImporter.h"
+#include "Engine/RuntimeData/Public/StaticMeshImporter.h"
+#include "Engine/RuntimeData/Public/TextureImporter.h"
+#include "Engine/RuntimeData/Public/MaterialImporter.h"
+#include "Engine/AssetManager/Public/AssimpImporter.h"
 
-#include "Engine/AssetRuntime/Pipeline/Public/StaticMeshExporter.h"
-#include "Engine/AssetRuntime/Pipeline/Public/MaterialExporter.h"
+#include "Engine/RuntimeData/Public/StaticMeshExporter.h"
+#include "Engine/RuntimeData/Public/MaterialExporter.h"
 
 namespace shz
 {

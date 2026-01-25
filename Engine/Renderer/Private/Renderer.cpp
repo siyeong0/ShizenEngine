@@ -4,7 +4,7 @@
 #include <unordered_set>
 
 #include "Engine/Core/Math/Math.h"
-#include "Engine/AssetRuntime/AssetManager/Public/AssetManager.h"
+#include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
@@ -18,10 +18,6 @@
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 
 #include "Engine/RenderPass/Public/DrawPacket.h"
-
-#include <chrono>
-#include <iostream>
-
 
 namespace shz
 {
@@ -87,7 +83,7 @@ namespace shz
 			MaterialTemplate gbufferMaskedTemplate;
 			const bool ok1 = makeTemplate(gbufferMaskedTemplate, "DefaultLitMasked", "GBufferMasked.vsh", "GBufferMasked.psh");
 			ASSERT(ok0 && ok1, "Build initial material templates failed.");
-			
+
 			m_TemplateCache[gbufferTemplate.GetName()] = gbufferTemplate;
 			m_TemplateCache[gbufferMaskedTemplate.GetName()] = gbufferMaskedTemplate;
 		}
@@ -313,9 +309,6 @@ namespace shz
 
 	void Renderer::Render(RenderScene& scene, const ViewFamily& viewFamily)
 	{
-		using Clock = std::chrono::high_resolution_clock;
-		const auto tBegin = Clock::now();
-
 		ASSERT(m_PassCtx.pImmediateContext, "Context is invalid.");
 		ASSERT(!viewFamily.Views.empty(), "No view.");
 		ASSERT(m_PassCtx.pMaterialStaticBinder, "MaterialStaticBinder is null.");
@@ -413,7 +406,7 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Build frustums: Main / Shadow (main/shadow 분리)
+		// Build frustums: Main / Shadow 
 		// ------------------------------------------------------------
 		ViewFrustumExt frMain = {};
 		ViewFrustumExt frShadow = {};
@@ -424,8 +417,7 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Visibility (Mesh 단위, Section culling 없음)
-		//  - Shadow는 Main과 독립 (Main에 안 보여도 Shadow에 보이면 포함)
+		// Visibility
 		// ------------------------------------------------------------
 		{
 			const auto& renderObjects = scene.GetObjects();
@@ -476,10 +468,7 @@ namespace shz
 		auto& objectsMutable = scene.GetObjects();
 
 		// ------------------------------------------------------------
-		// Material RD apply (이번 프레임에 "사용될" RD는 전부 Apply)
-		//  - MainVisible의 모든 섹션 RD
-		//  - ShadowVisible 중 alpha-masked 섹션 RD (MaterialConstants out-of-date 버그의 핵심)
-		//  - 중복 Apply 방지
+		// Material RD apply
 		// ------------------------------------------------------------
 		std::unordered_set<MaterialRenderData*> appliedRD;
 		appliedRD.reserve(1024);
@@ -906,12 +895,6 @@ namespace shz
 				});
 		}
 
-		const auto tEnd = Clock::now();
-		const double ms =
-			std::chrono::duration<double, std::milli>(tEnd - tBegin).count();
-
-		std::cout << "[Renderer::Render] " << ms << " ms\n";
-
 		// ------------------------------------------------------------
 		// Execute passes
 		// ------------------------------------------------------------
@@ -976,7 +959,7 @@ namespace shz
 
 		AssetPtr<TextureAsset> assetPtr = m_pAssetManager->Acquire(assetRef);
 		ASSERT(assetPtr, "Failed to acquire TextureAsset.");
-		
+
 		if (name == "")
 		{
 			return CreateTexture(*assetPtr, key, assetPtr.GetSourcePath());
@@ -1321,7 +1304,7 @@ namespace shz
 					{
 						pView = m_ErrorTexture.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 					}
-					
+
 					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
 					{
 						var->Set(pView);

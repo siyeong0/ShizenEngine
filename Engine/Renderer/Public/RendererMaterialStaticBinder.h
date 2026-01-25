@@ -9,12 +9,6 @@
 
 namespace shz
 {
-	// ----------------------------------------------------------------------------
-	// RendererMaterialStaticBinder
-	//
-	// A small binder that knows about renderer-global static bindings used by
-	// mesh material PSOs (e.g. GBuffer PSOs).
-	// ----------------------------------------------------------------------------
 	class RendererMaterialStaticBinder final : public IMaterialStaticBinder
 	{
 	public:

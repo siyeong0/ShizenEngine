@@ -7,8 +7,8 @@
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
-#include "Engine/AssetRuntime/Common/AssetRef.hpp"
-#include "Engine/AssetRuntime/AssetData/Public/TextureAsset.h"
+#include "Engine/AssetManager/Public/AssetRef.hpp"
+#include "Engine/RuntimeData/Public/TextureAsset.h"
 
 #include "Engine/RHI/Interface/IShader.h"
 #include "Engine/RHI/Interface/IPipelineState.h"

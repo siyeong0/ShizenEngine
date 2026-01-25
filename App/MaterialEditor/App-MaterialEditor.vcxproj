@@ -28,8 +28,8 @@
     <ClInclude Include="MaterialEditor.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Engine\AssetRuntime\Engine-AssetRuntime.vcxproj">
-      <Project>{505d73a4-5365-4527-b263-3c10be6d839b}</Project>
+    <ProjectReference Include="..\..\Engine\AssetManager\Engine-AssetManager.vcxproj">
+      <Project>{b0bd56c0-142c-408d-ade6-81183a399cb8}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
@@ -66,6 +66,9 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\RHI_D3DBase\Engine-RHI-D3DBase.vcxproj">
       <Project>{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\RuntimeData\Engine-RuntimeData.vcxproj">
+      <Project>{3240c8bd-9334-4e6a-af0e-da6ade0da2ac}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\ShaderTools\Engine-ShaderTools.vcxproj">
       <Project>{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}</Project>

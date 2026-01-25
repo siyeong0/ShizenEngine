@@ -23,7 +23,7 @@
 
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 
-#include "Engine/AssetRuntime/AssetData/Public/StaticMeshAsset.h"
+#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 #include "Engine/Renderer/Public/ViewFamily.h"

@@ -1,4 +1,3 @@
-// RenderScene.cpp
 #include "pch.h"
 #include "RenderScene.h"
 
