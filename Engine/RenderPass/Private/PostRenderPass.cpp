@@ -9,7 +9,7 @@
 
 namespace shz
 {
-	bool PostRenderPass::Initialize(RenderPassContext& ctx)
+	PostRenderPass::PostRenderPass(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
@@ -86,11 +86,7 @@ namespace shz
 				sci.Desc.UseCombinedTextureSamplers = false;
 
 				ctx.pDevice->CreateShader(sci, &vs);
-				if (!vs)
-				{
-					ASSERT(false, "Failed to create PostCopy VS.");
-					return false;
-				}
+				ASSERT(vs, "Failed to create PostCopy VS.");
 			}
 
 			RefCntAutoPtr<IShader> ps;
@@ -102,11 +98,7 @@ namespace shz
 				sci.Desc.UseCombinedTextureSamplers = false;
 
 				ctx.pDevice->CreateShader(sci, &ps);
-				if (!ps)
-				{
-					ASSERT(false, "Failed to create PostCopy PS.");
-					return false;
-				}
+				ASSERT(ps, "Failed to create PostCopy PS.");
 			}
 
 			psoCi.pVS = vs;
@@ -135,24 +127,14 @@ namespace shz
 			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
 			m_pPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
-			if (!m_pPSO)
-			{
-				ASSERT(false, "Failed to create Post PSO.");
-				return false;
-			}
+			ASSERT(m_pPSO, "Failed to acquire Post PSO.");
 
 			m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
-			if (!m_pSRB)
-			{
-				ASSERT(false, "Failed to create SRB_Post.");
-				return false;
-			}
+			ASSERT(m_pSRB, "Failed to create SRB_Post.");
 		}
 
-		return true;
 	}
-
-	void PostRenderPass::Cleanup()
+	PostRenderPass::~PostRenderPass()
 	{
 		m_pFramebufferCurrentBB.Release();
 		m_pRenderPass.Release();

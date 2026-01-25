@@ -120,7 +120,7 @@ namespace shz
 	// - Asset: persistent authoring values
 	// - Instance: runtime knobs driving PSO/layout dirty
 	// ------------------------------------------------------------
-	struct MaterialCommonOptions
+	struct MaterialOptions
 	{
 		MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
@@ -143,16 +143,6 @@ namespace shz
 			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
 		};
-
-		bool EqualsSampler(const MaterialCommonOptions& rhs) const
-		{
-			if (LinearWrapSamplerName != rhs.LinearWrapSamplerName)
-			{
-				return false;
-			}
-
-			return std::memcmp(&LinearWrapSamplerDesc, &rhs.LinearWrapSamplerDesc, sizeof(SamplerDesc)) == 0;
-		}
 	};
 
 } // namespace shz

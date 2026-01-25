@@ -18,10 +18,10 @@ namespace shz
 	class ShadowRenderPass final : public RenderPassBase
 	{
 	public:
-		const char* GetName() const override { return "Shadow"; }
+		ShadowRenderPass(RenderPassContext& ctx);
+		~ShadowRenderPass() override;
 
-		bool Initialize(RenderPassContext& ctx) override;
-		void Cleanup() override;
+		const char* GetName() const override { return "Shadow"; }
 
 		void BeginFrame(RenderPassContext& ctx) override;
 		void Execute(RenderPassContext& ctx) override;

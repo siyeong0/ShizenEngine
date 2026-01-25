@@ -76,19 +76,16 @@ namespace shz
 		j["TemplateName"] = mat->GetTemplateName();
 		j["RenderPassName"] = mat->GetRenderPassName();
 
-		const auto& o = mat->GetOptions();
 		j["Options"] = json{
-			{"BlendMode", (int)o.BlendMode},
-			{"CullMode", (int)o.CullMode},
-			{"FrontCounterClockwise", o.FrontCounterClockwise},
-			{"DepthEnable", o.DepthEnable},
-			{"DepthWriteEnable", o.DepthWriteEnable},
-			{"DepthFunc", (int)o.DepthFunc},
-			{"TextureBindingMode", (int)o.TextureBindingMode},
-			{"LinearWrapSamplerName", o.LinearWrapSamplerName},
-			{"LinearWrapSamplerDesc", samplerToJson(o.LinearWrapSamplerDesc)},
-			{"TwoSided", o.bTwoSided},
-			{"CastShadow", o.bCastShadow},
+			{"BlendMode", (int)mat->GetBlendMode()},
+			{"CullMode", (int)mat->GetCullMode()},
+			{"FrontCounterClockwise", mat->GetFrontCounterClockwise()},
+			{"DepthEnable", mat->GetDepthEnable()},
+			{"DepthWriteEnable", mat->GetDepthWriteEnable()},
+			{"DepthFunc", (int)mat->GetDepthFunc()},
+			{"TextureBindingMode", (int)mat->GetTextureBindingMode()},
+			{"LinearWrapSamplerName", mat->GetLinearWrapSamplerName()},
+			{"LinearWrapSamplerDesc", samplerToJson(mat->GetLinearWrapSamplerDesc())},
 		};
 
 		j["Values"] = json::array();
@@ -96,7 +93,6 @@ namespace shz
 		{
 			const auto& v = mat->GetValueOverride(i);
 			j["Values"].push_back(json{
-				{"StableID", v.StableID},
 				{"Name", v.Name},
 				{"Type", (int)v.Type},
 				{"Data", v.Data},
@@ -110,7 +106,6 @@ namespace shz
 			const AssetID tid = r.TextureRef.GetID();
 
 			json rj;
-			rj["StableID"] = r.StableID;
 			rj["Name"] = r.Name;
 			rj["Type"] = (int)r.Type;
 			rj["SourcePath"] = r.TextureRef.GetID().SourcePath;

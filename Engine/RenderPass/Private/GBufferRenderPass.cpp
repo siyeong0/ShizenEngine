@@ -16,7 +16,7 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	bool GBufferRenderPass::Initialize(RenderPassContext& ctx)
+	GBufferRenderPass::GBufferRenderPass(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
@@ -33,10 +33,9 @@ namespace shz
 		ok = createPassObjects(ctx);
 		ASSERT(ok, "Failed to create g-buffer pass objects.");
 
-		return true;
 	}
 
-	void GBufferRenderPass::Cleanup()
+	GBufferRenderPass::~GBufferRenderPass()
 	{
 		m_pFramebuffer.Release();
 		m_pRenderPass.Release();

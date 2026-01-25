@@ -121,12 +121,12 @@ namespace shz
 		std::vector<float2> uv0;
 
 		auto loadStream = [&](const char* key, auto& outVec) -> bool
-		{
-			const auto& s = streams.at(key);
-			const uint64 off = s.at("Offset").get<uint64>();
-			const uint64 cnt = s.at("Count").get<uint64>();
-			return readBlob(bin, off, cnt, outVec);
-		};
+			{
+				const auto& s = streams.at(key);
+				const uint64 off = s.at("Offset").get<uint64>();
+				const uint64 cnt = s.at("Count").get<uint64>();
+				return readBlob(bin, off, cnt, outVec);
+			};
 
 		if (!loadStream("Positions", pos)) { setErr(pOutError, "Failed to read Positions."); return {}; }
 		loadStream("Normals", nrm);
@@ -181,34 +181,40 @@ namespace shz
 			std::vector<Material> mats;
 			for (const auto& mj : j["MaterialSlots"])
 			{
-				Material m;
-				m.SetName(mj.value("Name", ""));
-				m.SetTemplateName(mj.value("TemplateName", ""));
+				Material m(mj.value("Name", ""), mj.value("TemplateName", ""));
 				m.SetRenderPassName(mj.value("RenderPassName", ""));
 
 				// Options
 				if (mj.contains("Options"))
 				{
-					auto& o = m.GetOptions();
 					const auto& oj = mj["Options"];
 
-					o.BlendMode = (MATERIAL_BLEND_MODE)oj.value("BlendMode", (int)o.BlendMode);
-					o.CullMode = (CULL_MODE)oj.value("CullMode", (int)o.CullMode);
-					o.FrontCounterClockwise = oj.value("FrontCounterClockwise", o.FrontCounterClockwise);
+					// Blend / Raster
+					m.SetBlendMode((MATERIAL_BLEND_MODE)oj.value("BlendMode", (int)m.GetBlendMode()));
+					m.SetCullMode((CULL_MODE)oj.value("CullMode", (int)m.GetCullMode()));
+					m.SetFrontCounterClockwise(oj.value("FrontCounterClockwise", m.GetFrontCounterClockwise()));
 
-					o.DepthEnable = oj.value("DepthEnable", o.DepthEnable);
-					o.DepthWriteEnable = oj.value("DepthWriteEnable", o.DepthWriteEnable);
-					o.DepthFunc = (COMPARISON_FUNCTION)oj.value("DepthFunc", (int)o.DepthFunc);
+					// Depth
+					m.SetDepthEnable(oj.value("DepthEnable", m.GetDepthEnable()));
+					m.SetDepthWriteEnable(oj.value("DepthWriteEnable", m.GetDepthWriteEnable()));
+					m.SetDepthFunc((COMPARISON_FUNCTION)oj.value("DepthFunc", (int)m.GetDepthFunc()));
 
-					o.TextureBindingMode = (MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)o.TextureBindingMode);
+					// Texture binding
+					m.SetTextureBindingMode((MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)m.GetTextureBindingMode()));
 
-					o.LinearWrapSamplerName = oj.value("LinearWrapSamplerName", o.LinearWrapSamplerName);
-					if (oj.contains("LinearWrapSamplerDesc"))
-						o.LinearWrapSamplerDesc = jsonToSamplerDesc(oj["LinearWrapSamplerDesc"]);
+					// LinearWrap sampler
+					{
+						const std::string samplerName = oj.value("LinearWrapSamplerName", m.GetLinearWrapSamplerName());
 
-					o.bTwoSided = oj.value("TwoSided", o.bTwoSided);
-					o.bCastShadow = oj.value("CastShadow", o.bCastShadow);
+						m.SetLinearWrapSamplerName(samplerName);
+
+						if (oj.contains("LinearWrapSamplerDesc"))
+						{
+							m.SetLinearWrapSamplerDesc(jsonToSamplerDesc(oj["LinearWrapSamplerDesc"]));
+						}
+					}
 				}
+
 
 				// Values
 				if (mj.contains("Values"))
@@ -217,11 +223,10 @@ namespace shz
 					{
 						const std::string name = vj.value("Name", "");
 						const auto type = (MATERIAL_VALUE_TYPE)vj.value("Type", (int)MATERIAL_VALUE_TYPE_UNKNOWN);
-						const uint64 stable = vj.value("StableID", 0ull);
 						const std::vector<uint8> data = vj.value("Data", std::vector<uint8>{});
 
 						if (!name.empty() && !data.empty() && type != MATERIAL_VALUE_TYPE_UNKNOWN)
-							m.SetRaw(name.c_str(), type, data.data(), (uint32)data.size(), stable);
+							m.SetRaw(name.c_str(), type, data.data(), (uint32)data.size());
 					}
 				}
 
@@ -232,7 +237,6 @@ namespace shz
 					{
 						const std::string rname = rj.value("Name", "");
 						const auto rtype = (MATERIAL_RESOURCE_TYPE)rj.value("Type", (int)MATERIAL_RESOURCE_TYPE_UNKNOWN);
-						const uint64 stable = rj.value("StableID", 0ull);
 						const std::string sourcePath = rj.value("SourcePath", "");
 
 						AssetID texId = {};
@@ -245,13 +249,13 @@ namespace shz
 
 						if (!rname.empty() && !sourcePath.empty())
 						{
-							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<Texture>(sourcePath), stable);
+							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<Texture>(sourcePath));
 						}
 
 						const bool hasS = rj.value("HasSamplerOverride", false);
 						if (hasS && rj.contains("SamplerOverrideDesc"))
 						{
-							m.SetSamplerOverride(rname.c_str(), jsonToSamplerDesc(rj["SamplerOverrideDesc"]), stable);
+							m.SetSamplerOverrideDesc(rname.c_str(), jsonToSamplerDesc(rj["SamplerOverrideDesc"]));
 						}
 					}
 				}

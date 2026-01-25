@@ -86,6 +86,8 @@ namespace shz
 
 			m_TemplateCache[gbufferTemplate.GetName()] = gbufferTemplate;
 			m_TemplateCache[gbufferMaskedTemplate.GetName()] = gbufferMaskedTemplate;
+
+			Material::RegisterTemplateLibrary(&m_TemplateCache);
 		}
 
 		const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
@@ -234,19 +236,10 @@ namespace shz
 		{
 			ASSERT(m_Passes.empty(), "m_Passes are already initilaized.");
 			ASSERT(m_PassOrder.empty(), "m_PassOrder are already initilaized.");
-			addPass(std::make_unique<ShadowRenderPass>());
-			addPass(std::make_unique<GBufferRenderPass>());
-			addPass(std::make_unique<LightingRenderPass>());
-			addPass(std::make_unique<PostRenderPass>());
-
-			for (const std::string& name : m_PassOrder)
-			{
-				RenderPassBase* pass = m_Passes[name].get();
-				ASSERT(pass, "Pass is null.");
-
-				const bool ok = pass->Initialize(m_PassCtx);
-				ASSERT(ok, "Pass initialize failed.");
-			}
+			addPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
+			addPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
+			addPass(std::make_unique<LightingRenderPass>(m_PassCtx));
+			addPass(std::make_unique<PostRenderPass>(m_PassCtx));
 		}
 
 		wirePassOutputs();
@@ -258,15 +251,9 @@ namespace shz
 	{
 		ReleaseSwapChainBuffers();
 
-		for (const std::string& name : m_PassOrder)
-		{
-			RenderPassBase* pass = m_Passes[name].get();
-			ASSERT(pass, "Pass is null.");
-			pass->Cleanup();
-		}
-
 		m_Passes.clear();
 		m_PassOrder.clear();
+		m_RHIRenderPasses.clear();
 
 		m_EnvTex.Release();
 		m_EnvDiffuseTex.Release();
@@ -1059,7 +1046,7 @@ namespace shz
 		}
 	}
 
-	const MaterialRenderData& Renderer::CreateMaterial(const Material& asset, uint64 key, const std::string& name)
+	const MaterialRenderData& Renderer::CreateMaterial(const Material& material, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -1068,16 +1055,12 @@ namespace shz
 
 		MaterialRenderData out = {};
 
-		MaterialInstance inst;
-		inst.Initialize(&m_TemplateCache[asset.GetTemplateName()], name);
-		asset.ApplyToInstance(&inst);
-
 		ASSERT(m_pDevice, "Device is null.");
 
 		out.CBIndex = 0;
-		for (; out.CBIndex < inst.GetTemplate()->GetCBufferCount(); ++out.CBIndex)
+		for (; out.CBIndex < material.GetTemplate().GetCBufferCount(); ++out.CBIndex)
 		{
-			const auto& cb = inst.GetTemplate()->GetCBuffer(out.CBIndex);
+			const auto& cb = material.GetTemplate().GetCBuffer(out.CBIndex);
 			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
 			{
 				break;
@@ -1086,102 +1069,32 @@ namespace shz
 
 		// Create PSO
 		{
-			const MATERIAL_PIPELINE_TYPE pipelineType = inst.GetPipelineType();
+			const MATERIAL_PIPELINE_TYPE pipelineType = material.GetPipelineType();
 
 			if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 			{
-				GraphicsPipelineStateCreateInfo psoCi = {};
-				psoCi.PSODesc = inst.GetPSODesc();
-				psoCi.GraphicsPipeline = inst.GetGraphicsPipelineDesc();
-				psoCi.GraphicsPipeline.pRenderPass = m_Passes[inst.GetRenderPass()]->GetRHIRenderPass();
-				ASSERT(psoCi.GraphicsPipeline.pRenderPass != nullptr, "Render pass is null.");
+				GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_RHIRenderPasses);
+				ASSERT(psoCI.GraphicsPipeline.pRenderPass != nullptr, "Render pass is null.");
 
-				// Attach shaders from instance
-				bool hasMeshStages = false;
-				bool hasLegacyStages = false;
-
-				for (const RefCntAutoPtr<IShader>& shader : inst.GetShaders())
-				{
-					ASSERT(shader, "Shader in source instance is null.");
-
-					const SHADER_TYPE shaderType = shader->GetDesc().ShaderType;
-
-					// classify for earlier diagnostic
-					if (shaderType == SHADER_TYPE_MESH || shaderType == SHADER_TYPE_AMPLIFICATION)
-					{
-						hasMeshStages = true;
-					}
-
-					if (shaderType == SHADER_TYPE_VERTEX ||
-						shaderType == SHADER_TYPE_GEOMETRY ||
-						shaderType == SHADER_TYPE_HULL ||
-						shaderType == SHADER_TYPE_DOMAIN)
-					{
-						hasLegacyStages = true;
-					}
-
-					if (shaderType == SHADER_TYPE_VERTEX)             psoCi.pVS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_PIXEL)         psoCi.pPS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_GEOMETRY)      psoCi.pGS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_HULL)          psoCi.pHS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_DOMAIN)        psoCi.pDS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_AMPLIFICATION) psoCi.pAS = shader.RawPtr();
-					else if (shaderType == SHADER_TYPE_MESH)          psoCi.pMS = shader.RawPtr();
-				}
-
-				// Diligent/your utils assert: mesh stages can't be combined with legacy stages
-				ASSERT(!(hasMeshStages && hasLegacyStages), "Invalid shader stage mix: mesh stages can't be combined with VS/GS/HS/DS.");
-
-				// Auto-generated resource layout from instance
-				psoCi.PSODesc.ResourceLayout.DefaultVariableType = inst.GetDefaultVariableType();
-
-				psoCi.PSODesc.ResourceLayout.Variables = inst.GetLayoutVarCount() > 0 ? inst.GetLayoutVars() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumVariables = inst.GetLayoutVarCount();
-
-				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = inst.GetImmutableSamplerCount() > 0 ? inst.GetImmutableSamplers() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = inst.GetImmutableSamplerCount();
-
-				out.PSO = m_pPipelineStateManager->AcquireGraphics(psoCi);
+				out.PSO = m_pPipelineStateManager->AcquireGraphics(psoCI);
 				ASSERT(out.PSO, "Failed to create PSO.");
-
-				if (m_pMaterialStaticBinder)
-				{
-					bool ok = m_pMaterialStaticBinder->BindStatics(out.PSO);
-					ASSERT(ok, "Failed to bind statics.");
-				}
 			}
 			else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
 			{
-				ComputePipelineStateCreateInfo psoCi = {};
-				psoCi.PSODesc = inst.GetPSODesc();
+				ComputePipelineStateCreateInfo psoCI = material.BuildComputePipelineStateCreateInfo();
 
-				for (const RefCntAutoPtr<IShader>& shader : inst.GetShaders())
-				{
-					ASSERT(shader, "Shader in source instance is null.");
-					ASSERT(shader->GetDesc().ShaderType == SHADER_TYPE_COMPUTE, "Shader type is not compute in compute pipeline.");
-					psoCi.pCS = shader.RawPtr();
-				}
-
-				psoCi.PSODesc.ResourceLayout.DefaultVariableType = inst.GetDefaultVariableType();
-
-				psoCi.PSODesc.ResourceLayout.Variables = inst.GetLayoutVarCount() > 0 ? inst.GetLayoutVars() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumVariables = inst.GetLayoutVarCount();
-
-				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = inst.GetImmutableSamplerCount() > 0 ? inst.GetImmutableSamplers() : nullptr;
-				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = inst.GetImmutableSamplerCount();
-
-				out.PSO = m_pPipelineStateManager->AcquireCompute(psoCi);
+				out.PSO = m_pPipelineStateManager->AcquireCompute(psoCI);
 				ASSERT(out.PSO, "Failed to create PSO.");
-
-				if (m_pMaterialStaticBinder)
-				{
-					bool ok = m_pMaterialStaticBinder->BindStatics(out.PSO);
-					ASSERT(ok, "Failed to bind statics.");
-				}
 			}
 			else
 			{
 				ASSERT(false, "Unsupported pipeline type.");
+			}
+
+			if (m_pMaterialStaticBinder)
+			{
+				bool ok = m_pMaterialStaticBinder->BindStatics(out.PSO);
+				ASSERT(ok, "Failed to bind statics.");
 			}
 		}
 
@@ -1191,10 +1104,10 @@ namespace shz
 			ASSERT(out.SRB, "Failed to create SRB.");
 
 			// Create dynamic material constants buffer if template has cbuffers.
-			const uint32 cbCount = inst.GetTemplate()->GetCBufferCount();
+			const uint32 cbCount = material.GetTemplate().GetCBufferCount();
 			if (cbCount > 0)
 			{
-				const MaterialCBufferDesc& cb = inst.GetTemplate()->GetCBuffer(out.CBIndex);
+				const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(out.CBIndex);
 
 				BufferDesc desc = {};
 				desc.Name = "MaterialConstants";
@@ -1211,7 +1124,7 @@ namespace shz
 				if (out.ConstantBuffer)
 				{
 					// Bind by name for first stage that exposes it.
-					for (const RefCntAutoPtr<IShader>& shader : inst.GetShaders())
+					for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
 					{
 						ASSERT(shader, "Shader in source instance is null.");
 
@@ -1227,7 +1140,7 @@ namespace shz
 			}
 		}
 
-		if (asset.GetOptions().BlendMode == MATERIAL_BLEND_MODE_MASKED)
+		if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
 		{
 			IPipelineState* shadowMaskedPSO = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->GetShadowMaskedPSO();
 			shadowMaskedPSO->CreateShaderResourceBinding(&out.ShadowSRB, true);
@@ -1254,11 +1167,11 @@ namespace shz
 		{
 			if (out.ConstantBuffer)
 			{
-				const uint32 cbCount = inst.GetCBufferBlobCount();
+				const uint32 cbCount = material.GetCBufferBlobCount();
 				ASSERT(out.CBIndex < cbCount, "CB index out of bounds.");
 
-				const uint8* pBlob = inst.GetCBufferBlobData(out.CBIndex);
-				const uint32 blobSize = inst.GetCBufferBlobSize(out.CBIndex);
+				const uint8* pBlob = material.GetCBufferBlobData(out.CBIndex);
+				const uint32 blobSize = material.GetCBufferBlobSize(out.CBIndex);
 				ASSERT(pBlob && blobSize > 0, "Invalid blob data.");
 				ASSERT(blobSize <= out.ConstantBuffer->GetDesc().Size, "Blob size exceeds CB size.");
 
@@ -1273,10 +1186,10 @@ namespace shz
 
 			// Bind all textures
 			{
-				const uint32 resCount = inst.GetTemplate()->GetResourceCount();
+				const uint32 resCount = material.GetTemplate().GetResourceCount();
 				for (uint32 i = 0; i < resCount; ++i)
 				{
-					const MaterialResourceDesc& resDesc = inst.GetTemplate()->GetResource(i);
+					const MaterialResourceDesc& resDesc = material.GetTemplate().GetResource(i);
 
 					if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
 						resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
@@ -1285,12 +1198,12 @@ namespace shz
 						continue;
 					}
 
-					if (!inst.IsTextureDirty(i))
+					if (!material.IsTextureDirty(i))
 					{
 						continue;
 					}
 
-					const TextureBinding& b = inst.GetTextureBinding(i);
+					const MaterialTextureBinding& b = material.GetTextureBinding(i);
 
 					ITextureView* pView = nullptr;
 
@@ -1513,5 +1426,6 @@ namespace shz
 
 		m_PassOrder.push_back(name);
 		m_Passes.emplace(name, std::move(pass));
+		m_RHIRenderPasses.emplace(name, m_Passes[name]->GetRHIRenderPass());
 	}
 } // namespace shz

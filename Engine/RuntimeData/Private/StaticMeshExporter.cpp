@@ -142,38 +142,38 @@ namespace shz
 			mj["RenderPassName"] = m.GetRenderPassName();
 
 			// Options (MaterialCommonOptions + extra)
-			const auto& o = m.GetOptions();
 			mj["Options"] = json{
-				{"BlendMode", (int)o.BlendMode},
-				{"CullMode", (int)o.CullMode},
-				{"FrontCounterClockwise", o.FrontCounterClockwise},
-				{"DepthEnable", o.DepthEnable},
-				{"DepthWriteEnable", o.DepthWriteEnable},
-				{"DepthFunc", (int)o.DepthFunc},
-				{"TextureBindingMode", (int)o.TextureBindingMode},
-				{"LinearWrapSamplerName", o.LinearWrapSamplerName},
+				{"BlendMode", (int)m.GetBlendMode()},
+				{"CullMode", (int)m.GetCullMode()},
+				{"FrontCounterClockwise", m.GetFrontCounterClockwise()},
+
+				{"DepthEnable", m.GetDepthEnable()},
+				{"DepthWriteEnable", m.GetDepthWriteEnable()},
+				{"DepthFunc", (int)m.GetDepthFunc()},
+
+				{"TextureBindingMode", (int)m.GetTextureBindingMode()},
+				{"LinearWrapSamplerName", m.GetLinearWrapSamplerName()},
 				{"LinearWrapSamplerDesc", json{
-					{"MinFilter",(int)o.LinearWrapSamplerDesc.MinFilter},
-					{"MagFilter",(int)o.LinearWrapSamplerDesc.MagFilter},
-					{"MipFilter",(int)o.LinearWrapSamplerDesc.MipFilter},
-					{"AddressU",(int)o.LinearWrapSamplerDesc.AddressU},
-					{"AddressV",(int)o.LinearWrapSamplerDesc.AddressV},
-					{"AddressW",(int)o.LinearWrapSamplerDesc.AddressW},
-					{"MipLODBias",o.LinearWrapSamplerDesc.MipLODBias},
-					{"MaxAnisotropy",o.LinearWrapSamplerDesc.MaxAnisotropy},
-					{"ComparisonFunc",(int)o.LinearWrapSamplerDesc.ComparisonFunc},
+					{"MinFilter",      (int)m.GetLinearWrapSamplerDesc().MinFilter},
+					{"MagFilter",      (int)m.GetLinearWrapSamplerDesc().MagFilter},
+					{"MipFilter",      (int)m.GetLinearWrapSamplerDesc().MipFilter},
+					{"AddressU",       (int)m.GetLinearWrapSamplerDesc().AddressU},
+					{"AddressV",       (int)m.GetLinearWrapSamplerDesc().AddressV},
+					{"AddressW",       (int)m.GetLinearWrapSamplerDesc().AddressW},
+					{"MipLODBias",      m.GetLinearWrapSamplerDesc().MipLODBias},
+					{"MaxAnisotropy",   m.GetLinearWrapSamplerDesc().MaxAnisotropy},
+					{"ComparisonFunc",(int)m.GetLinearWrapSamplerDesc().ComparisonFunc},
 					{"BorderColor", {
-						o.LinearWrapSamplerDesc.BorderColor[0],
-						o.LinearWrapSamplerDesc.BorderColor[1],
-						o.LinearWrapSamplerDesc.BorderColor[2],
-						o.LinearWrapSamplerDesc.BorderColor[3],
+						m.GetLinearWrapSamplerDesc().BorderColor[0],
+						m.GetLinearWrapSamplerDesc().BorderColor[1],
+						m.GetLinearWrapSamplerDesc().BorderColor[2],
+						m.GetLinearWrapSamplerDesc().BorderColor[3],
 					}},
-					{"MinLOD",o.LinearWrapSamplerDesc.MinLOD},
-					{"MaxLOD",o.LinearWrapSamplerDesc.MaxLOD},
+					{"MinLOD", m.GetLinearWrapSamplerDesc().MinLOD},
+					{"MaxLOD", m.GetLinearWrapSamplerDesc().MaxLOD},
 				}},
-				{"TwoSided", o.bTwoSided},
-				{"CastShadow", o.bCastShadow},
 			};
+
 
 			// Values
 			mj["Values"] = json::array();
@@ -181,7 +181,6 @@ namespace shz
 			{
 				const auto& v = m.GetValueOverride(i);
 				mj["Values"].push_back(json{
-					{"StableID", v.StableID},
 					{"Name", v.Name},
 					{"Type", (int)v.Type},
 					{"Data", v.Data},
@@ -194,7 +193,6 @@ namespace shz
 			{
 				const auto& r = m.GetResourceBinding(i);
 				json rj;
-				rj["StableID"] = r.StableID;
 				rj["Name"] = r.Name;
 				rj["Type"] = (int)r.Type;
 				rj["SourcePath"] = r.TextureRef.GetID().SourcePath;

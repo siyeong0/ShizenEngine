@@ -20,7 +20,7 @@ namespace shz
 		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16; // TODO: Runtime setting?
 	}
 
-	bool ShadowRenderPass::Initialize(RenderPassContext& ctx)
+	ShadowRenderPass::ShadowRenderPass(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
@@ -326,11 +326,9 @@ namespace shz
 				}
 			}
 		}
-
-		return true;
 	}
 
-	void ShadowRenderPass::Cleanup()
+	ShadowRenderPass::~ShadowRenderPass()
 	{
 		m_pSRB.Release();
 

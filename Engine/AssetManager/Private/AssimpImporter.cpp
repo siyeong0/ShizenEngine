@@ -380,34 +380,29 @@ namespace shz
 		return !outPath.empty();
 	}
 
-	static void importOneMaterial(
+	static Material importOneMaterial(
 		const aiScene* scene,
 		const aiMaterial* mat,
 		uint32 materialIndex,
 		const std::string& sceneFilePath,
-		Material& outMat,
 		AssetManager* pAssetManager,
-		const AssimpImportSettings& s,
+		const AssimpImportSettings& setting,
 		std::string* outError)
 	{
-		auto PushErrorOnce = [&](const std::string& msg)
-		{
-			if (!outError) return;
-			if (outError->empty()) *outError = msg;
-		};
 
-		outMat.Clear();
-
-		// Name
+		std::string name;
+		aiString n;
+		if (mat != nullptr && mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS)
 		{
-			aiString n;
-			if (mat != nullptr && mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS)
-				outMat.SetName(n.C_Str());
-			else
-				outMat.SetName(std::string("Material_") + std::to_string(materialIndex));
+			name = std::string(n.C_Str());
 		}
+		else
+		{
+			name = std::string("Material_") + std::to_string(materialIndex);
+		}
+		std::string templateName = "DefaultLit"; // TODO: from settings?
 
-		outMat.SetTemplateName("DefaultLit");
+		Material outMat(name, templateName);
 
 		// BaseColor
 		float baseColor[4] = { 1, 1, 1, 1 };
@@ -448,11 +443,15 @@ namespace shz
 
 #if defined(AI_MATKEY_METALLIC_FACTOR)
 			if (!(mat != nullptr && mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS))
+			{
 				metallic = 0.0f;
+			}
 #endif
 #if defined(AI_MATKEY_ROUGHNESS_FACTOR)
 			if (!(mat != nullptr && mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS))
+			{
 				roughness = 1.0f;
+			}
 #endif
 			outMat.SetFloat("g_MetallicFactor", metallic);
 			outMat.SetFloat("g_RoughnessFactor", roughness);
@@ -472,34 +471,28 @@ namespace shz
 			float alphaCutoff = 0.5f;
 #if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
 			if (!(mat != nullptr && mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff) == AI_SUCCESS))
+			{
 				alphaCutoff = 0.5f;
+			}
 #endif
 			outMat.SetFloat("g_AlphaCutoff", alphaCutoff);
 		}
 
 		outMat.SetFloat("g_NormalScale", 1.0f);
 
-		auto BindTex2D = [&](const char* shaderVar, const std::string& texPath)
-		{
-			if (!shaderVar || shaderVar[0] == '\0')
-				return;
-
-			if (texPath.empty())
-				return;
-
-			if (!pAssetManager || !s.bRegisterTextureAssets)
-				return;
-
-			// NOTE: RegisterAsset<TextureAsset>(path) 가 존재한다고 가정.
-			const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
-			if (!texRef)
+		auto bindTexture = [&](const char* shaderVar, const std::string& texPath)
 			{
-				PushErrorOnce(std::string("RegisterAsset<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);
-				return;
-			}
+				ASSERT(shaderVar != nullptr, "shaderVar is null.");
+				ASSERT(shaderVar[0] != '\0', "shaderVar is empty.");
+				ASSERT(!texPath.empty(), "texPath is empty.");
+				ASSERT(pAssetManager != nullptr, "pAssetManager is null.");
+				ASSERT(setting.bRegisterTextureAssets, "setting:bRegisterTextureAssets is false.");
 
-			outMat.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
-		};
+				const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
+				ASSERT(texRef, "RegisterAsset<TextureAsset> returned null AssetRef.");
+
+				outMat.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
+			};
 
 		{
 			std::string path;
@@ -510,7 +503,7 @@ namespace shz
 			if (resolveTexturePath(scene, mat, aiTextureType_BASE_COLOR, sceneFilePath, path, outError) ||
 				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_BaseColorTex", path);
+				bindTexture("g_BaseColorTex", path);
 				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
 			}
 
@@ -519,7 +512,7 @@ namespace shz
 			if (resolveTexturePath(scene, mat, aiTextureType_NORMALS, sceneFilePath, path, outError) ||
 				resolveTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_NormalTex", path);
+				bindTexture("g_NormalTex", path);
 				materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
 
@@ -529,7 +522,7 @@ namespace shz
 				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, sceneFilePath, path, outError) ||
 				resolveTexturePath(scene, mat, aiTextureType_UNKNOWN, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_MetallicRoughnessTex", path);
+				bindTexture("g_MetallicRoughnessTex", path);
 				materialFlag |= hlsl::MAT_HAS_MR;
 			}
 
@@ -537,7 +530,7 @@ namespace shz
 			path.clear();
 			if (resolveTexturePath(scene, mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_AOTex", path);
+				bindTexture("g_AOTex", path);
 				materialFlag |= hlsl::MAT_HAS_AO;
 			}
 
@@ -545,7 +538,7 @@ namespace shz
 			path.clear();
 			if (resolveTexturePath(scene, mat, aiTextureType_EMISSIVE, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_EmissiveTex", path);
+				bindTexture("g_EmissiveTex", path);
 				materialFlag |= hlsl::MAT_HAS_EMISSIVE;
 			}
 
@@ -553,12 +546,14 @@ namespace shz
 			path.clear();
 			if (resolveTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
 			{
-				BindTex2D("g_HeightTex", path);
+				bindTexture("g_HeightTex", path);
 				materialFlag |= hlsl::MAT_HAS_HEIGHT;
 			}
 
 			outMat.SetUint("g_MaterialFlags", materialFlag);
 		}
+
+		return outMat;
 	}
 
 	// ------------------------------------------------------------
@@ -615,23 +610,13 @@ namespace shz
 	bool BuildStaticMeshAsset(
 		const AssimpAsset& assimpAsset,
 		StaticMesh* pOutMesh,
-		const AssimpImportSettings& s,
+		const AssimpImportSettings& setting,
 		std::string* outError,
 		AssetManager* pAssetManager)
 	{
-		if (pOutMesh == nullptr)
-		{
-			if (outError) *outError = "pOutMesh is null.";
-			return false;
-		}
-
+		ASSERT(pOutMesh, "pOutMesh is null.");
+		ASSERT(assimpAsset.IsValid(), "assimpAsset is invalid.");
 		pOutMesh->Clear();
-
-		if (!assimpAsset.IsValid())
-		{
-			if (outError) *outError = "AssimpAsset is invalid (Scene/Importer missing).";
-			return false;
-		}
 
 		const aiScene* scene = assimpAsset.Scene;
 		const std::string& filePath = assimpAsset.SourcePath;
@@ -651,15 +636,15 @@ namespace shz
 		// ------------------------------------------------------------
 		// Import materials (optional)
 		// ------------------------------------------------------------
-		if (s.bImportMaterials)
+		if (setting.bImportMaterials)
 		{
 			std::vector<Material> materials;
-			materials.resize(scene->mNumMaterials);
+			materials.reserve(scene->mNumMaterials);
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
 			{
 				const aiMaterial* mat = scene->mMaterials[i];
-				importOneMaterial(scene, mat, i, filePath, materials[i], pAssetManager, s, outError);
+				materials.emplace_back(importOneMaterial(scene, mat, i, filePath, pAssetManager, setting, outError));
 			}
 
 			pOutMesh->SetMaterialSlots(static_cast<std::vector<Material>&&>(materials));
@@ -670,7 +655,7 @@ namespace shz
 		// ------------------------------------------------------------
 		uint32 totalVertexCount = 0;
 
-		if (s.bMergeMeshes)
+		if (setting.bMergeMeshes)
 		{
 			for (uint32 m = 0; m < scene->mNumMeshes; ++m)
 			{
@@ -695,10 +680,10 @@ namespace shz
 		auto& idx16 = pOutMesh->GetIndicesU16();
 
 		auto pushIndex = [&](uint32 idx)
-		{
-			if (indexType == VT_UINT32) idx32.push_back(idx);
-			else idx16.push_back(static_cast<uint16>(idx));
-		};
+			{
+				if (indexType == VT_UINT32) idx32.push_back(idx);
+				else idx16.push_back(static_cast<uint16>(idx));
+			};
 
 		// ------------------------------------------------------------
 		// Import meshes by traversing nodes (BAKE transforms)
@@ -714,111 +699,113 @@ namespace shz
 		texCoords.reserve(totalVertexCount);
 
 		std::vector<StaticMesh::Section> sections;
-		sections.reserve(s.bMergeMeshes ? scene->mNumMeshes : 1);
+		sections.reserve(setting.bMergeMeshes ? scene->mNumMeshes : 1);
 
-		auto ImportMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global) -> bool
-		{
-			if (mesh == nullptr)
+		auto importMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global)
+			{
+				ASSERT(mesh, "mesh is null.");
+				ASSERT(mesh->HasPositions(), "mesh has no positions.");
+
+				const uint32 baseVertex = static_cast<uint32>(positions.size());
+				const uint32 vertexCount = mesh->mNumVertices;
+
+				const bool hasNormals = mesh->HasNormals();
+				const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
+				const bool hasUV0 = mesh->HasTextureCoords(0);
+
+				const aiMatrix3x3 normalM = makeNormalMatrix(global);
+
+				for (uint32 v = 0; v < vertexCount; ++v)
+				{
+					const aiVector3D& pA = mesh->mVertices[v];
+
+					float3 p = float3(pA.x, pA.y, pA.z) * setting.UniformScale;
+					p = transformPoint(global, p);
+					positions.push_back(p);
+
+					float3 n = hasNormals
+						? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
+						: float3(0.0f, 1.0f, 0.0f);
+					normals.push_back(transformNormal(normalM, n));
+
+					float3 t = hasTangents
+						? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
+						: float3(1.0f, 0.0f, 0.0f);
+					tangents.push_back(transformNormal(normalM, t));
+
+					if (hasUV0)
+					{
+						texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
+					}
+					else
+					{
+						texCoords.push_back(float2(0.0f, 0.0f));
+					}
+				}
+
+				StaticMesh::Section sec = {};
+				sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
+				sec.MaterialSlot = mesh->mMaterialIndex;
+
+				const uint32 firstIndex = pOutMesh->GetIndexCount();
+				uint32 indexCount = 0;
+
+				for (uint32 f = 0; f < mesh->mNumFaces; ++f)
+				{
+					const aiFace& face = mesh->mFaces[f];
+					ASSERT(face.mNumIndices == 3, "Only triangles are supported.");
+
+					pushIndex(face.mIndices[0]);
+					pushIndex(face.mIndices[1]);
+					pushIndex(face.mIndices[2]);
+					indexCount += 3;
+				}
+
+				sec.FirstIndex = firstIndex;
+				sec.IndexCount = indexCount;
+
+				sections.push_back(sec);
+			};
+
+		auto traverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
+			{
+				ASSERT(node, "node is null.");
+
+				aiMatrix4x4 global = parent * node->mTransformation;
+
+				for (uint32 i = 0; i < node->mNumMeshes; ++i)
+				{
+					const uint32 meshIndex = node->mMeshes[i];
+					ASSERT(meshIndex < scene->mNumMeshes, "meshIndex out of range.");
+
+					const aiMesh* pMesh = scene->mMeshes[meshIndex];
+					importMeshAsSection(pMesh, global);
+
+					if (!setting.bMergeMeshes)
+					{
+						return true;
+					}
+				}
+
+				for (uint32 c = 0; c < node->mNumChildren; ++c)
+				{
+					if (!self(self, node->mChildren[c], global))
+					{
+						return false;
+					}
+
+					if (!setting.bMergeMeshes && !sections.empty())
+					{
+						return true;
+					}
+				}
+
 				return true;
-
-			if (!mesh->HasPositions())
-				return false;
-
-			const uint32 baseVertex = static_cast<uint32>(positions.size());
-			const uint32 vertexCount = mesh->mNumVertices;
-
-			const bool hasNormals = mesh->HasNormals();
-			const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
-			const bool hasUV0 = mesh->HasTextureCoords(0);
-
-			const aiMatrix3x3 normalM = makeNormalMatrix(global);
-
-			for (uint32 v = 0; v < vertexCount; ++v)
-			{
-				const aiVector3D& pA = mesh->mVertices[v];
-
-				float3 p = float3(pA.x, pA.y, pA.z) * s.UniformScale;
-				p = transformPoint(global, p);
-				positions.push_back(p);
-
-				float3 n = hasNormals
-					? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
-					: float3(0.0f, 1.0f, 0.0f);
-				normals.push_back(transformNormal(normalM, n));
-
-				float3 t = hasTangents
-					? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
-					: float3(1.0f, 0.0f, 0.0f);
-				tangents.push_back(transformNormal(normalM, t));
-
-				if (hasUV0)
-					texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
-				else
-					texCoords.push_back(float2(0.0f, 0.0f));
-			}
-
-			StaticMesh::Section sec = {};
-			sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
-			sec.MaterialSlot = mesh->mMaterialIndex;
-
-			const uint32 firstIndex = pOutMesh->GetIndexCount();
-			uint32 indexCount = 0;
-
-			for (uint32 f = 0; f < mesh->mNumFaces; ++f)
-			{
-				const aiFace& face = mesh->mFaces[f];
-				if (face.mNumIndices != 3)
-					continue;
-
-				pushIndex(face.mIndices[0]);
-				pushIndex(face.mIndices[1]);
-				pushIndex(face.mIndices[2]);
-				indexCount += 3;
-			}
-
-			sec.FirstIndex = firstIndex;
-			sec.IndexCount = indexCount;
-
-			sections.push_back(sec);
-			return true;
-		};
-
-		auto TraverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
-		{
-			if (node == nullptr)
-				return true;
-
-			aiMatrix4x4 global = parent * node->mTransformation;
-
-			for (uint32 i = 0; i < node->mNumMeshes; ++i)
-			{
-				const uint32 meshIndex = node->mMeshes[i];
-				if (meshIndex >= scene->mNumMeshes)
-					continue;
-
-				const aiMesh* mesh = scene->mMeshes[meshIndex];
-				if (!ImportMeshAsSection(mesh, global))
-					return false;
-
-				if (!s.bMergeMeshes)
-					return true;
-			}
-
-			for (uint32 c = 0; c < node->mNumChildren; ++c)
-			{
-				if (!self(self, node->mChildren[c], global))
-					return false;
-
-				if (!s.bMergeMeshes && !sections.empty())
-					return true;
-			}
-
-			return true;
-		};
+			};
 
 		{
 			const aiMatrix4x4 identity;
-			if (!TraverseNode(TraverseNode, scene->mRootNode, identity))
+			if (!traverseNode(traverseNode, scene->mRootNode, identity))
 			{
 				if (outError) *outError = "BuildStaticMeshAsset: node traversal failed.";
 				return false;

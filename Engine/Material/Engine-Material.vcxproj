@@ -140,7 +140,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\MaterialInstance.h" />
     <ClInclude Include="Public\MaterialTemplate.h" />
     <ClInclude Include="Public\MaterialTypes.h" />
   </ItemGroup>
@@ -151,7 +150,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\MaterialInstance.cpp" />
     <ClCompile Include="Private\MaterialTemplate.cpp" />
   </ItemGroup>
   <ItemGroup>

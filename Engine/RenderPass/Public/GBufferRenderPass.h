@@ -18,10 +18,10 @@ namespace shz
 	class GBufferRenderPass final : public RenderPassBase
 	{
 	public:
-		const char* GetName() const override { return "GBuffer"; }
+		GBufferRenderPass(RenderPassContext& ctx);
+		~GBufferRenderPass() override;
 
-		bool Initialize(RenderPassContext& ctx) override;
-		void Cleanup() override;
+		const char* GetName() const override { return "GBuffer"; }
 
 		void BeginFrame(RenderPassContext& ctx) override;
 		void Execute(RenderPassContext& ctx) override;

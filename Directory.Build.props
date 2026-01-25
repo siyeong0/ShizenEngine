@@ -50,6 +50,7 @@
 				D3D12_SUPPORTED;
 				PROFILING;
 				NOMINMAX;
+				_CRT_SECURE_NO_WARNINGS;
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
 

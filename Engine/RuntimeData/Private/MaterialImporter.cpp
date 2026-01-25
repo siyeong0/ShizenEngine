@@ -69,34 +69,57 @@ namespace shz
 			return {};
 		}
 
-		Material m;
-		m.SetName(j.value("Name", ""));
-		m.SetTemplateName(j.value("TemplateName", ""));
+		std::string name = j.value("Name", "");
+		std::string templateName = j.value("TemplateName", "");
+		Material m(name, templateName);
+
 		m.SetRenderPassName(j.value("RenderPassName", ""));
 
 		// Options
+		// Options
 		if (j.contains("Options"))
 		{
-			auto& o = m.GetOptions();
 			const auto& oj = j["Options"];
 
-			o.BlendMode = (MATERIAL_BLEND_MODE)oj.value("BlendMode", (int)o.BlendMode);
-			o.CullMode = (CULL_MODE)oj.value("CullMode", (int)o.CullMode);
-			o.FrontCounterClockwise = oj.value("FrontCounterClockwise", o.FrontCounterClockwise);
+			// Blend / Raster
+			{
+				const MATERIAL_BLEND_MODE blend = (MATERIAL_BLEND_MODE)oj.value("BlendMode", (int)m.GetBlendMode());
+				m.SetBlendMode(blend);
+				const CULL_MODE cull = (CULL_MODE)oj.value("CullMode", (int)m.GetCullMode());
+				m.SetCullMode(cull);
+				const bool frontCCW = oj.value("FrontCounterClockwise", m.GetFrontCounterClockwise());
+				m.SetFrontCounterClockwise(frontCCW);
+			}
 
-			o.DepthEnable = oj.value("DepthEnable", o.DepthEnable);
-			o.DepthWriteEnable = oj.value("DepthWriteEnable", o.DepthWriteEnable);
-			o.DepthFunc = (COMPARISON_FUNCTION)oj.value("DepthFunc", (int)o.DepthFunc);
+			// Depth
+			{
+				const bool depthEnable = oj.value("DepthEnable", m.GetDepthEnable());
+				m.SetDepthEnable(depthEnable);
+				const bool depthWrite = oj.value("DepthWriteEnable", m.GetDepthWriteEnable());
+				m.SetDepthWriteEnable(depthWrite);
+				const COMPARISON_FUNCTION depthFunc = (COMPARISON_FUNCTION)oj.value("DepthFunc", (int)m.GetDepthFunc());
+				m.SetDepthFunc(depthFunc);
+			}
 
-			o.TextureBindingMode = (MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)o.TextureBindingMode);
+			// Texture binding mode 
+			{
+				const MATERIAL_TEXTURE_BINDING_MODE bindMode = (MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)m.GetTextureBindingMode());
+				m.SetTextureBindingMode(bindMode);
+			}
 
-			o.LinearWrapSamplerName = oj.value("LinearWrapSamplerName", o.LinearWrapSamplerName);
-			if (oj.contains("LinearWrapSamplerDesc"))
-				o.LinearWrapSamplerDesc = jsonToSampler(oj["LinearWrapSamplerDesc"]);
+			// LinearWrap sampler (layout ¿µÇâ)
+			{
+				const std::string samplerName = oj.value("LinearWrapSamplerName", m.GetLinearWrapSamplerName());
+				m.SetLinearWrapSamplerName(samplerName);
 
-			o.bTwoSided = oj.value("TwoSided", o.bTwoSided);
-			o.bCastShadow = oj.value("CastShadow", o.bCastShadow);
+				if (oj.contains("LinearWrapSamplerDesc"))
+				{
+					const SamplerDesc desc = jsonToSampler(oj["LinearWrapSamplerDesc"]);
+					m.SetLinearWrapSamplerDesc(desc);
+				}
+			}
 		}
+
 
 		// Values
 		if (j.contains("Values"))
@@ -105,11 +128,10 @@ namespace shz
 			{
 				const std::string name = vj.value("Name", "");
 				const auto type = (MATERIAL_VALUE_TYPE)vj.value("Type", (int)MATERIAL_VALUE_TYPE_UNKNOWN);
-				const uint64 stable = vj.value("StableID", 0ull);
 				const std::vector<uint8> data = vj.value("Data", std::vector<uint8>{});
 
 				if (!name.empty() && !data.empty() && type != MATERIAL_VALUE_TYPE_UNKNOWN)
-					m.SetRaw(name.c_str(), type, data.data(), (uint32)data.size(), stable);
+					m.SetRaw(name.c_str(), type, data.data(), (uint32)data.size());
 			}
 		}
 
@@ -120,7 +142,6 @@ namespace shz
 			{
 				const std::string rname = rj.value("Name", "");
 				const auto rtype = (MATERIAL_RESOURCE_TYPE)rj.value("Type", (int)MATERIAL_RESOURCE_TYPE_UNKNOWN);
-				const uint64 stable = rj.value("StableID", 0ull);
 
 				AssetID texId = {};
 				if (rj.contains("TextureAssetID"))
@@ -131,11 +152,15 @@ namespace shz
 				}
 
 				if (!rname.empty() && texId)
-					m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<Texture>(texId), stable);
+					m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<Texture>(texId));
 
 				const bool hasS = rj.value("HasSamplerOverride", false);
 				if (hasS && rj.contains("SamplerOverrideDesc"))
-					m.SetSamplerOverride(rname.c_str(), jsonToSampler(rj["SamplerOverrideDesc"]), stable);
+				{
+					m.SetSamplerOverrideDesc(
+						rname.c_str(),
+						jsonToSampler(rj["SamplerOverrideDesc"]));
+				}
 			}
 		}
 

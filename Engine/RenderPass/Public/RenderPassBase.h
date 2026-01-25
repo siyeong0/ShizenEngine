@@ -10,15 +10,12 @@ namespace shz
 	class RenderPassBase
 	{
 	public:
-		RenderPassBase() = default;
+		RenderPassBase() {};
 		RenderPassBase(const RenderPassBase&) = delete;
 		RenderPassBase& operator=(const RenderPassBase&) = delete;
-		virtual ~RenderPassBase() = default;
+		virtual ~RenderPassBase() {};
 
 		virtual const char* GetName() const = 0;
-
-		virtual bool Initialize(RenderPassContext& ctx) = 0;
-		virtual void Cleanup() = 0;
 
 		virtual void BeginFrame(RenderPassContext& ctx) = 0;
 		virtual void Execute(RenderPassContext& ctx) = 0;

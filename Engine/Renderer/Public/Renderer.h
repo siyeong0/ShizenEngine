@@ -25,7 +25,7 @@
 
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Material/Public/MaterialInstance.h"
+#include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.hpp"
 #include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
@@ -135,6 +135,7 @@ namespace shz
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
+		std::unordered_map<std::string, IRenderPass*> m_RHIRenderPasses;
 		std::vector<std::string> m_PassOrder;
 	};
 } // namespace shz

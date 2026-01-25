@@ -1,286 +1,436 @@
 #include "pch.h"
 #include "Engine/RuntimeData/Public/Material.h"
 
-#include "Engine/Material/Public/MaterialInstance.h"
-
 namespace shz
 {
-	// ------------------------------------------------------------
-	// Small helpers
-	// ------------------------------------------------------------
-	static inline bool strEq(const std::string& a, const char* b)
+	Material::Material(const std::string& name, const std::string& templateName)
+		: m_Name(name)
+		, m_TemplateName(templateName)
+		, m_Template(m_sTemplateLibrary->at(templateName))
 	{
-		return (b != nullptr) ? (a == b) : false;
+		syncDescFromOptions();
+
+		// Ensure runtime template binding
+		{
+			// Constant buffers
+			const uint32 cbCount = m_Template.GetCBufferCount();
+			m_CBufferBlobs.resize(cbCount);
+			m_bCBufferDirties.resize(cbCount);
+
+			for (uint32 i = 0; i < cbCount; ++i)
+			{
+				const MaterialCBufferDesc& CB = m_Template.GetCBuffer(i);
+
+				m_CBufferBlobs[i].resize(CB.ByteSize);
+				std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
+				m_bCBufferDirties[i] = 1;
+			}
+
+			// Resources
+			const uint32 resCount = m_Template.GetResourceCount();
+			m_TextureBindings.resize(resCount);
+			m_bTextureDirties.resize(resCount);
+
+			for (uint32 i = 0; i < resCount; ++i)
+			{
+				m_TextureBindings[i] = {};
+				m_bTextureDirties[i] = 1;
+			}
+		}
+
+		rebuildAutoResourceLayout();
+
+		MarkAllDirty();
 	}
 
-	static inline void copyBytes(std::vector<uint8>& dst, const void* pData, uint32 byteSize)
+	void Material::SetRenderPassName(const std::string& name)
 	{
-		ASSERT(byteSize > 0, "Byte size must not be 0.");
-		dst.resize(byteSize);
+		m_RenderPassName = name;
+		m_bPsoDirty = 1;
+	}
 
-		if (!pData)
+	void Material::SetBlendMode(MATERIAL_BLEND_MODE mode)
+	{
+		if (m_Options.BlendMode == mode)
 		{
-			std::memset(dst.data(), 0, byteSize);
 			return;
 		}
 
-		std::memcpy(dst.data(), pData, byteSize);
+		m_Options.BlendMode = mode;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	// ============================================================
-	// Lookups
-	// ============================================================
-	const Material::ValueOverride* Material::FindValueOverride(const char* name) const
+	void Material::SetCullMode(CULL_MODE mode)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (const ValueOverride& v : m_ValueOverrides)
+		if (m_Options.CullMode == mode)
 		{
-			if (strEq(v.Name, name))
-			{
-				return &v;
-			}
+			return;
 		}
 
-		return nullptr;
+		m_Options.CullMode = mode;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	Material::ValueOverride* Material::findValueOverrideMutable(const char* name)
+	void Material::SetFrontCounterClockwise(bool v)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (ValueOverride& v : m_ValueOverrides)
+		if (m_Options.FrontCounterClockwise == v)
 		{
-			if (strEq(v.Name, name))
-			{
-				return &v;
-			}
+			return;
 		}
 
-		return nullptr;
+		m_Options.FrontCounterClockwise = v;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	bool Material::RemoveValueOverride(const char* name)
+	void Material::SetDepthEnable(bool v)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (size_t i = 0; i < m_ValueOverrides.size(); ++i)
+		if (m_Options.DepthEnable == v)
 		{
-			if (strEq(m_ValueOverrides[i].Name, name))
-			{
-				m_ValueOverrides.erase(m_ValueOverrides.begin() + i);
-				return true;
-			}
+			return;
 		}
 
-		return false;
+		m_Options.DepthEnable = v;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	const Material::ResourceBinding* Material::FindResourceBinding(const char* name) const
+	void Material::SetDepthWriteEnable(bool v)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (const ResourceBinding& r : m_ResourceBindings)
+		if (m_Options.DepthWriteEnable == v)
 		{
-			if (strEq(r.Name, name))
-			{
-				return &r;
-			}
+			return;
 		}
 
-		return nullptr;
+		m_Options.DepthWriteEnable = v;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	Material::ResourceBinding* Material::findResourceBindingMutable(const char* name)
+	void Material::SetDepthFunc(COMPARISON_FUNCTION f)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (ResourceBinding& r : m_ResourceBindings)
+		if (m_Options.DepthFunc == f)
 		{
-			if (strEq(r.Name, name))
-			{
-				return &r;
-			}
+			return;
 		}
 
-		return nullptr;
+		m_Options.DepthFunc = f;
+		syncDescFromOptions();
+		m_bPsoDirty = 1;
 	}
 
-	bool Material::RemoveResourceBinding(const char* name)
+	void Material::SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-
-		for (size_t i = 0; i < m_ResourceBindings.size(); ++i)
+		if (m_Options.TextureBindingMode == mode)
 		{
-			if (strEq(m_ResourceBindings[i].Name, name))
-			{
-				m_ResourceBindings.erase(m_ResourceBindings.begin() + i);
-				return true;
-			}
+			return;
 		}
 
-		return false;
+		m_Options.TextureBindingMode = mode;
+		rebuildAutoResourceLayout();
+		m_bLayoutDirty = 1;
 	}
 
-	// ============================================================
-	// Values
-	// ============================================================
-	bool Material::SetFloat(const char* name, float v, uint64 stableId)
+	void Material::SetLinearWrapSamplerName(const std::string& name)
 	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT, &v, sizeof(v), stableId);
-	}
-
-	bool Material::SetFloat2(const char* name, const float v[2], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT2, v, sizeof(float) * 2, stableId);
-	}
-
-	bool Material::SetFloat3(const char* name, const float v[3], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT3, v, sizeof(float) * 3, stableId);
-	}
-
-	bool Material::SetFloat4(const char* name, const float v[4], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT4, v, sizeof(float) * 4, stableId);
-	}
-
-	bool Material::SetInt(const char* name, int32 v, uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT, &v, sizeof(v), stableId);
-	}
-
-	bool Material::SetInt2(const char* name, const int32 v[2], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT2, v, sizeof(int32) * 2, stableId);
-	}
-
-	bool Material::SetInt3(const char* name, const int32 v[3], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT3, v, sizeof(int32) * 3, stableId);
-	}
-
-	bool Material::SetInt4(const char* name, const int32 v[4], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT4, v, sizeof(int32) * 4, stableId);
-	}
-
-	bool Material::SetUint(const char* name, uint32 v, uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT, &v, sizeof(v), stableId);
-	}
-
-	bool Material::SetUint2(const char* name, const uint32 v[2], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT2, v, sizeof(uint32) * 2, stableId);
-	}
-
-	bool Material::SetUint3(const char* name, const uint32 v[3], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT3, v, sizeof(uint32) * 3, stableId);
-	}
-
-	bool Material::SetUint4(const char* name, const uint32 v[4], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT4, v, sizeof(uint32) * 4, stableId);
-	}
-
-	bool Material::SetFloat4x4(const char* name, const float m16[16], uint64 stableId)
-	{
-		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT4X4, m16, sizeof(float) * 16, stableId);
-	}
-
-	bool Material::SetRaw(
-		const char* name,
-		MATERIAL_VALUE_TYPE type,
-		const void* pData,
-		uint32 byteSize,
-		uint64 stableId)
-	{
-		return writeValueInternal(name, type, pData, byteSize, stableId);
-	}
-
-	bool Material::writeValueInternal(
-		const char* name,
-		MATERIAL_VALUE_TYPE type,
-		const void* pData,
-		uint32 byteSize,
-		uint64 stableId)
-	{
-		ASSERT(name && name[0] != '\0', "Invalid name string.");
-		ASSERT(type != MATERIAL_VALUE_TYPE_UNKNOWN, "Value type is unkown. Please specify value type.");
-		ASSERT(byteSize > 0, "Byte size must not be 0.");
-
-		ValueOverride* v = findValueOverrideMutable(name);
-		if (!v)
+		const std::string newName = name.empty() ? "g_LinearWrapSampler" : name;
+		if (m_Options.LinearWrapSamplerName == newName)
 		{
-			ValueOverride nv = {};
-			nv.StableID = stableId;
-			nv.Name = name;
-			nv.Type = type;
-			copyBytes(nv.Data, pData, byteSize);
-			m_ValueOverrides.push_back(static_cast<ValueOverride&&>(nv));
-			return true;
+			return;
 		}
 
-		v->StableID = (stableId != 0) ? stableId : v->StableID;
-		v->Type = type;
-		copyBytes(v->Data, pData, byteSize);
+		m_Options.LinearWrapSamplerName = newName;
+
+		rebuildAutoResourceLayout();
+		m_bLayoutDirty = 1;
+	}
+
+	void Material::SetLinearWrapSamplerDesc(const SamplerDesc& desc)
+	{
+		if (std::memcmp(&m_Options.LinearWrapSamplerDesc, &desc, sizeof(SamplerDesc)) == 0)
+		{
+			return;
+		}
+
+		m_Options.LinearWrapSamplerDesc = desc;
+		rebuildAutoResourceLayout();
+		m_bLayoutDirty = 1;
+	}
+
+	uint32 Material::GetValueOverrideCount() const
+	{
+		ensureSnapshotCache();
+		return static_cast<uint32>(m_SnapshotValues.size());
+	}
+
+	const MaterialSerializedValue& Material::GetValueOverride(uint32 index) const
+	{
+		ensureSnapshotCache();
+		ASSERT(index < static_cast<uint32>(m_SnapshotValues.size()), "Out of bounds.");
+		return m_SnapshotValues[index];
+	}
+
+	uint32 Material::GetResourceBindingCount() const
+	{
+		ensureSnapshotCache();
+		return static_cast<uint32>(m_SnapshotResources.size());
+	}
+
+	const MaterialSerializedResource& Material::GetResourceBinding(uint32 index) const
+	{
+		ensureSnapshotCache();
+		ASSERT(index < static_cast<uint32>(m_SnapshotResources.size()), "Out of bounds.");
+		return m_SnapshotResources[index];
+	}
+
+	const uint8* Material::GetCBufferBlobData(uint32 cbufferIndex) const
+	{
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
+		return m_CBufferBlobs[cbufferIndex].data();
+	}
+
+	uint32 Material::GetCBufferBlobSize(uint32 cbufferIndex) const
+	{
+		ASSERT(cbufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
+		return static_cast<uint32>(m_CBufferBlobs[cbufferIndex].size());
+	}
+
+	bool Material::IsCBufferDirty(uint32 cbufferIndex) const
+	{
+		ASSERT(cbufferIndex < static_cast<uint32>(m_bCBufferDirties.size()), "Out of bounds.");
+		return m_bCBufferDirties[cbufferIndex] != 0;
+	}
+
+	void Material::ClearCBufferDirty(uint32 cbufferIndex)
+	{
+		ASSERT(cbufferIndex < static_cast<uint32>(m_bCBufferDirties.size()), "Out of bounds.");
+		m_bCBufferDirties[cbufferIndex] = 0;
+	}
+
+	bool Material::IsTextureDirty(uint32 resourceIndex) const
+	{
+		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
+		return m_bTextureDirties[resourceIndex] != 0;
+	}
+
+	void Material::ClearTextureDirty(uint32 resourceIndex)
+	{
+		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
+		m_bTextureDirties[resourceIndex] = 0;
+	}
+
+	void Material::MarkAllDirty()
+	{
+		m_bPsoDirty = 1;
+		m_bLayoutDirty = 1;
+		m_bSnapshotDirty = 1;
+
+		for (uint8& b : m_bCBufferDirties)
+		{
+			b = 1;
+		}
+
+		for (uint8& b : m_bTextureDirties)
+		{
+			b = 1;
+		}
+	}
+
+
+	void Material::BuildSerializedSnapshot(
+		std::vector<MaterialSerializedValue>* outValues,
+		std::vector<MaterialSerializedResource>* outResources) const
+	{
+		ASSERT(outValues, "outValues is null.");
+		ASSERT(outResources, "outResources is null.");
+
+		ensureSnapshotCache();
+		*outValues = m_SnapshotValues;
+		*outResources = m_SnapshotResources;
+	}
+
+	bool Material::writeValueImmediate(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedType)
+	{
+		ASSERT(name && name[0] != '\0', "Invalid name.");
+		ASSERT(pData, "pData is null.");
+
+		MaterialValueParamDesc desc = {};
+		if (!m_Template.ValidateSetValue(name, expectedType, &desc))
+		{
+			return false;
+		}
+
+		ASSERT(desc.CBufferIndex < static_cast<uint32>(m_CBufferBlobs.size()), "Out of bounds.");
+		ASSERT(byteSize > 0, "Byte size must be > 0.");
+		ASSERT(byteSize <= desc.ByteSize, "Byte size must be <= variable size (%u).", desc.ByteSize);
+
+		std::vector<uint8>& blob = m_CBufferBlobs[desc.CBufferIndex];
+		const uint32 endOffset = desc.ByteOffset + byteSize;
+
+		ASSERT(endOffset <= static_cast<uint32>(blob.size()), "Out of bounds.");
+
+		std::memcpy(blob.data() + desc.ByteOffset, pData, byteSize);
+		m_bCBufferDirties[desc.CBufferIndex] = 1;
+
+		m_bSnapshotDirty = 1;
 		return true;
 	}
 
-	// ============================================================
-	// Resources
-	// ============================================================
-	bool Material::SetTextureAssetRef(
-		const char* resourceName,
-		MATERIAL_RESOURCE_TYPE expectedType,
-		const AssetRef<Texture>& textureRef,
-		uint64 stableId)
+	bool Material::SetFloat(const char* name, float v)
 	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+		return writeValueImmediate(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_FLOAT);
+	}
+
+	bool Material::SetFloat2(const char* name, const float v[2])
+	{
+		return writeValueImmediate(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2);
+	}
+
+	bool Material::SetFloat3(const char* name, const float v[3])
+	{
+		return writeValueImmediate(name, v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3);
+	}
+
+	bool Material::SetFloat4(const char* name, const float v[4])
+	{
+		return writeValueImmediate(name, v, sizeof(float) * 4, MATERIAL_VALUE_TYPE_FLOAT4);
+	}
+
+	bool Material::SetInt(const char* name, int32 v)
+	{
+		return writeValueImmediate(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_INT);
+	}
+
+	bool Material::SetInt2(const char* name, const int32 v[2])
+	{
+		return writeValueImmediate(name, v, sizeof(int32) * 2, MATERIAL_VALUE_TYPE_INT2);
+	}
+
+	bool Material::SetInt3(const char* name, const int32 v[3])
+	{
+		return writeValueImmediate(name, v, sizeof(int32) * 3, MATERIAL_VALUE_TYPE_INT3);
+	}
+
+	bool Material::SetInt4(const char* name, const int32 v[4])
+	{
+		return writeValueImmediate(name, v, sizeof(int32) * 4, MATERIAL_VALUE_TYPE_INT4);
+	}
+
+	bool Material::SetUint(const char* name, uint32 v)
+	{
+		return writeValueImmediate(name, &v, sizeof(v), MATERIAL_VALUE_TYPE_UINT);
+	}
+
+	bool Material::SetUint2(const char* name, const uint32 v[2])
+	{
+		return writeValueImmediate(name, v, sizeof(uint32) * 2, MATERIAL_VALUE_TYPE_UINT2);
+	}
+
+	bool Material::SetUint3(const char* name, const uint32 v[3])
+	{
+		return writeValueImmediate(name, v, sizeof(uint32) * 3, MATERIAL_VALUE_TYPE_UINT3);
+	}
+
+	bool Material::SetUint4(const char* name, const uint32 v[4])
+	{
+		return writeValueImmediate(name, v, sizeof(uint32) * 4, MATERIAL_VALUE_TYPE_UINT4);
+	}
+
+	bool Material::SetFloat4x4(const char* name, const float m16[16])
+	{
+		return writeValueImmediate(name, m16, sizeof(float) * 16, MATERIAL_VALUE_TYPE_FLOAT4X4);
+	}
+
+	bool Material::SetRaw(const char* name, MATERIAL_VALUE_TYPE type, const void* pData, uint32 byteSize)
+	{
+		ASSERT(type != MATERIAL_VALUE_TYPE_UNKNOWN, "Value type is unknown. Please specify value type.");
+		return writeValueImmediate(name, pData, byteSize, type);
+	}
+
+	bool Material::setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef)
+	{
+		ASSERT(name && name[0] != '\0', "Invalid name.");
 		ASSERT(IsTextureType(expectedType), "Expected type must be a texture type.");
 
-		ResourceBinding* r = findResourceBindingMutable(resourceName);
-		if (!r)
+		uint32 resIndex = 0;
+		if (!m_Template.FindResourceIndex(name, &resIndex))
 		{
-			ResourceBinding nr = {};
-			nr.StableID = stableId;
-			nr.Name = resourceName;
-			nr.Type = expectedType;
-			nr.TextureRef = textureRef;
-			m_ResourceBindings.push_back(static_cast<ResourceBinding&&>(nr));
-			return true;
+			return false;
 		}
 
-		r->StableID = (stableId != 0) ? stableId : r->StableID;
-		r->Type = expectedType;
-		r->TextureRef = textureRef;
+		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			return false;
+		}
+
+		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
+		tb.Name = name;
+		tb.TextureRef = texRef;
+
+		m_bTextureDirties[resIndex] = 1;
+		m_bSnapshotDirty = 1;
 		return true;
 	}
 
-	bool Material::SetSamplerOverride(
-		const char* resourceName,
-		const SamplerDesc& desc,
-		uint64 stableId)
+	bool Material::SetTextureAssetRef(const char* resourceName, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& textureRef)
+	{
+		return setTextureImmediate(resourceName, expectedType, textureRef);
+	}
+
+	bool Material::SetSamplerOverridePtr(const char* resourceName, ISampler* pSampler)
 	{
 		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
 
-		ResourceBinding* r = findResourceBindingMutable(resourceName);
-		if (!r)
+		uint32 resIndex = 0;
+		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
 		{
-			ResourceBinding nr = {};
-			nr.StableID = stableId;
-			nr.Name = resourceName;
-			nr.bHasSamplerOverride = true;
-			nr.SamplerOverrideDesc = desc;
-			m_ResourceBindings.push_back(static_cast<ResourceBinding&&>(nr));
-			return true;
+			return false;
 		}
 
-		r->StableID = (stableId != 0) ? stableId : r->StableID;
-		r->bHasSamplerOverride = true;
-		r->SamplerOverrideDesc = desc;
+		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			return false;
+		}
+
+		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
+		tb.Name = resourceName;
+		tb.pSamplerOverride = pSampler;
+
+		m_bTextureDirties[resIndex] = 1;
+		m_bSnapshotDirty = 1;
+		return true;
+	}
+
+	bool Material::SetSamplerOverrideDesc(const char* resourceName, const SamplerDesc& desc)
+	{
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+
+		uint32 resIndex = 0;
+		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
+		{
+			return false;
+		}
+
+		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			return false;
+		}
+
+		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
+		tb.Name = resourceName;
+		tb.bHasSamplerOverride = true;
+		tb.SamplerOverrideDesc = desc;
+
+		// Defer pointer resolution to renderer/sampler cache
+		tb.pSamplerOverride = nullptr;
+
+		m_bTextureDirties[resIndex] = 1;
+		m_bSnapshotDirty = 1;
 		return true;
 	}
 
@@ -288,83 +438,366 @@ namespace shz
 	{
 		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
 
-		ResourceBinding* r = findResourceBindingMutable(resourceName);
-		if (!r)
+		uint32 resIndex = 0;
+		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
 		{
 			return false;
 		}
 
-		r->bHasSamplerOverride = false;
+		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			return false;
+		}
+
+		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
+		tb.bHasSamplerOverride = false;
+		tb.pSamplerOverride = nullptr;
+
+		m_bTextureDirties[resIndex] = 1;
+		m_bSnapshotDirty = 1;
 		return true;
 	}
 
-	// ============================================================
+
+	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(
+		const std::unordered_map<std::string, IRenderPass*>& renderPassLut) const
+	{
+		GraphicsPipelineStateCreateInfo outGraphicsPipelineStateCI = {};
+
+		PipelineStateDesc& psDesc = outGraphicsPipelineStateCI.PSODesc;
+		psDesc = m_PSODesc;
+
+		GraphicsPipelineDesc& gpDesc = outGraphicsPipelineStateCI.GraphicsPipeline;
+		gpDesc = m_GraphicsPipeline;
+
+		// Inject pRenderPass if graphics pipeline
+		if (psDesc.IsAnyGraphicsPipeline())
+		{
+			GraphicsPipelineDesc* gp = &gpDesc;
+			ASSERT(gp, "Graphics pipeline desc is required for graphics PSO.");
+
+			gp->pRenderPass = nullptr;
+			gp->SubpassIndex = 0;
+
+			auto it = renderPassLut.find(m_RenderPassName);
+			ASSERT(it != renderPassLut.end(), "Render pass '%s' not found in LUT.", m_RenderPassName.c_str());
+
+			gp->pRenderPass = it->second;
+
+			// IMPORTANT:
+			// When pRenderPass != null:
+			// - NumRenderTargets must be 0
+			// - RTVFormats[] and DSVFormat must be UNKNOWN
+			gp->NumRenderTargets = 0;
+			for (uint32 i = 0; i < _countof(gp->RTVFormats); ++i)
+			{
+				gp->RTVFormats[i] = TEX_FORMAT_UNKNOWN;
+			}
+			gp->DSVFormat = TEX_FORMAT_UNKNOWN;
+			gp->ReadOnlyDSV = false;
+		}
+
+		// Attach shaders from instance
+		bool bHasMeshStages = false;
+		bool bHasLegacyStages = false;
+
+		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
+		{
+			ASSERT(shader, "Shader in source instance is null.");
+
+			const SHADER_TYPE shaderType = shader->GetDesc().ShaderType;
+
+			// classify for earlier diagnostic
+			if (shaderType == SHADER_TYPE_MESH || shaderType == SHADER_TYPE_AMPLIFICATION)
+			{
+				bHasMeshStages = true;
+			}
+
+			if (shaderType == SHADER_TYPE_VERTEX ||
+				shaderType == SHADER_TYPE_GEOMETRY ||
+				shaderType == SHADER_TYPE_HULL ||
+				shaderType == SHADER_TYPE_DOMAIN)
+			{
+				bHasLegacyStages = true;
+			}
+
+			if (shaderType == SHADER_TYPE_VERTEX)             outGraphicsPipelineStateCI.pVS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_PIXEL)         outGraphicsPipelineStateCI.pPS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_GEOMETRY)      outGraphicsPipelineStateCI.pGS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_HULL)          outGraphicsPipelineStateCI.pHS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_DOMAIN)        outGraphicsPipelineStateCI.pDS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_AMPLIFICATION) outGraphicsPipelineStateCI.pAS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_MESH)          outGraphicsPipelineStateCI.pMS = shader.RawPtr();
+		}
+
+		// Diligent/your utils assert: mesh stages can't be combined with legacy stages
+		ASSERT(!(bHasMeshStages && bHasLegacyStages), "Invalid shader stage mix: mesh stages can't be combined with VS/GS/HS/DS.");
+
+		return outGraphicsPipelineStateCI;
+	}
+
+	ComputePipelineStateCreateInfo Material::BuildComputePipelineStateCreateInfo() const
+	{
+		ComputePipelineStateCreateInfo outComputePipelineStateCI = {};
+		PipelineStateDesc& psDesc = outComputePipelineStateCI.PSODesc;
+		psDesc = m_PSODesc;
+		// Attach shaders from instance
+		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
+		{
+			ASSERT(shader, "Shader in source instance is null.");
+			const SHADER_TYPE shaderType = shader->GetDesc().ShaderType;
+			if (shaderType == SHADER_TYPE_COMPUTE)
+			{
+				outComputePipelineStateCI.pCS = shader.RawPtr();
+			}
+		}
+		return outComputePipelineStateCI;
+	}
+
+	// ------------------------------------------------------------
 	// Reset
-	// ============================================================
+	// ------------------------------------------------------------
+
 	void Material::Clear()
 	{
 		m_Name.clear();
 		m_TemplateName.clear();
+		m_RenderPassName = "GBuffer";
 
 		m_Options = {};
 
-		m_ValueOverrides.clear();
-		m_ResourceBindings.clear();
+		m_PSODesc = {};
+		m_GraphicsPipeline = {};
+
+		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+		m_Variables.clear();
+		m_ImmutableSamplersStorage.clear();
+
+		m_CBufferBlobs.clear();
+		m_bCBufferDirties.clear();
+
+		m_TextureBindings.clear();
+		m_bTextureDirties.clear();
+
+		m_SnapshotValues.clear();
+		m_SnapshotResources.clear();
+		m_bSnapshotDirty = 1;
+
+		m_bPsoDirty = 1;
+		m_bLayoutDirty = 1;
 	}
 
-	// ============================================================
-	// Apply to runtime instance
-	// ============================================================
-	bool Material::ApplyToInstance(MaterialInstance* pInstance) const
+	void Material::rebuildAutoResourceLayout()
 	{
-		ASSERT(pInstance, "Material instance is null.");
+		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-		// Options -> instance knobs
-		pInstance->SetRenderPass(m_RenderPassName);
-		pInstance->SetCullMode(m_Options.CullMode);
-		pInstance->SetFrontCounterClockwise(m_Options.FrontCounterClockwise);
+		m_Variables.clear();
+		m_ImmutableSamplersStorage.clear();
 
-		pInstance->SetDepthEnable(m_Options.DepthEnable);
-		pInstance->SetDepthWriteEnable(m_Options.DepthWriteEnable);
-		pInstance->SetDepthFunc(m_Options.DepthFunc);
+		m_Variables.reserve(32);
+		m_ImmutableSamplersStorage.reserve(4);
 
-		pInstance->SetTextureBindingMode(m_Options.TextureBindingMode);
-
-		// Values
-		for (const ValueOverride& v : m_ValueOverrides)
+		// Constant buffer
+		if (m_Template.GetCBufferCount() > 0)
 		{
-			if (v.Name.empty() || v.Data.empty())
+			ShaderResourceVariableDesc v = {};
+			v.ShaderStages = SHADER_TYPE_PIXEL; // TODO: reflect stages
+			v.Name = MaterialTemplate::MATERIAL_CBUFFER_NAME;
+			v.Type = SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+			m_Variables.push_back(v);
+		}
+
+		// Textures
+		const SHADER_RESOURCE_VARIABLE_TYPE texVarType =
+			(m_Options.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC)
+			? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC
+			: SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+
+		const uint32 resCount = m_Template.GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
+		{
+			const MaterialResourceDesc& r = m_Template.GetResource(i);
+
+			if (IsTextureType(r.Type))
 			{
-				continue;
+				ShaderResourceVariableDesc v = {};
+				v.ShaderStages = SHADER_TYPE_PIXEL; // TODO
+				v.Name = r.Name.c_str();
+				v.Type = texVarType;
+				m_Variables.push_back(v);
+			}
+		}
+
+		// Immutable sampler: LinearWrap
+		{
+			ImmutableSamplerDesc s = {};
+			s.ShaderStages = SHADER_TYPE_PIXEL; // TODO: Vertex samplers possible
+			s.SamplerOrTextureName = m_Options.LinearWrapSamplerName.c_str();
+			s.Desc = m_Options.LinearWrapSamplerDesc;
+			m_ImmutableSamplersStorage.push_back(s);
+		}
+
+		// Write into PSODesc.ResourceLayout (plain struct)
+		{
+			PipelineResourceLayoutDesc& rl = m_PSODesc.ResourceLayout;
+			rl = {};
+
+			rl.DefaultVariableType = m_DefaultVariableType;
+
+			rl.Variables = m_Variables.empty() ? nullptr : m_Variables.data();
+			rl.NumVariables = static_cast<uint32>(m_Variables.size());
+
+			rl.ImmutableSamplers = m_ImmutableSamplersStorage.empty() ? nullptr : m_ImmutableSamplersStorage.data();
+			rl.NumImmutableSamplers = static_cast<uint32>(m_ImmutableSamplersStorage.size());
+		}
+	}
+
+	void Material::syncDescFromOptions()
+	{
+		// Pipeline type
+		{
+			const MATERIAL_PIPELINE_TYPE t = m_Template.GetPipelineType();
+			if (t == MATERIAL_PIPELINE_TYPE_COMPUTE)
+			{
+				m_PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+			}
+			else
+			{
+				m_PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+			}
+		}
+
+		// Name policy (debug)
+		{
+			if (!m_Name.empty())
+			{
+				m_PSODesc.Name = m_Name.c_str();
+			}
+			else if (!m_Template.GetName().empty())
+			{
+				m_PSODesc.Name = GetName().c_str();
+			}
+			else
+			{
+				m_PSODesc.Name = "Material PSO";
+			}
+		}
+
+		// Graphics pipeline (only meaningful for graphics)
+		if (m_PSODesc.IsAnyGraphicsPipeline())
+		{
+			// Policy: formats come from RenderPass => keep unknowns here.
+			m_GraphicsPipeline.NumRenderTargets = 0;
+			for (uint32 i = 0; i < _countof(m_GraphicsPipeline.RTVFormats); ++i)
+				m_GraphicsPipeline.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
+			m_GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+			m_GraphicsPipeline.pRenderPass = nullptr;
+			m_GraphicsPipeline.SubpassIndex = 0;
+
+			m_GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+			// Raster
+			{
+				m_GraphicsPipeline.RasterizerDesc.CullMode = m_Options.CullMode;
+				m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
 			}
 
-			pInstance->SetRaw(v.Name.c_str(), v.Data.data(), static_cast<uint32>(v.Data.size()));
+			// Depth
+			{
+				m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
+				m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
+				m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
+			}
+
+			// Input layout policy: fixed mesh layout (adjust to your engine's vertex format)
+			static LayoutElement kLayoutElems[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+				LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+			};
+
+			m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
+			m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);
+		}
+	}
+
+	void Material::ensureSnapshotCache() const
+	{
+		if (m_bSnapshotDirty == 0)
+		{
+			return;
+		}
+
+		m_SnapshotValues.clear();
+		m_SnapshotResources.clear();
+
+		// Values from reflected params -> current blob bytes
+		{
+			const uint32 valueCount = m_Template.GetValueParamCount();
+			m_SnapshotValues.reserve(valueCount);
+
+			for (uint32 i = 0; i < valueCount; ++i)
+			{
+				const MaterialValueParamDesc& vp = m_Template.GetValueParam(i);
+
+				MaterialSerializedValue v = {};
+				v.Name = vp.Name;
+				v.Type = vp.Type;
+
+				ASSERT(vp.CBufferIndex < m_CBufferBlobs.size(), "Out of bounds.");
+				const std::vector<uint8>& blob = m_CBufferBlobs[vp.CBufferIndex];
+
+				const uint32 maxCopy = static_cast<uint32>(blob.size()) - vp.ByteOffset;
+				const uint32 copySize = std::min<uint32>(vp.ByteSize, maxCopy);
+
+				v.Data.resize(copySize);
+				std::memcpy(v.Data.data(), blob.data() + vp.ByteOffset, copySize);
+
+				m_SnapshotValues.push_back(static_cast<MaterialSerializedValue&&>(v));
+			}
 		}
 
 		// Resources
-		for (const ResourceBinding& r : m_ResourceBindings)
 		{
-			if (r.Name.empty())
-			{
-				continue;
-			}
+			const uint32 resCount = m_Template.GetResourceCount();
+			m_SnapshotResources.reserve(resCount);
 
-			if (r.TextureRef)
+			for (uint32 i = 0; i < resCount; ++i)
 			{
-				pInstance->SetTextureAsset(r.Name.c_str(), r.TextureRef);
-			}
+				const MaterialResourceDesc& rr = m_Template.GetResource(i);
+				if (!IsTextureType(rr.Type))
+				{
+					continue;
+				}
 
-			if (r.bHasSamplerOverride)
-			{
-				// MaterialInstance currently supports per-texture sampler override via ISampler*,
-				// but the asset stores SamplerDesc. If you have a sampler cache, resolve it there.
-				// For now, just store it in the asset and let higher-level code apply it.
-				// (No-op here.)
-				ASSERT(false, "Not implemented.");
+				MaterialSerializedResource r = {};
+				r.Name = rr.Name;
+				r.Type = rr.Type;
+
+				if (i < m_TextureBindings.size())
+				{
+					const MaterialTextureBinding& tb = m_TextureBindings[i];
+
+					if (tb.TextureRef.has_value())
+					{
+						r.TextureRef = tb.TextureRef.value();
+					}
+
+					r.bHasSamplerOverride = tb.bHasSamplerOverride;
+					if (tb.bHasSamplerOverride)
+					{
+						r.SamplerOverrideDesc = tb.SamplerOverrideDesc;
+					}
+				}
+
+				m_SnapshotResources.push_back(static_cast<MaterialSerializedResource&&>(r));
 			}
 		}
 
-		return true;
+		m_bSnapshotDirty = 0;
 	}
-
 } // namespace shz
