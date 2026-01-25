@@ -187,16 +187,10 @@ namespace shz
 		// Create env textures
 		{
 			TextureLoadInfo tli = {};
-			/*CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/clear_pureskyEnvHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/clear_pureskyDiffuseHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvDiffuseTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/clear_pureskySpecularHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvSpecularTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/clear_pureskyBrdf.dds", tli, m_CreateInfo.pDevice, &m_EnvBrdfTex);*/
-
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleEnvHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleDiffuseHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvDiffuseTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleSpecularHDR.dds", tli, m_CreateInfo.pDevice, &m_EnvSpecularTex);
-			CreateTextureFromFile("C:/Dev/ShizenEngine/Assets/Cubemap/SampleBrdf.dds", tli, m_CreateInfo.pDevice, &m_EnvBrdfTex);
-
+			CreateTextureFromFile(m_CreateInfo.EnvTexturePath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvTex);
+			CreateTextureFromFile(m_CreateInfo.DiffuseIrradianceTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvDiffuseTex);
+			CreateTextureFromFile(m_CreateInfo.SpecularIrradianceTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvSpecularTex);
+			CreateTextureFromFile(m_CreateInfo.BrdfLUTTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvBrdfTex);
 
 			ASSERT(m_EnvTex, "Env tex load failed.");
 			ASSERT(m_EnvDiffuseTex, "Env diffuse load failed.");

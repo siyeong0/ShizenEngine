@@ -718,6 +718,11 @@ namespace shz
 		rci.BackBufferHeight = std::max(1u, scDesc.Height);
 		rci.pAssetManager = m_pAssetManager.get();
 
+		rci.EnvTexturePath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sample/SampleEnvHDR.dds";
+		rci.DiffuseIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sample/SampleDiffuseHDR.dds";
+		rci.SpecularIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sample/SampleSpecularHDR.dds";
+		rci.BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sample/SampleBrdf.dds";
+
 		(void)m_pRenderer->Initialize(rci);
 
 		// Scene

@@ -52,6 +52,11 @@ namespace shz
 
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
+
+		std::string EnvTexturePath = "C:/Dev/ShizenEngine/Assets/Cubemap/ClearSky/ClearSkyEnvHDR.dds";
+		std::string DiffuseIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/ClearSky/ClearSkyDiffuseHDR.dds";
+		std::string SpecularIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/ClearSky/ClearSkySpecularHDR.dds";
+		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/ClearSky/ClearSkyBrdf.dds";
 	};
 
 	class Renderer final
