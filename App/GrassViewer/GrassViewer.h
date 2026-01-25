@@ -86,5 +86,7 @@ namespace shz
 		// Hard-coded scene objects
 		LoadedStaticMesh              m_Floor = {};
 		std::vector<LoadedStaticMesh> m_Grasses = {};
+
+		float m_Speed = 3.0f;
 	};
 } // namespace shz

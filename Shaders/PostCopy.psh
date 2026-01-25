@@ -1,4 +1,3 @@
-// PostCopy.psh
 #include "HLSL_Structures.hlsli"
 
 Texture2D<float4> g_InputColor;
@@ -10,7 +9,29 @@ struct PSInput
     float2 UV : TEXCOORD0;
 };
 
+// ACES fitted curve (Narkowicz 2015)
+float3 ToneMapACES(float3 x)
+{
+    // Hardcoded ACES constants
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    OutColor = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV);
+    float3 hdrColor = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb;
+
+    // Hardcoded exposure
+    const float Exposure = 0.6f;
+    hdrColor *= Exposure;
+
+    // Tone mapping
+    float3 ldrColor = ToneMapACES(hdrColor);
+
+    OutColor = float4(ldrColor, 1.0);
 }

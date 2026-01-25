@@ -15,10 +15,13 @@
 
 namespace shz
 {
-	namespace
+	namespace hlsl
 	{
 #include "Shaders/HLSL_Structures.hlsli"
+	} // namespace hlsl
 
+	namespace
+	{
 		static constexpr const char* kShaderRoot = "C:/Dev/ShizenEngine/Shaders";
 
 		static void setupDefaultViewFamily(ViewFamily& vf)
@@ -139,30 +142,50 @@ namespace shz
 
 		// Load terrain
 		{
+			const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+			const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
 
-			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(
-				"C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png");
+			float scale = 0.5f;
+
+			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
 			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
 			ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
 
 			const TerrainHeightField& terrain = *terrainPtr;
-
-			for (uint32 z = 0; z < terrain.GetHeight(); z += 100)
-			{
-				for (uint32 x = 0; x < terrain.GetWidth(); x += 100)
-				{
-					const float worldHeight = terrain.GetWorldHeightAt(x, z);
-					std::cout << worldHeight << " ";
-				}
-				std::cout << std::endl;
-			}
-
 			StaticMesh terrainMesh;
-
 			TerrainMeshBuilder meshBuilder;
 			TerrainMeshBuildSettings buildSettings = {};
 			buildSettings.YOffset = -10.0f;
-			meshBuilder.BuildStaticMesh(terrain,&terrainMesh, buildSettings);
+
+			Material tm("TerrainMaterial", "DefaultLit");
+			bool ok = false;
+			ok = tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.f));
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_EmissiveIntensity", 0.0f);
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_RoughnessFactor", 0.85f);
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_NormalScale", 1.0f);
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_OcclusionStrength", 1.0f);
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_AlphaCutoff", 0.5f);
+			ASSERT(ok, "Failed to set material parameter.");
+			ok = tm.SetFloat("g_MetallicFactor", 0.0f);
+			ASSERT(ok, "Failed to set material parameter.");
+
+			ok = tm.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR);
+			ASSERT(ok, "Failed to set material parameter.");
+
+			ok = tm.SetTextureAssetRef(
+				"g_BaseColorTex",
+				MATERIAL_RESOURCE_TYPE_TEXTURE2D,
+				m_pAssetManager->RegisterAsset<Texture>(diffusePath));
+			ASSERT(ok, "Failed to set material parameter.");
+
+			meshBuilder.BuildStaticMesh(&terrainMesh, terrain, std::move(tm), buildSettings);
 
 			StaticMeshRenderData terrainRenderData = m_pRenderer->CreateStaticMesh(terrainMesh);
 			RenderScene::RenderObject terrainObj = {};
@@ -170,7 +193,7 @@ namespace shz
 			terrainObj.Transform = Matrix4x4::TRS(
 				float3(0.0f, 0.0f, 0.0f),
 				float3(0.0f, 0.0f, 0.0f),
-				float3(1.0f, 1.0f, 1.0f));
+				float3(scale, scale, scale));
 			terrainObj.bCastShadow = true;
 			const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
 		}
@@ -312,6 +335,19 @@ namespace shz
 
 			ImGui::Separator();
 			ImGui::TextDisabled("FPS: %.1f", ImGui::GetIO().Framerate);
+
+			ImGui::Separator();
+
+			float prevSpeed = m_Speed;
+			if (ImGui::DragFloat("Speed", &m_Speed, 0.05f, 0.01f, 100.0f, "%.3f"))
+			{
+				if (m_Speed < 0.01f) m_Speed = 0.01f;
+
+				if (m_Speed != prevSpeed)
+				{
+					m_Camera.SetSpeedUpScales(m_Speed, 1.0f);
+				}
+			}
 		}
 		ImGui::End();
 

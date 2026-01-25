@@ -1,4 +1,3 @@
-// PostCopy.vsh
 #include "HLSL_Structures.hlsli"
 
 struct VSOutput

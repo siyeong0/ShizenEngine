@@ -54,12 +54,11 @@ namespace shz
 	}
 
 	bool TerrainMeshBuilder::BuildStaticMesh(
-		const TerrainHeightField& hf,
 		StaticMesh* pOutMesh,
-		const TerrainMeshBuildSettings& settings,
-		std::string* pOutError)
+		const TerrainHeightField& hf,
+		Material&& terrainMaterial,
+		const TerrainMeshBuildSettings& settings)
 	{
-		if (pOutError) pOutError->clear();
 		ASSERT(pOutMesh != nullptr, "pOutMesh is null.");
 		ASSERT(hf.IsValid(), "Heightfield is invalid.");
 
@@ -73,7 +72,6 @@ namespace shz
 		const uint64 numVertices64 = static_cast<uint64>(w) * static_cast<uint64>(h);
 		if (numVertices64 > static_cast<uint64>(std::numeric_limits<uint32>::max()))
 		{
-			setError(pOutError, "TerrainMeshBuilder: too many vertices.");
 			ASSERT(false, "Too many vertices.");
 			return false;
 		}
@@ -155,7 +153,6 @@ namespace shz
 
 		if (numIndices64 > static_cast<uint64>(std::numeric_limits<uint32>::max()))
 		{
-			setError(pOutError, "TerrainMeshBuilder: too many indices.");
 			ASSERT(false, "Too many indices.");
 			return false;
 		}
@@ -267,28 +264,7 @@ namespace shz
 		pOutMesh->SetSections(std::move(sections));
 
 		std::vector<Material> materials;
-		Material tm("TerrainMaterial", "DefaultLit");
-
-		bool ok = false;
-
-		ok = tm.SetFloat4("g_BaseColorFactor", float4(0.5f, 0.8f, 0.3f, 1.f));
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_EmissiveIntensity", 0.0f);
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_RoughnessFactor", 0.85f);
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_NormalScale", 1.0f);
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_OcclusionStrength", 1.0f);
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_AlphaCutoff", 0.5f);
-		ASSERT(ok, "Failed to set material parameter.");
-		ok = tm.SetFloat("g_MetallicFactor", 0.0f);
-		ASSERT(ok, "Failed to set material parameter.");
-
-		materials.emplace_back(std::move(tm));
+		materials.emplace_back(std::move(terrainMaterial));
 		pOutMesh->SetMaterialSlots(std::move(materials));
 
 		// ------------------------------------------------------------
@@ -298,7 +274,7 @@ namespace shz
 
 		if (!pOutMesh->IsValid())
 		{
-			setError(pOutError, "TerrainMeshBuilder: produced mesh is invalid.");
+			ASSERT(false, "Built StaticMesh is invalid.");
 			return false;
 		}
 

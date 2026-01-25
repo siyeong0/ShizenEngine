@@ -951,7 +951,7 @@ namespace shz
 		}
 	}
 
-	const TextureRenderData& Renderer::CreateTexture(const Texture& asset, uint64 key, const std::string& name)
+	const TextureRenderData& Renderer::CreateTexture(const Texture& texture, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -960,7 +960,7 @@ namespace shz
 
 		TextureRenderData out;
 
-		const auto& mips = asset.GetMips();
+		const auto& mips = texture.GetMips();
 		ASSERT(!mips.empty(), "TextureAsset has no mips.");
 
 		const uint32 width = mips[0].Width;
@@ -1258,7 +1258,7 @@ namespace shz
 		}
 	}
 
-	const StaticMeshRenderData& Renderer::CreateStaticMesh(const StaticMesh& asset, uint64 key, const std::string& name)
+	const StaticMeshRenderData& Renderer::CreateStaticMesh(const StaticMesh& mesh, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -1276,13 +1276,13 @@ namespace shz
 		std::vector<PackedStaticVertex> packed;
 		// Build packed vertex buffer data
 		{
-			const uint32 vtxCount = asset.GetVertexCount();
+			const uint32 vtxCount = mesh.GetVertexCount();
 			packed.resize(vtxCount);
 
-			const std::vector<float3>& positions = asset.GetPositions();
-			const std::vector<float3>& normals = asset.GetNormals();
-			const std::vector<float3>& tangents = asset.GetTangents();
-			const std::vector<float2>& texCoords = asset.GetTexCoords();
+			const std::vector<float3>& positions = mesh.GetPositions();
+			const std::vector<float3>& normals = mesh.GetNormals();
+			const std::vector<float3>& tangents = mesh.GetTangents();
+			const std::vector<float2>& texCoords = mesh.GetTexCoords();
 
 			const bool bHasNormals = (!normals.empty() && normals.size() == positions.size());
 			const bool bHasTangents = (!tangents.empty() && tangents.size() == positions.size());
@@ -1318,8 +1318,8 @@ namespace shz
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
 		ASSERT(pVB, "Failed to create vertex buffer for StaticMesh.");
 
-		const void* pIndexData = asset.GetIndexData();
-		const uint32 ibBytes = asset.GetIndexDataSizeBytes();
+		const void* pIndexData = mesh.GetIndexData();
+		const uint32 ibBytes = mesh.GetIndexDataSizeBytes();
 		ASSERT(pIndexData && ibBytes > 0, "Invalid index data in StaticMeshAsset.");
 
 		RefCntAutoPtr<IBuffer> pIB = createImmutableBuffer(m_pDevice, "StaticMesh_IB", BIND_INDEX_BUFFER, pIndexData, ibBytes);
@@ -1329,13 +1329,13 @@ namespace shz
 		out.VertexBuffer = pVB;
 		out.IndexBuffer = pIB;
 		out.VertexStride = static_cast<uint32>(sizeof(PackedStaticVertex));
-		out.VertexCount = asset.GetVertexCount();
-		out.IndexCount = asset.GetIndexCount();
-		out.IndexType = asset.GetIndexType();
-		out.LocalBounds = asset.GetBounds();
+		out.VertexCount = mesh.GetVertexCount();
+		out.IndexCount = mesh.GetIndexCount();
+		out.IndexType = mesh.GetIndexType();
+		out.LocalBounds = mesh.GetBounds();
 
-		out.Sections.reserve(asset.GetSections().size());
-		for (const auto& s : asset.GetSections())
+		out.Sections.reserve(mesh.GetSections().size());
+		for (const auto& s : mesh.GetSections())
 		{
 			StaticMeshRenderData::Section d{};
 			d.FirstIndex = s.FirstIndex;
@@ -1343,7 +1343,7 @@ namespace shz
 			d.BaseVertex = s.BaseVertex;
 			d.LocalBounds = s.LocalBounds;
 
-			d.Material = CreateMaterial(asset.GetMaterialSlot(s.MaterialSlot));
+			d.Material = CreateMaterial(mesh.GetMaterialSlot(s.MaterialSlot));
 
 			out.Sections.push_back(d);
 		}

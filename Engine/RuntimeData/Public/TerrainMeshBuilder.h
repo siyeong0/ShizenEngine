@@ -26,9 +26,9 @@ namespace shz
 		// Builds a single StaticMesh from the entire heightfield.
 		// One section, one material slot.
 		static bool BuildStaticMesh(
-			const TerrainHeightField& hf,
 			StaticMesh* pOutMesh,
-			const TerrainMeshBuildSettings& settings = {},
-			std::string* pOutError = nullptr);
+			const TerrainHeightField& hf,
+			Material&& terrainMaterial,
+			const TerrainMeshBuildSettings& settings = {});
 	};
 } // namespace shz
