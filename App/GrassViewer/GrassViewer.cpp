@@ -134,7 +134,7 @@ namespace shz
 
 		// Hard-coded objects
 		{
-			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Ground.shzmesh.json";
+			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Floor.shzmesh.json";
 			const bool ok = loadStaticMeshObject(
 				m_Floor,
 				floorPath,
@@ -150,20 +150,20 @@ namespace shz
 		// Grass grid
 		const char* kGrassPaths[] =
 		{
-			"C:/Dev/ShizenEngine/Assets/Exported/Grass00.shzmesh.json",
-			// "C:/Dev/ShizenEngine/Assets/Exported/Grass01.shzmesh.json",
+			"C:/Dev/ShizenEngine/Assets/Exported/Grass01.shzmesh.json",
+			// "C:/Dev/ShizenEngine/Assets/Exported/Grass02.shzmesh.json",
 		};
 
 #ifdef SHZ_DEBUG
 		const int32 countX = 50;
 		const int32 countZ = 50;
 		const float spacing = 3.5f;
-		const float3 origin = { -5.0f, -0.1f, 2.0f };
+		const float3 origin = { -5.0f, 0.1f, 2.0f };
 #else
 		const int32 countX = 200;
 		const int32 countZ = 200;
 		const float spacing = 0.35f;
-		const float3 origin = { -10.0f, -0.1f, -10.0f };
+		const float3 origin = { -10.0f, 0.1f, -10.0f };
 #endif
 
 		m_Grasses.clear();

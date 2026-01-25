@@ -164,9 +164,6 @@
     <ProjectReference Include="..\..\Engine\ImGui\Engine-ImGui.vcxproj">
       <Project>{7f85a29a-8214-48e6-9531-db5a4d102df5}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Engine\Material\Engine-Material.vcxproj">
-      <Project>{079b918f-e9b0-4ba3-8027-08ed497f4628}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\..\Engine\Renderer\Engine-Renderer.vcxproj">
       <Project>{434146a2-c1af-4d85-8e9b-2faf1727b469}</Project>
     </ProjectReference>
@@ -196,9 +193,6 @@
     </ProjectReference>
     <ProjectReference Include="..\..\ThirdParty\imgui\imgui.vcxproj">
       <Project>{2ae4af76-99c4-4fe0-9759-7d19832fbff1}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Tools\Image\Tools-Image.vcxproj">
-      <Project>{5b44506a-9b58-4488-a48f-52044bfd19c8}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

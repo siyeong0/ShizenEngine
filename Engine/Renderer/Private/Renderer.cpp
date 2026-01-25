@@ -8,7 +8,7 @@
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
-#include "Tools/Image/Public/TextureUtilities.h"
+#include "Engine/Image/Public/TextureUtilities.h"
 
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 

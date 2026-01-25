@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include "Tools/Image/Public/TextureLoader.h"
+#include "Engine/Image/Public/TextureLoader.h"
 
 namespace shz
 {

@@ -20,8 +20,8 @@
 #include "Engine/RHI/Interface/IShaderResourceVariable.h"
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 
-#include "Engine/Material/Public/MaterialTypes.h"
-#include "Engine/Material/Public/MaterialTemplate.h"
+#include "Engine/RuntimeData/Public/MaterialTypes.h"
+#include "Engine/RuntimeData/Public/MaterialTemplate.h"
 #include "Engine/RuntimeData/Public/Texture.h"
 
 namespace shz

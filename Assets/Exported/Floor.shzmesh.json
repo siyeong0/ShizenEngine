@@ -1,0 +1,618 @@
+{
+  "Bin": "Floor.shzmesh.bin",
+  "Bounds": {
+    "Max": [
+      22.91240692138672,
+      0.07429690659046173,
+      32.14208221435547
+    ],
+    "Min": [
+      -22.91240692138672,
+      -0.07429690659046173,
+      -32.14208221435547
+    ]
+  },
+  "Format": "shzmesh",
+  "IndexCount": 942762,
+  "IndexType": "u32",
+  "Indices": {
+    "Count": 942762,
+    "Offset": 29111808
+  },
+  "MaterialSlots": [
+    {
+      "Name": "lambert2",
+      "Options": {
+        "BlendMode": 0,
+        "CullMode": 3,
+        "DepthEnable": true,
+        "DepthFunc": 4,
+        "DepthWriteEnable": true,
+        "FrontCounterClockwise": true,
+        "LinearWrapSamplerDesc": {
+          "AddressU": 1,
+          "AddressV": 1,
+          "AddressW": 1,
+          "BorderColor": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ComparisonFunc": 1,
+          "MagFilter": 2,
+          "MaxAnisotropy": 0,
+          "MaxLOD": 3.4028234663852886e+38,
+          "MinFilter": 2,
+          "MinLOD": 0.0,
+          "MipFilter": 2,
+          "MipLODBias": 0.0
+        },
+        "LinearWrapSamplerName": "g_LinearWrapSampler",
+        "TextureBindingMode": 1
+      },
+      "RenderPassName": "GBuffer",
+      "Resources": [
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_BaseColorTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/floor/textures/GRAS07L.JPG",
+          "TextureAssetID": {
+            "Hi": 10298467544199129544,
+            "Lo": 9122587714838825813
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        }
+      ],
+      "TemplateName": "DefaultLit",
+      "Values": [
+        {
+          "Data": [
+            205,
+            204,
+            76,
+            63,
+            205,
+            204,
+            76,
+            63,
+            205,
+            204,
+            76,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_BaseColorFactor",
+          "Type": 4
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_EmissiveFactor",
+          "Type": 3
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveIntensity",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_RoughnessFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MetallicFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MaterialFlags",
+          "Type": 9
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "_pad0",
+          "Type": 10
+        }
+      ]
+    },
+    {
+      "Name": "blinn1",
+      "Options": {
+        "BlendMode": 0,
+        "CullMode": 3,
+        "DepthEnable": true,
+        "DepthFunc": 4,
+        "DepthWriteEnable": true,
+        "FrontCounterClockwise": true,
+        "LinearWrapSamplerDesc": {
+          "AddressU": 1,
+          "AddressV": 1,
+          "AddressW": 1,
+          "BorderColor": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ComparisonFunc": 1,
+          "MagFilter": 2,
+          "MaxAnisotropy": 0,
+          "MaxLOD": 3.4028234663852886e+38,
+          "MinFilter": 2,
+          "MinLOD": 0.0,
+          "MipFilter": 2,
+          "MipLODBias": 0.0
+        },
+        "LinearWrapSamplerName": "g_LinearWrapSampler",
+        "TextureBindingMode": 1
+      },
+      "RenderPassName": "GBuffer",
+      "Resources": [
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_BaseColorTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/floor/textures/stone14.jpg",
+          "TextureAssetID": {
+            "Hi": 2190429616837020968,
+            "Lo": 8734457077364034101
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        }
+      ],
+      "TemplateName": "DefaultLit",
+      "Values": [
+        {
+          "Data": [
+            205,
+            204,
+            76,
+            63,
+            205,
+            204,
+            76,
+            63,
+            205,
+            204,
+            76,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_BaseColorFactor",
+          "Type": 4
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_EmissiveFactor",
+          "Type": 3
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveIntensity",
+          "Type": 1
+        },
+        {
+          "Data": [
+            53,
+            175,
+            63,
+            63
+          ],
+          "Name": "g_RoughnessFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MetallicFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MaterialFlags",
+          "Type": 9
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "_pad0",
+          "Type": 10
+        }
+      ]
+    }
+  ],
+  "Sections": [
+    {
+      "BaseVertex": 0,
+      "FirstIndex": 0,
+      "IndexCount": 240,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          -0.05560135841369629,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.05560135841369629,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 0
+    },
+    {
+      "BaseVertex": 55,
+      "FirstIndex": 240,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 94566,
+      "FirstIndex": 134886,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 189077,
+      "FirstIndex": 269532,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 283588,
+      "FirstIndex": 404178,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 378099,
+      "FirstIndex": 538824,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 472610,
+      "FirstIndex": 673470,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    },
+    {
+      "BaseVertex": 567121,
+      "FirstIndex": 808116,
+      "IndexCount": 134646,
+      "LocalBounds": {
+        "Max": [
+          22.91240692138672,
+          0.07429690659046173,
+          32.14208221435547
+        ],
+        "Min": [
+          -22.91240692138672,
+          -0.07429690659046173,
+          -32.14208221435547
+        ]
+      },
+      "MaterialSlot": 1
+    }
+  ],
+  "Streams": {
+    "Normals": {
+      "Count": 661632,
+      "Offset": 7939584,
+      "Stride": 12
+    },
+    "Positions": {
+      "Count": 661632,
+      "Offset": 0,
+      "Stride": 12
+    },
+    "Tangents": {
+      "Count": 661632,
+      "Offset": 15879168,
+      "Stride": 12
+    },
+    "TexCoord0": {
+      "Count": 661632,
+      "Offset": 23818752,
+      "Stride": 8
+    }
+  },
+  "Version": 1,
+  "VertexCount": 661632
+}

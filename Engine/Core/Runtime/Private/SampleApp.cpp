@@ -43,7 +43,7 @@
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Core/Common/Public/ImageTools.h"
 
-#include "Tools/Image/Public/Image.h"
+#include "Engine/Image/Public/Image.h"
 
 #if D3D11_SUPPORTED
 #    include "Engine/RHI_D3D11/Public/EngineFactoryD3D11.h"

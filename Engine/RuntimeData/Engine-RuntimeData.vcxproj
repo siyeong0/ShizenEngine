@@ -136,6 +136,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\MaterialTemplate.h" />
+    <ClInclude Include="Public\MaterialTypes.h" />
     <ClInclude Include="Public\Material.h" />
     <ClInclude Include="Public\MaterialExporter.h" />
     <ClInclude Include="Public\MaterialImporter.h" />
@@ -155,6 +157,7 @@
     <ClCompile Include="Private\Material.cpp" />
     <ClCompile Include="Private\MaterialExporter.cpp" />
     <ClCompile Include="Private\MaterialImporter.cpp" />
+    <ClCompile Include="Private\MaterialTemplate.cpp" />
     <ClCompile Include="Private\StaticMesh.cpp" />
     <ClCompile Include="Private\StaticMeshExporter.cpp" />
     <ClCompile Include="Private\StaticMeshImporter.cpp" />

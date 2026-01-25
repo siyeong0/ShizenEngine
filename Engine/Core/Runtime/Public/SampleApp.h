@@ -39,7 +39,7 @@
 #include "Engine/RHI/Interface/ISwapChain.h"
 #include "Engine/Core/Runtime/Public/SampleBase.h"
 #include "Engine/GraphicsTools/Public/ScreenCapture.hpp"
-#include "Tools/Image/Public/Image.h"
+#include "Engine/Image/Public/Image.h"
 
 namespace shz
 {

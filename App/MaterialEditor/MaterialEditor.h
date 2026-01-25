@@ -19,7 +19,7 @@
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/RuntimeData/Public/Texture.h"
 
-#include "Engine/Material/Public/MaterialTemplate.h"
+#include "Engine/RuntimeData/Public/MaterialTemplate.h"
 #include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
@@ -159,14 +159,14 @@ namespace shz
 
 		// Main object
 		MainObjectState m_Main = {};
-		std::string m_MainMeshPath = "C:/Dev/ShizenEngine/Assets/Basic/DamagedHelmet/DamagedHelmet.gltf";
+		std::string m_MainMeshPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/DamagedHelmet.gltf";
 
 		std::unique_ptr<AssetObject> m_pMainBuiltObjForSave = nullptr;
 		std::string m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
 
 		// Floor mesh
 		Handle<RenderScene::RenderObject> m_Floor = {};
-		std::string m_FloorMeshPath = "C:/Dev/ShizenEngine/Assets/Basic/floor/FbxFloor.fbx";
+		std::string m_FloorMeshPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/floor/FbxFloor.fbx";
 
 		// Material selection
 		int32 m_SelectedSlot = 0;

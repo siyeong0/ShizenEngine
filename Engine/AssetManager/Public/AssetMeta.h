@@ -6,9 +6,9 @@
 #include "Primitives/BasicTypes.h"
 #include "Engine/AssetManager/Public/AssetID.hpp"
 
-#include "Tools/Image/Public/TextureLoader.h"
+#include "Engine/Image/Public/TextureLoader.h"
 #include "Engine/RHI/Interface/GraphicsTypes.h"
-#include "Engine/Material/Public/MaterialTypes.h"
+#include "Engine/RuntimeData/Public/MaterialTypes.h"
 
 namespace shz
 {
