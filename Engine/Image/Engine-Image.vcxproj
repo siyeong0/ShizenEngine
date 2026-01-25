@@ -139,6 +139,7 @@
     <ClInclude Include="Private\dxgiformat.h" />
     <ClInclude Include="Private\TextureLoaderImpl.hpp" />
     <ClInclude Include="Public\BCTools.h" />
+    <ClInclude Include="Public\EXRCodec.h" />
     <ClInclude Include="Public\Image.h" />
     <ClInclude Include="Public\JPEGCodec.h" />
     <ClInclude Include="Public\PNGCodec.h" />
@@ -155,6 +156,7 @@
     </ClCompile>
     <ClCompile Include="Private\BCTools.cpp" />
     <ClCompile Include="Private\DDSLoader.cpp" />
+    <ClCompile Include="Private\EXRCodec.cpp" />
     <ClCompile Include="Private\Image.cpp" />
     <ClCompile Include="Private\JPEGCodec.cpp" />
     <ClCompile Include="Private\KTXLoader.cpp" />

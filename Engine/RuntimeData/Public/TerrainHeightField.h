@@ -27,7 +27,7 @@ namespace shz
 		float WorldSpacingX = 1.f;
 		float WorldSpacingZ = 1.f;
 
-		float HeightScale = 100.f;
+		float HeightScale = 1000.f;
 		float HeightOffset = 0.f;
 
 		constexpr TerrainHeightFieldCreateInfo() = default;

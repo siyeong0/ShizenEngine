@@ -80,7 +80,7 @@ namespace shz
 		// We don't know the source bit depth before loading, so:
 		// 1) Try R16 first (most heightmaps are 16-bit)
 		// 2) Fallback to R8 if loader fails or returns something unexpected
-		tli.Format = TEX_FORMAT_R16_UNORM;
+		// tli.Format = TEX_FORMAT_R16_UNORM;
 
 		RefCntAutoPtr<ITextureLoader> pLoader;
 		CreateTextureLoaderFromFile(meta.SourcePath.c_str(), IMAGE_FILE_FORMAT_UNKNOWN, tli, &pLoader);

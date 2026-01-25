@@ -95,19 +95,6 @@
              '$(MSBuildProjectName)' == 'ShizenEngine'">
 		<Link>
 			<AdditionalDependencies>
-				Engine-Core.lib;
-				Engine-GraphicsArchiver.lib;
-				Engine-GraphicsTools.lib;
-				Engine-GraphicsUtils.lib;
-				Engine-ImGui.lib;
-				Engine-Renderer.lib;
-				Engine-RHI.lib;
-				Engine-RHI-D3DBase.lib;
-				Engine-RHI-D3D12.lib;
-				Engine-ShaderTools.lib;
-				Platforms-Basic.lib;
-				Platforms-Win64.lib;
-				Tools-Image.lib;
 				d3d12.lib;
 				dxgi.lib;
 				dxguid.lib;

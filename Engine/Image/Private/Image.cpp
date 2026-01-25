@@ -38,6 +38,7 @@
 #include "PNGCodec.h"
 #include "JPEGCodec.h"
 #include "SGILoader.h"
+#include "EXRCodec.h"
 
 #include "Primitives/Align.hpp"
 #include "Primitives/DebugUtilities.hpp"
@@ -420,6 +421,13 @@ namespace shz
 			Result = false;
 			LOG_ERROR_MESSAGE("An image can't be created from KTX file. Use CreateTextureFromFile() or CreateTextureFromKTX() functions.");
 			break;
+		case IMAGE_FILE_FORMAT_EXR:
+			Result = DecodeEXR(pSrcData, SrcDataSize, pDstPixels, &Desc) == DECODE_EXR_RESULT_OK;
+			if (!Result)
+			{
+				LOG_ERROR_MESSAGE("Failed to load EXR image");
+			}
+			break;
 
 		default:
 			Result = false;
@@ -562,6 +570,39 @@ namespace shz
 			if (Res != ENCODE_PNG_RESULT_OK)
 				LOG_ERROR_MESSAGE("Failed to encode png file");
 		}
+		else if (Info.FileFormat == IMAGE_FILE_FORMAT_EXR)
+		{
+			// Only float formats make sense for EXR (start strict: RGBA16F/RGBA32F)
+			ImageDesc SrcDesc = {};
+			SrcDesc.Width = Info.Width;
+			SrcDesc.Height = Info.Height;
+
+			if (Info.TexFormat == TEX_FORMAT_RGBA16_FLOAT)
+			{
+				SrcDesc.ComponentType = VT_FLOAT16;
+				SrcDesc.NumComponents = 4;
+			}
+			else if (Info.TexFormat == TEX_FORMAT_RGBA32_FLOAT)
+			{
+				SrcDesc.ComponentType = VT_FLOAT32;
+				SrcDesc.NumComponents = 4;
+			}
+			else
+			{
+				LOG_ERROR_MESSAGE("EXR encode only supports RGBA16F or RGBA32F for now.");
+				SrcDesc.ComponentType = VT_UNDEFINED;
+				SrcDesc.NumComponents = 0;
+			}
+
+			if (SrcDesc.ComponentType != VT_UNDEFINED)
+			{
+				SrcDesc.RowStride = Info.Stride;
+
+				ENCODE_EXR_RESULT Res = EncodeEXR(Info.pData, SrcDesc, pEncodedData);
+				if (Res != ENCODE_EXR_RESULT_OK)
+					LOG_ERROR_MESSAGE("Failed to encode exr file");
+			}
+		}
 		else
 		{
 			ASSERT(false, "Unsupported image file format");
@@ -607,6 +648,9 @@ namespace shz
 
 			if (Size >= 2 && pData[0] == 0x01 && pData[1] == 0xDA)
 				return IMAGE_FILE_FORMAT_SGI;
+
+			if (Size >= 4 && pData[0] == 0x76 && pData[1] == 0x2F && pData[2] == 0x31 && pData[3] == 0x01)
+				return IMAGE_FILE_FORMAT_EXR;
 		}
 
 		if (FilePath != nullptr)
@@ -643,6 +687,8 @@ namespace shz
 				return IMAGE_FILE_FORMAT_HDR;
 			else if (Extension == "tga")
 				return IMAGE_FILE_FORMAT_TGA;
+			else if (Extension == "exr")
+				return IMAGE_FILE_FORMAT_EXR;
 			else
 				LOG_ERROR_MESSAGE("Unrecognized image file extension", Extension);
 		}
@@ -657,7 +703,8 @@ namespace shz
 			Format == IMAGE_FILE_FORMAT_TIFF ||
 			Format == IMAGE_FILE_FORMAT_SGI ||
 			Format == IMAGE_FILE_FORMAT_HDR ||
-			Format == IMAGE_FILE_FORMAT_TGA);
+			Format == IMAGE_FILE_FORMAT_TGA ||
+			Format == IMAGE_FILE_FORMAT_EXR);
 	}
 
 	template <typename T>

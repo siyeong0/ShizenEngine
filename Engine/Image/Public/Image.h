@@ -72,6 +72,9 @@ namespace shz
 
 		// TGA file
 		IMAGE_FILE_FORMAT_TGA,
+
+		// OpenEXR file
+		IMAGE_FILE_FORMAT_EXR,
 	};
 
 	/// Image loading information
