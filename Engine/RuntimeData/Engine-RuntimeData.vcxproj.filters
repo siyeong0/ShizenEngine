@@ -54,6 +54,9 @@
     <ClInclude Include="Public\TerrainHeightFieldImporter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\TerrainMeshBuilder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -90,6 +93,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\TerrainHeightFieldImporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\TerrainMeshBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -229,14 +229,29 @@ namespace shz
 		return writeValueImmediate(name, v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2);
 	}
 
+	bool Material::SetFloat2(const char* name, const float2& v)
+	{
+		return writeValueImmediate(name, &v, sizeof(float) * 2, MATERIAL_VALUE_TYPE_FLOAT2);
+	}
+
 	bool Material::SetFloat3(const char* name, const float v[3])
 	{
 		return writeValueImmediate(name, v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3);
 	}
 
+	bool Material::SetFloat3(const char* name, const float3& v)
+	{
+		return writeValueImmediate(name, &v, sizeof(float) * 3, MATERIAL_VALUE_TYPE_FLOAT3);
+	}
+
 	bool Material::SetFloat4(const char* name, const float v[4])
 	{
 		return writeValueImmediate(name, v, sizeof(float) * 4, MATERIAL_VALUE_TYPE_FLOAT4);
+	}
+
+	bool Material::SetFloat4(const char* name, const float4& v)
+	{
+		return writeValueImmediate(name, &v, sizeof(float) * 4, MATERIAL_VALUE_TYPE_FLOAT4);
 	}
 
 	bool Material::SetInt(const char* name, int32 v)

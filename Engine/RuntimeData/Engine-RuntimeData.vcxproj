@@ -146,6 +146,7 @@
     <ClInclude Include="Public\StaticMeshImporter.h" />
     <ClInclude Include="Public\TerrainHeightField.h" />
     <ClInclude Include="Public\TerrainHeightFieldImporter.h" />
+    <ClInclude Include="Public\TerrainMeshBuilder.h" />
     <ClInclude Include="Public\Texture.h" />
     <ClInclude Include="Public\TextureImporter.h" />
   </ItemGroup>
@@ -160,6 +161,7 @@
     <ClCompile Include="Private\MaterialExporter.cpp" />
     <ClCompile Include="Private\MaterialImporter.cpp" />
     <ClCompile Include="Private\MaterialTemplate.cpp" />
+    <ClCompile Include="Private\TerrainMeshBuilder.cpp" />
     <ClCompile Include="Private\StaticMesh.cpp" />
     <ClCompile Include="Private\StaticMeshExporter.cpp" />
     <ClCompile Include="Private\StaticMeshImporter.cpp" />

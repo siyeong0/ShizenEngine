@@ -30,10 +30,6 @@ namespace shz
 		float HeightScale = 100.f;
 		float HeightOffset = 0.f;
 
-		// Optional: 원본 파일 경로들(디버그/리임포트/툴링용)
-		std::string SourceHeightMapPath = {};
-		std::string SourceColorMapPath = {};
-
 		constexpr TerrainHeightFieldCreateInfo() = default;
 
 		constexpr TerrainHeightFieldCreateInfo(
@@ -82,9 +78,6 @@ namespace shz
 
 		float GetHeightScale() const { return m_CI.HeightScale; }
 		float GetHeightOffset() const { return m_CI.HeightOffset; }
-
-		const std::string& GetSourceHeightMapPath() const { return m_CI.SourceHeightMapPath; }
-		const std::string& GetSourceColorMapPath()  const { return m_CI.SourceColorMapPath; }
 
 		const std::vector<float>& GetData() const { return m_Data; }
 

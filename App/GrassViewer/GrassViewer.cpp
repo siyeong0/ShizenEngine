@@ -11,6 +11,8 @@
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
 #include "Engine/RuntimeData/Public/TerrainHeightFieldImporter.h"
 
+#include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
+
 namespace shz
 {
 	namespace
@@ -154,21 +156,23 @@ namespace shz
 				}
 				std::cout << std::endl;
 			}
-		}
 
-		// Hard-coded objects
-		{
-			const char* floorPath = "C:/Dev/ShizenEngine/Assets/Exported/Floor.shzmesh.json";
-			const bool ok = loadStaticMeshObject(
-				m_Floor,
-				floorPath,
-				{ 0.0f, 0.0f, 0.0f },
-				{ 0.0f, 0.0f, 0.0f },
-				{ 1.0f, 1.0f, 1.0f },
-				true,
-				false);
+			StaticMesh terrainMesh;
 
-			ASSERT(ok, "Failed to load floor.");
+			TerrainMeshBuilder meshBuilder;
+			TerrainMeshBuildSettings buildSettings = {};
+			buildSettings.YOffset = -10.0f;
+			meshBuilder.BuildStaticMesh(terrain,&terrainMesh, buildSettings);
+
+			StaticMeshRenderData terrainRenderData = m_pRenderer->CreateStaticMesh(terrainMesh);
+			RenderScene::RenderObject terrainObj = {};
+			terrainObj.Mesh = terrainRenderData;
+			terrainObj.Transform = Matrix4x4::TRS(
+				float3(0.0f, 0.0f, 0.0f),
+				float3(0.0f, 0.0f, 0.0f),
+				float3(1.0f, 1.0f, 1.0f));
+			terrainObj.bCastShadow = true;
+			const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
 		}
 
 		// Grass grid

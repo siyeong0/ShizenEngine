@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "Primitives/BasicTypes.h"
+#include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 #include "Engine/Core/Common/Public/HashUtils.hpp"
 
@@ -133,8 +134,11 @@ namespace shz
 
 		bool SetFloat(const char* name, float v);
 		bool SetFloat2(const char* name, const float v[2]);
+		bool SetFloat2(const char* name, const float2& v);
 		bool SetFloat3(const char* name, const float v[3]);
+		bool SetFloat3(const char* name, const float3& v);
 		bool SetFloat4(const char* name, const float v[4]);
+		bool SetFloat4(const char* name, const float4& v);
 
 		bool SetInt(const char* name, int32 v);
 		bool SetInt2(const char* name, const int32 v[2]);

@@ -75,8 +75,6 @@ namespace shz
         float HeightOffset = 0.f;
 
         HEIGHT_FIELD_SAMPLE_FORMAT ForceSampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN;
-
-        std::string ColorMapPath = {};
     };
 
     using AssetImportSetting = std::variant<

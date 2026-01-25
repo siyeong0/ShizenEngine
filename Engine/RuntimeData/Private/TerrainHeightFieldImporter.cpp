@@ -92,40 +92,21 @@ namespace shz
 			CreateTextureLoaderFromFile(meta.SourcePath.c_str(), IMAGE_FILE_FORMAT_UNKNOWN, tli, &pLoader);
 		}
 
-		if (!pLoader)
-		{
-			setError(pOutError, "Failed to create texture loader.");
-			return {};
-		}
+
+		ASSERT(!!pLoader, "Failed to create texture loader for heightfield.");
 
 		const TextureDesc& desc = pLoader->GetTextureDesc();
-
-		if (desc.Width == 0 || desc.Height == 0 || desc.MipLevels == 0)
-		{
-			ASSERT(false, "Invalid texture desc from loader.");
-			setError(pOutError, "Invalid texture data.");
-			return {};
-		}
+		ASSERT(desc.Width > 0 && desc.Height > 0, "Invalid texture dimensions from loader.");
+		ASSERT(desc.MipLevels > 0, "Invalid mip levels from loader.");
 
 		// We only need base mip for heightfield CPU data.
 		const TextureSubResData& sub = pLoader->GetSubresourceData(/*MipLevel*/0, /*ArraySlice*/0);
-		if (sub.pData == nullptr || sub.Stride == 0)
-		{
-			ASSERT(false, "Subresource data is null.");
-			setError(pOutError, "Subresource data is null.");
-			return {};
-		}
+		ASSERT(sub.pData != nullptr && sub.Stride > 0, "Invalid subresource data from loader.");
 
 		const TEXTURE_FORMAT fmt = desc.Format;
 		const uint32 numComps = getNumComponentsFromFormat(fmt);
 		const uint32 compSize = getComponentSizeFromFormat(fmt);
-
-		if (numComps == 0 || compSize == 0)
-		{
-			ASSERT(false, "Invalid format attribs.");
-			setError(pOutError, "Invalid format attribs.");
-			return {};
-		}
+		ASSERT(numComps > 0 && compSize > 0, "Invalid texture format from loader.");
 
 		// ------------------------------------------------------------
 		// Create TerrainHeightField (always store float normalized)
@@ -139,9 +120,6 @@ namespace shz
 
 		ci.HeightScale = setting.HeightScale;
 		ci.HeightOffset = setting.HeightOffset;
-
-		ci.SourceHeightMapPath = meta.SourcePath;
-		ci.SourceColorMapPath = setting.ColorMapPath;
 
 		// For debug bookkeeping only (actual storage is float)
 		ci.SampleFormat = setting.ForceSampleFormat;
@@ -164,12 +142,7 @@ namespace shz
 
 		// Minimal sanity
 		const uint64 minRowBytes = static_cast<uint64>(width) * static_cast<uint64>(bytesPerPixel);
-		if (sub.Stride < minRowBytes)
-		{
-			ASSERT(false, "Source stride is smaller than tightly packed row size.");
-			setError(pOutError, "Source stride is smaller than expected.");
-			return {};
-		}
+		ASSERT(sub.Stride >= minRowBytes, "Source stride is smaller than tightly packed row size.");
 
 		// ------------------------------------------------------------
 		// Convert pixels -> normalized float [0..1] stored in hf
