@@ -4,11 +4,12 @@
 #include <vector>
 
 #include "Primitives/BasicTypes.h"
-#include "Engine/AssetManager/Public/AssetID.hpp"
+#include "Engine/RHI/Interface/GraphicsTypes.h"
 
 #include "Engine/Image/Public/TextureLoader.h"
-#include "Engine/RHI/Interface/GraphicsTypes.h"
+#include "Engine/AssetManager/Public/AssetID.hpp"
 #include "Engine/RuntimeData/Public/MaterialTypes.h"
+#include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
 namespace shz
 {
@@ -65,13 +66,27 @@ namespace shz
         // reserved
     };
 
+    struct TerrainHeightFieldImportSetting final
+    {
+        float WorldSpacingX = 1.f;
+        float WorldSpacingZ = 1.f;
+
+        float HeightScale = 100.f;
+        float HeightOffset = 0.f;
+
+        HEIGHT_FIELD_SAMPLE_FORMAT ForceSampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN;
+
+        std::string ColorMapPath = {};
+    };
+
     using AssetImportSetting = std::variant<
         std::monostate,
         TextureImportSettings,
         MaterialImportSettings,
         AssimpImportSettings,
         StaticMeshLoadSettings,
-        MaterialLoadSettings>;
+        MaterialLoadSettings,
+        TerrainHeightFieldImportSetting>;
 
     struct AssetMeta final
     {
@@ -96,5 +111,8 @@ namespace shz
 
         const MaterialLoadSettings* TryGetMaterialLoadMeta() const noexcept { return std::get_if<MaterialLoadSettings>(&Payload); }
         MaterialLoadSettings* TryGetMaterialLoadMeta() noexcept { return std::get_if<MaterialLoadSettings>(&Payload); }
+
+		const TerrainHeightFieldImportSetting* TryGetTerrainHeightFieldMeta() const noexcept { return std::get_if<TerrainHeightFieldImportSetting>(&Payload); }
+		TerrainHeightFieldImportSetting* TryGetTerrainHeightFieldMeta() noexcept { return std::get_if<TerrainHeightFieldImportSetting>(&Payload); }
     };
 } // namespace shz

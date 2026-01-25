@@ -48,6 +48,12 @@
     <ClInclude Include="Public\MaterialTemplate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\TerrainHeightField.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\TerrainHeightFieldImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -78,6 +84,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\MaterialTemplate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\TerrainHeightField.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\TerrainHeightFieldImporter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

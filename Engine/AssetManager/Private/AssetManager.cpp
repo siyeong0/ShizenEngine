@@ -3,6 +3,11 @@
 
 namespace shz
 {
+	void AssetManager::Initialize() noexcept
+	{
+		void();
+	}
+
 	void AssetManager::Shutdown() noexcept
 	{
 		const bool already = m_ShuttingDown.exchange(true, std::memory_order_relaxed);

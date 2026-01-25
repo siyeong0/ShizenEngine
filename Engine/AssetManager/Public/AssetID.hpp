@@ -15,6 +15,7 @@ namespace shz
 	template<typename T>
 	struct AssetTypeTraits
 	{
+		AssetTypeTraits() { ASSERT(false, "AssetTypeTraits<T> is not specialized for this type."); }
 		// Default: 0 means "unknown/unregistered"
 		static constexpr AssetTypeID TypeID = 0;
 	};

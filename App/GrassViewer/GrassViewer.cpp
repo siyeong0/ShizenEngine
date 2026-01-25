@@ -9,6 +9,7 @@
 #include "Engine/RuntimeData/Public/StaticMeshImporter.h"
 #include "Engine/RuntimeData/Public/TextureImporter.h"
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
+#include "Engine/RuntimeData/Public/TerrainHeightFieldImporter.h"
 
 namespace shz
 {
@@ -86,9 +87,11 @@ namespace shz
 		m_pAssetManager = std::make_unique<AssetManager>();
 		{
 			ASSERT(m_pAssetManager, "AssetManager is null.");
+			m_pAssetManager->Initialize();
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<TerrainHeightField>::TypeID, TerrainHeightFieldImporter{});
 		}
 
 		// Renderer + shader factory
@@ -131,6 +134,27 @@ namespace shz
 		setupDefaultGlobalLight(m_GlobalLight);
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 		ASSERT(m_GlobalLightHandle.IsValid(), "Failed to add global light.");
+
+		// Load terrain
+		{
+
+			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(
+				"C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png");
+			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
+			ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
+
+			const TerrainHeightField& terrain = *terrainPtr;
+
+			for (uint32 z = 0; z < terrain.GetHeight(); z += 100)
+			{
+				for (uint32 x = 0; x < terrain.GetWidth(); x += 100)
+				{
+					const float worldHeight = terrain.GetWorldHeightAt(x, z);
+					std::cout << worldHeight << " ";
+				}
+				std::cout << std::endl;
+			}
+		}
 
 		// Hard-coded objects
 		{

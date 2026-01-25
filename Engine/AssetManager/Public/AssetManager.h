@@ -55,6 +55,8 @@ namespace shz
 	public:
 		AssetManager() = default;
 		~AssetManager() { Shutdown(); }
+
+		void Initialize() noexcept;
 		void Shutdown() noexcept;
 
 		AssetManager(const AssetManager&) = delete;

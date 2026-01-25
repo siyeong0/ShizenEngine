@@ -50,7 +50,7 @@ namespace shz
 		pState->Offset += length;
 	}
 
-	DECODE_PNG_RESULT DecodePng(const void* pSrcPngBits,size_t PngDataSize,IDataBlob* pDstPixels,ImageDesc* pDstImgDesc)
+	DECODE_PNG_RESULT DecodePng(const void* pSrcPngBits, size_t PngDataSize, IDataBlob* pDstPixels, ImageDesc* pDstImgDesc)
 	{
 		if (!pSrcPngBits || !pDstImgDesc)
 			return DECODE_PNG_RESULT_INVALID_ARGUMENTS;
