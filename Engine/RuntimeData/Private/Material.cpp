@@ -15,7 +15,6 @@ namespace shz
 			// Constant buffers
 			const uint32 cbCount = m_Template.GetCBufferCount();
 			m_CBufferBlobs.resize(cbCount);
-			m_bCBufferDirties.resize(cbCount);
 
 			for (uint32 i = 0; i < cbCount; ++i)
 			{
@@ -23,30 +22,24 @@ namespace shz
 
 				m_CBufferBlobs[i].resize(CB.ByteSize);
 				std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
-				m_bCBufferDirties[i] = 1;
 			}
 
 			// Resources
 			const uint32 resCount = m_Template.GetResourceCount();
 			m_TextureBindings.resize(resCount);
-			m_bTextureDirties.resize(resCount);
 
 			for (uint32 i = 0; i < resCount; ++i)
 			{
 				m_TextureBindings[i] = {};
-				m_bTextureDirties[i] = 1;
 			}
 		}
 
 		rebuildAutoResourceLayout();
-
-		MarkAllDirty();
 	}
 
 	void Material::SetRenderPassName(const std::string& name)
 	{
 		m_RenderPassName = name;
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetBlendMode(MATERIAL_BLEND_MODE mode)
@@ -58,7 +51,6 @@ namespace shz
 
 		m_Options.BlendMode = mode;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetCullMode(CULL_MODE mode)
@@ -70,7 +62,6 @@ namespace shz
 
 		m_Options.CullMode = mode;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetFrontCounterClockwise(bool v)
@@ -82,7 +73,6 @@ namespace shz
 
 		m_Options.FrontCounterClockwise = v;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetDepthEnable(bool v)
@@ -94,7 +84,6 @@ namespace shz
 
 		m_Options.DepthEnable = v;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetDepthWriteEnable(bool v)
@@ -106,7 +95,6 @@ namespace shz
 
 		m_Options.DepthWriteEnable = v;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetDepthFunc(COMPARISON_FUNCTION f)
@@ -118,7 +106,6 @@ namespace shz
 
 		m_Options.DepthFunc = f;
 		syncDescFromOptions();
-		m_bPsoDirty = 1;
 	}
 
 	void Material::SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode)
@@ -130,7 +117,6 @@ namespace shz
 
 		m_Options.TextureBindingMode = mode;
 		rebuildAutoResourceLayout();
-		m_bLayoutDirty = 1;
 	}
 
 	void Material::SetLinearWrapSamplerName(const std::string& name)
@@ -144,7 +130,6 @@ namespace shz
 		m_Options.LinearWrapSamplerName = newName;
 
 		rebuildAutoResourceLayout();
-		m_bLayoutDirty = 1;
 	}
 
 	void Material::SetLinearWrapSamplerDesc(const SamplerDesc& desc)
@@ -156,7 +141,6 @@ namespace shz
 
 		m_Options.LinearWrapSamplerDesc = desc;
 		rebuildAutoResourceLayout();
-		m_bLayoutDirty = 1;
 	}
 
 	uint32 Material::GetValueOverrideCount() const
@@ -197,48 +181,6 @@ namespace shz
 		return static_cast<uint32>(m_CBufferBlobs[cbufferIndex].size());
 	}
 
-	bool Material::IsCBufferDirty(uint32 cbufferIndex) const
-	{
-		ASSERT(cbufferIndex < static_cast<uint32>(m_bCBufferDirties.size()), "Out of bounds.");
-		return m_bCBufferDirties[cbufferIndex] != 0;
-	}
-
-	void Material::ClearCBufferDirty(uint32 cbufferIndex)
-	{
-		ASSERT(cbufferIndex < static_cast<uint32>(m_bCBufferDirties.size()), "Out of bounds.");
-		m_bCBufferDirties[cbufferIndex] = 0;
-	}
-
-	bool Material::IsTextureDirty(uint32 resourceIndex) const
-	{
-		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
-		return m_bTextureDirties[resourceIndex] != 0;
-	}
-
-	void Material::ClearTextureDirty(uint32 resourceIndex)
-	{
-		ASSERT(resourceIndex < static_cast<uint32>(m_bTextureDirties.size()), "Out of bounds.");
-		m_bTextureDirties[resourceIndex] = 0;
-	}
-
-	void Material::MarkAllDirty()
-	{
-		m_bPsoDirty = 1;
-		m_bLayoutDirty = 1;
-		m_bSnapshotDirty = 1;
-
-		for (uint8& b : m_bCBufferDirties)
-		{
-			b = 1;
-		}
-
-		for (uint8& b : m_bTextureDirties)
-		{
-			b = 1;
-		}
-	}
-
-
 	void Material::BuildSerializedSnapshot(
 		std::vector<MaterialSerializedValue>* outValues,
 		std::vector<MaterialSerializedResource>* outResources) const
@@ -272,7 +214,6 @@ namespace shz
 		ASSERT(endOffset <= static_cast<uint32>(blob.size()), "Out of bounds.");
 
 		std::memcpy(blob.data() + desc.ByteOffset, pData, byteSize);
-		m_bCBufferDirties[desc.CBufferIndex] = 1;
 
 		m_bSnapshotDirty = 1;
 		return true;
@@ -370,7 +311,6 @@ namespace shz
 		tb.Name = name;
 		tb.TextureRef = texRef;
 
-		m_bTextureDirties[resIndex] = 1;
 		m_bSnapshotDirty = 1;
 		return true;
 	}
@@ -400,7 +340,6 @@ namespace shz
 		tb.Name = resourceName;
 		tb.pSamplerOverride = pSampler;
 
-		m_bTextureDirties[resIndex] = 1;
 		m_bSnapshotDirty = 1;
 		return true;
 	}
@@ -429,7 +368,6 @@ namespace shz
 		// Defer pointer resolution to renderer/sampler cache
 		tb.pSamplerOverride = nullptr;
 
-		m_bTextureDirties[resIndex] = 1;
 		m_bSnapshotDirty = 1;
 		return true;
 	}
@@ -454,7 +392,6 @@ namespace shz
 		tb.bHasSamplerOverride = false;
 		tb.pSamplerOverride = nullptr;
 
-		m_bTextureDirties[resIndex] = 1;
 		m_bSnapshotDirty = 1;
 		return true;
 	}
@@ -466,10 +403,10 @@ namespace shz
 		GraphicsPipelineStateCreateInfo outGraphicsPipelineStateCI = {};
 
 		PipelineStateDesc& psDesc = outGraphicsPipelineStateCI.PSODesc;
-		psDesc = m_PSODesc;
+		psDesc = m_PipelineStateDesc;
 
 		GraphicsPipelineDesc& gpDesc = outGraphicsPipelineStateCI.GraphicsPipeline;
-		gpDesc = m_GraphicsPipeline;
+		gpDesc = m_GraphicsPipelineDesc;
 
 		// Inject pRenderPass if graphics pipeline
 		if (psDesc.IsAnyGraphicsPipeline())
@@ -541,7 +478,7 @@ namespace shz
 	{
 		ComputePipelineStateCreateInfo outComputePipelineStateCI = {};
 		PipelineStateDesc& psDesc = outComputePipelineStateCI.PSODesc;
-		psDesc = m_PSODesc;
+		psDesc = m_PipelineStateDesc;
 		// Attach shaders from instance
 		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
 		{
@@ -567,25 +504,19 @@ namespace shz
 
 		m_Options = {};
 
-		m_PSODesc = {};
-		m_GraphicsPipeline = {};
+		m_PipelineStateDesc = {};
+		m_GraphicsPipelineDesc = {};
 
 		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		m_Variables.clear();
 		m_ImmutableSamplersStorage.clear();
 
 		m_CBufferBlobs.clear();
-		m_bCBufferDirties.clear();
-
 		m_TextureBindings.clear();
-		m_bTextureDirties.clear();
 
 		m_SnapshotValues.clear();
 		m_SnapshotResources.clear();
 		m_bSnapshotDirty = 1;
-
-		m_bPsoDirty = 1;
-		m_bLayoutDirty = 1;
 	}
 
 	void Material::rebuildAutoResourceLayout()
@@ -640,7 +571,7 @@ namespace shz
 
 		// Write into PSODesc.ResourceLayout (plain struct)
 		{
-			PipelineResourceLayoutDesc& rl = m_PSODesc.ResourceLayout;
+			PipelineResourceLayoutDesc& rl = m_PipelineStateDesc.ResourceLayout;
 			rl = {};
 
 			rl.DefaultVariableType = m_DefaultVariableType;
@@ -660,11 +591,11 @@ namespace shz
 			const MATERIAL_PIPELINE_TYPE t = m_Template.GetPipelineType();
 			if (t == MATERIAL_PIPELINE_TYPE_COMPUTE)
 			{
-				m_PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+				m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_COMPUTE;
 			}
 			else
 			{
-				m_PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+				m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 			}
 		}
 
@@ -672,43 +603,43 @@ namespace shz
 		{
 			if (!m_Name.empty())
 			{
-				m_PSODesc.Name = m_Name.c_str();
+				m_PipelineStateDesc.Name = m_Name.c_str();
 			}
 			else if (!m_Template.GetName().empty())
 			{
-				m_PSODesc.Name = GetName().c_str();
+				m_PipelineStateDesc.Name = GetName().c_str();
 			}
 			else
 			{
-				m_PSODesc.Name = "Material PSO";
+				m_PipelineStateDesc.Name = "Material PSO";
 			}
 		}
 
 		// Graphics pipeline (only meaningful for graphics)
-		if (m_PSODesc.IsAnyGraphicsPipeline())
+		if (m_PipelineStateDesc.IsAnyGraphicsPipeline())
 		{
 			// Policy: formats come from RenderPass => keep unknowns here.
-			m_GraphicsPipeline.NumRenderTargets = 0;
-			for (uint32 i = 0; i < _countof(m_GraphicsPipeline.RTVFormats); ++i)
-				m_GraphicsPipeline.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
-			m_GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;
+			m_GraphicsPipelineDesc.NumRenderTargets = 0;
+			for (uint32 i = 0; i < _countof(m_GraphicsPipelineDesc.RTVFormats); ++i)
+				m_GraphicsPipelineDesc.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
+			m_GraphicsPipelineDesc.DSVFormat = TEX_FORMAT_UNKNOWN;
 
-			m_GraphicsPipeline.pRenderPass = nullptr;
-			m_GraphicsPipeline.SubpassIndex = 0;
+			m_GraphicsPipelineDesc.pRenderPass = nullptr;
+			m_GraphicsPipelineDesc.SubpassIndex = 0;
 
-			m_GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			m_GraphicsPipelineDesc.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 			// Raster
 			{
-				m_GraphicsPipeline.RasterizerDesc.CullMode = m_Options.CullMode;
-				m_GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
+				m_GraphicsPipelineDesc.RasterizerDesc.CullMode = m_Options.CullMode;
+				m_GraphicsPipelineDesc.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
 			}
 
 			// Depth
 			{
-				m_GraphicsPipeline.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
-				m_GraphicsPipeline.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
-				m_GraphicsPipeline.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
+				m_GraphicsPipelineDesc.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
+				m_GraphicsPipelineDesc.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
+				m_GraphicsPipelineDesc.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
 			}
 
 			// Input layout policy: fixed mesh layout (adjust to your engine's vertex format)
@@ -720,8 +651,8 @@ namespace shz
 				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
 			};
 
-			m_GraphicsPipeline.InputLayout.LayoutElements = kLayoutElems;
-			m_GraphicsPipeline.InputLayout.NumElements = _countof(kLayoutElems);
+			m_GraphicsPipelineDesc.InputLayout.LayoutElements = kLayoutElems;
+			m_GraphicsPipelineDesc.InputLayout.NumElements = _countof(kLayoutElems);
 		}
 	}
 

@@ -84,10 +84,10 @@ namespace shz
 			const bool ok1 = makeTemplate(gbufferMaskedTemplate, "DefaultLitMasked", "GBufferMasked.vsh", "GBufferMasked.psh");
 			ASSERT(ok0 && ok1, "Build initial material templates failed.");
 
-			m_TemplateCache[gbufferTemplate.GetName()] = gbufferTemplate;
-			m_TemplateCache[gbufferMaskedTemplate.GetName()] = gbufferMaskedTemplate;
+			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
+			m_TemplateLibrary[gbufferMaskedTemplate.GetName()] = gbufferMaskedTemplate;
 
-			Material::RegisterTemplateLibrary(&m_TemplateCache);
+			Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		}
 
 		const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
@@ -1198,11 +1198,6 @@ namespace shz
 						continue;
 					}
 
-					if (!material.IsTextureDirty(i))
-					{
-						continue;
-					}
-
 					const MaterialTextureBinding& b = material.GetTextureBinding(i);
 
 					ITextureView* pView = nullptr;
@@ -1379,9 +1374,19 @@ namespace shz
 
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const
 	{
-		auto it = m_TemplateCache.find(name);
-		ASSERT(it != m_TemplateCache.end(), "Material template not found: %s", name.c_str());
+		auto it = m_TemplateLibrary.find(name);
+		ASSERT(it != m_TemplateLibrary.end(), "Material template not found: %s", name.c_str());
 		return it->second;
+	}
+
+	std::vector<std::string> Renderer::GetAllMaterialTemplateNames() const
+	{
+		std::vector<std::string> names;
+		for (const auto& pair : m_TemplateLibrary)
+		{
+			names.push_back(pair.first);
+		}
+		return names;
 	}
 
 	void Renderer::uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex)

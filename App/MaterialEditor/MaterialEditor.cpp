@@ -1,6 +1,7 @@
 #include "MaterialEditor.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 #include "ThirdParty/imgui/imgui.h"
@@ -22,9 +23,13 @@ namespace shz
 
 		static constexpr const char* kShaderRoot = "C:/Dev/ShizenEngine/Shaders";
 
-		// -----------------------------
-		// Safe std::string InputText
-		// -----------------------------
+		static float ComputeUniformScale(const Box& bounds)
+		{
+			float3 extents = bounds.Extents();
+			float maxExtent = std::max({ extents.x, extents.y, extents.z });
+			return (maxExtent > 0.0f) ? (1.0f / maxExtent) : 1.0f;
+		}
+
 		static int InputTextCallback_Resize(ImGuiInputTextCallbackData* data)
 		{
 			if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
@@ -70,19 +75,6 @@ namespace shz
 			return s;
 		}
 
-		static const char* BlendModeLabel(MATERIAL_BLEND_MODE m)
-		{
-			switch (m)
-			{
-			case MATERIAL_BLEND_MODE_OPAQUE:       return "OPAQUE";
-			case MATERIAL_BLEND_MODE_MASKED:       return "MASKED";
-			case MATERIAL_BLEND_MODE_TRANSLUCENT:  return "TRANSLUCENT";
-			case MATERIAL_BLEND_MODE_ADDITIVE:     return "ADDITIVE";
-			case MATERIAL_BLEND_MODE_PREMULTIPLIED:return "PREMULTIPLIED";
-			default:                               return "UNKNOWN";
-			}
-		}
-
 		static bool IsColorNameLike(const std::string& name)
 		{
 			return (name.find("Color") != std::string::npos) ||
@@ -90,18 +82,25 @@ namespace shz
 				(name.find("BaseColor") != std::string::npos);
 		}
 
-		static float ComputeFitToUnitCubeUniformScale(const shz::StaticMesh& mesh, float unitSize)
+		static inline std::string ToLowerCopy(std::string s)
 		{
-			const Box& bounds = mesh.GetBounds();
-			float3 bmin = bounds.Min;
-			float3 bmax = bounds.Max;
+			for (char& c : s)
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			return s;
+		}
 
-			const float3 extent = bmax - bmin;
-			const float maxDim = std::max(extent.x, std::max(extent.y, extent.z));
-			if (maxDim <= 0.000001f)
-				return 1.0f;
+		static inline bool EndsWithNoCase(const std::string& s, const char* suffix)
+		{
+			if (!suffix) return false;
+			std::string ss = ToLowerCopy(s);
+			std::string suf = ToLowerCopy(suffix);
+			if (ss.size() < suf.size()) return false;
+			return ss.compare(ss.size() - suf.size(), suf.size(), suf) == 0;
+		}
 
-			return unitSize / maxDim;
+		static inline bool IsShzMeshJsonPath(const std::string& path)
+		{
+			return EndsWithNoCase(path, ".shzmesh.json");
 		}
 
 		static const char* FindMaterialFlagsParamName(const shz::MaterialTemplate& tmpl)
@@ -122,6 +121,19 @@ namespace shz
 			p = SanitizeFilePath(p);
 			return !p.empty();
 		}
+
+		static const char* BlendModeLabel(MATERIAL_BLEND_MODE m)
+		{
+			switch (m)
+			{
+			case MATERIAL_BLEND_MODE_OPAQUE:        return "OPAQUE";
+			case MATERIAL_BLEND_MODE_MASKED:        return "MASKED";
+			case MATERIAL_BLEND_MODE_TRANSLUCENT:   return "TRANSLUCENT";
+			case MATERIAL_BLEND_MODE_ADDITIVE:      return "ADDITIVE";
+			case MATERIAL_BLEND_MODE_PREMULTIPLIED: return "PREMULTIPLIED";
+			default:                                return "UNKNOWN";
+			}
+		}
 	} // namespace
 
 	SampleBase* CreateSample()
@@ -129,9 +141,12 @@ namespace shz
 		return new MaterialEditor();
 	}
 
-	void MaterialEditor::clearTemplateCache()
+	// ------------------------------------------------------------
+	// Utilities
+	// ------------------------------------------------------------
+
+	void MaterialEditor::MarkAllSlotUiDirty()
 	{
-		// mark all slot caches dirty (reflection may change)
 		for (auto& kv : m_SlotUi)
 			kv.second.Dirty = true;
 	}
@@ -140,7 +155,7 @@ namespace shz
 	// Main object access
 	// ------------------------------------------------------------
 
-	RenderScene::RenderObject* MaterialEditor::getMainRenderObjectOrNull()
+	RenderScene::RenderObject* MaterialEditor::GetMainRenderObjectOrNull()
 	{
 		if (!m_pRenderScene)
 			return nullptr;
@@ -149,8 +164,7 @@ namespace shz
 			return nullptr;
 
 		// NOTE:
-		// Your RenderScene likely has a "GetObject(handle)" API.
-		// If not, add one. Below is a placeholder pattern you should adapt.
+		// Replace with your actual scene API.
 		return m_pRenderScene->GetObjectOrNull(m_Main.ObjectId);
 	}
 
@@ -158,27 +172,7 @@ namespace shz
 	// Load / rebuild flow
 	// ------------------------------------------------------------
 
-	static inline std::string ToLowerCopy(std::string s)
-	{
-		for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-		return s;
-	}
-
-	static inline bool EndsWithNoCase(const std::string& s, const char* suffix)
-	{
-		if (!suffix) return false;
-		std::string ss = ToLowerCopy(s);
-		std::string suf = ToLowerCopy(suffix);
-		if (ss.size() < suf.size()) return false;
-		return ss.compare(ss.size() - suf.size(), suf.size(), suf) == 0;
-	}
-
-	static inline bool IsShzMeshJsonPath(const std::string& path)
-	{
-		return EndsWithNoCase(path, ".shzmesh.json");
-	}
-
-	bool MaterialEditor::loadOrReplaceMainObject(
+	bool MaterialEditor::LoadOrReplaceMainObject(
 		const char* path,
 		float3 position,
 		float3 rotation,
@@ -190,21 +184,25 @@ namespace shz
 		ASSERT(m_pRenderScene, "RenderScene is null.");
 		ASSERT(m_pRenderer, "Renderer is null.");
 
-		// Remove old
+		// Remove old object
 		if (m_Main.ObjectId.IsValid())
 		{
 			m_pRenderScene->RemoveObject(m_Main.ObjectId);
 			m_Main.ObjectId = {};
 		}
 
-		if (m_Main.ImportedCpuMesh != nullptr)
+		// Reset state
+		m_SelectedSlot = 0;
+
+		// NOTE: if ImportedCpuMesh is owned (import path), release it.
+		// We keep behavior same as your previous code: delete when imported.
+		if (m_Main.AssimpPtr && m_Main.ImportedCpuMesh)
 		{
-			m_Main.MeshRD = {};
+			delete m_Main.ImportedCpuMesh;
+			m_Main.ImportedCpuMesh = nullptr;
 		}
 
-		m_SelectedSlot = 0;
-		m_Main = {}; // reset state
-
+		m_Main = {};
 		m_Main.Path = path;
 		m_Main.Position = position;
 		m_Main.Rotation = rotation;
@@ -213,9 +211,7 @@ namespace shz
 
 		StaticMesh* cpu = nullptr;
 
-		// ------------------------------------------------------------
-		// 1) Native mesh: *.shzmesh.json -> StaticMeshAsset
-		// ------------------------------------------------------------
+		// 1) Native mesh: *.shzmesh.json
 		if (IsShzMeshJsonPath(m_Main.Path))
 		{
 			m_Main.MeshRef = m_pAssetManager->RegisterAsset<StaticMesh>(m_Main.Path);
@@ -227,9 +223,7 @@ namespace shz
 			if (!cpu)
 				return false;
 		}
-		// ------------------------------------------------------------
-		// 2) Imported mesh: fbx/gltf/glb/... -> AssimpAsset -> BuildStaticMeshAsset
-		// ------------------------------------------------------------
+		// 2) Imported mesh: fbx/gltf/...
 		else
 		{
 			m_Main.AssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>(m_Main.Path);
@@ -257,33 +251,18 @@ namespace shz
 			}
 
 			cpu = m_Main.ImportedCpuMesh;
-			ASSERT(cpu, "Imported CPU mesh is null.");
 		}
 
-		if (m_bFitToUnitCube && cpu)
-		{
-			const float s = ComputeFitToUnitCubeUniformScale(*cpu, m_FitUnitCubeSize);
-			m_Main.Scale = m_Main.Scale * float3(s, s, s); // uniform
-		}
-
-		// ------------------------------------------------------------
-		// Authoring policy: default template names (TemplateKey X, TemplateName O)
-		// - default: DefaultLit
-		// - if BlendMode == MASKED => DefaultLitMasked
-		// ------------------------------------------------------------
-		for (uint32 i = 0; i < cpu->GetMaterialSlotCount(); ++i)
-		{
-			Material& mat = cpu->GetMaterialSlot(i);
-
-			if (mat.GetTemplateName().empty())
-			{
-				const MATERIAL_BLEND_MODE bm = mat.GetOptions().BlendMode;
-				mat.SetTemplateName((bm == MATERIAL_BLEND_MODE_MASKED) ? "DefaultLitMasked" : "DefaultLit");
-			}
-		}
+		ASSERT(cpu, "CPU mesh is null.");
 
 		// Build GPU render data
 		m_Main.MeshRD = m_pRenderer->CreateStaticMesh(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh");
+
+		if (m_bUniformScale)
+		{
+			float uniformScale = ComputeUniformScale(cpu->GetBounds());
+			m_Main.Scale = float3{ uniformScale, uniformScale, uniformScale };
+		}
 
 		RenderScene::RenderObject obj = {};
 		obj.Mesh = m_Main.MeshRD;
@@ -293,10 +272,13 @@ namespace shz
 		m_Main.ObjectId = m_pRenderScene->AddObject(std::move(obj));
 		ASSERT(m_Main.ObjectId.IsValid(), "Failed to add RenderObject.");
 
+		// UI state should be refreshed
+		m_SlotUi.clear();
+
 		return true;
 	}
 
-	bool MaterialEditor::rebuildMainMeshRenderData()
+	bool MaterialEditor::RebuildMainMeshRenderData()
 	{
 		ASSERT(m_pRenderer, "Renderer is null.");
 		ASSERT(m_pRenderScene, "RenderScene is null.");
@@ -305,7 +287,7 @@ namespace shz
 		if (!cpu)
 			return false;
 
-		RenderScene::RenderObject* obj = getMainRenderObjectOrNull();
+		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
 		if (!obj)
 			return false;
 
@@ -316,199 +298,267 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Slot cache
+	// Slot UI state
 	// ------------------------------------------------------------
 
-	MaterialEditor::MaterialUiCache& MaterialEditor::getOrCreateSlotCache(uint32 slotIndex)
+	MaterialEditor::SlotUiState& MaterialEditor::GetOrCreateSlotUi(uint32 slotIndex)
 	{
 		auto it = m_SlotUi.find(slotIndex);
 		if (it != m_SlotUi.end())
 			return it->second;
 
-		MaterialUiCache cache = {};
-		cache.Dirty = true;
-
-		auto [insIt, _] = m_SlotUi.emplace(slotIndex, std::move(cache));
+		SlotUiState ui = {};
+		ui.Dirty = true;
+		auto [insIt, _] = m_SlotUi.emplace(slotIndex, std::move(ui));
 		return insIt->second;
 	}
 
-	void MaterialEditor::syncCacheFromMaterialAsset(MaterialUiCache& cache, const Material& mat, const MaterialTemplate& tmpl)
+	void MaterialEditor::SyncSlotUiFromMaterial(SlotUiState& ui, const Material& mat)
 	{
-		cache.TemplateName = mat.GetTemplateName().empty() ? "DefaultLit" : mat.GetTemplateName();
-		cache.RenderPassName = mat.GetRenderPassName();
+		// This is UI-only snapshot for displaying values/resources.
+		// Material itself is the source of truth.
+		ui.PendingTemplateName = mat.GetTemplateName();
 
-		const auto& opt = mat.GetOptions();
+		std::vector<MaterialSerializedValue> values;
+		std::vector<MaterialSerializedResource> resources;
+		mat.BuildSerializedSnapshot(&values, &resources);
 
-		cache.BlendMode = opt.BlendMode;
-
-		cache.CullMode = opt.CullMode;
-		cache.FrontCounterClockwise = opt.FrontCounterClockwise;
-
-		cache.DepthEnable = opt.DepthEnable;
-		cache.DepthWriteEnable = opt.DepthWriteEnable;
-		cache.DepthFunc = opt.DepthFunc;
-
-		cache.TextureBindingMode = opt.TextureBindingMode;
-
-		cache.LinearWrapSamplerName = opt.LinearWrapSamplerName;
-		cache.LinearWrapSamplerDesc = opt.LinearWrapSamplerDesc;
-
-		cache.bTwoSided = opt.bTwoSided;
-		cache.bCastShadow = opt.bCastShadow;
-
-		// Value bytes: build reflection list, fill from overrides if exists, else zero
-		cache.ValueBytes.clear();
-		for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
+		ui.ValueBytes.clear();
+		for (const auto& v : values)
 		{
-			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
-			if (desc.Name.empty())
+			if (v.Name.empty())
 				continue;
-
-			uint32 sz = desc.ByteSize != 0 ? desc.ByteSize : ValueTypeByteSize(desc.Type);
-			if (sz == 0)
-				continue;
-
-			std::vector<uint8> bytes(sz);
-			std::memset(bytes.data(), 0, bytes.size());
-
-			if (const Material::ValueOverride* ov = mat.FindValueOverride(desc.Name.c_str()))
-			{
-				const size_t copySz = std::min<size_t>(ov->Data.size(), bytes.size());
-				if (copySz > 0)
-					std::memcpy(bytes.data(), ov->Data.data(), copySz);
-			}
-
-			cache.ValueBytes.emplace(desc.Name, std::move(bytes));
+			ui.ValueBytes[v.Name] = v.Data;
 		}
 
-		// Resource paths: keep strings (authoring). If you have AssetRef->path query, wire it here.
-		cache.TexturePaths.clear();
+		ui.TexturePaths.clear();
+		ui.bHasSamplerOverride.clear();
+		ui.SamplerOverrideDesc.clear();
 
-		for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
+		for (const auto& r : resources)
 		{
-			const MaterialResourceDesc& res = tmpl.GetResource(i);
-			if (res.Name.empty())
-				continue;
-			if (!IsTextureType(res.Type))
+			if (r.Name.empty())
 				continue;
 
-			// 항상 key를 만들고, 기본은 empty
-			std::string& outPath = cache.TexturePaths[res.Name];
-			outPath.clear();
+			// NOTE: if AssetRef<T> has no path getter, adapt this line.
+			std::string path = {};
+			if (r.TextureRef.IsValid())
+				path = r.TextureRef.GetSourcePath();
 
-			const Material::ResourceBinding* rb = mat.FindResourceBinding(res.Name.c_str());
-			if (!rb)
-				continue;
-
-			if (rb->TextureRef.IsValid())
-			{
-				outPath = SanitizeFilePath(rb->TextureRef.GetSourcePath());
-			}
-		}
-	}
-
-	void MaterialEditor::applyCacheToMaterialAsset(Material& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl)
-	{
-		// Metadata
-		mat.SetTemplateName(cache.TemplateName.empty() ? "DefaultLit" : cache.TemplateName);
-		mat.SetRenderPassName(cache.RenderPassName);
-
-		// Options
-		mat.SetBlendMode(cache.BlendMode);
-
-		mat.SetCullMode(cache.CullMode);
-		mat.SetFrontCounterClockwise(cache.FrontCounterClockwise);
-
-		mat.SetDepthEnable(cache.DepthEnable);
-		mat.SetDepthWriteEnable(cache.DepthWriteEnable);
-		mat.SetDepthFunc(cache.DepthFunc);
-
-		mat.SetTextureBindingMode(cache.TextureBindingMode);
-
-		mat.SetLinearWrapSamplerName(cache.LinearWrapSamplerName);
-		mat.SetLinearWrapSamplerDesc(cache.LinearWrapSamplerDesc);
-
-		mat.SetTwoSided(cache.bTwoSided);
-		mat.SetCastShadow(cache.bCastShadow);
-
-		// Values: set overrides (only what template exposes)
-		for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
-		{
-			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
-			if (desc.Name.empty())
-				continue;
-
-			auto it = cache.ValueBytes.find(desc.Name);
-			if (it == cache.ValueBytes.end())
-				continue;
-
-			const auto& bytes = it->second;
-			if (bytes.empty())
-				continue;
-
-			const uint32 sz = (uint32)bytes.size();
-			(void)mat.SetRaw(desc.Name.c_str(), desc.Type, bytes.data(), sz, /*stableId*/0);
+			ui.TexturePaths[r.Name] = SanitizeFilePath(path);
+			ui.bHasSamplerOverride[r.Name] = r.bHasSamplerOverride;
+			ui.SamplerOverrideDesc[r.Name] = r.SamplerOverrideDesc;
 		}
 
-		// Resources: set texture AssetRef from paths
-		// NOTE: MaterialAsset stores AssetRef<TextureAsset>, so we register by path.
-		for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
+		ui.PendingTemplateName = mat.GetTemplateName();
+
+		ui.TemplateComboIndex = -1;
+		if (m_pRenderer)
 		{
-			const MaterialResourceDesc& res = tmpl.GetResource(i);
-			if (res.Name.empty())
-				continue;
-
-			if (!IsTextureType(res.Type))
-				continue;
-
-			auto itPath = cache.TexturePaths.find(res.Name);
-			if (itPath == cache.TexturePaths.end())
-				continue;
-
-			const std::string p = SanitizeFilePath(itPath->second);
-			if (p.empty())
+			const auto names = m_pRenderer->GetAllMaterialTemplateNames();
+			for (size_t i = 0; i < names.size(); ++i)
 			{
-				(void)mat.RemoveResourceBinding(res.Name.c_str());
-				continue;
-			}
-
-			ASSERT(m_pAssetManager, "AssetManager is null.");
-			const AssetRef<Texture> texRef = m_pAssetManager->RegisterAsset<Texture>(p);
-
-			(void)mat.SetTextureAssetRef(
-				res.Name.c_str(),
-				res.Type,
-				texRef,
-				/*stableId*/0);
-
-			// ------------------------------------------------------------
-			// MaterialFlags (based on texture bindings)
-			// ------------------------------------------------------------
-			{
-				uint32 flags = 0;
-
-				// 텍스처 변수명은 HLSL에서 실제 쓰는 이름으로 맞춰야 함.
-				// (아래는 너가 말한 g_BaseColorTex 기준)
-				if (HasTexturePath(cache.TexturePaths, "g_BaseColorTex"))          flags |= MAT_HAS_BASECOLOR;
-				if (HasTexturePath(cache.TexturePaths, "g_NormalTex"))             flags |= MAT_HAS_NORMAL;
-
-				// MR은 프로젝트마다 이름이 흔들리니 둘 중 하나라도 있으면 ON
-				if (HasTexturePath(cache.TexturePaths, "g_MRTex") ||
-					HasTexturePath(cache.TexturePaths, "g_MetallicRoughnessTex"))   flags |= MAT_HAS_MR;
-
-				if (HasTexturePath(cache.TexturePaths, "g_AOTex"))                 flags |= MAT_HAS_AO;
-				if (HasTexturePath(cache.TexturePaths, "g_EmissiveTex"))           flags |= MAT_HAS_EMISSIVE;
-				if (HasTexturePath(cache.TexturePaths, "g_HeightTex"))             flags |= MAT_HAS_HEIGHT;
-
-				if (const char* flagsName = FindMaterialFlagsParamName(tmpl))
+				if (names[i] == ui.PendingTemplateName)
 				{
-					(void)mat.SetUint(flagsName, flags, /*stableId*/0);
+					ui.TemplateComboIndex = (int)i;
+					break;
 				}
 			}
 		}
+
+		ui.Dirty = false;
 	}
 
-	bool MaterialEditor::rebuildMainSaveObjectFromScene(std::string* outError)
+	// Recreate a new Material from OldMat + NewTemplateName, copying serializable payload.
+	bool MaterialEditor::RecreateMaterialWithTemplate(
+		Material* pOutNewMat,
+		const Material& oldMat,
+		const std::string& newTemplateName)
+	{
+		ASSERT(pOutNewMat, "Out material is null.");
+		if (newTemplateName.empty())
+			return false;
+
+		// 1) Create new material bound to new template
+		Material newMat(oldMat.GetName(), newTemplateName);
+
+		// 2) Copy render pass name and options (these have getters)
+		newMat.SetRenderPassName(oldMat.GetRenderPassName());
+
+		newMat.SetBlendMode(oldMat.GetBlendMode());
+		newMat.SetCullMode(oldMat.GetCullMode());
+		newMat.SetFrontCounterClockwise(oldMat.GetFrontCounterClockwise());
+
+		newMat.SetDepthEnable(oldMat.GetDepthEnable());
+		newMat.SetDepthWriteEnable(oldMat.GetDepthWriteEnable());
+		newMat.SetDepthFunc(oldMat.GetDepthFunc());
+
+		newMat.SetTextureBindingMode(oldMat.GetTextureBindingMode());
+		newMat.SetLinearWrapSamplerName(oldMat.GetLinearWrapSamplerName());
+		newMat.SetLinearWrapSamplerDesc(oldMat.GetLinearWrapSamplerDesc());
+
+		// 3) Copy serialized values/resources
+		std::vector<MaterialSerializedValue> values;
+		std::vector<MaterialSerializedResource> resources;
+		oldMat.BuildSerializedSnapshot(&values, &resources);
+
+		for (const auto& v : values)
+		{
+			if (v.Name.empty())
+				continue;
+
+			if (v.Type == MATERIAL_VALUE_TYPE_UNKNOWN)
+				continue;
+
+			if (v.Data.empty())
+				continue;
+
+			(void)newMat.SetRaw(v.Name.c_str(), v.Type, v.Data.data(), (uint32)v.Data.size());
+		}
+
+		for (const auto& r : resources)
+		{
+			if (r.Name.empty())
+				continue;
+
+			if (r.Type == MATERIAL_RESOURCE_TYPE_UNKNOWN)
+				continue;
+
+			if (r.TextureRef.IsValid())
+			{
+				(void)newMat.SetTextureAssetRef(r.Name.c_str(), r.Type, r.TextureRef);
+			}
+
+			if (r.bHasSamplerOverride)
+			{
+				(void)newMat.SetSamplerOverrideDesc(r.Name.c_str(), r.SamplerOverrideDesc);
+			}
+		}
+
+		std::destroy_at(pOutNewMat);
+		std::construct_at(pOutNewMat, std::move(newMat));
+		return true;
+	}
+
+	// Apply UI edits to Material immediately.
+	// If bRebuildMeshRD is true, it rebuilds StaticMeshRenderData to reflect pipeline/layout changes.
+	void MaterialEditor::ApplySlotUiToMaterial(Material& mat, SlotUiState& ui, bool bRebuildMeshRD)
+	{
+		const MaterialTemplate& tmpl = mat.GetTemplate();
+
+		// ------------------------------------------------------------
+		// Values
+		// ------------------------------------------------------------
+		for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
+		{
+			const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
+			if (desc.Name.empty())
+				continue;
+
+			auto it = ui.ValueBytes.find(desc.Name);
+			if (it == ui.ValueBytes.end())
+				continue;
+
+			const std::vector<uint8>& bytes = it->second;
+			if (bytes.empty())
+				continue;
+
+			(void)mat.SetRaw(desc.Name.c_str(), desc.Type, bytes.data(), (uint32)bytes.size());
+		}
+
+		// ------------------------------------------------------------
+		// Resources (textures + sampler override)
+		// ------------------------------------------------------------
+		ASSERT(m_pAssetManager, "AssetManager is null.");
+
+		for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
+		{
+			const MaterialResourceDesc& res = tmpl.GetResource(i);
+			if (res.Name.empty())
+				continue;
+
+			// We only edit texture-like resources here.
+			if (!IsTextureType(res.Type))
+				continue;
+
+			// Path -> AssetRef<Texture>
+			std::string path = {};
+			{
+				auto itPath = ui.TexturePaths.find(res.Name);
+				if (itPath != ui.TexturePaths.end())
+					path = SanitizeFilePath(itPath->second);
+			}
+
+			if (!path.empty())
+			{
+				const AssetRef<Texture> texRef = m_pAssetManager->RegisterAsset<Texture>(path);
+				(void)mat.SetTextureAssetRef(res.Name.c_str(), res.Type, texRef);
+			}
+			else
+			{
+				// If you want "clear texture binding" behavior:
+				// - Material API currently doesn't show RemoveTextureBinding().
+				// - So we leave it as-is when path is empty.
+			}
+
+			// Sampler override
+			bool bHas = false;
+			SamplerDesc sdesc = {};
+			{
+				auto itHas = ui.bHasSamplerOverride.find(res.Name);
+				if (itHas != ui.bHasSamplerOverride.end())
+					bHas = itHas->second;
+
+				auto itDesc = ui.SamplerOverrideDesc.find(res.Name);
+				if (itDesc != ui.SamplerOverrideDesc.end())
+					sdesc = itDesc->second;
+			}
+
+			if (bHas)
+			{
+				(void)mat.SetSamplerOverrideDesc(res.Name.c_str(), sdesc);
+			}
+			else
+			{
+				(void)mat.ClearSamplerOverride(res.Name.c_str());
+			}
+		}
+
+		// ------------------------------------------------------------
+		// MaterialFlags example (based on edited texture paths)
+		// ------------------------------------------------------------
+		{
+			uint32 flags = 0;
+
+			if (HasTexturePath(ui.TexturePaths, "g_BaseColorTex"))          flags |= MAT_HAS_BASECOLOR;
+			if (HasTexturePath(ui.TexturePaths, "g_NormalTex"))             flags |= MAT_HAS_NORMAL;
+
+			if (HasTexturePath(ui.TexturePaths, "g_MRTex") ||
+				HasTexturePath(ui.TexturePaths, "g_MetallicRoughnessTex"))   flags |= MAT_HAS_MR;
+
+			if (HasTexturePath(ui.TexturePaths, "g_AOTex"))                 flags |= MAT_HAS_AO;
+			if (HasTexturePath(ui.TexturePaths, "g_EmissiveTex"))           flags |= MAT_HAS_EMISSIVE;
+			if (HasTexturePath(ui.TexturePaths, "g_HeightTex"))             flags |= MAT_HAS_HEIGHT;
+
+			if (const char* flagsName = FindMaterialFlagsParamName(tmpl))
+			{
+				(void)mat.SetUint(flagsName, flags);
+			}
+		}
+
+		// If pipeline/layout/resources changed, you said you want to rebuild mesh RD.
+		if (bRebuildMeshRD)
+			(void)RebuildMainMeshRenderData();
+
+		// Refresh UI snapshot
+		ui.Dirty = true;
+	}
+
+	// ------------------------------------------------------------
+	// Save flow
+	// ------------------------------------------------------------
+
+	bool MaterialEditor::RebuildMainSaveObjectFromScene(std::string* outError)
 	{
 		if (outError) outError->clear();
 
@@ -524,42 +574,53 @@ namespace shz
 			return false;
 		}
 
-		if (!m_pRenderer)
-		{
-			if (outError) *outError = "Renderer is null.";
-			return false;
-		}
-
-		// 1) CPU Mesh를 통째로 복사해서 "Save용 baked mesh"를 만든다.
+		// Copy CPU mesh as baked output
 		StaticMesh baked = *m_Main.ImportedCpuMesh;
 
-		// 2) 현재 UI cache 상태를 baked mesh의 MaterialSlot에 굽는다.
 		const uint32 slotCount = baked.GetMaterialSlotCount();
 		for (uint32 slot = 0; slot < slotCount; ++slot)
 		{
 			Material& mat = baked.GetMaterialSlot(slot);
 
-			MaterialUiCache& cache = getOrCreateSlotCache(slot);
+			SlotUiState& ui = GetOrCreateSlotUi(slot);
+			if (ui.Dirty)
+				SyncSlotUiFromMaterial(ui, mat);
 
-			// 현재 slot의 template로 적용해야 하므로, 캐시의 TemplateName을 우선 사용
-			const std::string tmplName = cache.TemplateName.empty()
-				? (mat.GetTemplateName().empty() ? "DefaultLit" : mat.GetTemplateName())
-				: cache.TemplateName;
+			// If pending template differs, recreate IN-PLACE for the baked copy.
+			{
+				const std::string desiredTmpl = ui.PendingTemplateName.empty()
+					? mat.GetTemplateName()
+					: ui.PendingTemplateName;
 
-			const MaterialTemplate& tmpl = m_pRenderer->GetMaterialTemplate(tmplName);
+				if (!desiredTmpl.empty() && desiredTmpl != mat.GetTemplateName())
+				{
+					// IMPORTANT:
+					// RecreateMaterialWithTemplate() must snapshot oldMat BEFORE destroying pOutNewMat.
+					if (!RecreateMaterialWithTemplate(&mat, mat, desiredTmpl))
+					{
+						if (outError) *outError = "RecreateMaterialWithTemplate failed (baked copy).";
+						return false;
+					}
 
-			applyCacheToMaterialAsset(mat, cache, tmpl);
+					// New template => UI snapshot must be refreshed for this slot.
+					ui.Dirty = true;
+					SyncSlotUiFromMaterial(ui, mat);
+				}
+			}
 
-			// template name도 강제
-			mat.SetTemplateName(tmplName);
+			// Apply UI bytes/paths to this baked copy.
+			ApplySlotUiToMaterial(mat, ui, /*bRebuildMeshRD*/false);
+
+			// Keep UI cache consistent (optional but safe)
+			if (ui.Dirty)
+				SyncSlotUiFromMaterial(ui, mat);
 		}
 
-		// 3) Exporter는 AssetObject*를 받으니 TypedAssetObject로 감싼다.
 		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMesh>>(std::move(baked));
 		return true;
 	}
 
-	bool MaterialEditor::saveMainObject(const std::string& outPath, EAssetSaveFlags /*flags*/, std::string* outError)
+	bool MaterialEditor::SaveMainObject(const std::string& outPath, EAssetSaveFlags /*flags*/, std::string* outError)
 	{
 		if (outError) outError->clear();
 
@@ -576,10 +637,10 @@ namespace shz
 			return false;
 		}
 
-		// Save 직전에 "현재 UI 상태"를 baked mesh에 반영
+		// Rebuild save object from current scene/material state
 		{
 			std::string err;
-			if (!rebuildMainSaveObjectFromScene(&err))
+			if (!RebuildMainSaveObjectFromScene(&err))
 			{
 				if (outError) *outError = err;
 				return false;
@@ -608,13 +669,12 @@ namespace shz
 
 		if (!ok)
 		{
-			if (outError) *outError = err.empty() ? "StaticMeshAssetExporter failed." : err;
+			if (outError) *outError = err.empty() ? "StaticMeshExporter failed." : err;
 			return false;
 		}
 
 		return true;
 	}
-
 
 	// ------------------------------------------------------------
 	// Lifecycle
@@ -684,33 +744,38 @@ namespace shz
 		m_Camera.SetMoveSpeed(3.0f);
 		m_Camera.SetRotationSpeed(0.01f);
 
-		// Light (optional default)
+		// Light
 		m_GlobalLight.Direction = float3(0.4f, -1.0f, 0.3f);
 		m_GlobalLight.Color = float3(1.0f, 1.0f, 1.0f);
 		m_GlobalLight.Intensity = 2.0f;
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 
-		// Load floor object
-		AssetRef<AssimpAsset> floorRef = m_pAssetManager->RegisterAsset<AssimpAsset>(m_FloorMeshPath);
-		AssetPtr<AssimpAsset> floorPtr = m_pAssetManager->LoadBlocking(floorRef);
-		StaticMesh cpuFloorMesh;
-		BuildStaticMeshAsset(
-			*floorPtr,
-			&cpuFloorMesh,
-			AssimpImportSettings{},
-			nullptr,
-			m_pAssetManager.get());
-		RenderScene::RenderObject floorObj = {};
-		floorObj.Mesh = m_pRenderer->CreateStaticMesh(cpuFloorMesh);
-		floorObj.Transform = Matrix4x4::TRS(
-			{ 0.0f, -1.0f, 0.0f },
-			{ 0.0f, 0.0f, 0.0f },
-			{ 10.0f, 1.0f, 10.0f });
-		floorObj.bCastShadow = true;
-		m_Floor = m_pRenderScene->AddObject(std::move(floorObj));
+		// Floor
+		{
+			AssetRef<AssimpAsset> floorRef = m_pAssetManager->RegisterAsset<AssimpAsset>(m_FloorMeshPath);
+			AssetPtr<AssimpAsset> floorPtr = m_pAssetManager->LoadBlocking(floorRef);
 
-		// Load default main object
-		(void)loadOrReplaceMainObject(
+			StaticMesh cpuFloorMesh = {};
+			(void)BuildStaticMeshAsset(
+				*floorPtr,
+				&cpuFloorMesh,
+				AssimpImportSettings{},
+				nullptr,
+				m_pAssetManager.get());
+
+			RenderScene::RenderObject floorObj = {};
+			floorObj.Mesh = m_pRenderer->CreateStaticMesh(cpuFloorMesh);
+			floorObj.Transform = Matrix4x4::TRS(
+				{ 0.0f, -1.0f, 0.0f },
+				{ 0.0f, 0.0f, 0.0f },
+				{ 10.0f, 1.0f, 10.0f });
+			floorObj.bCastShadow = true;
+
+			m_Floor = m_pRenderScene->AddObject(std::move(floorObj));
+		}
+
+		// Main
+		(void)LoadOrReplaceMainObject(
 			m_MainMeshPath.c_str(),
 			{ 0.0f, 0.0f, 0.0f },
 			{ 0.0f, 0.0f, 0.0f },
@@ -794,14 +859,14 @@ namespace shz
 
 	void MaterialEditor::UpdateUI()
 	{
-		uiDockspace();
-		uiScenePanel();
-		uiViewportPanel();
-		uiMaterialPanel();
-		uiStatsPanel();
+		UiDockspace();
+		UiScenePanel();
+		UiViewportPanel();
+		UiMaterialPanel();
+		UiStatsPanel();
 	}
 
-	void MaterialEditor::uiDockspace()
+	void MaterialEditor::UiDockspace()
 	{
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
@@ -857,16 +922,11 @@ namespace shz
 
 			if (ImGui::BeginMenuBar())
 			{
-				if (ImGui::BeginMenu("Templates"))
+				if (ImGui::BeginMenu("UI"))
 				{
-					if (ImGui::MenuItem("Clear Template Cache"))
-						clearTemplateCache();
+					if (ImGui::MenuItem("Refresh Slot UI"))
+						MarkAllSlotUiDirty();
 
-					// reload defaults quickly
-					if (ImGui::MenuItem("Reload DefaultLit / DefaultLitMasked"))
-					{
-						clearTemplateCache();
-					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -875,7 +935,7 @@ namespace shz
 		ImGui::End();
 	}
 
-	void MaterialEditor::uiScenePanel()
+	void MaterialEditor::UiScenePanel()
 	{
 		if (!ImGui::Begin("Scene"))
 		{
@@ -890,12 +950,26 @@ namespace shz
 
 		ImGui::Separator();
 		ImGui::Text("Load Options");
-		ImGui::Checkbox("Fit To Unit Cube (Uniform)", &m_bFitToUnitCube);
-		ImGui::DragFloat("Unit Cube Size", &m_FitUnitCubeSize, 0.01f, 0.01f, 100.0f);
 
 		ImGui::DragFloat3("Position", reinterpret_cast<float*>(&m_Main.Position), 0.01f);
 		ImGui::DragFloat3("Rotation", reinterpret_cast<float*>(&m_Main.Rotation), 0.5f);
 		ImGui::DragFloat3("Scale", reinterpret_cast<float*>(&m_Main.Scale), 0.01f);
+
+		if (ImGui::Checkbox("Uniform Scale", &m_bUniformScale))
+		{
+			if (m_Main.ImportedCpuMesh)
+			{
+				if (m_bUniformScale)
+				{
+					float uniformScale = ComputeUniformScale(m_Main.ImportedCpuMesh->GetBounds());
+					m_Main.Scale = float3{ uniformScale, uniformScale, uniformScale };
+				}
+				else
+				{
+					m_Main.Scale = float3{ 1.0f, 1.0f, 1.0f };
+				}
+			}
+		}
 
 		ImGui::Checkbox("Cast Shadow (Object)", &m_Main.bCastShadow);
 
@@ -904,7 +978,7 @@ namespace shz
 			const std::string p = SanitizeFilePath(m_MainMeshPath);
 			if (!p.empty())
 			{
-				(void)loadOrReplaceMainObject(
+				(void)LoadOrReplaceMainObject(
 					p.c_str(),
 					m_Main.Position,
 					m_Main.Rotation,
@@ -923,21 +997,19 @@ namespace shz
 		if (ImGui::Button("Save"))
 		{
 			std::string err;
-			const bool ok = saveMainObject(
+			const bool ok = SaveMainObject(
 				m_MainMeshSavePath,
 				EAssetSaveFlags::None,
 				&err);
 
 			if (!ok)
-			{
 				ASSERT(false, err.empty() ? "Save failed." : err.c_str());
-			}
 		}
 
-		// Apply object transform live
+		// Apply transform live
 		if (m_Main.ImportedCpuMesh != nullptr)
 		{
-			if (RenderScene::RenderObject* obj = getMainRenderObjectOrNull())
+			if (RenderScene::RenderObject* obj = GetMainRenderObjectOrNull())
 			{
 				obj->Transform = Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale);
 				obj->bCastShadow = m_Main.bCastShadow;
@@ -956,7 +1028,7 @@ namespace shz
 		ImGui::End();
 	}
 
-	void MaterialEditor::uiViewportPanel()
+	void MaterialEditor::UiViewportPanel()
 	{
 		if (!ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
 		{
@@ -1002,7 +1074,7 @@ namespace shz
 		ImGui::End();
 	}
 
-	void MaterialEditor::uiMaterialPanel()
+	void MaterialEditor::UiMaterialPanel()
 	{
 		if (!ImGui::Begin("Material"))
 		{
@@ -1013,7 +1085,7 @@ namespace shz
 		StaticMesh* cpu = m_Main.ImportedCpuMesh;
 		if (!cpu)
 		{
-			ImGui::TextDisabled("Load a StaticMeshAsset first.");
+			ImGui::TextDisabled("Load a StaticMesh first.");
 			ImGui::End();
 			return;
 		}
@@ -1032,77 +1104,94 @@ namespace shz
 			if (ImGui::SliderInt("Slot", &slot, 0, std::max(0, (int)slotCount - 1)))
 			{
 				m_SelectedSlot = slot;
-				getOrCreateSlotCache((uint32)m_SelectedSlot).Dirty = true;
+				GetOrCreateSlotUi((uint32)m_SelectedSlot).Dirty = true;
 			}
 		}
 
 		const uint32 slotIndex = (uint32)std::clamp<int32>(m_SelectedSlot, 0, (int32)slotCount - 1);
 		Material& mat = cpu->GetMaterialSlot(slotIndex);
+		const MaterialTemplate& tmpl = mat.GetTemplate();
 
-		// Template selection: DefaultLit / DefaultLitMasked + custom
-		MaterialUiCache& cache = getOrCreateSlotCache(slotIndex);
+		SlotUiState& ui = GetOrCreateSlotUi(slotIndex);
+		if (ui.Dirty)
+			SyncSlotUiFromMaterial(ui, mat);
 
-		const MaterialTemplate* tmpl = &m_pRenderer->GetMaterialTemplate(mat.GetTemplateName().empty() ? "DefaultLit" : mat.GetTemplateName());
-		if (!tmpl)
-		{
-			ImGui::TextDisabled("Template load failed.");
-			ImGui::End();
-			return;
-		}
-
-		if (cache.Dirty)
-		{
-			syncCacheFromMaterialAsset(cache, mat, *tmpl);
-			cache.Dirty = false;
-		}
-
-		// -----------------------------
-		// Header (metadata)
-		// -----------------------------
 		ImGui::Text("Material Slot %u", slotIndex);
 		ImGui::Separator();
 
+		// ------------------------------------------------------------
+		// Template (requires recreate)
+		// ------------------------------------------------------------
 		{
-			// Quick buttons
-			if (ImGui::Button("Use DefaultLit"))
+			ASSERT(m_pRenderer, "Renderer is null.");
+
+			const auto tmplNames = m_pRenderer->GetAllMaterialTemplateNames();
+
+			// Build const char* list for ImGui
+			static std::vector<const char*> s_Items;
+			s_Items.clear();
+			for (const std::string& s : tmplNames)
+				s_Items.push_back(s.c_str());
+
+			// Ensure index is valid
+			if (ui.TemplateComboIndex < 0 || ui.TemplateComboIndex >= (int)s_Items.size())
 			{
-				cache.TemplateName = "DefaultLit";
-				mat.SetTemplateName(cache.TemplateName);
-				cache.Dirty = true;
+				ui.TemplateComboIndex = 0;
+				if (!tmplNames.empty())
+					ui.PendingTemplateName = tmplNames[0];
 			}
+
+			ImGui::Text("Material Template");
+
+			if (ImGui::Combo(
+				"Template",
+				&ui.TemplateComboIndex,
+				s_Items.data(),
+				(int)s_Items.size()))
+			{
+				// Selection changed (NOT applied yet)
+				ui.PendingTemplateName = tmplNames[ui.TemplateComboIndex];
+			}
+
 			ImGui::SameLine();
-			if (ImGui::Button("Use DefaultLitMasked"))
-			{
-				cache.TemplateName = "DefaultLitMasked";
-				mat.SetTemplateName(cache.TemplateName);
-				cache.BlendMode = MATERIAL_BLEND_MODE_MASKED;
-				cache.Dirty = true;
-			}
 
-			InputTextStdString("TemplateName", cache.TemplateName);
+			if (ImGui::Button("Recreate"))
+			{
+				const std::string& desiredTmpl = ui.PendingTemplateName;
+				if (!desiredTmpl.empty() && desiredTmpl != mat.GetTemplateName())
+				{
+					if (RecreateMaterialWithTemplate(&mat, mat, desiredTmpl))
+					{
+						// Template change affects PSO/layout
+						(void)RebuildMainMeshRenderData();
+						ui.Dirty = true;
+					}
+				}
+			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Load Template"))
-			{
-				mat.SetTemplateName(cache.TemplateName);
-				cache.Dirty = true;
-			}
+			ImGui::TextDisabled("Current: %s", mat.GetTemplateName().c_str());
 
-			InputTextStdString("RenderPass", cache.RenderPassName);
+			// Render pass name (unchanged)
+			{
+				std::string rp = mat.GetRenderPassName();
+				if (InputTextStdString("RenderPass", rp))
+					mat.SetRenderPassName(rp);
+			}
 		}
 
 		ImGui::Spacing();
 
-		// -----------------------------
-		// Options (pipeline-ish)
-		// -----------------------------
+		// ------------------------------------------------------------
+		// Options (direct set/get)
+		// ------------------------------------------------------------
 		if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			// Blend mode is now the alpha/masked policy (RenderObject.bAlphaMasked 없음)
+			// Blend mode
 			{
 				const char* items[] = { "OPAQUE","MASKED","TRANSLUCENT","ADDITIVE","PREMULTIPLIED" };
 				int sel = 0;
-				switch (cache.BlendMode)
+				switch (mat.GetBlendMode())
 				{
 				case MATERIAL_BLEND_MODE_OPAQUE:        sel = 0; break;
 				case MATERIAL_BLEND_MODE_MASKED:        sel = 1; break;
@@ -1122,26 +1211,64 @@ namespace shz
 						MATERIAL_BLEND_MODE_ADDITIVE,
 						MATERIAL_BLEND_MODE_PREMULTIPLIED
 					};
-					cache.BlendMode = map[sel];
+					mat.SetBlendMode(map[sel]);
+					ui.Dirty = true;
+				}
+
+				ImGui::SameLine();
+				ImGui::TextDisabled("(%s)", BlendModeLabel(mat.GetBlendMode()));
+			}
+
+			// Cull mode
+			{
+				CULL_MODE cm = mat.GetCullMode();
+				const char* items[] = { "None", "Front", "Back" };
+				int idx = (cm == CULL_MODE_NONE) ? 0 : (cm == CULL_MODE_FRONT) ? 1 : 2;
+
+				if (ImGui::Combo("Cull", &idx, items, 3))
+				{
+					const CULL_MODE newCm =
+						(idx == 0) ? CULL_MODE_NONE :
+						(idx == 1) ? CULL_MODE_FRONT :
+						CULL_MODE_BACK;
+
+					mat.SetCullMode(newCm);
+					ui.Dirty = true;
 				}
 			}
 
+			// FrontCCW
 			{
-				const char* items[] = { "None", "Front", "Back" };
-				int idx = (cache.CullMode == CULL_MODE_NONE) ? 0 : (cache.CullMode == CULL_MODE_FRONT) ? 1 : 2;
-				if (ImGui::Combo("Cull", &idx, items, 3))
-					cache.CullMode = (idx == 0) ? CULL_MODE_NONE : (idx == 1) ? CULL_MODE_FRONT : CULL_MODE_BACK;
+				bool v = mat.GetFrontCounterClockwise();
+				if (ImGui::Checkbox("FrontCCW", &v))
+				{
+					mat.SetFrontCounterClockwise(v);
+					ui.Dirty = true;
+				}
 			}
 
-			ImGui::Checkbox("FrontCCW", &cache.FrontCounterClockwise);
-
-			ImGui::Checkbox("DepthEnable", &cache.DepthEnable);
-			ImGui::Checkbox("DepthWrite", &cache.DepthWriteEnable);
-
+			// Depth
 			{
+				bool v = mat.GetDepthEnable();
+				if (ImGui::Checkbox("DepthEnable", &v))
+				{
+					mat.SetDepthEnable(v);
+					ui.Dirty = true;
+				}
+			}
+			{
+				bool v = mat.GetDepthWriteEnable();
+				if (ImGui::Checkbox("DepthWrite", &v))
+				{
+					mat.SetDepthWriteEnable(v);
+					ui.Dirty = true;
+				}
+			}
+			{
+				COMPARISON_FUNCTION f = mat.GetDepthFunc();
 				const char* labels[] = { "NEVER","LESS","EQUAL","LEQUAL","GREATER","NOT_EQUAL","GEQUAL","ALWAYS" };
 				int sel = 3;
-				switch (cache.DepthFunc)
+				switch (f)
 				{
 				case COMPARISON_FUNC_NEVER:         sel = 0; break;
 				case COMPARISON_FUNC_LESS:          sel = 1; break;
@@ -1167,37 +1294,45 @@ namespace shz
 						COMPARISON_FUNC_GREATER_EQUAL,
 						COMPARISON_FUNC_ALWAYS,
 					};
-					cache.DepthFunc = map[sel];
+					mat.SetDepthFunc(map[sel]);
+					ui.Dirty = true;
 				}
 			}
 
+			// Texture binding mode
 			{
+				MATERIAL_TEXTURE_BINDING_MODE m = mat.GetTextureBindingMode();
 				const char* items[] = { "DYNAMIC", "MUTABLE" };
-				int mode = (cache.TextureBindingMode == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
+				int mode = (m == MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC) ? 0 : 1;
+
 				if (ImGui::Combo("TexBinding", &mode, items, 2))
-					cache.TextureBindingMode = (mode == 0) ? MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC : MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
+				{
+					mat.SetTextureBindingMode((mode == 0) ? MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC : MATERIAL_TEXTURE_BINDING_MODE_MUTABLE);
+					ui.Dirty = true;
+				}
 			}
 
-			InputTextStdString("LinearWrapName", cache.LinearWrapSamplerName);
+			// LinearWrap Sampler
+			{
+				std::string samplerName = mat.GetLinearWrapSamplerName();
+				if (InputTextStdString("LinearWrapName", samplerName))
+				{
+					mat.SetLinearWrapSamplerName(samplerName);
+					ui.Dirty = true;
+				}
 
-			ImGui::Checkbox("TwoSided (asset)", &cache.bTwoSided);
-			ImGui::Checkbox("CastShadow (asset)", &cache.bCastShadow);
+				// NOTE: Expose desc edit if needed later (kept simple now).
+			}
+
+			ImGui::Separator();
+			ImGui::TextDisabled("CastShadow is per RenderObject (not in Material).");
 		}
 
 		ImGui::Spacing();
 
-		// IMPORTANT: if template name changed, reload tmpl pointer
-		tmpl = &m_pRenderer->GetMaterialTemplate(cache.TemplateName);
-		if (!tmpl)
-		{
-			ImGui::TextDisabled("Template is invalid.");
-			ImGui::End();
-			return;
-		}
-
-		// -----------------------------
-		// Values (reflection-driven)
-		// -----------------------------
+		// ------------------------------------------------------------
+		// Values (reflection-driven) - edit UI.ValueBytes then Apply
+		// ------------------------------------------------------------
 		if (ImGui::CollapsingHeader("Values", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static char s_Filter[128] = {};
@@ -1210,27 +1345,31 @@ namespace shz
 					return name.find(s_Filter) != std::string::npos;
 				};
 
-			for (uint32 i = 0; i < tmpl->GetValueParamCount(); ++i)
+			for (uint32 i = 0; i < tmpl.GetValueParamCount(); ++i)
 			{
-				const MaterialValueParamDesc& desc = tmpl->GetValueParam(i);
+				const MaterialValueParamDesc& desc = tmpl.GetValueParam(i);
 				if (desc.Name.empty())
 					continue;
 
 				if (!passFilter(desc.Name))
 					continue;
 
+				ImGui::PushID((int)i);
+
 				uint32 sz = desc.ByteSize != 0 ? desc.ByteSize : ValueTypeByteSize(desc.Type);
 				if (sz == 0)
+				{
+					ImGui::TextDisabled("%s (invalid size)", desc.Name.c_str());
+					ImGui::PopID();
 					continue;
+				}
 
-				auto& bytes = cache.ValueBytes[desc.Name];
+				std::vector<uint8>& bytes = ui.ValueBytes[desc.Name];
 				if ((uint32)bytes.size() != sz)
 				{
 					bytes.resize(sz);
 					std::memset(bytes.data(), 0, bytes.size());
 				}
-
-				ImGui::PushID((int)i);
 
 				switch (desc.Type)
 				{
@@ -1336,13 +1475,13 @@ namespace shz
 
 		ImGui::Spacing();
 
-		// -----------------------------
+		// ------------------------------------------------------------
 		// Resources (reflection-driven)
-		// -----------------------------
+		// ------------------------------------------------------------
 		if (ImGui::CollapsingHeader("Resources", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static char s_Filter[128] = {};
-			ImGui::InputTextWithHint("Filter", "name contains...", s_Filter, sizeof(s_Filter));
+			ImGui::InputTextWithHint("Filter##Res", "name contains...", s_Filter, sizeof(s_Filter));
 
 			auto passFilter = [&](const std::string& name) -> bool
 				{
@@ -1351,19 +1490,23 @@ namespace shz
 					return name.find(s_Filter) != std::string::npos;
 				};
 
-			for (uint32 i = 0; i < tmpl->GetResourceCount(); ++i)
+			for (uint32 i = 0; i < tmpl.GetResourceCount(); ++i)
 			{
-				const MaterialResourceDesc& res = tmpl->GetResource(i);
+				const MaterialResourceDesc& res = tmpl.GetResource(i);
 				if (res.Name.empty())
 					continue;
+
 				if (!IsTextureType(res.Type))
 					continue;
+
 				if (!passFilter(res.Name))
 					continue;
 
 				ImGui::PushID((int)i);
 
-				std::string& path = cache.TexturePaths[res.Name];
+				std::string& path = ui.TexturePaths[res.Name];
+				bool& bHasSampler = ui.bHasSamplerOverride[res.Name];
+				SamplerDesc& sdesc = ui.SamplerOverrideDesc[res.Name];
 
 				ImGui::Text("%s", res.Name.c_str());
 				ImGui::SameLine();
@@ -1377,6 +1520,21 @@ namespace shz
 				if (ImGui::Button("Clear"))
 					path.clear();
 
+				// Sampler override
+				{
+					if (ImGui::Checkbox("SamplerOverride", &bHasSampler))
+					{
+						// keep sdesc as-is
+					}
+
+					if (bHasSampler)
+					{
+						// NOTE: Keep minimal UI: just address/filter presets are not exposed.
+						// If you want full SamplerDesc editor, add it here.
+						ImGui::TextDisabled("SamplerDesc editor is TODO");
+					}
+				}
+
 				ImGui::PopID();
 				ImGui::Separator();
 			}
@@ -1385,28 +1543,25 @@ namespace shz
 		ImGui::Spacing();
 		ImGui::Separator();
 
-		// -----------------------------
-		// APPLY (authoring -> rebuild mesh render data)
-		// -----------------------------
-		if (ImGui::Button("Apply To Mesh Slot (Rebuild StaticMeshRenderData)"))
+		// ------------------------------------------------------------
+		// Apply
+		// ------------------------------------------------------------
 		{
-			// apply cache -> asset slot
-			applyCacheToMaterialAsset(mat, cache, *tmpl);
-
-			// also enforce template name on asset
-			mat.SetTemplateName(cache.TemplateName.empty() ? "DefaultLit" : cache.TemplateName);
-
-			// rebuild GPU mesh render data (includes materials per your policy)
-			(void)rebuildMainMeshRenderData();
-
-			syncCacheFromMaterialAsset(cache, mat, *tmpl);
-			cache.Dirty = false;
+			if (ImGui::Button("Apply"))
+			{
+				ApplySlotUiToMaterial(mat, ui, true);
+				ui.Dirty = true;
+			}
 		}
+
+		// Keep UI in sync if requested
+		if (ui.Dirty)
+			SyncSlotUiFromMaterial(ui, mat);
 
 		ImGui::End();
 	}
 
-	void MaterialEditor::uiStatsPanel()
+	void MaterialEditor::UiStatsPanel()
 	{
 		if (!ImGui::Begin("Stats"))
 		{
@@ -1420,7 +1575,6 @@ namespace shz
 		ImGuiIO& io = ImGui::GetIO();
 		ImGui::Text("ImGui FPS: %.1f", io.Framerate);
 
-		// draw call table
 		if (m_pRenderer)
 		{
 			const auto passTable = m_pRenderer->GetPassDrawCallCountTable();
@@ -1439,3 +1593,4 @@ namespace shz
 		ImGui::End();
 	}
 } // namespace shz
+

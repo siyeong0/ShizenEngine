@@ -129,17 +129,6 @@ namespace shz
 		const MaterialTextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
 		MaterialTextureBinding& GetTextureBindingMutable(uint32 index) { return m_TextureBindings[index]; }
 
-		bool IsCBufferDirty(uint32 cbufferIndex) const;
-		void ClearCBufferDirty(uint32 cbufferIndex);
-		bool IsTextureDirty(uint32 resourceIndex) const;
-		void ClearTextureDirty(uint32 resourceIndex);
-		bool IsPsoDirty() const noexcept { return m_bPsoDirty != 0; }
-		void ClearPsoDirty() noexcept { m_bPsoDirty = 0; }
-		bool IsLayoutDirty() const noexcept { return m_bLayoutDirty != 0; }
-		void ClearLayoutDirty() noexcept { m_bLayoutDirty = 0; }
-
-		void MarkAllDirty();
-
 		void BuildSerializedSnapshot(std::vector<MaterialSerializedValue>* outValues, std::vector<MaterialSerializedResource>* outResources) const;
 
 		bool SetFloat(const char* name, float v);
@@ -196,30 +185,21 @@ namespace shz
 		const MaterialTemplate& m_Template;
 
 		// Stored descs (plain types)
-		PipelineStateDesc m_PSODesc = {};
-		GraphicsPipelineDesc m_GraphicsPipeline = {};
+		PipelineStateDesc m_PipelineStateDesc = {};
+		GraphicsPipelineDesc m_GraphicsPipelineDesc = {};
 		std::vector<ImmutableSamplerDesc> m_ImmutableSamplersStorage = {};
 
-		// Auto layout (ResourceLayout inside m_PSODesc is built from these)
+		// Auto layout 
 		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		std::vector<ShaderResourceVariableDesc> m_Variables = {};
 
-		// Constant buffers
 		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
-		std::vector<uint8> m_bCBufferDirties = {};
-
-		// Resources
 		std::vector<MaterialTextureBinding> m_TextureBindings = {};
-		std::vector<uint8> m_bTextureDirties = {};
 
-		// Snapshot cache (to keep old JSON save code working)
+		// Snapshot cache // TODO : REMOVE
 		mutable uint8 m_bSnapshotDirty = 1;
 		mutable std::vector<MaterialSerializedValue> m_SnapshotValues = {};
 		mutable std::vector<MaterialSerializedResource> m_SnapshotResources = {};
-
-		// Dirty
-		uint8 m_bPsoDirty = 1;
-		uint8 m_bLayoutDirty = 1;
 	};
 
 } // namespace shz

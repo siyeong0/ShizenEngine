@@ -87,6 +87,7 @@ namespace shz
 		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
 
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
+		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
 	private:
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
@@ -103,7 +104,7 @@ namespace shz
 		RefCntAutoPtr<ISwapChain> m_pSwapChain;
 
 		AssetManager* m_pAssetManager = nullptr;
-		std::unordered_map<std::string, MaterialTemplate> m_TemplateCache = {};
+		std::unordered_map<std::string, MaterialTemplate> m_TemplateLibrary = {};
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;

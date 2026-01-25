@@ -59,96 +59,85 @@ namespace shz
 			float3 Rotation = {};
 			float3 Scale = { 1,1,1 };
 
+			// Object-only option (Material has no CastShadow)
 			bool bCastShadow = true;
 
 			// ------------------------------------------------------------
-			// Source 1) Native mesh asset (shzmesh.json)
+			// Source 1) Native mesh (shzmesh.json)
 			// ------------------------------------------------------------
 			AssetRef<StaticMesh> MeshRef = {};
 			AssetPtr<StaticMesh> MeshPtr = {};
 
 			// ------------------------------------------------------------
-			// Source 2) Imported mesh via Assimp (fbx/gltf/glb/...)
+			// Source 2) Imported mesh (fbx/gltf/...)
 			// ------------------------------------------------------------
 			AssetRef<AssimpAsset> AssimpRef = {};
 			AssetPtr<AssimpAsset> AssimpPtr = {};
 
-			// CPU
-			StaticMesh* ImportedCpuMesh = {}; // owns CPU mesh after BuildStaticMeshAsset()
+			// CPU mesh pointer for current main object
+			StaticMesh* ImportedCpuMesh = nullptr; // owns CPU mesh when imported
 
-			// GPU
+			// GPU + Scene
 			StaticMeshRenderData MeshRD = {};
 			Handle<RenderScene::RenderObject> ObjectId = {};
 
 			uint64 RebuildKey = 1;
 		};
 
-		struct MaterialUiCache final
+		// UI-only scratch state (NOT a runtime material cache).
+		// Used because Material does not expose getters for arbitrary param blobs.
+		struct SlotUiState final
 		{
 			bool Dirty = true;
 
-			// Metadata
-			std::string TemplateName = "DefaultLit";
-			std::string RenderPassName = "GBuffer";
+			// Pending template change (Material needs recreation)
+			std::string PendingTemplateName = {};
+			int TemplateComboIndex = -1;
 
-			// Options
-			MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
-
-			CULL_MODE CullMode = CULL_MODE_BACK;
-			bool FrontCounterClockwise = true;
-
-			bool DepthEnable = true;
-			bool DepthWriteEnable = true;
-			COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-			MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
-
-			std::string LinearWrapSamplerName = "g_LinearWrapSampler";
-			SamplerDesc LinearWrapSamplerDesc =
-			{
-				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-			};
-
-			// Asset-only options
-			bool bTwoSided = false;
-			bool bCastShadow = true;
-
-			// Reflection-driven payload
+			// Reflection-driven param bytes (for UI display/edit)
 			std::unordered_map<std::string, std::vector<uint8>> ValueBytes = {};
+
+			// Resource edit strings (paths) + sampler override flags
 			std::unordered_map<std::string, std::string> TexturePaths = {};
+			std::unordered_map<std::string, bool> bHasSamplerOverride = {};
+			std::unordered_map<std::string, SamplerDesc> SamplerOverrideDesc = {};
 		};
 
 	private:
-		bool loadOrReplaceMainObject(
+		bool LoadOrReplaceMainObject(
 			const char* Path,
 			float3 Position,
 			float3 Rotation,
 			float3 Scale,
 			bool bCastShadow);
 
-		bool rebuildMainMeshRenderData(); // CreateStaticMesh(key++) and patch scene object
+		bool RebuildMainMeshRenderData(); // CreateStaticMesh(key++) and patch scene object
 
-		RenderScene::RenderObject* getMainRenderObjectOrNull();
+		RenderScene::RenderObject* GetMainRenderObjectOrNull();
 
-		MaterialUiCache& getOrCreateSlotCache(uint32 slotIndex);
-		void syncCacheFromMaterialAsset(MaterialUiCache& cache, const Material& mat, const MaterialTemplate& tmpl);
-		void applyCacheToMaterialAsset(Material& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl);
+		SlotUiState& GetOrCreateSlotUi(uint32 SlotIndex);
+		void SyncSlotUiFromMaterial(SlotUiState& Ui, const Material& Mat);
+		void ApplySlotUiToMaterial(Material& Mat, SlotUiState& Ui, bool bRebuildMeshRD);
 
-		bool rebuildMainSaveObjectFromScene(std::string* outError);
-		bool saveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
+		bool RecreateMaterialWithTemplate(
+			Material* pOutNewMat,
+			const Material& OldMat,
+			const std::string& NewTemplateName);
 
-		void clearTemplateCache();
+		bool RebuildMainSaveObjectFromScene(std::string* outError);
+		bool SaveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);
+
+		void MarkAllSlotUiDirty();
 
 	private:
 		// ------------------------------------------------------------
 		// UI panels
 		// ------------------------------------------------------------
-		void uiDockspace();
-		void uiScenePanel();
-		void uiViewportPanel();
-		void uiMaterialPanel();
-		void uiStatsPanel();
+		void UiDockspace();
+		void UiScenePanel();
+		void UiViewportPanel();
+		void UiMaterialPanel();
+		void UiStatsPanel();
 
 	private:
 		// ------------------------------------------------------------
@@ -182,11 +171,10 @@ namespace shz
 		// Material selection
 		int32 m_SelectedSlot = 0;
 
-		bool  m_bFitToUnitCube = true;
-		float m_FitUnitCubeSize = 1.0f; 
+		bool m_bUniformScale = true;
 
-		// Slot UI cache
-		std::unordered_map<uint32, MaterialUiCache> m_SlotUi = {};
+		// UI-only per slot state
+		std::unordered_map<uint32, SlotUiState> m_SlotUi = {};
 
 		// Dock
 		bool m_DockBuilt = false;

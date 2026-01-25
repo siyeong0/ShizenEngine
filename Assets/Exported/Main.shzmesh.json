@@ -24,7 +24,6 @@
       "Name": "02 - Default",
       "Options": {
         "BlendMode": 1,
-        "CastShadow": true,
         "CullMode": 1,
         "DepthEnable": true,
         "DepthFunc": 4,
@@ -50,8 +49,7 @@
           "MipLODBias": 0.0
         },
         "LinearWrapSamplerName": "g_LinearWrapSampler",
-        "TextureBindingMode": 1,
-        "TwoSided": true
+        "TextureBindingMode": 1
       },
       "RenderPassName": "GBuffer",
       "Resources": [
@@ -59,10 +57,49 @@
           "HasSamplerOverride": false,
           "Name": "g_BaseColorTex",
           "SourcePath": "C:/Dev/ShizenEngine/Assets/Grass/grass-free-download/textures/grasspng.png",
-          "StableID": 0,
           "TextureAssetID": {
             "Hi": 1599070034695128394,
             "Lo": 2389124540201538119
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
           },
           "Type": 1
         }
@@ -89,7 +126,6 @@
             63
           ],
           "Name": "g_BaseColorFactor",
-          "StableID": 0,
           "Type": 4
         },
         {
@@ -108,7 +144,6 @@
             0
           ],
           "Name": "g_EmissiveFactor",
-          "StableID": 0,
           "Type": 3
         },
         {
@@ -119,18 +154,6 @@
             63
           ],
           "Name": "g_EmissiveIntensity",
-          "StableID": 0,
-          "Type": 1
-        },
-        {
-          "Data": [
-            0,
-            0,
-            0,
-            0
-          ],
-          "Name": "g_MetallicFactor",
-          "StableID": 0,
           "Type": 1
         },
         {
@@ -141,29 +164,6 @@
             63
           ],
           "Name": "g_RoughnessFactor",
-          "StableID": 0,
-          "Type": 1
-        },
-        {
-          "Data": [
-            0,
-            0,
-            128,
-            63
-          ],
-          "Name": "g_OcclusionStrength",
-          "StableID": 0,
-          "Type": 1
-        },
-        {
-          "Data": [
-            0,
-            0,
-            0,
-            63
-          ],
-          "Name": "g_AlphaCutoff",
-          "StableID": 0,
           "Type": 1
         },
         {
@@ -174,7 +174,36 @@
             63
           ],
           "Name": "g_NormalScale",
-          "StableID": 0,
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MetallicFactor",
           "Type": 1
         },
         {
@@ -185,7 +214,6 @@
             0
           ],
           "Name": "g_MaterialFlags",
-          "StableID": 0,
           "Type": 9
         },
         {
@@ -200,7 +228,6 @@
             0
           ],
           "Name": "_pad0",
-          "StableID": 0,
           "Type": 10
         }
       ]
