@@ -90,7 +90,7 @@ namespace shz
 				(name.find("BaseColor") != std::string::npos);
 		}
 
-		static float ComputeFitToUnitCubeUniformScale(const shz::StaticMeshAsset& mesh, float unitSize)
+		static float ComputeFitToUnitCubeUniformScale(const shz::StaticMesh& mesh, float unitSize)
 		{
 			const Box& bounds = mesh.GetBounds();
 			float3 bmin = bounds.Min;
@@ -211,14 +211,14 @@ namespace shz
 		m_Main.Scale = scale;
 		m_Main.bCastShadow = bCastShadow;
 
-		StaticMeshAsset* cpu = nullptr;
+		StaticMesh* cpu = nullptr;
 
 		// ------------------------------------------------------------
 		// 1) Native mesh: *.shzmesh.json -> StaticMeshAsset
 		// ------------------------------------------------------------
 		if (IsShzMeshJsonPath(m_Main.Path))
 		{
-			m_Main.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshAsset>(m_Main.Path);
+			m_Main.MeshRef = m_pAssetManager->RegisterAsset<StaticMesh>(m_Main.Path);
 			m_Main.MeshPtr = m_pAssetManager->LoadBlocking(m_Main.MeshRef);
 
 			cpu = m_Main.MeshPtr.Get();
@@ -239,7 +239,7 @@ namespace shz
 			if (!assimp)
 				return false;
 
-			m_Main.ImportedCpuMesh = new StaticMeshAsset();
+			m_Main.ImportedCpuMesh = new StaticMesh();
 			ASSERT(m_Main.ImportedCpuMesh, "ImportedCpuMesh alloc failed.");
 
 			AssimpImportSettings settings = {};
@@ -273,7 +273,7 @@ namespace shz
 		// ------------------------------------------------------------
 		for (uint32 i = 0; i < cpu->GetMaterialSlotCount(); ++i)
 		{
-			MaterialAsset& mat = cpu->GetMaterialSlot(i);
+			Material& mat = cpu->GetMaterialSlot(i);
 
 			if (mat.GetTemplateName().empty())
 			{
@@ -301,7 +301,7 @@ namespace shz
 		ASSERT(m_pRenderer, "Renderer is null.");
 		ASSERT(m_pRenderScene, "RenderScene is null.");
 
-		StaticMeshAsset* cpu = m_Main.ImportedCpuMesh;
+		StaticMesh* cpu = m_Main.ImportedCpuMesh;
 		if (!cpu)
 			return false;
 
@@ -332,7 +332,7 @@ namespace shz
 		return insIt->second;
 	}
 
-	void MaterialEditor::syncCacheFromMaterialAsset(MaterialUiCache& cache, const MaterialAsset& mat, const MaterialTemplate& tmpl)
+	void MaterialEditor::syncCacheFromMaterialAsset(MaterialUiCache& cache, const Material& mat, const MaterialTemplate& tmpl)
 	{
 		cache.TemplateName = mat.GetTemplateName().empty() ? "DefaultLit" : mat.GetTemplateName();
 		cache.RenderPassName = mat.GetRenderPassName();
@@ -371,7 +371,7 @@ namespace shz
 			std::vector<uint8> bytes(sz);
 			std::memset(bytes.data(), 0, bytes.size());
 
-			if (const MaterialAsset::ValueOverride* ov = mat.FindValueOverride(desc.Name.c_str()))
+			if (const Material::ValueOverride* ov = mat.FindValueOverride(desc.Name.c_str()))
 			{
 				const size_t copySz = std::min<size_t>(ov->Data.size(), bytes.size());
 				if (copySz > 0)
@@ -396,7 +396,7 @@ namespace shz
 			std::string& outPath = cache.TexturePaths[res.Name];
 			outPath.clear();
 
-			const MaterialAsset::ResourceBinding* rb = mat.FindResourceBinding(res.Name.c_str());
+			const Material::ResourceBinding* rb = mat.FindResourceBinding(res.Name.c_str());
 			if (!rb)
 				continue;
 
@@ -407,7 +407,7 @@ namespace shz
 		}
 	}
 
-	void MaterialEditor::applyCacheToMaterialAsset(MaterialAsset& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl)
+	void MaterialEditor::applyCacheToMaterialAsset(Material& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl)
 	{
 		// Metadata
 		mat.SetTemplateName(cache.TemplateName.empty() ? "DefaultLit" : cache.TemplateName);
@@ -473,7 +473,7 @@ namespace shz
 			}
 
 			ASSERT(m_pAssetManager, "AssetManager is null.");
-			const AssetRef<TextureAsset> texRef = m_pAssetManager->RegisterAsset<TextureAsset>(p);
+			const AssetRef<Texture> texRef = m_pAssetManager->RegisterAsset<Texture>(p);
 
 			(void)mat.SetTextureAssetRef(
 				res.Name.c_str(),
@@ -531,13 +531,13 @@ namespace shz
 		}
 
 		// 1) CPU Mesh를 통째로 복사해서 "Save용 baked mesh"를 만든다.
-		StaticMeshAsset baked = *m_Main.ImportedCpuMesh;
+		StaticMesh baked = *m_Main.ImportedCpuMesh;
 
 		// 2) 현재 UI cache 상태를 baked mesh의 MaterialSlot에 굽는다.
 		const uint32 slotCount = baked.GetMaterialSlotCount();
 		for (uint32 slot = 0; slot < slotCount; ++slot)
 		{
-			MaterialAsset& mat = baked.GetMaterialSlot(slot);
+			Material& mat = baked.GetMaterialSlot(slot);
 
 			MaterialUiCache& cache = getOrCreateSlotCache(slot);
 
@@ -555,7 +555,7 @@ namespace shz
 		}
 
 		// 3) Exporter는 AssetObject*를 받으니 TypedAssetObject로 감싼다.
-		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshAsset>>(std::move(baked));
+		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMesh>>(std::move(baked));
 		return true;
 	}
 
@@ -592,10 +592,10 @@ namespace shz
 			return false;
 		}
 
-		StaticMeshAssetExporter exporter = {};
+		StaticMeshExporter exporter = {};
 
 		AssetMeta meta = {};
-		meta.TypeID = AssetTypeTraits<StaticMeshAsset>::TypeID;
+		meta.TypeID = AssetTypeTraits<StaticMesh>::TypeID;
 		meta.SourcePath = m_Main.Path.empty() ? m_MainMeshPath : m_Main.Path;
 
 		std::string err;
@@ -627,13 +627,13 @@ namespace shz
 		// AssetManager
 		m_pAssetManager = std::make_unique<AssetManager>();
 		ASSERT(m_pAssetManager, "AssetManager is null.");
-		m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetImporter{});
-		m_pAssetManager->RegisterImporter(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
-		m_pAssetManager->RegisterImporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetImporter{});
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
 		m_pAssetManager->RegisterImporter(AssetTypeTraits<AssimpAsset>::TypeID, AssimpImporter{});
 
-		m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetExporter{});
-		m_pAssetManager->RegisterExporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetExporter{});
+		m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshExporter{});
+		m_pAssetManager->RegisterExporter(AssetTypeTraits<Material>::TypeID, MaterialExporter{});
 
 		// Renderer + shader factory
 		m_pRenderer = std::make_unique<Renderer>();
@@ -693,7 +693,7 @@ namespace shz
 		// Load floor object
 		AssetRef<AssimpAsset> floorRef = m_pAssetManager->RegisterAsset<AssimpAsset>(m_FloorMeshPath);
 		AssetPtr<AssimpAsset> floorPtr = m_pAssetManager->LoadBlocking(floorRef);
-		StaticMeshAsset cpuFloorMesh;
+		StaticMesh cpuFloorMesh;
 		BuildStaticMeshAsset(
 			*floorPtr,
 			&cpuFloorMesh,
@@ -1010,7 +1010,7 @@ namespace shz
 			return;
 		}
 
-		StaticMeshAsset* cpu = m_Main.ImportedCpuMesh;
+		StaticMesh* cpu = m_Main.ImportedCpuMesh;
 		if (!cpu)
 		{
 			ImGui::TextDisabled("Load a StaticMeshAsset first.");
@@ -1037,7 +1037,7 @@ namespace shz
 		}
 
 		const uint32 slotIndex = (uint32)std::clamp<int32>(m_SelectedSlot, 0, (int32)slotCount - 1);
-		MaterialAsset& mat = cpu->GetMaterialSlot(slotIndex);
+		Material& mat = cpu->GetMaterialSlot(slotIndex);
 
 		// Template selection: DefaultLit / DefaultLitMasked + custom
 		MaterialUiCache& cache = getOrCreateSlotCache(slotIndex);

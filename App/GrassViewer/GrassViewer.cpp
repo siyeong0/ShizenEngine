@@ -86,9 +86,9 @@ namespace shz
 		m_pAssetManager = std::make_unique<AssetManager>();
 		{
 			ASSERT(m_pAssetManager, "AssetManager is null.");
-			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshAsset>::TypeID, StaticMeshAssetImporter{});
-			m_pAssetManager->RegisterImporter(AssetTypeTraits<TextureAsset>::TypeID, TextureImporter{});
-			m_pAssetManager->RegisterImporter(AssetTypeTraits<MaterialAsset>::TypeID, MaterialAssetImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
 		}
 
 		// Renderer + shader factory
@@ -340,7 +340,7 @@ namespace shz
 		inout.bCastShadow = bCastShadow;
 		inout.bAlphaMasked = bAlphaMasked;
 
-		inout.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshAsset>(inout.Path);
+		inout.MeshRef = m_pAssetManager->RegisterAsset<StaticMesh>(inout.Path);
 		inout.Mesh = m_pRenderer->CreateStaticMesh(inout.MeshRef);
 
 		RenderScene::RenderObject obj = {};

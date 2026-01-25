@@ -107,7 +107,7 @@ namespace shz
 		// NOTE:
 		// This assumes TextureAsset is (or can be) returned as AssetObject.
 		// If TextureAsset does not inherit AssetObject, wrap it in an AssetObject.
-		TextureAsset tex = {};
+		Texture tex = {};
 
 		std::vector<TextureMip>& mips = tex.GetMips();
 		mips.clear();
@@ -169,7 +169,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Return as AssetObject
 		// ------------------------------------------------------------
-		return std::make_unique<TypedAssetObject<TextureAsset>>(tex);
+		return std::make_unique<TypedAssetObject<Texture>>(tex);
 	}
 
 } // namespace shz

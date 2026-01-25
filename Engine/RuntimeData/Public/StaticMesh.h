@@ -4,11 +4,11 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
 {
-	class StaticMeshAsset final
+	class StaticMesh final
 	{
 	public:
 		struct Section final
@@ -22,12 +22,12 @@ namespace shz
 		};
 
 	public:
-		StaticMeshAsset() = default;
-		StaticMeshAsset(const StaticMeshAsset&) = default;
-		StaticMeshAsset(StaticMeshAsset&&) noexcept = default;
-		StaticMeshAsset& operator=(const StaticMeshAsset&) = default;
-		StaticMeshAsset& operator=(StaticMeshAsset&&) noexcept = default;
-		~StaticMeshAsset() = default;
+		StaticMesh() = default;
+		StaticMesh(const StaticMesh&) = default;
+		StaticMesh(StaticMesh&&) noexcept = default;
+		StaticMesh& operator=(const StaticMesh&) = default;
+		StaticMesh& operator=(StaticMesh&&) noexcept = default;
+		~StaticMesh() = default;
 
 		// ------------------------------------------------------------
 		// Geometry setters
@@ -54,15 +54,15 @@ namespace shz
 		// Materials (slots)
 		// ------------------------------------------------------------
 		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
-		void SetMaterialSlots(std::vector<MaterialAsset>&& materials) { m_MaterialSlots = std::move(materials); }
+		void SetMaterialSlots(std::vector<Material>&& materials) { m_MaterialSlots = std::move(materials); }
 
-		std::vector<MaterialAsset>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
-		const std::vector<MaterialAsset>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
+		std::vector<Material>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
+		const std::vector<Material>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		MaterialAsset& GetMaterialSlot(uint32 slot) noexcept;
-		const MaterialAsset& GetMaterialSlot(uint32 slot) const noexcept;
+		Material& GetMaterialSlot(uint32 slot) noexcept;
+		const Material& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
@@ -115,7 +115,7 @@ namespace shz
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-		std::vector<MaterialAsset> m_MaterialSlots;
+		std::vector<Material> m_MaterialSlots;
 
 		Box m_Bounds = {};
 	};

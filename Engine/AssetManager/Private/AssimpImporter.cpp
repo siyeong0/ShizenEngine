@@ -14,8 +14,8 @@
 #include <assimp/postprocess.h>
 
 #include "Engine/AssetManager/Public/AssetManager.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 
 namespace shz
 {
@@ -385,7 +385,7 @@ namespace shz
 		const aiMaterial* mat,
 		uint32 materialIndex,
 		const std::string& sceneFilePath,
-		MaterialAsset& outMat,
+		Material& outMat,
 		AssetManager* pAssetManager,
 		const AssimpImportSettings& s,
 		std::string* outError)
@@ -491,7 +491,7 @@ namespace shz
 				return;
 
 			// NOTE: RegisterAsset<TextureAsset>(path) 가 존재한다고 가정.
-			const AssetRef<TextureAsset> texRef = pAssetManager->RegisterAsset<TextureAsset>(texPath);
+			const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
 			if (!texRef)
 			{
 				PushErrorOnce(std::string("RegisterAsset<TextureAsset> failed. Var=") + shaderVar + " Path=" + texPath);
@@ -614,7 +614,7 @@ namespace shz
 	// ------------------------------------------------------------
 	bool BuildStaticMeshAsset(
 		const AssimpAsset& assimpAsset,
-		StaticMeshAsset* pOutMesh,
+		StaticMesh* pOutMesh,
 		const AssimpImportSettings& s,
 		std::string* outError,
 		AssetManager* pAssetManager)
@@ -653,7 +653,7 @@ namespace shz
 		// ------------------------------------------------------------
 		if (s.bImportMaterials)
 		{
-			std::vector<MaterialAsset> materials;
+			std::vector<Material> materials;
 			materials.resize(scene->mNumMaterials);
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
@@ -662,7 +662,7 @@ namespace shz
 				importOneMaterial(scene, mat, i, filePath, materials[i], pAssetManager, s, outError);
 			}
 
-			pOutMesh->SetMaterialSlots(static_cast<std::vector<MaterialAsset>&&>(materials));
+			pOutMesh->SetMaterialSlots(static_cast<std::vector<Material>&&>(materials));
 		}
 
 		// ------------------------------------------------------------
@@ -713,7 +713,7 @@ namespace shz
 		tangents.reserve(totalVertexCount);
 		texCoords.reserve(totalVertexCount);
 
-		std::vector<StaticMeshAsset::Section> sections;
+		std::vector<StaticMesh::Section> sections;
 		sections.reserve(s.bMergeMeshes ? scene->mNumMeshes : 1);
 
 		auto ImportMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global) -> bool
@@ -757,7 +757,7 @@ namespace shz
 					texCoords.push_back(float2(0.0f, 0.0f));
 			}
 
-			StaticMeshAsset::Section sec = {};
+			StaticMesh::Section sec = {};
 			sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
 			sec.MaterialSlot = mesh->mMaterialIndex;
 
@@ -836,7 +836,7 @@ namespace shz
 		pOutMesh->SetNormals(static_cast<std::vector<float3>&&>(normals));
 		pOutMesh->SetTangents(static_cast<std::vector<float3>&&>(tangents));
 		pOutMesh->SetTexCoords(static_cast<std::vector<float2>&&>(texCoords));
-		pOutMesh->SetSections(static_cast<std::vector<StaticMeshAsset::Section>&&>(sections));
+		pOutMesh->SetSections(static_cast<std::vector<StaticMesh::Section>&&>(sections));
 
 		pOutMesh->RecomputeBounds();
 

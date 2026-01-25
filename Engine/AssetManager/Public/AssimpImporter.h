@@ -8,7 +8,7 @@
 #include "Engine/AssetManager/Public/AssetObject.h"
 
 #include "Engine/AssetManager/Public/AssimpAsset.h"
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
 
 namespace shz
 {
@@ -29,7 +29,7 @@ namespace shz
 	// ------------------------------------------------------------
 	bool BuildStaticMeshAsset(
 		const AssimpAsset& assimpAsset,
-		StaticMeshAsset* pOutMesh,
+		StaticMesh* pOutMesh,
 		const AssimpImportSettings& settings,
 		std::string* outError = nullptr,
 		AssetManager* pAssetManager = nullptr);

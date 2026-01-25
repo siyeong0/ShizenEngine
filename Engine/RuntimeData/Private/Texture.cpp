@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 
 namespace shz
 {

@@ -4,7 +4,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
 {
@@ -37,7 +37,7 @@ namespace shz
 		return d;
 	}
 
-	std::unique_ptr<AssetObject> MaterialAssetImporter::operator()(
+	std::unique_ptr<AssetObject> MaterialImporter::operator()(
 		AssetManager& /*assetManager*/,
 		const AssetMeta& meta,
 		uint64* pOutResidentBytes,
@@ -69,7 +69,7 @@ namespace shz
 			return {};
 		}
 
-		MaterialAsset m;
+		Material m;
 		m.SetName(j.value("Name", ""));
 		m.SetTemplateName(j.value("TemplateName", ""));
 		m.SetRenderPassName(j.value("RenderPassName", ""));
@@ -131,7 +131,7 @@ namespace shz
 				}
 
 				if (!rname.empty() && texId)
-					m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<TextureAsset>(texId), stable);
+					m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<Texture>(texId), stable);
 
 				const bool hasS = rj.value("HasSamplerOverride", false);
 				if (hasS && rj.contains("SamplerOverrideDesc"))
@@ -140,6 +140,6 @@ namespace shz
 		}
 
 		*pOutResidentBytes = (uint64)m.GetName().size() + (uint64)m.GetTemplateName().size();
-		return std::make_unique<TypedAssetObject<MaterialAsset>>(static_cast<MaterialAsset&&>(m));
+		return std::make_unique<TypedAssetObject<Material>>(static_cast<Material&&>(m));
 	}
 }

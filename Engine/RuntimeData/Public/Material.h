@@ -6,7 +6,7 @@
 #include "Primitives/BasicTypes.h"
 
 #include "Engine/AssetManager/Public/AssetRef.hpp"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 
 #include "Engine/RHI/Interface/ISampler.h"
 #include "Engine/RHI/Interface/ITextureView.h"
@@ -18,7 +18,7 @@ namespace shz
 {
 	class MaterialInstance;
 
-	class MaterialAsset final
+	class Material final
 	{
 	public:
 		struct Options final : MaterialCommonOptions
@@ -41,7 +41,7 @@ namespace shz
 			std::string Name = {};
 			MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
 
-			AssetRef<TextureAsset> TextureRef = {};
+			AssetRef<Texture> TextureRef = {};
 
 			// Optional sampler override (serialized)
 			bool bHasSamplerOverride = false;
@@ -53,12 +53,12 @@ namespace shz
 		};
 
 	public:
-		MaterialAsset() = default;
-		MaterialAsset(const MaterialAsset&) = default;
-		MaterialAsset(MaterialAsset&&) noexcept = default;
-		MaterialAsset& operator=(const MaterialAsset&) = default;
-		MaterialAsset& operator=(MaterialAsset&&) noexcept = default;
-		~MaterialAsset() = default;
+		Material() = default;
+		Material(const Material&) = default;
+		Material(Material&&) noexcept = default;
+		Material& operator=(const Material&) = default;
+		Material& operator=(Material&&) noexcept = default;
+		~Material() = default;
 
 		// Metadata
 		void SetName(const std::string& name) { m_Name = name; }
@@ -127,7 +127,7 @@ namespace shz
 		bool SetTextureAssetRef(
 			const char* resourceName,
 			MATERIAL_RESOURCE_TYPE expectedType,
-			const AssetRef<TextureAsset>& textureRef,
+			const AssetRef<Texture>& textureRef,
 			uint64 stableId = 0);
 
 		bool SetSamplerOverride(

@@ -136,13 +136,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\MaterialAsset.h" />
+    <ClInclude Include="Public\Material.h" />
     <ClInclude Include="Public\MaterialExporter.h" />
     <ClInclude Include="Public\MaterialImporter.h" />
-    <ClInclude Include="Public\StaticMeshAsset.h" />
+    <ClInclude Include="Public\StaticMesh.h" />
     <ClInclude Include="Public\StaticMeshExporter.h" />
     <ClInclude Include="Public\StaticMeshImporter.h" />
-    <ClInclude Include="Public\TextureAsset.h" />
+    <ClInclude Include="Public\Texture.h" />
     <ClInclude Include="Public\TextureImporter.h" />
   </ItemGroup>
   <ItemGroup>
@@ -152,13 +152,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\MaterialAsset.cpp" />
+    <ClCompile Include="Private\Material.cpp" />
     <ClCompile Include="Private\MaterialExporter.cpp" />
     <ClCompile Include="Private\MaterialImporter.cpp" />
-    <ClCompile Include="Private\StaticMeshAsset.cpp" />
+    <ClCompile Include="Private\StaticMesh.cpp" />
     <ClCompile Include="Private\StaticMeshExporter.cpp" />
     <ClCompile Include="Private\StaticMeshImporter.cpp" />
-    <ClCompile Include="Private\TextureAsset.cpp" />
+    <ClCompile Include="Private\Texture.cpp" />
     <ClCompile Include="Private\TextureImporter.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

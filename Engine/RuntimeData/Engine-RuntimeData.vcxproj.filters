@@ -18,13 +18,13 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\TextureAsset.h">
+    <ClInclude Include="Public\Texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\StaticMeshAsset.h">
+    <ClInclude Include="Public\StaticMesh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\MaterialAsset.h">
+    <ClInclude Include="Public\Material.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\MaterialExporter.h">
@@ -47,13 +47,13 @@
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\MaterialAsset.cpp">
+    <ClCompile Include="Private\Material.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\StaticMeshAsset.cpp">
+    <ClCompile Include="Private\StaticMesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\TextureAsset.cpp">
+    <ClCompile Include="Private\Texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\MaterialExporter.cpp">

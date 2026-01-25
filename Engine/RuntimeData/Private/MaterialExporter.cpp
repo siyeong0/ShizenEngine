@@ -6,7 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
 {
@@ -40,7 +40,7 @@ namespace shz
 		};
 	}
 
-	bool MaterialAssetExporter::operator()(
+	bool MaterialExporter::operator()(
 		AssetManager& /*assetManager*/,
 		const AssetMeta& /*meta*/,
 		const AssetObject* pObject,
@@ -53,7 +53,7 @@ namespace shz
 			return false;
 		}
 
-		const MaterialAsset* mat = AssetObjectCast<MaterialAsset>(pObject);
+		const Material* mat = AssetObjectCast<Material>(pObject);
 		if (!mat)
 		{
 			setErr(pOutError, "MaterialAssetExporter: type mismatch (not MaterialAsset).");

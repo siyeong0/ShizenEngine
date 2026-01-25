@@ -95,7 +95,7 @@ namespace shz
 		m_pPipelineStateManager = std::make_unique<PipelineStateManager>();
 		m_pPipelineStateManager->Initialize(m_pDevice);
 
-		AssetRef<TextureAsset> ref = m_pAssetManager->RegisterAsset<TextureAsset>("C:/Dev/ShizenEngine/Assets/Error.jpg");
+		AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Error.jpg");
 		m_ErrorTexture = CreateTexture(ref);
 
 		m_pMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
@@ -948,7 +948,7 @@ namespace shz
 		wirePassOutputs();
 	}
 
-	const TextureRenderData& Renderer::CreateTexture(const AssetRef<TextureAsset>& assetRef, const std::string& name)
+	const TextureRenderData& Renderer::CreateTexture(const AssetRef<Texture>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const TextureRenderData* cached = m_TextureCache.Acquire(key);
@@ -957,7 +957,7 @@ namespace shz
 			return *cached;
 		}
 
-		AssetPtr<TextureAsset> assetPtr = m_pAssetManager->Acquire(assetRef);
+		AssetPtr<Texture> assetPtr = m_pAssetManager->Acquire(assetRef);
 		ASSERT(assetPtr, "Failed to acquire TextureAsset.");
 
 		if (name == "")
@@ -970,7 +970,7 @@ namespace shz
 		}
 	}
 
-	const TextureRenderData& Renderer::CreateTexture(const TextureAsset& asset, uint64 key, const std::string& name)
+	const TextureRenderData& Renderer::CreateTexture(const Texture& asset, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -1037,7 +1037,7 @@ namespace shz
 	}
 
 
-	const MaterialRenderData& Renderer::CreateMaterial(const AssetRef<MaterialAsset>& assetRef, const std::string& name)
+	const MaterialRenderData& Renderer::CreateMaterial(const AssetRef<Material>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const MaterialRenderData* cached = m_MaterialCache.Acquire(key);
@@ -1046,7 +1046,7 @@ namespace shz
 			return *cached;
 		}
 
-		AssetPtr<MaterialAsset> assetPtr = m_pAssetManager->Acquire(assetRef);
+		AssetPtr<Material> assetPtr = m_pAssetManager->Acquire(assetRef);
 		ASSERT(assetPtr, "Failed to acquire MaterialAsset.");
 
 		if (name == "")
@@ -1059,7 +1059,7 @@ namespace shz
 		}
 	}
 
-	const MaterialRenderData& Renderer::CreateMaterial(const MaterialAsset& asset, uint64 key, const std::string& name)
+	const MaterialRenderData& Renderer::CreateMaterial(const Material& asset, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -1334,7 +1334,7 @@ namespace shz
 		return *m_MaterialCache.Acquire(key);
 	}
 
-	const StaticMeshRenderData& Renderer::CreateStaticMesh(const AssetRef<StaticMeshAsset>& assetRef, const std::string& name)
+	const StaticMeshRenderData& Renderer::CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const StaticMeshRenderData* cached = m_StaticMeshCache.Acquire(key);
@@ -1343,7 +1343,7 @@ namespace shz
 			return *cached;
 		}
 
-		AssetPtr<StaticMeshAsset> assetPtr = m_pAssetManager->Acquire(assetRef);
+		AssetPtr<StaticMesh> assetPtr = m_pAssetManager->Acquire(assetRef);
 		ASSERT(assetPtr, "Failed to acquire StaticMeshAsset.");
 
 		if (name == "")
@@ -1356,7 +1356,7 @@ namespace shz
 		}
 	}
 
-	const StaticMeshRenderData& Renderer::CreateStaticMesh(const StaticMeshAsset& asset, uint64 key, const std::string& name)
+	const StaticMeshRenderData& Renderer::CreateStaticMesh(const StaticMesh& asset, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{

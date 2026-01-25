@@ -8,7 +8,7 @@ namespace shz
 {
 	class AssetManager;
 
-	class StaticMeshAssetExporter final
+	class StaticMeshExporter final
 	{
 	public:
 		bool operator()(

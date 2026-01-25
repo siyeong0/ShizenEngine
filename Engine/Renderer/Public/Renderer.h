@@ -23,7 +23,7 @@
 
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Material/Public/MaterialInstance.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
@@ -72,12 +72,12 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
-		const TextureRenderData& CreateTexture(const AssetRef<TextureAsset>& assetRef, const std::string& name = "");
-		const TextureRenderData& CreateTexture(const TextureAsset& asset, uint64 key = 0, const std::string& name = "");
-		const MaterialRenderData& CreateMaterial(const AssetRef<MaterialAsset>& assetRef, const std::string& name = "");
-		const MaterialRenderData& CreateMaterial(const MaterialAsset& asset, uint64 key = 0, const std::string& name = "");
-		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMeshAsset>& assetRef, const std::string& name = "");
-		const StaticMeshRenderData& CreateStaticMesh(const StaticMeshAsset& asset, uint64 key = 0, const std::string& name = "");
+		const TextureRenderData& CreateTexture(const AssetRef<Texture>& assetRef, const std::string& name = "");
+		const TextureRenderData& CreateTexture(const Texture& asset, uint64 key = 0, const std::string& name = "");
+		const MaterialRenderData& CreateMaterial(const AssetRef<Material>& assetRef, const std::string& name = "");
+		const MaterialRenderData& CreateMaterial(const Material& asset, uint64 key = 0, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMesh(const StaticMesh& asset, uint64 key = 0, const std::string& name = "");
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }

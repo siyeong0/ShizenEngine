@@ -8,7 +8,7 @@
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/AssetManager/Public/AssetRef.hpp"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 
 #include "Engine/RHI/Interface/IShader.h"
 #include "Engine/RHI/Interface/IPipelineState.h"
@@ -26,7 +26,7 @@ namespace shz
 	struct TextureBinding final
 	{
 		std::string Name = {};
-		std::optional<AssetRef<TextureAsset>> TextureRef = {};
+		std::optional<AssetRef<Texture>> TextureRef = {};
 		ISampler* pSamplerOverride = nullptr;
 	};
 
@@ -145,7 +145,7 @@ namespace shz
 		// --------------------------------------------------------------------
 		// Resources
 		// --------------------------------------------------------------------
-		bool SetTextureAsset(const char* textureName, const AssetRef<TextureAsset>& textureRef);
+		bool SetTextureAsset(const char* textureName, const AssetRef<Texture>& textureRef);
 		bool SetSamplerOverride(const char* textureName, ISampler* pSampler);
 
 		bool ClearTextureAsset(const char* textureName);

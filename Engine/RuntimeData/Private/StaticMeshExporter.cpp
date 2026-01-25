@@ -7,8 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/AssetManager/Public/AssetTypeTraits.h"
 
 namespace shz
@@ -39,7 +39,7 @@ namespace shz
 		};
 	}
 
-	bool StaticMeshAssetExporter::operator()(
+	bool StaticMeshExporter::operator()(
 		AssetManager& /*assetManager*/,
 		const AssetMeta& /*meta*/,
 		const AssetObject* pObject,
@@ -52,7 +52,7 @@ namespace shz
 			return false;
 		}
 
-		const StaticMeshAsset* mesh = AssetObjectCast<StaticMeshAsset>(pObject);
+		const StaticMesh* mesh = AssetObjectCast<StaticMesh>(pObject);
 		if (!mesh)
 		{
 			setErr(pOutError, "StaticMeshAssetExporter: type mismatch (not StaticMeshAsset).");
@@ -121,7 +121,7 @@ namespace shz
 
 		// Sections
 		j["Sections"] = json::array();
-		for (const StaticMeshAsset::Section& s : mesh->GetSections())
+		for (const StaticMesh::Section& s : mesh->GetSections())
 		{
 			j["Sections"].push_back(json{
 				{"FirstIndex", s.FirstIndex},
@@ -134,7 +134,7 @@ namespace shz
 
 		// Material slots (inline: 현재 포맷 유지)
 		j["MaterialSlots"] = json::array();
-		for (const MaterialAsset& m : mesh->GetMaterialSlots())
+		for (const Material& m : mesh->GetMaterialSlots())
 		{
 			json mj;
 			mj["Name"] = m.GetName();

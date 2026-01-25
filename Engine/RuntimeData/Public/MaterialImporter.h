@@ -9,7 +9,7 @@ namespace shz
 {
 	class AssetManager;
 
-	class MaterialAssetImporter final
+	class MaterialImporter final
 	{
 	public:
 		std::unique_ptr<AssetObject> operator()(

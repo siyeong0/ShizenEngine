@@ -16,11 +16,11 @@
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 
 #include "Engine/Material/Public/MaterialTemplate.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
 {
@@ -64,8 +64,8 @@ namespace shz
 			// ------------------------------------------------------------
 			// Source 1) Native mesh asset (shzmesh.json)
 			// ------------------------------------------------------------
-			AssetRef<StaticMeshAsset> MeshRef = {};
-			AssetPtr<StaticMeshAsset> MeshPtr = {};
+			AssetRef<StaticMesh> MeshRef = {};
+			AssetPtr<StaticMesh> MeshPtr = {};
 
 			// ------------------------------------------------------------
 			// Source 2) Imported mesh via Assimp (fbx/gltf/glb/...)
@@ -74,7 +74,7 @@ namespace shz
 			AssetPtr<AssimpAsset> AssimpPtr = {};
 
 			// CPU
-			StaticMeshAsset* ImportedCpuMesh = {}; // owns CPU mesh after BuildStaticMeshAsset()
+			StaticMesh* ImportedCpuMesh = {}; // owns CPU mesh after BuildStaticMeshAsset()
 
 			// GPU
 			StaticMeshRenderData MeshRD = {};
@@ -132,8 +132,8 @@ namespace shz
 		RenderScene::RenderObject* getMainRenderObjectOrNull();
 
 		MaterialUiCache& getOrCreateSlotCache(uint32 slotIndex);
-		void syncCacheFromMaterialAsset(MaterialUiCache& cache, const MaterialAsset& mat, const MaterialTemplate& tmpl);
-		void applyCacheToMaterialAsset(MaterialAsset& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl);
+		void syncCacheFromMaterialAsset(MaterialUiCache& cache, const Material& mat, const MaterialTemplate& tmpl);
+		void applyCacheToMaterialAsset(Material& mat, const MaterialUiCache& cache, const MaterialTemplate& tmpl);
 
 		bool rebuildMainSaveObjectFromScene(std::string* outError);
 		bool saveMainObject(const std::string& outPath, EAssetSaveFlags flags, std::string* outError);

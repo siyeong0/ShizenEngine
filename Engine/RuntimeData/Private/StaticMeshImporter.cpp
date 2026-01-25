@@ -8,9 +8,9 @@
 #include <nlohmann/json.hpp>
 
 #include "Engine/AssetManager/Public/AssetManager.h"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Texture.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 namespace shz
 {
@@ -65,7 +65,7 @@ namespace shz
 		return d;
 	}
 
-	std::unique_ptr<AssetObject> StaticMeshAssetImporter::operator()(
+	std::unique_ptr<AssetObject> StaticMeshImporter::operator()(
 		AssetManager& assetManager,
 		const AssetMeta& meta,
 		uint64* pOutResidentBytes,
@@ -112,7 +112,7 @@ namespace shz
 			return {};
 		}
 
-		StaticMeshAsset mesh;
+		StaticMesh mesh;
 
 		// Streams
 		const auto& streams = j.at("Streams");
@@ -160,10 +160,10 @@ namespace shz
 		// Sections
 		if (j.contains("Sections"))
 		{
-			std::vector<StaticMeshAsset::Section> secs;
+			std::vector<StaticMesh::Section> secs;
 			for (const auto& sj : j["Sections"])
 			{
-				StaticMeshAsset::Section s;
+				StaticMesh::Section s;
 				s.FirstIndex = sj.value("FirstIndex", 0u);
 				s.IndexCount = sj.value("IndexCount", 0u);
 				s.BaseVertex = sj.value("BaseVertex", 0u);
@@ -178,10 +178,10 @@ namespace shz
 		// Material slots (inline)
 		if (j.contains("MaterialSlots"))
 		{
-			std::vector<MaterialAsset> mats;
+			std::vector<Material> mats;
 			for (const auto& mj : j["MaterialSlots"])
 			{
-				MaterialAsset m;
+				Material m;
 				m.SetName(mj.value("Name", ""));
 				m.SetTemplateName(mj.value("TemplateName", ""));
 				m.SetRenderPassName(mj.value("RenderPassName", ""));
@@ -245,7 +245,7 @@ namespace shz
 
 						if (!rname.empty() && !sourcePath.empty())
 						{
-							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<TextureAsset>(sourcePath), stable);
+							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<Texture>(sourcePath), stable);
 						}
 
 						const bool hasS = rj.value("HasSamplerOverride", false);
@@ -284,6 +284,6 @@ namespace shz
 			*pOutResidentBytes = bytes;
 		}
 
-		return std::make_unique<TypedAssetObject<StaticMeshAsset>>(static_cast<StaticMeshAsset&&>(mesh));
+		return std::make_unique<TypedAssetObject<StaticMesh>>(static_cast<StaticMesh&&>(mesh));
 	}
 }

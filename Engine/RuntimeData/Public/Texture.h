@@ -14,10 +14,10 @@ namespace shz
 		std::vector<uint8> RGBA = {};
 	};
 
-	class TextureAsset final
+	class Texture final
 	{
 	public:
-		TextureAsset() = default;
+		Texture() = default;
 
 		// System memory data
 		std::vector<TextureMip>& GetMips() noexcept { return m_Mips; }

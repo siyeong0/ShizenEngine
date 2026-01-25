@@ -548,7 +548,7 @@ namespace shz
 	// Resources
 	// --------------------------------------------------------------------
 
-	bool MaterialInstance::SetTextureAsset(const char* textureName, const AssetRef<TextureAsset>& textureRef)
+	bool MaterialInstance::SetTextureAsset(const char* textureName, const AssetRef<Texture>& textureRef)
 	{
 		ASSERT(textureName && textureName[0] != '\0', "Invalid name.");
 		ASSERT(m_pTemplate, "Template is null.");

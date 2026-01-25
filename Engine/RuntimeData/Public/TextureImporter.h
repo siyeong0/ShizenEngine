@@ -4,7 +4,7 @@
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/AssetManager/Public/AssetObject.h"
-#include "Engine/RuntimeData/Public/TextureAsset.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 #include "Engine/AssetManager/Public/AssetMeta.h"
 #include "Engine/AssetManager/Public/AssetManager.h"
 

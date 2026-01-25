@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/RuntimeData/Public/StaticMeshAsset.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
 
 #include <limits>
 
@@ -8,7 +8,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Geometry setters
 	// ------------------------------------------------------------
-	void StaticMeshAsset::ReserveVertices(uint32 count)
+	void StaticMesh::ReserveVertices(uint32 count)
 	{
 		m_Positions.reserve(count);
 		m_Normals.reserve(count);
@@ -19,7 +19,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Indices
 	// ------------------------------------------------------------
-	void StaticMeshAsset::SetIndicesU32(std::vector<uint32>&& indices)
+	void StaticMesh::SetIndicesU32(std::vector<uint32>&& indices)
 	{
 		m_IndexType = VT_UINT32;
 		m_IndicesU32 = std::move(indices);
@@ -27,7 +27,7 @@ namespace shz
 		m_IndicesU16.clear();
 	}
 
-	void StaticMeshAsset::SetIndicesU16(std::vector<uint16>&& indices)
+	void StaticMesh::SetIndicesU16(std::vector<uint16>&& indices)
 	{
 		m_IndexType = VT_UINT16;
 		m_IndicesU16 = std::move(indices);
@@ -35,7 +35,7 @@ namespace shz
 		m_IndicesU32.clear();
 	}
 
-	const void* StaticMeshAsset::GetIndexData() const noexcept
+	const void* StaticMesh::GetIndexData() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -55,7 +55,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMeshAsset::GetIndexDataSizeBytes() const noexcept
+	uint32 StaticMesh::GetIndexDataSizeBytes() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -69,7 +69,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMeshAsset::GetIndexCount() const noexcept
+	uint32 StaticMesh::GetIndexCount() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -81,7 +81,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMeshAsset::GetIndexAt(uint32 i) const noexcept
+	uint32 StaticMesh::GetIndexAt(uint32 i) const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -96,13 +96,13 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-	MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) noexcept
+	Material& StaticMesh::GetMaterialSlot(uint32 slot) noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];
 	}
 
-	const MaterialAsset& StaticMeshAsset::GetMaterialSlot(uint32 slot) const noexcept
+	const Material& StaticMesh::GetMaterialSlot(uint32 slot) const noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];
@@ -111,7 +111,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Validation / policy
 	// ------------------------------------------------------------
-	bool StaticMeshAsset::IsValid() const noexcept
+	bool StaticMesh::IsValid() const noexcept
 	{
 		// Positions are required.
 		if (m_Positions.empty())
@@ -180,7 +180,7 @@ namespace shz
 		return true;
 	}
 
-	bool StaticMeshAsset::HasCPUData() const noexcept
+	bool StaticMesh::HasCPUData() const noexcept
 	{
 		if (m_Positions.empty())
 		{
@@ -198,7 +198,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Bounds
 	// ------------------------------------------------------------
-	void StaticMeshAsset::RecomputeBounds()
+	void StaticMesh::RecomputeBounds()
 	{
 		if (m_Positions.empty())
 		{
@@ -236,7 +236,7 @@ namespace shz
 		RecomputeSectionBounds();
 	}
 
-	void StaticMeshAsset::RecomputeSectionBounds()
+	void StaticMesh::RecomputeSectionBounds()
 	{
 		if (m_Sections.empty())
 		{
@@ -298,7 +298,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Memory
 	// ------------------------------------------------------------
-	void StaticMeshAsset::StripCPUData()
+	void StaticMesh::StripCPUData()
 	{
 		m_Positions.clear();
 		m_Normals.clear();
@@ -309,7 +309,7 @@ namespace shz
 		m_IndicesU16.clear();
 	}
 
-	void StaticMeshAsset::Clear()
+	void StaticMesh::Clear()
 	{
 		m_Positions.clear();
 		m_Normals.clear();

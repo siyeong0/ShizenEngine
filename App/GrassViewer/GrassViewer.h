@@ -46,7 +46,7 @@ namespace shz
 		{
 			std::string Path = {};
 
-			AssetRef<StaticMeshAsset> MeshRef = {};
+			AssetRef<StaticMesh> MeshRef = {};
 			StaticMeshRenderData      Mesh = {};
 
 			Handle<RenderScene::RenderObject> ObjectId = {};

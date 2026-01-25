@@ -8,7 +8,7 @@ namespace shz
 {
 	class AssetManager;
 
-	class MaterialAssetExporter final
+	class MaterialExporter final
 	{
 	public:
 		bool operator()(

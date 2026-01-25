@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/RuntimeData/Public/MaterialAsset.h"
+#include "Engine/RuntimeData/Public/Material.h"
 
 #include "Engine/Material/Public/MaterialInstance.h"
 
@@ -30,7 +30,7 @@ namespace shz
 	// ============================================================
 	// Lookups
 	// ============================================================
-	const MaterialAsset::ValueOverride* MaterialAsset::FindValueOverride(const char* name) const
+	const Material::ValueOverride* Material::FindValueOverride(const char* name) const
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -45,7 +45,7 @@ namespace shz
 		return nullptr;
 	}
 
-	MaterialAsset::ValueOverride* MaterialAsset::findValueOverrideMutable(const char* name)
+	Material::ValueOverride* Material::findValueOverrideMutable(const char* name)
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -60,7 +60,7 @@ namespace shz
 		return nullptr;
 	}
 
-	bool MaterialAsset::RemoveValueOverride(const char* name)
+	bool Material::RemoveValueOverride(const char* name)
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -76,7 +76,7 @@ namespace shz
 		return false;
 	}
 
-	const MaterialAsset::ResourceBinding* MaterialAsset::FindResourceBinding(const char* name) const
+	const Material::ResourceBinding* Material::FindResourceBinding(const char* name) const
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -91,7 +91,7 @@ namespace shz
 		return nullptr;
 	}
 
-	MaterialAsset::ResourceBinding* MaterialAsset::findResourceBindingMutable(const char* name)
+	Material::ResourceBinding* Material::findResourceBindingMutable(const char* name)
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -106,7 +106,7 @@ namespace shz
 		return nullptr;
 	}
 
-	bool MaterialAsset::RemoveResourceBinding(const char* name)
+	bool Material::RemoveResourceBinding(const char* name)
 	{
 		ASSERT(name && name[0] != '\0', "Invalid name string.");
 
@@ -125,72 +125,72 @@ namespace shz
 	// ============================================================
 	// Values
 	// ============================================================
-	bool MaterialAsset::SetFloat(const char* name, float v, uint64 stableId)
+	bool Material::SetFloat(const char* name, float v, uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT, &v, sizeof(v), stableId);
 	}
 
-	bool MaterialAsset::SetFloat2(const char* name, const float v[2], uint64 stableId)
+	bool Material::SetFloat2(const char* name, const float v[2], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT2, v, sizeof(float) * 2, stableId);
 	}
 
-	bool MaterialAsset::SetFloat3(const char* name, const float v[3], uint64 stableId)
+	bool Material::SetFloat3(const char* name, const float v[3], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT3, v, sizeof(float) * 3, stableId);
 	}
 
-	bool MaterialAsset::SetFloat4(const char* name, const float v[4], uint64 stableId)
+	bool Material::SetFloat4(const char* name, const float v[4], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT4, v, sizeof(float) * 4, stableId);
 	}
 
-	bool MaterialAsset::SetInt(const char* name, int32 v, uint64 stableId)
+	bool Material::SetInt(const char* name, int32 v, uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT, &v, sizeof(v), stableId);
 	}
 
-	bool MaterialAsset::SetInt2(const char* name, const int32 v[2], uint64 stableId)
+	bool Material::SetInt2(const char* name, const int32 v[2], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT2, v, sizeof(int32) * 2, stableId);
 	}
 
-	bool MaterialAsset::SetInt3(const char* name, const int32 v[3], uint64 stableId)
+	bool Material::SetInt3(const char* name, const int32 v[3], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT3, v, sizeof(int32) * 3, stableId);
 	}
 
-	bool MaterialAsset::SetInt4(const char* name, const int32 v[4], uint64 stableId)
+	bool Material::SetInt4(const char* name, const int32 v[4], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_INT4, v, sizeof(int32) * 4, stableId);
 	}
 
-	bool MaterialAsset::SetUint(const char* name, uint32 v, uint64 stableId)
+	bool Material::SetUint(const char* name, uint32 v, uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT, &v, sizeof(v), stableId);
 	}
 
-	bool MaterialAsset::SetUint2(const char* name, const uint32 v[2], uint64 stableId)
+	bool Material::SetUint2(const char* name, const uint32 v[2], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT2, v, sizeof(uint32) * 2, stableId);
 	}
 
-	bool MaterialAsset::SetUint3(const char* name, const uint32 v[3], uint64 stableId)
+	bool Material::SetUint3(const char* name, const uint32 v[3], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT3, v, sizeof(uint32) * 3, stableId);
 	}
 
-	bool MaterialAsset::SetUint4(const char* name, const uint32 v[4], uint64 stableId)
+	bool Material::SetUint4(const char* name, const uint32 v[4], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_UINT4, v, sizeof(uint32) * 4, stableId);
 	}
 
-	bool MaterialAsset::SetFloat4x4(const char* name, const float m16[16], uint64 stableId)
+	bool Material::SetFloat4x4(const char* name, const float m16[16], uint64 stableId)
 	{
 		return writeValueInternal(name, MATERIAL_VALUE_TYPE_FLOAT4X4, m16, sizeof(float) * 16, stableId);
 	}
 
-	bool MaterialAsset::SetRaw(
+	bool Material::SetRaw(
 		const char* name,
 		MATERIAL_VALUE_TYPE type,
 		const void* pData,
@@ -200,7 +200,7 @@ namespace shz
 		return writeValueInternal(name, type, pData, byteSize, stableId);
 	}
 
-	bool MaterialAsset::writeValueInternal(
+	bool Material::writeValueInternal(
 		const char* name,
 		MATERIAL_VALUE_TYPE type,
 		const void* pData,
@@ -232,10 +232,10 @@ namespace shz
 	// ============================================================
 	// Resources
 	// ============================================================
-	bool MaterialAsset::SetTextureAssetRef(
+	bool Material::SetTextureAssetRef(
 		const char* resourceName,
 		MATERIAL_RESOURCE_TYPE expectedType,
-		const AssetRef<TextureAsset>& textureRef,
+		const AssetRef<Texture>& textureRef,
 		uint64 stableId)
 	{
 		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
@@ -259,7 +259,7 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialAsset::SetSamplerOverride(
+	bool Material::SetSamplerOverride(
 		const char* resourceName,
 		const SamplerDesc& desc,
 		uint64 stableId)
@@ -284,7 +284,7 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialAsset::ClearSamplerOverride(const char* resourceName)
+	bool Material::ClearSamplerOverride(const char* resourceName)
 	{
 		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
 
@@ -301,7 +301,7 @@ namespace shz
 	// ============================================================
 	// Reset
 	// ============================================================
-	void MaterialAsset::Clear()
+	void Material::Clear()
 	{
 		m_Name.clear();
 		m_TemplateName.clear();
@@ -315,7 +315,7 @@ namespace shz
 	// ============================================================
 	// Apply to runtime instance
 	// ============================================================
-	bool MaterialAsset::ApplyToInstance(MaterialInstance* pInstance) const
+	bool Material::ApplyToInstance(MaterialInstance* pInstance) const
 	{
 		ASSERT(pInstance, "Material instance is null.");
 
