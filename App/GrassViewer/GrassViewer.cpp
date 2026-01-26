@@ -144,13 +144,13 @@ namespace shz
 
 		// Load terrain
 		{
-			/*const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-			const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";*/
+			const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+			const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
 
-			const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/HeightEXR.exr";
-			const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/Diffuse.png"; // TODO: exr rgba not works.
+			//const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/HeightEXR.exr";
+			//const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/Diffuse.png"; // TODO: exr rgba not works.
 
-			float scale = 0.1f;
+			float scale = 0.5f;
 
 			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
 			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
@@ -161,7 +161,7 @@ namespace shz
 			StaticMesh terrainMesh;
 			TerrainMeshBuilder meshBuilder;
 			TerrainMeshBuildSettings buildSettings = {};
-			buildSettings.YOffset = -100.0f;
+			buildSettings.YOffset = -10.0f;
 
 			Material tm("TerrainMaterial", "DefaultLit");
 			bool ok = false;

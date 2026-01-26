@@ -71,7 +71,7 @@ namespace shz
         float WorldSpacingX = 1.f;
         float WorldSpacingZ = 1.f;
 
-        float HeightScale = 10000.0f;
+        float HeightScale = 100.0f;
         float HeightOffset = 0.f;
 
         HEIGHT_FIELD_SAMPLE_FORMAT ForceSampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN;
