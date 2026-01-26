@@ -15,6 +15,32 @@ RWByteAddressBuffer g_Counter;
 
 static const uint kMaxInstances = 1u << 20; // 1,048,576
 
+// Heightmap (UNORM16)
+Texture2D<float> g_HeightMap;
+SamplerState g_LinearWrapSampler;
+
+static const float kHeightScale = 1000.0;
+static const float kHeightOffset = -10.0;
+
+static const float2 kTerrainOriginXZ = float2(0.0, 0.0); // heightfield (0,0) at world
+static const float2 kTerrainSizeXZ = float2(4096.0, 4096.0); // world meters covered by heightmap (X,Z)
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+float SampleWorldHeight(float2 worldXZ)
+{
+    // World -> UV
+    float2 uv = (worldXZ - kTerrainOriginXZ) / max(kTerrainSizeXZ, float2(1e-6, 1e-6));
+    uv = saturate(uv);
+
+    // Sample normalized (0..1)
+    float hN = g_HeightMap.SampleLevel(g_LinearWrapSampler, uv, 0.0);
+
+    // Decode to world height
+    return kHeightOffset + hN * kHeightScale;
+}
+
 // ------------------------------------------------------------
 // Chunk config
 // ------------------------------------------------------------
@@ -57,7 +83,6 @@ float rand01(uint seed)
 
 uint hash2i(int2 v, uint salt)
 {
-    // stable integer hash for chunk coords
     uint x = (uint) v.x;
     uint y = (uint) v.y;
     return (x * 73856093u) ^ (y * 19349663u) ^ salt;
@@ -71,74 +96,55 @@ uint hash2i(int2 v, uint salt)
 [numthreads(8, 8, 1)]
 void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 {
-    // Chunk grid coords in [-kChunkHalfExtent, +kChunkHalfExtent)
     int2 chunkGrid = int2((int) tid.x - kChunkHalfExtent, (int) tid.y - kChunkHalfExtent);
 
-    // Camera position in XZ
     float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
 
-    // Camera chunk coord (world-anchored)
     int2 camChunk = int2(floor(camXZ / kChunkSize));
     int2 worldChunk = camChunk + chunkGrid;
 
-    // Chunk origin is fixed on world grid: (..., -4, 0, 4, 8, ...)
     float2 chunkOriginXZ = float2(worldChunk) * kChunkSize;
 
-    // One seed per chunk (camera-independent)
     const uint chunkSeed = hash2i(worldChunk, 0xA53A9E37u);
 
-    // Generate multiple samples inside the chunk
     [loop]
     for (uint s = 0; s < kSamplesPerChunk; ++s)
     {
-        // Derive per-sample seed from chunkSeed + sample index
         uint seed = wang_hash(chunkSeed ^ (s * 0x9E3779B9u));
 
-        // Spawn probability per sample
         if (rand01(seed ^ 0x7777u) > kSpawnProb)
-        {
             continue;
-        }
 
-        // Jitter inside [0,1) then map to chunk
         float ux = rand01(seed ^ 0x1234u);
         float uz = rand01(seed ^ 0xBEEFu);
 
-        // Centered jitter: [-0.5, +0.5] scaled
         float jx = (ux - 0.5f) * kJitter;
         float jz = (uz - 0.5f) * kJitter;
 
         float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * kChunkSize;
         float2 posXZ = chunkOriginXZ + localXZ;
 
-        // Radius cull + outer fade (camera-dependent *visibility* only)
         float2 d = posXZ - camXZ;
         float dist2 = dot(d, d);
 
         if (dist2 > kSpawnRadius * kSpawnRadius)
-        {
             continue;
-        }
-
-        float dist = sqrt(dist2);
 
         float keepProb = 0.95;
         if (rand01(seed ^ 0x1357u) > keepProb)
-        {
             continue;
-        }
 
-        // Counter alloc
         uint idx;
         g_Counter.InterlockedAdd(0, 1, idx);
 
         if (idx >= kMaxInstances)
-        {
             return;
-        }
+
+        // --- HeightMap Àû¿ë ---
+        float y = SampleWorldHeight(posXZ);
 
         GrassInstance inst = (GrassInstance) 0;
-        inst.PosWS = float3(posXZ.x, 0.0f, posXZ.y); // TODO: terrain height
+        inst.PosWS = float3(posXZ.x, y, posXZ.y);
         inst.Yaw = rand01(seed ^ 0x9999u) * 6.2831853f;
         inst.Scale = lerp(kMinScale, kMaxScale, rand01(seed ^ 0x2222u)) * 0.04;
 

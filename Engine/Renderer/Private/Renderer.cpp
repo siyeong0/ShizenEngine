@@ -353,6 +353,8 @@ namespace shz
 		m_PassCtx.pObjectTableSBGrass = m_pObjectTableSBGrass.RawPtr();
 		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
 
+		m_PassCtx.HeightMap = scene.GetHeightMap();
+
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------

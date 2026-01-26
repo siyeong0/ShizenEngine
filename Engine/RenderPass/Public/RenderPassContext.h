@@ -82,6 +82,8 @@ namespace shz
 		ITextureView* pDepthDsv = nullptr;
 		ITextureView* pLightingSrv = nullptr;
 
+		TextureRenderData HeightMap = {};
+
 		// ------------------------------------------------------------
 		// Per-frame barrier list
 		// ------------------------------------------------------------
