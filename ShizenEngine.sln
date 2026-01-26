@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36811.4
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.35229.62
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
@@ -55,6 +55,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GBuffer.vsh = Shaders\GBuffer.vsh
 		Shaders\GBufferMasked.psh = Shaders\GBufferMasked.psh
 		Shaders\GBufferMasked.vsh = Shaders\GBufferMasked.vsh
+		Shaders\GrassBuildInstances.hlsl = Shaders\GrassBuildInstances.hlsl
+		Shaders\GrassForward.psh = Shaders\GrassForward.psh
+		Shaders\GrassForward.vsh = Shaders\GrassForward.vsh
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\Lighting.psh = Shaders\Lighting.psh
 		Shaders\Lighting.vsh = Shaders\Lighting.vsh
@@ -79,6 +82,38 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Image", "Engine\Image\Engine-Image.vcxproj", "{F72EDD8B-E50B-44A1-B439-F92B45DA940D}"
 EndProject
 Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		Platforms\Common\Platforms-Common.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{5bd3cd7e-f27f-43b2-8bca-b9ce3047b507}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{5bd3cd7e-f27f-43b2-8bca-b9ce3047b507}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{7f85a29a-8214-48e6-9531-db5a4d102df5}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{7f85a29a-8214-48e6-9531-db5a4d102df5}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{89183668-4d95-4e13-a935-958beaf15c71}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{89183668-4d95-4e13-a935-958beaf15c71}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{9064164c-970f-4494-88c6-4cb710c1d714}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{9064164c-970f-4494-88c6-4cb710c1d714}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{945ab006-8bd2-442f-822d-2b72abf5ed6c}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{945ab006-8bd2-442f-822d-2b72abf5ed6c}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{d00159aa-bdd4-46e5-9f2a-ee4574b45379}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{d00159aa-bdd4-46e5-9f2a-ee4574b45379}*SharedItemsImports = 4
+		Platforms\Common\Platforms-Common.vcxitems*{da67e797-8562-4a95-85d8-e51f465c292a}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{da67e797-8562-4a95-85d8-e51f465c292a}*SharedItemsImports = 4
+		Primitives\Primitives.vcxitems*{f62f584c-db47-468f-b345-c6bf71c41a19}*SharedItemsImports = 9
+		Platforms\Common\Platforms-Common.vcxitems*{fc7d24c2-8c02-446b-a485-3ef732dbd174}*SharedItemsImports = 9
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
@@ -275,37 +310,5 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {18FF0238-B1F0-41F5-B348-E7D538FEA02E}
-	EndGlobalSection
-	GlobalSection(SharedMSBuildProjectFiles) = preSolution
-		Platforms\Common\Platforms-Common.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{33e167c2-6555-4601-b556-df06e1328c1b}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{3e258117-8c7c-494f-9d61-1629a0f7400d}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{56281a9e-af63-4c08-acee-3e619e8ea440}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{59d7e47f-9aaf-4e70-9c3d-2195af7f7aef}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{5bd3cd7e-f27f-43b2-8bca-b9ce3047b507}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{5bd3cd7e-f27f-43b2-8bca-b9ce3047b507}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{7f85a29a-8214-48e6-9531-db5a4d102df5}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{7f85a29a-8214-48e6-9531-db5a4d102df5}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{89183668-4d95-4e13-a935-958beaf15c71}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{89183668-4d95-4e13-a935-958beaf15c71}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{9064164c-970f-4494-88c6-4cb710c1d714}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{9064164c-970f-4494-88c6-4cb710c1d714}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{945ab006-8bd2-442f-822d-2b72abf5ed6c}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{945ab006-8bd2-442f-822d-2b72abf5ed6c}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{b73c511f-83c2-4a94-8f45-c8bc3cd819b6}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{c901be66-8350-4df9-8576-50ce5f052836}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{d00159aa-bdd4-46e5-9f2a-ee4574b45379}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{d00159aa-bdd4-46e5-9f2a-ee4574b45379}*SharedItemsImports = 4
-		Platforms\Common\Platforms-Common.vcxitems*{da67e797-8562-4a95-85d8-e51f465c292a}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{da67e797-8562-4a95-85d8-e51f465c292a}*SharedItemsImports = 4
-		Primitives\Primitives.vcxitems*{f62f584c-db47-468f-b345-c6bf71c41a19}*SharedItemsImports = 9
-		Platforms\Common\Platforms-Common.vcxitems*{fc7d24c2-8c02-446b-a485-3ef732dbd174}*SharedItemsImports = 9
 	EndGlobalSection
 EndGlobal

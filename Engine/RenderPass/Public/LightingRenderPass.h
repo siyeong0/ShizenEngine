@@ -33,6 +33,7 @@ namespace shz
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
 	public:
 		ITextureView* GetLightingSRV() const noexcept { return m_pLightingSRV; }
+		ITextureView* GetLightingRTV() const noexcept { return m_pLightingRTV; }
 
 	private:
 		bool createTargets(RenderPassContext& ctx, uint32 width, uint32 height);

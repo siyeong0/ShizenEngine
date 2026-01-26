@@ -53,6 +53,28 @@ struct ObjectConstants
     float4x4 WorldInvTranspose; // Normal matrix
 };
 
+struct GrassInstance
+{
+    float3 PosWS;
+    float Yaw; // rad
+
+    float Scale; // uniform scale
+    float _pad1;
+    float _pad2;
+    uint Flags;
+};
+
+struct GrassConstants
+{
+    float4 BaseColorFactor;
+    float4 Tint;
+    
+    float AlphaCut;
+    float Ambient;
+    uint MaterialFlags;
+    uint _pad1;
+};
+
 // Must exist for C++ side too (Renderer.cpp includes this file under namespace hlsl)
 struct ObjectIndexConstants
 {

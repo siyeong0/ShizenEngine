@@ -156,6 +156,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\DrawPacket.h" />
     <ClInclude Include="Public\GBufferRenderPass.h" />
+    <ClInclude Include="Public\GrassRenderPass.h" />
     <ClInclude Include="Public\LightingRenderPass.h" />
     <ClInclude Include="Public\PostRenderPass.h" />
     <ClInclude Include="Public\RenderPassBase.h" />
@@ -170,6 +171,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\GBufferRenderPass.cpp" />
+    <ClCompile Include="Private\GrassRenderPass.cpp" />
     <ClCompile Include="Private\LightingRenderPass.cpp" />
     <ClCompile Include="Private\PostRenderPass.cpp" />
     <ClCompile Include="Private\ShadowRenderPass.cpp" />

@@ -26,8 +26,7 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 		ASSERT(ctx.pShaderSourceFactory, "Shader source factory is null.");
 		ASSERT(ctx.pShadowCB, "ShadowCB is null.");
-		ASSERT(ctx.pObjectTableSB, "ObjectTableSB is null.");
-		ASSERT(ctx.pObjectIndexVB, "ObjectIndexVB is null.");
+		ASSERT(ctx.pObjectTableSBShadow, "ObjectTableSB is null.");
 
 		m_Width = SHADOW_MAP_SIZE;
 		m_Height = SHADOW_MAP_SIZE;
@@ -322,7 +321,7 @@ namespace shz
 
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(ctx.pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+					var->Set(ctx.pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 				}
 			}
 		}

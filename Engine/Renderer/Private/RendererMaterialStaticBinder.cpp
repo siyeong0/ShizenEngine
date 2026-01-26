@@ -11,36 +11,29 @@ namespace shz
 		ASSERT(m_pObjectTableSRV, "Object table srv is not set.");
 		//ASSERT(m_pLinearWrapSampler, "Linear wrap sampler is not set.");
 
-		// FRAME_CONSTANTS is typically referenced in VS/PS.
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+		SHADER_TYPE supportedShaderTypes[] =
 		{
-			var->Set(m_pFrameCB);
-		}
+			SHADER_TYPE_VERTEX,
+			SHADER_TYPE_PIXEL,
+			SHADER_TYPE_COMPUTE,
+		};
 
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+		for (SHADER_TYPE type : supportedShaderTypes)
 		{
-			var->Set(m_pFrameCB);
-		}
+			if (auto* var = pPSO->GetStaticVariableByName(type, "FRAME_CONSTANTS"))
+			{
+				var->Set(m_pFrameCB);
+			}
 
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
-		{
-			var->Set(m_pDrawCB);
-		}
+			if (auto* var = pPSO->GetStaticVariableByName(type, "DRAW_CONSTANTS"))
+			{
+				var->Set(m_pDrawCB);
+			}
 
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "DRAW_CONSTANTS"))
-		{
-			var->Set(m_pDrawCB);
-		}
-
-		// Object indirection table (StructuredBuffer<ObjectConstants>).
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-		{
-			var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-		}
-
-		if (auto* var = pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_ObjectTable"))
-		{
-			var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			if (auto* var = pPSO->GetStaticVariableByName(type, "g_ObjectTable"))
+			{
+				var->Set(m_pObjectTableSRV, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 
 		return true;

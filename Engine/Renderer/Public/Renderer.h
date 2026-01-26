@@ -124,13 +124,16 @@ namespace shz
 
 		TextureRenderData m_ErrorTexture;
 
-		std::unique_ptr<RendererMaterialStaticBinder> m_pMaterialStaticBinder;
+		std::unique_ptr<RendererMaterialStaticBinder> m_pGBufferMaterialStaticBinder;
+		std::unique_ptr<RendererMaterialStaticBinder> m_pGrassMaterialStaticBinder;
+		std::unique_ptr<RendererMaterialStaticBinder> m_pShadowMaterialStaticBinder;
 
 		RefCntAutoPtr<IBuffer> m_pFrameCB;
 		RefCntAutoPtr<IBuffer> m_pDrawCB;
 		RefCntAutoPtr<IBuffer> m_pShadowCB;
 
-		RefCntAutoPtr<IBuffer> m_pObjectTableSB;
+		RefCntAutoPtr<IBuffer> m_pObjectTableSBGBuffer;
+		RefCntAutoPtr<IBuffer> m_pObjectTableSBGrass;
 		RefCntAutoPtr<IBuffer> m_pObjectTableSBShadow;
 		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
 

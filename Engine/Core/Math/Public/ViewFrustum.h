@@ -83,7 +83,6 @@ namespace shz
 		return !(a == b);
 	}
 
-	// For OpenGL, near clip plane is at -1 (NDC). For D3D/VK, near is 0.
 	// Returned normals are NOT normalized.
 	inline void ExtractViewFrustumPlanesFromMatrix(const Matrix4x4& matrix, ViewFrustum& frustum)
 	{

@@ -34,6 +34,7 @@ namespace shz
 	public:
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_pGBufferSRV[index]; }
 		ITextureView* GetDepthSRV() const noexcept { return m_pDepthSRV; }
+		ITextureView* GetDepthDSV() const noexcept { return m_pDepthDSV; }
 
 	private:
 		bool createTargets(RenderPassContext& ctx, uint32 width, uint32 height);

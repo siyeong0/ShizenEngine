@@ -31,7 +31,9 @@ namespace shz
 		uint32 CBIndex = 0;
 		std::vector<TextureRenderData> BoundTextures = {};
 
-		RefCntAutoPtr<IShaderResourceBinding>  ShadowSRB = {};
+		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
+
+		std::string RenderPassName = {};
 	};
 
 	struct StaticMeshRenderData final

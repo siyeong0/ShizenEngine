@@ -201,66 +201,66 @@ namespace shz
 				float3(0.0f, 0.0f, 0.0f),
 				float3(scale, scale, scale));
 			terrainObj.bCastShadow = true;
-			const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
+			// const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
 		}
 
 		// Grass grid
-		const char* kGrassPaths[] =
-		{
-			"C:/Dev/ShizenEngine/Assets/Exported/Grass01.shzmesh.json",
-			// "C:/Dev/ShizenEngine/Assets/Exported/Grass02.shzmesh.json",
-		};
+		//const char* kGrassPaths[] =
+		//{
+		//	"C:/Dev/ShizenEngine/Assets/Exported/Grass01.shzmesh.json",
+		//	// "C:/Dev/ShizenEngine/Assets/Exported/Grass02.shzmesh.json",
+		//};
 
-#ifdef SHZ_DEBUG
-		const int32 countX = 50;
-		const int32 countZ = 50;
-		const float spacing = 3.5f;
-		const float3 origin = { -5.0f, 0.1f, 2.0f };
-#else
-		const int32 countX = 200;
-		const int32 countZ = 200;
-		const float spacing = 0.35f;
-		const float3 origin = { -10.0f, 0.1f, -10.0f };
-#endif
-
-		m_Grasses.clear();
-		m_Grasses.reserve((size_t)countX * (size_t)countZ);
-
-		int32 assetPick = 0;
-
-		for (int32 z = 0; z < countZ; ++z)
-		{
-			for (int32 x = 0; x < countX; ++x)
-			{
-				LoadedStaticMesh g = {};
-
-				const char* p = kGrassPaths[assetPick];
-				assetPick = (assetPick + 1) % (int32)std::size(kGrassPaths);
-
-				const float3 pos =
-				{
-					origin.x + (float)x * spacing,
-					origin.y,
-					origin.z + (float)z * spacing
-				};
-
-				const float yaw = (float)((x * 131 + z * 911) % 360) * (PI / 180.0f);
-				const float3 rot = { 0.0f, yaw, 0.0f };
-				const float3 scl = { 0.01f, 0.01f, 0.01f };
-
-				const bool ok = loadStaticMeshObject(
-					g,
-					p,
-					pos,
-					rot,
-					scl,
-					true,
-					true);
-
-				ASSERT(ok, "Failed to load grass object.");
-				m_Grasses.push_back(std::move(g));
-			}
-		}
+//#ifdef SHZ_DEBUG
+//		const int32 countX = 50;
+//		const int32 countZ = 50;
+//		const float spacing = 3.5f;
+//		const float3 origin = { -5.0f, 0.1f, 2.0f };
+//#else
+//		const int32 countX = 200;
+//		const int32 countZ = 200;
+//		const float spacing = 0.35f;
+//		const float3 origin = { -10.0f, 0.1f, -10.0f };
+//#endif
+//
+//		m_Grasses.clear();
+//		m_Grasses.reserve((size_t)countX * (size_t)countZ);
+//
+//		int32 assetPick = 0;
+//
+//		for (int32 z = 0; z < countZ; ++z)
+//		{
+//			for (int32 x = 0; x < countX; ++x)
+//			{
+//				LoadedStaticMesh g = {};
+//
+//				const char* p = kGrassPaths[assetPick];
+//				assetPick = (assetPick + 1) % (int32)std::size(kGrassPaths);
+//
+//				const float3 pos =
+//				{
+//					origin.x + (float)x * spacing,
+//					origin.y,
+//					origin.z + (float)z * spacing
+//				};
+//
+//				const float yaw = (float)((x * 131 + z * 911) % 360) * (PI / 180.0f);
+//				const float3 rot = { 0.0f, yaw, 0.0f };
+//				const float3 scl = { 0.01f, 0.01f, 0.01f };
+//
+//				const bool ok = loadStaticMeshObject(
+//					g,
+//					p,
+//					pos,
+//					rot,
+//					scl,
+//					true,
+//					true);
+//
+//				ASSERT(ok, "Failed to load grass object.");
+//				m_Grasses.push_back(std::move(g));
+//			}
+//		}
 
 		// Fill first view immediately
 		updatePrimaryView(m_ViewFamily, m_Viewport, m_Camera);

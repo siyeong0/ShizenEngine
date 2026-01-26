@@ -111,7 +111,7 @@ namespace shz
 		// on the render target and considered back-facing if they are clockwise.
 		// If this parameter is false, the opposite is true.
 		// Default value: false.
-		bool      FrontCounterClockwise = false;
+		bool      FrontCounterClockwise = true;
 
 		// Enable clipping against near and far clip planes.
 

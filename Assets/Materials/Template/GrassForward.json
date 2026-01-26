@@ -1,0 +1,22 @@
+{
+    "pipeline_type": 1,
+    "shader_stages": [
+        {
+            "compile_flags": 8,
+            "debug_name": "GrassForward VS",
+            "entry": "main",
+            "file": "GrassForward.vsh",
+            "type": "VS",
+            "use_combined_texture_samplers": false
+        },
+        {
+            "compile_flags": 8,
+            "debug_name": "GrassForward PS",
+            "entry": "main",
+            "file": "GrassForward.psh",
+            "type": "PS",
+            "use_combined_texture_samplers": false
+        }
+    ],
+    "version": 1
+}

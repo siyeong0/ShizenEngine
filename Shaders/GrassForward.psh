@@ -1,0 +1,48 @@
+#include "HLSL_Structures.hlsli"
+
+cbuffer FRAME_CONSTANTS
+{
+    FrameConstants g_FrameCB;
+};
+
+Texture2D<float4> g_BaseColorTex;
+SamplerState g_LinearWrapSampler;
+
+struct PSInput
+{
+    float4 Pos : SV_Position;
+    float3 PosWS : TEXCOORD0;
+    float3 NormalWS : TEXCOORD1;
+    float2 UV : TEXCOORD2;
+};
+
+cbuffer GRASS_CONSTANTS
+{
+    GrassConstants g_GrassCB;
+};
+
+float4 main(PSInput IN) : SV_TARGET0
+{
+    float4 baseColor = g_GrassCB.BaseColorFactor;
+    if ((g_GrassCB.MaterialFlags & MAT_HAS_BASECOLOR) != 0)
+    {
+        baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, IN.UV);
+    }
+    
+    // alpha cut
+    if (g_GrassCB.AlphaCut > 0.0 && baseColor.a < g_GrassCB.AlphaCut)
+    {
+        discard;
+    }
+
+    float3 N = normalize(IN.NormalWS);
+    float3 L = normalize(-g_FrameCB.LightDirWS);
+
+    float ndl = dot(N, L);
+    ndl = saturate(ndl);
+
+    float3 ambient = baseColor.rgb * g_GrassCB.Ambient;
+    float3 diffuse = baseColor.rgb * (ndl * g_FrameCB.LightIntensity) * g_FrameCB.LightColor;
+    
+    return float4(ambient + diffuse, 1.0);
+}

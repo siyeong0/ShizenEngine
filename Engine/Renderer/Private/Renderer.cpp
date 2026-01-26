@@ -16,6 +16,7 @@
 #include "Engine/RenderPass/Public/GBufferRenderPass.h"
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
 #include "Engine/RenderPass/Public/PostRenderPass.h"
+#include "Engine/RenderPass/Public/GrassRenderPass.h"
 
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
@@ -45,43 +46,44 @@ namespace shz
 		// Build fixed templates + prepare cache map
 		{
 			auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
-				{
-					MaterialTemplateCreateInfo tci = {};
-					tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-					tci.TemplateName = name;
+			{
+				MaterialTemplateCreateInfo tci = {};
+				tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
+				tci.TemplateName = name;
 
-					tci.ShaderStages.clear();
-					tci.ShaderStages.reserve(2);
+				tci.ShaderStages.clear();
+				tci.ShaderStages.reserve(2);
 
-					MaterialShaderStageDesc sVS = {};
-					sVS.ShaderType = SHADER_TYPE_VERTEX;
-					sVS.DebugName = "VS";
-					sVS.FilePath = vs;
-					sVS.EntryPoint = "main";
-					sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-					sVS.UseCombinedTextureSamplers = false;
+				MaterialShaderStageDesc sVS = {};
+				sVS.ShaderType = SHADER_TYPE_VERTEX;
+				sVS.DebugName = "VS";
+				sVS.FilePath = vs;
+				sVS.EntryPoint = "main";
+				sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sVS.UseCombinedTextureSamplers = false;
 
-					MaterialShaderStageDesc sPS = {};
-					sPS.ShaderType = SHADER_TYPE_PIXEL;
-					sPS.DebugName = "PS";
-					sPS.FilePath = ps;
-					sPS.EntryPoint = "main";
-					sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-					sPS.UseCombinedTextureSamplers = false;
+				MaterialShaderStageDesc sPS = {};
+				sPS.ShaderType = SHADER_TYPE_PIXEL;
+				sPS.DebugName = "PS";
+				sPS.FilePath = ps;
+				sPS.EntryPoint = "main";
+				sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sPS.UseCombinedTextureSamplers = false;
 
-					tci.ShaderStages.push_back(sVS);
-					tci.ShaderStages.push_back(sPS);
+				tci.ShaderStages.push_back(sVS);
+				tci.ShaderStages.push_back(sPS);
 
-					return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
-				};
+				return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
+			};
 
 			MaterialTemplate gbufferTemplate;
 			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
 
 			MaterialTemplate gbufferMaskedTemplate;
 			const bool ok1 = makeTemplate(gbufferMaskedTemplate, "DefaultLitMasked", "GBufferMasked.vsh", "GBufferMasked.psh");
+
 			ASSERT(ok0 && ok1, "Build initial material templates failed.");
 
 			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
@@ -100,7 +102,9 @@ namespace shz
 		AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Error.jpg");
 		m_ErrorTexture = CreateTexture(ref);
 
-		m_pMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
+		m_pGBufferMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
+		m_pGrassMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
+		m_pShadowMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 
 		// Create shared buffers
 		{
@@ -153,13 +157,27 @@ namespace shz
 				dev->CreateBuffer(desc, nullptr, &newBuf);
 				ASSERT(newBuf, "Object table create failed.");
 
-				m_pObjectTableSB = newBuf;
-				m_PassCtx.pObjectTableSB = m_pObjectTableSB.RawPtr();
+				m_pObjectTableSBGBuffer = newBuf;
+			}
 
-				if (m_pMaterialStaticBinder)
-				{
-					m_pMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
-				}
+			{
+				IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+				ASSERT(dev, "Device is null.");
+
+				BufferDesc desc = {};
+				desc.Name = "ObjectTableSB";
+				desc.Usage = USAGE_DYNAMIC;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+				desc.Mode = BUFFER_MODE_STRUCTURED;
+				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+
+				RefCntAutoPtr<IBuffer> newBuf;
+				dev->CreateBuffer(desc, nullptr, &newBuf);
+				ASSERT(newBuf, "Object table create failed.");
+
+				m_pObjectTableSBGrass = newBuf;
 			}
 
 			{
@@ -180,7 +198,6 @@ namespace shz
 				ASSERT(newBuf, "Object table create failed.");
 
 				m_pObjectTableSBShadow = newBuf;
-				m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
 			}
 		}
 
@@ -198,9 +215,17 @@ namespace shz
 			ASSERT(m_EnvBrdfTex, "Env brdf load failed.");
 		}
 
-		m_pMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
-		m_pMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
-		m_pMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+		m_pGBufferMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
+		m_pGBufferMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
+		m_pGBufferMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBGBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+
+		m_pGrassMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
+		m_pGrassMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
+		m_pGrassMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBGrass->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+
+		m_pShadowMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
+		m_pShadowMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
+		m_pShadowMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 
 		m_PassCtx = {};
 		m_PassCtx.pDevice = m_CreateInfo.pDevice.RawPtr();
@@ -209,12 +234,16 @@ namespace shz
 		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
 		m_PassCtx.pAssetManager = m_pAssetManager;
 		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
-		m_PassCtx.pMaterialStaticBinder = m_pMaterialStaticBinder.get();
+
+		m_PassCtx.pGBufferMaterialStaticBinder = m_pGBufferMaterialStaticBinder.get();
+		m_PassCtx.pGrassMaterialStaticBinder = m_pGrassMaterialStaticBinder.get();
+		m_PassCtx.pShadowMaterialStaticBinder = m_pShadowMaterialStaticBinder.get();
 
 		m_PassCtx.pFrameCB = m_pFrameCB.RawPtr();
 		m_PassCtx.pDrawCB = m_pDrawCB.RawPtr();
 		m_PassCtx.pShadowCB = m_pShadowCB.RawPtr();
-		m_PassCtx.pObjectTableSB = m_pObjectTableSB.RawPtr();
+		m_PassCtx.pObjectTableSBGBuffer = m_pObjectTableSBGBuffer.RawPtr();
+		m_PassCtx.pObjectTableSBGrass = m_pObjectTableSBGrass.RawPtr();
 		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
 		m_PassCtx.pObjectIndexVB = m_pObjectIndexVB.RawPtr();
 
@@ -233,7 +262,18 @@ namespace shz
 			addPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
 			addPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
 			addPass(std::make_unique<LightingRenderPass>(m_PassCtx));
+
+			wirePassOutputs(); // Depth DSV
+			ASSERT(m_PassCtx.pDepthDsv, "GBuffer depth DSV must exist before Grass pass.");
+
+			addPass(std::make_unique<GrassRenderPass>(m_PassCtx));
 			addPass(std::make_unique<PostRenderPass>(m_PassCtx));
+
+			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassPatch.shzmesh.json");
+			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
+			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load terrain height field.");
+			StaticMeshRenderData grassRenderData = CreateStaticMesh(*grassPtr);
+			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, grassRenderData);
 		}
 
 		wirePassOutputs();
@@ -255,7 +295,8 @@ namespace shz
 		m_EnvBrdfTex.Release();
 
 		m_pObjectIndexVB.Release();
-		m_pObjectTableSB.Release();
+		m_pObjectTableSBGBuffer.Release();
+		m_pObjectTableSBGrass.Release();
 		m_pObjectTableSBShadow.Release();
 
 		m_pShadowCB.Release();
@@ -265,7 +306,9 @@ namespace shz
 		m_StaticMeshCache.Clear();
 		m_MaterialCache.Clear();
 
-		m_pMaterialStaticBinder.reset();
+		m_pGBufferMaterialStaticBinder.reset();
+		m_pGrassMaterialStaticBinder.reset();
+		m_pShadowMaterialStaticBinder.reset();
 
 		m_pShaderSourceFactory.Release();
 		m_pAssetManager = nullptr;
@@ -292,18 +335,22 @@ namespace shz
 	{
 		ASSERT(m_PassCtx.pImmediateContext, "Context is invalid.");
 		ASSERT(!viewFamily.Views.empty(), "No view.");
-		ASSERT(m_PassCtx.pMaterialStaticBinder, "MaterialStaticBinder is null.");
+		ASSERT(m_PassCtx.pGBufferMaterialStaticBinder, "GBuffer MaterialStaticBinder is null.");
+		ASSERT(m_PassCtx.pGrassMaterialStaticBinder, "Grass MaterialStaticBinder is null.");
+		ASSERT(m_PassCtx.pShadowMaterialStaticBinder, "Shadow MaterialStaticBinder is null.");
 
 		IDeviceContext* ctx = m_PassCtx.pImmediateContext;
 		m_PassCtx.ResetFrame();
 
 		// Ensure SBs exist
-		ASSERT(m_pObjectTableSB, "ObjectTableSB (GBuffer) is null.");
-		ASSERT(m_pObjectTableSBShadow, "ObjectTableSBShadow is null.");
+		ASSERT(m_pObjectTableSBGBuffer, "ObjectTableSB (GBuffer) is null.");
+		ASSERT(m_pObjectTableSBGrass, "ObjectTableSB (Grass) is null.");
+		ASSERT(m_pObjectTableSBShadow, "ObjectTableSB (Shadow) is null.");
 		ASSERT(m_PassCtx.pDrawCB, "DrawCB is null.");
 
 		// Wire SB pointers
-		m_PassCtx.pObjectTableSB = m_pObjectTableSB.RawPtr();
+		m_PassCtx.pObjectTableSBGBuffer = m_pObjectTableSBGBuffer.RawPtr();
+		m_PassCtx.pObjectTableSBGrass = m_pObjectTableSBGrass.RawPtr();
 		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
 
 		const View& view = viewFamily.Views[0];
@@ -434,7 +481,8 @@ namespace shz
 		m_PassCtx.PushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		m_PassCtx.PushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		m_PassCtx.PushBarrier(m_pObjectTableSB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_pObjectTableSBGBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(m_pObjectTableSBGrass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		m_PassCtx.PushBarrier(m_pObjectTableSBShadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
 		m_PassCtx.PushBarrier(m_PassCtx.pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -455,28 +503,28 @@ namespace shz
 		appliedRD.reserve(1024);
 
 		auto applyMaterialIfNeeded = [&](MaterialRenderData& rd)
+		{
+			if (appliedRD.find(&rd) != appliedRD.end())
 			{
-				if (appliedRD.find(&rd) != appliedRD.end())
-				{
-					return;
-				}
+				return;
+			}
 
-				appliedRD.insert(&rd);
+			appliedRD.insert(&rd);
 
-				// Dynamic MaterialConstants 포함한 SRB 업데이트를 여기서 보장
-				// rd->Apply(m_PassCtx.pCache, ctx); //TODO: Apply?
+			// Dynamic MaterialConstants 포함한 SRB 업데이트를 여기서 보장
+			// rd->Apply(m_PassCtx.pCache, ctx); //TODO: Apply?
 
-				// Barriers: mat CB / bound textures
-				if (rd.ConstantBuffer)
-				{
-					m_PassCtx.PushBarrier(rd.ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-				}
+			// Barriers: mat CB / bound textures
+			if (rd.ConstantBuffer)
+			{
+				m_PassCtx.PushBarrier(rd.ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+			}
 
-				for (auto tex : rd.BoundTextures)
-				{
-					m_PassCtx.PushBarrier(tex.Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-				}
-			};
+			for (auto tex : rd.BoundTextures)
+			{
+				m_PassCtx.PushBarrier(tex.Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+			}
+		};
 
 		// Mesh VB/IB barriers + material apply (Main)
 		for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
@@ -521,17 +569,27 @@ namespace shz
 			ctx->TransitionResourceStates(static_cast<uint32>(m_PassCtx.PreBarriers.size()), m_PassCtx.PreBarriers.data());
 		}
 
-		// ============================================================
-		//  Build GBuffer packets + pack ObjectTableSB (2-pass batching)
-		// ============================================================
-		{
-			std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
-			batches.reserve(m_PassCtx.VisibleObjectIndexMain.size() * 4);
 
-			// -------- Pass 1: count instances per batch
+		auto buildPassPacketsAndObjectTable = [](
+			IDeviceContext* ctx,
+			const std::vector<uint32>& visibleObjectIndices,
+			std::vector<RenderScene::RenderObject>& objectsMutable,
+			const std::string passName,
+			IBuffer* pObjectTableSB) -> std::vector<DrawPacket>
+		{
+			ASSERT(ctx, "Context is null.");
+			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+			ASSERT(!passName.empty(), "PassName is empty.");
+
+			std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
+			batches.reserve(visibleObjectIndices.size() * 4);
+
+			// -------------------------
+			// Pass 1: count instances
+			// -------------------------
 			uint32 totalInstances = 0;
 
-			for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
+			for (uint32 objectIndex : visibleObjectIndices)
 			{
 				RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 
@@ -540,10 +598,18 @@ namespace shz
 				ASSERT(vb && ib, "Mesh buffers are invalid.");
 
 				const VALUE_TYPE indexType = obj.Mesh.IndexType;
+
 				for (auto& section : obj.Mesh.Sections)
 				{
 					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
+
 					const MaterialRenderData& rd = section.Material;
+
+					if (rd.RenderPassName != passName)
+					{
+						continue;
+					}
+
 					ASSERT(rd.PSO && rd.SRB, "Material render data is invalid.");
 
 					DrawPacketKey key = {};
@@ -565,7 +631,7 @@ namespace shz
 						bi.Packet.IndexBuffer = ib;
 						bi.Packet.PSO = key.PSO;
 						bi.Packet.SRB = key.SRB;
-						bi.Packet.ObjectIndex = 0; // instance table path
+						bi.Packet.ObjectIndex = 0; // SB instance table path
 
 						bi.Packet.DrawAttribs = {};
 						bi.Packet.DrawAttribs.NumIndices = key.NumIndices;
@@ -577,7 +643,7 @@ namespace shz
 						bi.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
 						auto [newIt, ok] = batches.emplace(key, bi);
-						ASSERT(ok, "Failed to emplace GBuffer batch.");
+						ASSERT(ok, "Failed to emplace batch.");
 						it = newIt;
 					}
 
@@ -586,9 +652,11 @@ namespace shz
 				}
 			}
 
-			ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity (GBuffer).");
+			ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity for pass: %s", passName.c_str());
 
-			// -------- Prefix sum: assign FirstInstance per batch
+			// -------------------------
+			// Prefix sum
+			// -------------------------
 			{
 				uint32 cursor = 0;
 				for (auto& kv : batches)
@@ -600,12 +668,15 @@ namespace shz
 				}
 			}
 
-			// -------- Pass 2: fill SB at the correct contiguous ranges
+			// -------------------------
+			// Pass 2: fill object table
+			// -------------------------
+			if (totalInstances > 0)
 			{
-				MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
 				hlsl::ObjectConstants* dst = map;
 
-				for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
+				for (uint32 objectIndex : visibleObjectIndices)
 				{
 					const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 
@@ -616,6 +687,11 @@ namespace shz
 					for (auto& section : obj.Mesh.Sections)
 					{
 						const MaterialRenderData& rd = section.Material;
+
+						if (rd.RenderPassName != passName)
+						{
+							continue;
+						}
 
 						DrawPacketKey key = {};
 						key.PSO = rd.PSO;
@@ -628,7 +704,7 @@ namespace shz
 						key.BaseVertex = section.BaseVertex;
 
 						auto it = batches.find(key);
-						ASSERT(it != batches.end(), "Batch not found (GBuffer).");
+						ASSERT(it != batches.end(), "Batch not found: %s", passName.c_str());
 
 						BatchInfo& bi = it->second;
 
@@ -644,20 +720,24 @@ namespace shz
 				}
 			}
 
-			// -------- Finalize packets
-			m_PassCtx.GBufferDrawPackets.clear();
-			m_PassCtx.GBufferDrawPackets.reserve(batches.size());
+			// -------------------------
+			// Finalize packets
+			// -------------------------
+			std::vector<DrawPacket> out;
+			out.reserve(batches.size());
 
 			for (auto& kv : batches)
 			{
 				BatchInfo& bi = kv.second;
+
 				bi.Packet.DrawAttribs.NumInstances = bi.Count;
 				bi.Packet.DrawAttribs.FirstInstanceLocation = bi.FirstInstance;
-				m_PassCtx.GBufferDrawPackets.push_back(bi.Packet);
+
+				out.push_back(bi.Packet);
 			}
 
-			// Sort packets for state change minimization (SB layout에는 영향 없음)
-			std::sort(m_PassCtx.GBufferDrawPackets.begin(), m_PassCtx.GBufferDrawPackets.end(),
+			// Sort packets for state change minimization (SB layout은 prefix sum 기준으로 이미 결정됨)
+			std::sort(out.begin(), out.end(),
 				[](const DrawPacket& a, const DrawPacket& b)
 				{
 					if (a.PSO != b.PSO) return a.PSO < b.PSO;
@@ -672,7 +752,25 @@ namespace shz
 
 					return a.DrawAttribs.FirstInstanceLocation < b.DrawAttribs.FirstInstanceLocation;
 				});
-		}
+
+			return out;
+		};
+
+		m_PassCtx.GBufferDrawPackets = buildPassPacketsAndObjectTable(
+			ctx,
+			m_PassCtx.VisibleObjectIndexMain,
+			objectsMutable,
+			"GBuffer",
+			m_pObjectTableSBGBuffer
+		);
+
+		m_PassCtx.GrassDrawPackets = buildPassPacketsAndObjectTable(
+			ctx,
+			m_PassCtx.VisibleObjectIndexMain,
+			objectsMutable,
+			"Grass",
+			m_pObjectTableSBGrass
+		);
 
 		// ============================================================
 		//  Build Shadow packets + pack ObjectTableSBShadow (2-pass)
@@ -886,6 +984,8 @@ namespace shz
 			pass->Execute(m_PassCtx);
 		}
 
+		auto scDesc = m_pSwapChain->GetDesc();
+
 		wirePassOutputs();
 	}
 
@@ -1042,14 +1142,14 @@ namespace shz
 
 	const MaterialRenderData& Renderer::CreateMaterial(const Material& material, uint64 key, const std::string& name)
 	{
+		ASSERT(m_pDevice, "Device is null.");
 		if (key == 0)
 		{
 			key = std::rand(); // TODO: better hash or REMOVE CreateMaterial overload
 		}
 
 		MaterialRenderData out = {};
-
-		ASSERT(m_pDevice, "Device is null.");
+		out.RenderPassName = material.GetRenderPassName();
 
 		out.CBIndex = 0;
 		for (; out.CBIndex < material.GetTemplate().GetCBufferCount(); ++out.CBIndex)
@@ -1085,11 +1185,13 @@ namespace shz
 				ASSERT(false, "Unsupported pipeline type.");
 			}
 
-			if (m_pMaterialStaticBinder)
-			{
-				bool ok = m_pMaterialStaticBinder->BindStatics(out.PSO);
-				ASSERT(ok, "Failed to bind statics.");
-			}
+			RendererMaterialStaticBinder* binder = nullptr;
+			if (out.RenderPassName == "GBuffer") binder = m_pGBufferMaterialStaticBinder.get();
+			else if (out.RenderPassName == "Grass") binder = m_pGrassMaterialStaticBinder.get();
+			else ASSERT(false, "RenderPass (%s) not exist.", out.RenderPassName);
+
+			bool ok = binder->BindStatics(out.PSO);
+			ASSERT(ok, "Failed to bind statics.");
 		}
 
 		// Create SRB and bind material CB
@@ -1254,7 +1356,7 @@ namespace shz
 		}
 		else
 		{
-			return CreateStaticMesh(*assetPtr, key);
+			return CreateStaticMesh(*assetPtr, key, name);
 		}
 	}
 
@@ -1300,19 +1402,19 @@ namespace shz
 		}
 
 		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-			{
-				BufferDesc desc = {};
-				desc.Name = name;
-				desc.Size = dataSize;
-				desc.Usage = USAGE_IMMUTABLE;
-				desc.BindFlags = bindFlags;
-				BufferData initData = {};
-				initData.pData = pData;
-				initData.DataSize = dataSize;
-				RefCntAutoPtr<IBuffer> pBuffer;
-				device->CreateBuffer(desc, &initData, &pBuffer);
-				return pBuffer;
-			};
+		{
+			BufferDesc desc = {};
+			desc.Name = name;
+			desc.Size = dataSize;
+			desc.Usage = USAGE_IMMUTABLE;
+			desc.BindFlags = bindFlags;
+			BufferData initData = {};
+			initData.pData = pData;
+			initData.DataSize = dataSize;
+			RefCntAutoPtr<IBuffer> pBuffer;
+			device->CreateBuffer(desc, &initData, &pBuffer);
+			return pBuffer;
+		};
 
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1394,24 +1496,37 @@ namespace shz
 
 	void Renderer::wirePassOutputs()
 	{
-		if (auto* shadow = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get()))
+		if (auto it = m_Passes.find("Shadow"); it != m_Passes.end())
 		{
-			m_PassCtx.pShadowMapSrv = shadow->GetShadowMapSRV();
+			if (auto* shadow = static_cast<ShadowRenderPass*>(it->second.get()))
+			{
+				m_PassCtx.pShadowMapSrv = shadow->GetShadowMapSRV();
+			}
 		}
 
-		if (auto* gb = static_cast<GBufferRenderPass*>(m_Passes["GBuffer"].get()))
+		if (auto it = m_Passes.find("GBuffer"); it != m_Passes.end())
 		{
-			for (uint32 i = 0; i < RenderPassContext::NUM_GBUFFERS; ++i)
-				m_PassCtx.pGBufferSrv[i] = gb->GetGBufferSRV(i);
-
-			m_PassCtx.pDepthSrv = gb->GetDepthSRV();
+			if (auto* gb = static_cast<GBufferRenderPass*>(it->second.get()))
+			{
+				for (uint32 i = 0; i < RenderPassContext::NUM_GBUFFERS; ++i)
+				{
+					m_PassCtx.pGBufferSrv[i] = gb->GetGBufferSRV(i);
+				}
+				m_PassCtx.pDepthSrv = gb->GetDepthSRV();
+				m_PassCtx.pDepthDsv = gb->GetDepthDSV();
+			}
 		}
 
-		if (auto* light = static_cast<LightingRenderPass*>(m_Passes["Lighting"].get()))
+		if (auto it = m_Passes.find("Lighting"); it != m_Passes.end())
 		{
-			m_PassCtx.pLightingSrv = light->GetLightingSRV();
+			if (auto* light = static_cast<LightingRenderPass*>(it->second.get()))
+			{
+				m_PassCtx.pLightingSrv = light->GetLightingSRV();
+				m_PassCtx.pLightingRtv = light->GetLightingRTV();
+			}
 		}
 	}
+
 
 	void Renderer::addPass(std::unique_ptr<RenderPassBase> pass)
 	{

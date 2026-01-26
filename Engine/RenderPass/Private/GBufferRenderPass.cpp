@@ -139,92 +139,6 @@ namespace shz
 		return true;
 	}
 
-	bool GBufferRenderPass::createPassObjects(RenderPassContext& ctx)
-	{
-		IRenderDevice* device = ctx.pDevice;
-		ASSERT(device, "Device is null.");
-
-		// RenderPass (once)
-		if (!m_pRenderPass)
-		{
-			RenderPassAttachmentDesc attachments[5] = {};
-
-			attachments[0].Format = TEX_FORMAT_RGBA8_UNORM;
-			attachments[1].Format = TEX_FORMAT_RGBA16_FLOAT;
-			attachments[2].Format = TEX_FORMAT_RGBA8_UNORM;
-			attachments[3].Format = TEX_FORMAT_RGBA16_FLOAT;
-
-			for (uint32 i = 0; i < 4; ++i)
-			{
-				attachments[i].SampleCount = 1;
-				attachments[i].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
-				attachments[i].StoreOp = ATTACHMENT_STORE_OP_STORE;
-				attachments[i].InitialState = RESOURCE_STATE_RENDER_TARGET;
-				attachments[i].FinalState = RESOURCE_STATE_RENDER_TARGET;
-			}
-
-			attachments[4].Format = TEX_FORMAT_D32_FLOAT;
-			attachments[4].SampleCount = 1;
-			attachments[4].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[4].StoreOp = ATTACHMENT_STORE_OP_STORE;
-			attachments[4].InitialState = RESOURCE_STATE_DEPTH_WRITE;
-			attachments[4].FinalState = RESOURCE_STATE_DEPTH_WRITE;
-
-			AttachmentReference colorRefs[4] = {};
-			for (uint32 i = 0; i < 4; ++i)
-			{
-				colorRefs[i].AttachmentIndex = i;
-				colorRefs[i].State = RESOURCE_STATE_RENDER_TARGET;
-			}
-
-			AttachmentReference depthRef = {};
-			depthRef.AttachmentIndex = 4;
-			depthRef.State = RESOURCE_STATE_DEPTH_WRITE;
-
-			SubpassDesc subpass = {};
-			subpass.RenderTargetAttachmentCount = 4;
-			subpass.pRenderTargetAttachments = colorRefs;
-			subpass.pDepthStencilAttachment = &depthRef;
-
-			RenderPassDesc rpDesc = {};
-			rpDesc.Name = "RP_GBuffer";
-			rpDesc.AttachmentCount = 5;
-			rpDesc.pAttachments = attachments;
-			rpDesc.SubpassCount = 1;
-			rpDesc.pSubpasses = &subpass;
-
-			device->CreateRenderPass(rpDesc, &m_pRenderPass);
-			ASSERT(m_pRenderPass, "CreateRenderPass(RP_GBuffer) failed.");
-		}
-
-		// Framebuffer (size-dependent)
-		{
-			ASSERT(m_pRenderPass, "RP_GBuffer is null.");
-			ASSERT(m_pGBufferRTV[0] && m_pGBufferRTV[1] && m_pGBufferRTV[2] && m_pGBufferRTV[3] && m_pDepthDSV, "GBuffer views are null.");
-
-			ITextureView* atch[5] =
-			{
-				m_pGBufferRTV[0],
-				m_pGBufferRTV[1],
-				m_pGBufferRTV[2],
-				m_pGBufferRTV[3],
-				m_pDepthDSV
-			};
-
-			FramebufferDesc fbDesc = {};
-			fbDesc.Name = "FB_GBuffer";
-			fbDesc.pRenderPass = m_pRenderPass;
-			fbDesc.AttachmentCount = 5;
-			fbDesc.ppAttachments = atch;
-
-			m_pFramebuffer.Release();
-			device->CreateFramebuffer(fbDesc, &m_pFramebuffer);
-			ASSERT(m_pFramebuffer, "CreateFramebuffer(FB_GBuffer) failed.");
-		}
-
-		return true;
-	}
-
 	void GBufferRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
@@ -233,10 +147,6 @@ namespace shz
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
 		const std::vector<DrawPacket>& packets = ctx.GBufferDrawPackets;
-		if (packets.empty())
-		{
-			return;
-		}
 
 		// RT/DS transitions
 		{
@@ -373,5 +283,91 @@ namespace shz
 
 		// FB rebind
 		(void)createPassObjects(ctx);
+	}
+
+	bool GBufferRenderPass::createPassObjects(RenderPassContext& ctx)
+	{
+		IRenderDevice* device = ctx.pDevice;
+		ASSERT(device, "Device is null.");
+
+		// RenderPass (once)
+		if (!m_pRenderPass)
+		{
+			RenderPassAttachmentDesc attachments[5] = {};
+
+			attachments[0].Format = TEX_FORMAT_RGBA8_UNORM;
+			attachments[1].Format = TEX_FORMAT_RGBA16_FLOAT;
+			attachments[2].Format = TEX_FORMAT_RGBA8_UNORM;
+			attachments[3].Format = TEX_FORMAT_RGBA16_FLOAT;
+
+			for (uint32 i = 0; i < 4; ++i)
+			{
+				attachments[i].SampleCount = 1;
+				attachments[i].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+				attachments[i].StoreOp = ATTACHMENT_STORE_OP_STORE;
+				attachments[i].InitialState = RESOURCE_STATE_RENDER_TARGET;
+				attachments[i].FinalState = RESOURCE_STATE_RENDER_TARGET;
+			}
+
+			attachments[4].Format = TEX_FORMAT_D32_FLOAT;
+			attachments[4].SampleCount = 1;
+			attachments[4].LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[4].StoreOp = ATTACHMENT_STORE_OP_STORE;
+			attachments[4].InitialState = RESOURCE_STATE_DEPTH_WRITE;
+			attachments[4].FinalState = RESOURCE_STATE_DEPTH_WRITE;
+
+			AttachmentReference colorRefs[4] = {};
+			for (uint32 i = 0; i < 4; ++i)
+			{
+				colorRefs[i].AttachmentIndex = i;
+				colorRefs[i].State = RESOURCE_STATE_RENDER_TARGET;
+			}
+
+			AttachmentReference depthRef = {};
+			depthRef.AttachmentIndex = 4;
+			depthRef.State = RESOURCE_STATE_DEPTH_WRITE;
+
+			SubpassDesc subpass = {};
+			subpass.RenderTargetAttachmentCount = 4;
+			subpass.pRenderTargetAttachments = colorRefs;
+			subpass.pDepthStencilAttachment = &depthRef;
+
+			RenderPassDesc rpDesc = {};
+			rpDesc.Name = "RP_GBuffer";
+			rpDesc.AttachmentCount = 5;
+			rpDesc.pAttachments = attachments;
+			rpDesc.SubpassCount = 1;
+			rpDesc.pSubpasses = &subpass;
+
+			device->CreateRenderPass(rpDesc, &m_pRenderPass);
+			ASSERT(m_pRenderPass, "CreateRenderPass(RP_GBuffer) failed.");
+		}
+
+		// Framebuffer (size-dependent)
+		{
+			ASSERT(m_pRenderPass, "RP_GBuffer is null.");
+			ASSERT(m_pGBufferRTV[0] && m_pGBufferRTV[1] && m_pGBufferRTV[2] && m_pGBufferRTV[3] && m_pDepthDSV, "GBuffer views are null.");
+
+			ITextureView* atch[5] =
+			{
+				m_pGBufferRTV[0],
+				m_pGBufferRTV[1],
+				m_pGBufferRTV[2],
+				m_pGBufferRTV[3],
+				m_pDepthDSV
+			};
+
+			FramebufferDesc fbDesc = {};
+			fbDesc.Name = "FB_GBuffer";
+			fbDesc.pRenderPass = m_pRenderPass;
+			fbDesc.AttachmentCount = 5;
+			fbDesc.ppAttachments = atch;
+
+			m_pFramebuffer.Release();
+			device->CreateFramebuffer(fbDesc, &m_pFramebuffer);
+			ASSERT(m_pFramebuffer, "CreateFramebuffer(FB_GBuffer) failed.");
+		}
+
+		return true;
 	}
 } // namespace shz
