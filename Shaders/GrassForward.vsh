@@ -52,7 +52,6 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     // Clip
     float4 worldPos4 = float4(p, 1.0);
     OUT.Pos = mul(worldPos4, g_FrameCB.ViewProj);
-    OUT.Pos.y *= -1.0;
     
     float3 n = IN.Normal;
 

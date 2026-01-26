@@ -201,7 +201,7 @@ namespace shz
 				float3(0.0f, 0.0f, 0.0f),
 				float3(scale, scale, scale));
 			terrainObj.bCastShadow = true;
-			// const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
+			const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
 		}
 
 		// Grass grid
