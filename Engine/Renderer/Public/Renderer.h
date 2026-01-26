@@ -36,6 +36,8 @@
 
 #include "Engine/Renderer/Public/RenderData.h"
 
+#include "Engine/RuntimeData/Public/TerrainHeightField.h"
+
 namespace shz
 {
 	struct RendererCreateInfo
@@ -83,6 +85,8 @@ namespace shz
 		const MaterialRenderData& CreateMaterial(const Material& material, uint64 key = 0, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMesh(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
+
+		const TextureRenderData CreateTextureFromHeightField(const TerrainHeightField& terrain);
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }

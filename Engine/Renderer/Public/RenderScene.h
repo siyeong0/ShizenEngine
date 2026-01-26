@@ -8,6 +8,9 @@
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Renderer/Public/RenderData.h"
 
+#include "Engine/RuntimeData/Public/TerrainHeightField.h"
+#include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
+
 namespace shz
 {
 	class RenderScene final
@@ -53,6 +56,9 @@ namespace shz
 		void RemoveLight(Handle<LightObject> h);
 		void UpdateLight(Handle<LightObject> h, const LightObject& light);
 
+		void SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData terrainMesh);
+		void ClearTerrain() {}
+
 		RenderObject* GetObjectOrNull(Handle<RenderObject> h) noexcept;
 		const RenderObject* GetObjectOrNull(Handle<RenderObject> h) const noexcept;
 
@@ -66,6 +72,8 @@ namespace shz
 		std::vector<RenderObject>& GetObjects() noexcept { return m_Objects; }
 		const std::vector<RenderObject>& GetObjects() const noexcept { return m_Objects; }
 		const std::vector<LightObject>& GetLights()  const noexcept { return m_Lights; }
+
+		const TextureRenderData& GetHeightMap() const { return m_TerrainHeightMap; }
 
 	private:
 		static constexpr uint32 INVALID_INDEX = 0xFFFFFFFFu;
@@ -109,6 +117,12 @@ namespace shz
 		std::vector<uint32> m_LightSparse;
 		std::vector<LightObject> m_Lights;
 		std::vector<Handle<LightObject>> m_LightHandles;
+
+		// ------------------------------------------------------------
+		// Height field
+		// ------------------------------------------------------------
+		TextureRenderData m_TerrainHeightMap = {};
+		Handle<RenderObject> m_TerrainMesh = {};
 	};
 
 } // namespace shz

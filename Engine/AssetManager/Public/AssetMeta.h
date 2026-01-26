@@ -73,8 +73,6 @@ namespace shz
 
         float HeightScale = 100.0f;
         float HeightOffset = 0.f;
-
-        HEIGHT_FIELD_SAMPLE_FORMAT ForceSampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN;
     };
 
     using AssetImportSetting = std::variant<

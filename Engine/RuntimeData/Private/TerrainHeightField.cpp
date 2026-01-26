@@ -1,25 +1,58 @@
 #include "pch.h"
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
+#include <cmath>
+
 #include "Engine/Core/Math/Math.h"
 
 namespace shz
 {
+	// -----------------------------
+	// Helpers
+	// -----------------------------
+
+	float TerrainHeightField::u16ToNormalized(uint16 v)
+	{
+		// Map [0..65535] -> [0..1]
+		return static_cast<float>(v) * (1.0f / 65535.0f);
+	}
+
+	uint16 TerrainHeightField::normalizedToU16(float n)
+	{
+		// Clamp to [0..1], then map to [0..65535]
+		const float c = Clamp01(n);
+
+		// Round to nearest for less bias.
+		// 0 -> 0, 1 -> 65535
+		const float scaled = c * 65535.0f;
+		const uint32 iv = static_cast<uint32>(scaled + 0.5f);
+
+		return static_cast<uint16>(iv > 65535u ? 65535u : iv);
+	}
+
+	// -----------------------------
+	// Lifecycle
+	// -----------------------------
+
 	void TerrainHeightField::Initialize(const TerrainHeightFieldCreateInfo& ci)
 	{
 		m_CI = ci;
 		ASSERT(m_CI.Width > 0 && m_CI.Height > 0, "TerrainHeightFieldCreateInfo has invalid dimensions.");
 
 		const uint64 count = static_cast<uint64>(m_CI.Width) * static_cast<uint64>(m_CI.Height);
-		m_Data.assign(static_cast<size_t>(count), 0.f);
+		m_DataU16.assign(static_cast<size_t>(count), 0u);
 	}
 
 	void TerrainHeightField::Cleanup()
 	{
-		m_Data.clear();
-		m_Data.shrink_to_fit();
+		m_DataU16.clear();
+		m_DataU16.shrink_to_fit();
 		m_CI = {};
 	}
+
+	// -----------------------------
+	// Accessors
+	// -----------------------------
 
 	float TerrainHeightField::GetNormalizedHeightAt(uint32 x, uint32 z) const
 	{
@@ -28,9 +61,9 @@ namespace shz
 		ASSERT(z < m_CI.Height, "Z coordinate out of range.");
 
 		const uint32 idx = getIndex(x, z);
-		ASSERT(idx < static_cast<uint32>(m_Data.size()), "Index out of range.");
+		ASSERT(idx < static_cast<uint32>(m_DataU16.size()), "Index out of range.");
 
-		return Clamp01(m_Data[idx]);
+		return u16ToNormalized(m_DataU16[idx]);
 	}
 
 	float TerrainHeightField::GetWorldHeightAt(uint32 x, uint32 z) const
@@ -46,10 +79,14 @@ namespace shz
 		ASSERT(z < m_CI.Height, "Z coordinate out of range.");
 
 		const uint32 idx = getIndex(x, z);
-		ASSERT(idx < static_cast<uint32>(m_Data.size()), "Index out of range.");
+		ASSERT(idx < static_cast<uint32>(m_DataU16.size()), "Index out of range.");
 
-		m_Data[idx] = Clamp01(normalizedHeight);
+		m_DataU16[idx] = normalizedToU16(normalizedHeight);
 	}
+
+	// -----------------------------
+	// Sampling
+	// -----------------------------
 
 	float TerrainHeightField::SampleNormalizedHeight(float worldX, float worldZ) const
 	{
@@ -77,6 +114,7 @@ namespace shz
 		const float tx = x - static_cast<float>(x0);
 		const float tz = z - static_cast<float>(z0);
 
+		// Fetch 4 corners (already normalized 0..1)
 		const float h00 = GetNormalizedHeightAt(x0, z0);
 		const float h10 = GetNormalizedHeightAt(x1, z0);
 		const float h01 = GetNormalizedHeightAt(x0, z1);
@@ -94,4 +132,3 @@ namespace shz
 		return m_CI.HeightOffset + n * m_CI.HeightScale;
 	}
 }
-

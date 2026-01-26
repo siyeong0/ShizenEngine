@@ -8,19 +8,8 @@
 
 namespace shz
 {
-
-	enum HEIGHT_FIELD_SAMPLE_FORMAT : uint8
-	{
-		HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN = 0,
-		HEIGHT_FIELD_SAMPLE_FORMAT_UINT8 = 1,
-		HEIGHT_FIELD_SAMPLE_FORMAT_UINT16 = 2,
-		HEIGHT_FIELD_SAMPLE_FORMAT_FLOAT32 = 3,
-	};
-
 	struct TerrainHeightFieldCreateInfo final
 	{
-		HEIGHT_FIELD_SAMPLE_FORMAT SampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN;
-
 		uint32 Width = 0;
 		uint32 Height = 0;
 
@@ -35,13 +24,11 @@ namespace shz
 		constexpr TerrainHeightFieldCreateInfo(
 			uint32 inWidth,
 			uint32 inHeight,
-			HEIGHT_FIELD_SAMPLE_FORMAT  inSampleFormat,
 			float inWorldSpacingX = 1.f,
 			float inWorldSpacingZ = 1.f,
 			float inHeightScale = 100.f,
 			float inHeightOffset = 0.f)
-			: SampleFormat(inSampleFormat)
-			, Width(inWidth)
+			: Width(inWidth)
 			, Height(inHeight)
 			, WorldSpacingX(inWorldSpacingX)
 			, WorldSpacingZ(inWorldSpacingZ)
@@ -67,11 +54,9 @@ namespace shz
 		void Cleanup();
 
 		// Basic info
-		bool IsValid() const { return (m_CI.Width > 0) && (m_CI.Height > 0) && !m_Data.empty(); }
+		bool IsValid() const { return (m_CI.Width > 0) && (m_CI.Height > 0) && !m_DataU16.empty(); }
 		uint32 GetWidth() const { return m_CI.Width; }
 		uint32 GetHeight() const { return m_CI.Height; }
-
-		HEIGHT_FIELD_SAMPLE_FORMAT GetSampleFormat() const { return m_CI.SampleFormat; }
 
 		float GetWorldSpacingX() const { return m_CI.WorldSpacingX; }
 		float GetWorldSpacingZ() const { return m_CI.WorldSpacingZ; }
@@ -79,8 +64,10 @@ namespace shz
 		float GetHeightScale() const { return m_CI.HeightScale; }
 		float GetHeightOffset() const { return m_CI.HeightOffset; }
 
-		const std::vector<float>& GetData() const { return m_Data; }
+		// Raw storage (0..65535). Useful for uploading to R16_UNORM texture.
+		const std::vector<uint16>& GetDataU16() const { return m_DataU16; }
 
+		// 0..1 API
 		float GetNormalizedHeightAt(uint32 x, uint32 z) const;
 		float GetWorldHeightAt(uint32 x, uint32 z) const;
 
@@ -95,9 +82,12 @@ namespace shz
 	private:
 		uint32 getIndex(uint32 x, uint32 z) const { return z * m_CI.Width + x; }
 
+		static float u16ToNormalized(uint16 v);
+		static uint16 normalizedToU16(float n);
+
 	private:
 		TerrainHeightFieldCreateInfo m_CI = {};
 
-		std::vector<float> m_Data = {};
+		std::vector<uint16> m_DataU16 = {};
 	};
 }

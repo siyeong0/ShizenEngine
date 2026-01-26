@@ -156,52 +156,29 @@ namespace shz
 			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
 			ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
 
-			const TerrainHeightField& terrain = *terrainPtr;
 
 			StaticMesh terrainMesh;
+			Material tm("TerrainMaterial", "DefaultLit");
+			tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.f));
+			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+			tm.SetFloat("g_EmissiveIntensity", 0.0f);
+			tm.SetFloat("g_RoughnessFactor", 0.85f);
+			tm.SetFloat("g_NormalScale", 1.0f);
+			tm.SetFloat("g_OcclusionStrength", 1.0f);
+			tm.SetFloat("g_AlphaCutoff", 0.5f);
+			tm.SetFloat("g_MetallicFactor", 0.0f);
+			tm.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR);
+			tm.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D,
+				m_pAssetManager->RegisterAsset<Texture>(diffusePath));
+
 			TerrainMeshBuilder meshBuilder;
 			TerrainMeshBuildSettings buildSettings = {};
 			buildSettings.YOffset = -10.0f;
+			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, std::move(tm), buildSettings);
 
-			Material tm("TerrainMaterial", "DefaultLit");
-			bool ok = false;
-			ok = tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.f));
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_EmissiveIntensity", 0.0f);
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_RoughnessFactor", 0.85f);
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_NormalScale", 1.0f);
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_OcclusionStrength", 1.0f);
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_AlphaCutoff", 0.5f);
-			ASSERT(ok, "Failed to set material parameter.");
-			ok = tm.SetFloat("g_MetallicFactor", 0.0f);
-			ASSERT(ok, "Failed to set material parameter.");
-
-			ok = tm.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR);
-			ASSERT(ok, "Failed to set material parameter.");
-
-			ok = tm.SetTextureAssetRef(
-				"g_BaseColorTex",
-				MATERIAL_RESOURCE_TYPE_TEXTURE2D,
-				m_pAssetManager->RegisterAsset<Texture>(diffusePath));
-			ASSERT(ok, "Failed to set material parameter.");
-
-			meshBuilder.BuildStaticMesh(&terrainMesh, terrain, std::move(tm), buildSettings);
-
-			StaticMeshRenderData terrainRenderData = m_pRenderer->CreateStaticMesh(terrainMesh);
-			RenderScene::RenderObject terrainObj = {};
-			terrainObj.Mesh = terrainRenderData;
-			terrainObj.Transform = Matrix4x4::TRS(
-				float3(0.0f, 0.0f, 0.0f),
-				float3(0.0f, 0.0f, 0.0f),
-				float3(scale, scale, scale));
-			terrainObj.bCastShadow = true;
-			const Handle<RenderScene::RenderObject> terrainObjHandle = m_pRenderScene->AddObject(std::move(terrainObj));
+			m_pRenderScene->SetTerrain(
+				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
+				m_pRenderer->CreateStaticMesh(terrainMesh));
 		}
 
 		// Grass grid

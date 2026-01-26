@@ -121,16 +121,6 @@ namespace shz
 		ci.HeightScale = setting.HeightScale;
 		ci.HeightOffset = setting.HeightOffset;
 
-		// For debug bookkeeping only (actual storage is float)
-		ci.SampleFormat = setting.ForceSampleFormat;
-		if (ci.SampleFormat == HEIGHT_FIELD_SAMPLE_FORMAT_UNKNOWN)
-		{
-			// Guess from component size
-			if (compSize == 1)      ci.SampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UINT8;
-			else if (compSize == 2) ci.SampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_UINT16;
-			else                    ci.SampleFormat = HEIGHT_FIELD_SAMPLE_FORMAT_FLOAT32;
-		}
-
 		TerrainHeightField hf = {};
 		hf.Initialize(ci);
 
@@ -204,7 +194,7 @@ namespace shz
 		}
 
 		// Resident bytes (CPU height data)
-		*pOutResidentBytes = static_cast<uint64>(hf.GetData().size() * sizeof(float));
+		*pOutResidentBytes = static_cast<uint64>(hf.GetDataU16().size() * sizeof(uint16));
 		return std::make_unique<TypedAssetObject<TerrainHeightField>>(hf);
 	}
 

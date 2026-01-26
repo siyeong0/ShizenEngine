@@ -236,6 +236,18 @@ namespace shz
 		m_Lights[denseIndex] = light;
 	}
 
+	void RenderScene::SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData terrainMesh)
+	{
+		m_TerrainHeightMap = heightMap;
+		RenderObject terrainObj = {};
+		terrainObj.Mesh = terrainMesh;
+		terrainObj.Transform = Matrix4x4::TRS(
+			float3(0.0f, 0.0f, 0.0f),
+			float3(0.0f, 0.0f, 0.0f),
+			float3(0.5f, 0.5f, 0.5f));
+		terrainObj.bCastShadow = false;
+		m_TerrainMesh = AddObject(std::move(terrainObj));
+	}
 
 	RenderScene::RenderObject* RenderScene::GetObjectOrNull(Handle<RenderObject> h) noexcept
 	{
