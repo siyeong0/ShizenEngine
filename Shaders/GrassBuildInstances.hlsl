@@ -315,7 +315,7 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         // - Optional bias: lower density => slightly larger blades
         // ------------------------------------------------------------
         float scaleT = rand01(seed ^ 0x5555u);
-        float densityScaleBias = lerp(1.10f, 0.90f, density); // low density -> bigger
+        float densityScaleBias = lerp(1.2f, 0.8f, density); // low density -> bigger
 
         // NOTE: keep *0.04f if your grass mesh is huge.
         inst.Scale = lerp(g_GrassGenCB.MinScale, g_GrassGenCB.MaxScale, scaleT) * 0.04f * densityScaleBias;

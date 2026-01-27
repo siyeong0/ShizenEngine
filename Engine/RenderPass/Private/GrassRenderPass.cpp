@@ -536,7 +536,7 @@ namespace shz
 			// --- Chunk placement ---
 			map->ChunkSize = 4.0f;
 			map->ChunkHalfExtent = 64;
-			map->SamplesPerChunk = 1024;
+			map->SamplesPerChunk = 2048;
 			map->Jitter = 0.95f;
 
 			map->SpawnProb = 0.75f;
