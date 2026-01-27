@@ -272,6 +272,13 @@ namespace shz
 			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
 			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load terrain height field.");
+
+			grassPtr->RecomputeBounds();
+			const Box& b = grassPtr->GetBounds();
+			float yScale01 = 1.0f / b.Max.y - b.Min.y;
+			grassPtr->ApplyUniformScale(yScale01);
+			grassPtr->MoveBottomToOrigin(true);
+
 			StaticMeshRenderData grassRenderData = CreateStaticMesh(*grassPtr);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, grassRenderData);
 		}

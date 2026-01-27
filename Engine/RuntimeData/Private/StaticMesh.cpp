@@ -35,6 +35,49 @@ namespace shz
 		m_IndicesU32.clear();
 	}
 
+	void StaticMesh::ApplyUniformScale(float s)
+	{
+		ASSERT(!m_Positions.empty(), "Mesh is not initialized.");
+		ASSERT(s > 1e-6f && std::isfinite(s), "Invalid scale factor.");
+		
+		for (float3& p : m_Positions)
+		{
+			p *= s;
+		}
+
+		// Bounds become invalid after transform
+		RecomputeBounds();
+	}
+
+	void StaticMesh::MoveBottomToOrigin(bool centerXZ)
+	{
+		ASSERT(!m_Positions.empty(), "Mesh is not initialized.");
+
+		const Box& b = m_Bounds;
+		float3 minV = b.Min;
+		float3 maxV = b.Max;
+
+		// Y: move lowest point to 0
+		float3 offset = float3(0, -minV.y, 0);
+
+		if (centerXZ)
+		{
+			// Put pivot at bottom-center in XZ (common for grass)
+			float cx = 0.5f * (minV.x + maxV.x);
+			float cz = 0.5f * (minV.z + maxV.z);
+			offset.x = -cx;
+			offset.z = -cz;
+		}
+
+		for (float3& p : m_Positions)
+		{
+			p += offset;
+		}
+
+		RecomputeBounds();
+	}
+
+
 	const void* StaticMesh::GetIndexData() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)

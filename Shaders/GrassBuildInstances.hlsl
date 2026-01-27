@@ -18,7 +18,7 @@ RWByteAddressBuffer g_IndirectArgs;
 // uint Counter (4 bytes) at byte offset 0
 RWByteAddressBuffer g_Counter;
 
-static const uint kMaxInstances = 1u << 20; // 1,048,576
+static const uint kMaxInstances = 1u << 24; // 1,048,576
 
 // Heightmap (R16_UNORM sampled as normalized float 0..1)
 Texture2D<float> g_HeightMap;
@@ -155,12 +155,6 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
             continue;
         }
 
-        // Optional thinning
-        if (rand01(seed ^ 0x4444u) > g_GrassGenCB.KeepProb)
-        {
-            continue;
-        }
-
         uint idx;
         g_Counter.InterlockedAdd(0, 1, idx);
 
@@ -183,12 +177,14 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         inst.Yaw = rand01(seed ^ 0x6666u) * 6.2831853f;
 
         // Small initial lean (¡¾ ~15 degrees)
-        inst.Pitch = lerp(-0.25f, 0.25f, rand01(seed ^ 0x7777u));
+        inst.Pitch = lerp(-0.90f, 0.90f, rand01(seed ^ 0x7777u));
 
         // Bend stiffness
         inst.BendStrength =
             lerp(g_GrassGenCB.BendStrengthMin, g_GrassGenCB.BendStrengthMax, rand01(seed ^ 0x8888u));
 
+        inst._pad0 = 0;
+        
         g_OutInstances[idx] = inst;
     }
 }
@@ -206,7 +202,8 @@ static const uint kStartInstanceLocation = 0;
 void WriteIndirectArgs(uint3 tid : SV_DispatchThreadID)
 {
     uint instanceCount = g_Counter.Load(0);
-
+    instanceCount = min(instanceCount, kMaxInstances);
+    
     g_IndirectArgs.Store(0, kIndexCountPerInstance);
     g_IndirectArgs.Store(4, instanceCount);
     g_IndirectArgs.Store(8, kStartIndexLocation);

@@ -42,6 +42,9 @@ namespace shz
 		void SetIndicesU32(std::vector<uint32>&& indices);
 		void SetIndicesU16(std::vector<uint16>&& indices);
 
+		void ApplyUniformScale(float s);
+		void MoveBottomToOrigin(bool centerXZ);
+
 		// ------------------------------------------------------------
 		// Sections (submeshes)
 		// ------------------------------------------------------------

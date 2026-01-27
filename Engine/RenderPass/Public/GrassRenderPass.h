@@ -62,7 +62,7 @@ namespace shz
         RefCntAutoPtr<IBuffer> m_pGrassGenConstantsCB;    // GRASS_GEN_CONSTANTS (CS)
         RefCntAutoPtr<IBuffer> m_pGrassRenderConstantsCB; // GRASS_RENDER_CONSTANTS (VS/PS)
 
-        uint32 m_MaxInstances = 1u << 20;
+        uint32 m_MaxInstances = 1u << 24;
 
         StaticMeshRenderData m_GrassMesh;
     };

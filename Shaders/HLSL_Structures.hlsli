@@ -104,10 +104,10 @@ struct GrassGenConstants
     float SpawnProb; // keep if rand <= SpawnProb
     float SpawnRadius; // meters
 
-    float KeepProb; // second-stage thinning (optional)
     float BendStrengthMin; // base bend random range
     float BendStrengthMax;
     uint SeedSalt; // salt for deterministic placement
+    uint _padT4;
 };
 
 // ----------------------------------------------

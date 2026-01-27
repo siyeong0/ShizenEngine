@@ -25,9 +25,9 @@ namespace shz
 
 		static float ComputeUniformScale(const Box& bounds)
 		{
-			float3 extents = bounds.Extents();
-			float maxExtent = std::max({ extents.x, extents.y, extents.z });
-			return (maxExtent > 0.0f) ? (1.0f / maxExtent) : 1.0f;
+			float3 size = bounds.Size();
+			float maxSize = std::max({ size.x, size.y, size.z });
+			return (maxSize > 0.0f) ? (1.0f / maxSize) : 1.0f;
 		}
 
 		static int InputTextCallback_Resize(ImGuiInputTextCallbackData* data)

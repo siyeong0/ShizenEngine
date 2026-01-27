@@ -525,33 +525,28 @@ namespace shz
 			map->HeightScale = 100.0f;
 			map->HeightOffset = 0.0f;
 			map->YOffset = 0.0f;
-			map->_padT0 = 0.0f;
 
 			map->HFWidth = 1025;
 			map->HFHeight = 1025;
 			map->CenterXZ = 1;
-			map->_padT1 = 0;
 
 			map->SpacingX = 1.0f;
 			map->SpacingZ = 1.0f;
-			map->_padT2 = 0.0f;
-			map->_padT3 = 0.0f;
 
 			// Chunk placement
 			map->ChunkSize = 4.0f;
 			map->ChunkHalfExtent = 32;
-			map->SamplesPerChunk = 256;
+			map->SamplesPerChunk = 1024;
 			map->Jitter = 0.95f;
 
 			map->SpawnProb = 0.95f;
-			map->KeepProb = 0.90f;
 			map->SpawnRadius = 500.0f;
 
-			map->MinScale = 4.5f;
-			map->MaxScale = 14.5f;
+			map->MinScale = 0.7f;
+			map->MaxScale = 3.1f;
 
-			map->BendStrengthMin = 0.35f;
-			map->BendStrengthMax = 0.95f;
+			map->BendStrengthMin = 0.95f;
+			map->BendStrengthMax = 1.05f;
 
 			map->SeedSalt = 0xA53A9E37u;
 		}
@@ -574,12 +569,12 @@ namespace shz
 			map->DirectLightStrength = 0.22f;
 
 			map->WindDirXZ = float2{ 0.80f, 0.60f };
-			map->WindStrength = 0.65f;
+			map->WindStrength = 0.85f;
 			map->WindSpeed = 0.75f;
 
-			map->WindFreq = 0.035f;
+			map->WindFreq = 0.055f;
 			map->WindGust = 0.22f;
-			map->MaxBendAngle = 0.55f;
+			map->MaxBendAngle = 1.50f;
 		}
 
 		// ---------------------------------------------------------------------
