@@ -103,6 +103,28 @@ float SampleWorldHeight(float2 worldXZ)
     return g_GrassGenCB.YOffset + (g_GrassGenCB.HeightOffset + hN * g_GrassGenCB.HeightScale);
 }
 
+bool AabbInsideFrustum(float3 bmin, float3 bmax)
+{
+    // Conservative: if AABB is completely outside any plane -> cull
+    [unroll]
+    for (int i = 0; i < 6; ++i)
+    {
+        float4 P = g_FrameCB.FrustumPlanesWS[i];
+        float3 n = P.xyz;
+        float d = P.w;
+
+        // Select the vertex most in direction of plane normal (positive vertex)
+        float3 v;
+        v.x = (n.x >= 0.0) ? bmax.x : bmin.x;
+        v.y = (n.y >= 0.0) ? bmax.y : bmin.y;
+        v.z = (n.z >= 0.0) ? bmax.z : bmin.z;
+
+        if (dot(n, v) + d < 0.0)
+            return false; // fully outside
+    }
+    return true;
+}
+
 // ------------------------------------------------------------
 // Chunk-based generation
 // Each thread == one chunk
@@ -125,6 +147,20 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 
     float2 chunkOriginXZ = float2(worldChunk) * chunkSize;
 
+    // ------------------------------------------------------------
+    // Chunk frustum culling (do this before per-sample work)
+    // Chunk AABB in world space
+    // ------------------------------------------------------------
+    float chunkOriginHeight = SampleWorldHeight(chunkOriginXZ);
+    float3 chunkMin = float3(chunkOriginXZ.x, chunkOriginHeight - 20.0, chunkOriginXZ.y);
+    float3 chunkMax = float3(chunkOriginXZ.x + chunkSize, chunkOriginHeight + 20.0, chunkOriginXZ.y + chunkSize);
+
+    // Cull whole chunk if outside frustum
+    if (!AabbInsideFrustum(chunkMin, chunkMax))
+    {
+        return;
+    }
+    
     uint chunkSeed = hash2i(worldChunk, g_GrassGenCB.SeedSalt);
 
     [loop]

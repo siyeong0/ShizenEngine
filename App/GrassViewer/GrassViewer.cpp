@@ -160,7 +160,8 @@ namespace shz
 
 			StaticMesh terrainMesh;
 			Material tm("TerrainMaterial", "DefaultLit");
-			tm.SetFloat4("g_BaseColorFactor", float4(27.f, 160.f, 0.f, 1.f) / 255.f);
+			// tm.SetFloat4("g_BaseColorFactor", float4(27.f, 160.f, 0.f, 1.f) / 255.f);
+			tm.SetFloat4("g_BaseColorFactor", float4(180.f, 75.f, 24.f, 1.f) / 255.f);
 			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 			tm.SetFloat("g_EmissiveIntensity", 0.0f);
 			tm.SetFloat("g_RoughnessFactor", 0.85f);

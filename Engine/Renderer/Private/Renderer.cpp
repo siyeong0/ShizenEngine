@@ -364,6 +364,11 @@ namespace shz
 
 		const View& view = viewFamily.Views[0];
 
+		// Build frustums: Main / Shadow 
+		ViewFrustumExt frustumMain = {};
+		const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+		ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
@@ -377,6 +382,13 @@ namespace shz
 			cb->InvViewProj = cb->ViewProj.Inversed();
 
 			cb->CameraPosition = view.CameraPosition;
+
+			cb->FrustumPlanesWS[0] = frustumMain.NearPlane;
+			cb->FrustumPlanesWS[1] = frustumMain.FarPlane;
+			cb->FrustumPlanesWS[2] = frustumMain.TopPlane;
+			cb->FrustumPlanesWS[3] = frustumMain.BottomPlane;
+			cb->FrustumPlanesWS[4] = frustumMain.LeftPlane;
+			cb->FrustumPlanesWS[5] = frustumMain.RightPlane;
 
 			cb->ViewportSize =
 			{
@@ -442,16 +454,8 @@ namespace shz
 			cb->LightViewProj = lightViewProj;
 		}
 
-		// ------------------------------------------------------------
-		// Build frustums: Main / Shadow 
-		// ------------------------------------------------------------
-		ViewFrustumExt frMain = {};
-		ViewFrustumExt frShadow = {};
-		{
-			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-			ExtractViewFrustumPlanesFromMatrix(viewProj, frMain);
-			ExtractViewFrustumPlanesFromMatrix(lightViewProj, frShadow);
-		}
+		ViewFrustumExt frustumShadow = {};
+		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);
 
 		// ------------------------------------------------------------
 		// Visibility
@@ -469,14 +473,14 @@ namespace shz
 
 				const Box& localBounds = obj.Mesh.LocalBounds;
 
-				if (IntersectsFrustum(frMain, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+				if (IntersectsFrustum(frustumMain, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 				{
 					m_PassCtx.VisibleObjectIndexMain.push_back(i);
 				}
 
 				if (obj.bCastShadow)
 				{
-					if (IntersectsFrustum(frShadow, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+					if (IntersectsFrustum(frustumShadow, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 					{
 						m_PassCtx.VisibleObjectIndexShadow.push_back(i);
 					}

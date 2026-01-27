@@ -536,14 +536,14 @@ namespace shz
 			// Chunk placement
 			map->ChunkSize = 4.0f;
 			map->ChunkHalfExtent = 32;
-			map->SamplesPerChunk = 1024;
+			map->SamplesPerChunk = 2048;
 			map->Jitter = 0.95f;
 
 			map->SpawnProb = 0.95f;
 			map->SpawnRadius = 500.0f;
 
-			map->MinScale = 0.7f;
-			map->MaxScale = 3.1f;
+			map->MinScale = 5.7f;
+			map->MaxScale = 11.1f;
 
 			map->BendStrengthMin = 0.95f;
 			map->BendStrengthMax = 1.05f;

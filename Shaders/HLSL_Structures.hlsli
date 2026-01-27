@@ -14,6 +14,8 @@ struct FrameConstants
     float3 CameraPosition;
     float _pad0;
 
+    float4 FrustumPlanesWS[6];
+    
     float2 ViewportSize;
     float2 InvViewportSize;
 
