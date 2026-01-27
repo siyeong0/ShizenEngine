@@ -535,18 +535,18 @@ namespace shz
 
 			// Chunk placement
 			map->ChunkSize = 4.0f;
-			map->ChunkHalfExtent = 32;
-			map->SamplesPerChunk = 2048;
+			map->ChunkHalfExtent = 64;
+			map->SamplesPerChunk = 1024;
 			map->Jitter = 0.95f;
 
 			map->SpawnProb = 0.95f;
-			map->SpawnRadius = 500.0f;
+			map->SpawnRadius = 1000.0f;
 
 			map->MinScale = 5.7f;
 			map->MaxScale = 11.1f;
 
 			map->BendStrengthMin = 0.95f;
-			map->BendStrengthMax = 1.05f;
+			map->BendStrengthMax = 1.55f;
 
 			map->SeedSalt = 0xA53A9E37u;
 		}
@@ -569,11 +569,11 @@ namespace shz
 			map->DirectLightStrength = 0.22f;
 
 			map->WindDirXZ = float2{ 0.80f, 0.60f };
-			map->WindStrength = 0.85f;
-			map->WindSpeed = 0.75f;
+			map->WindStrength = 1.85f;
+			map->WindSpeed = 1.75f;
 
-			map->WindFreq = 0.055f;
-			map->WindGust = 0.22f;
+			map->WindFreq = 0.155f;
+			map->WindGust = 0.42f;
 			map->MaxBendAngle = 1.50f;
 		}
 
@@ -599,8 +599,8 @@ namespace shz
 
 			// Preserve current behavior: same dispatch grid as before
 			DispatchComputeAttribs disp = {};
-			disp.ThreadGroupCountX = (2u * 32u + 8u - 1u) / 8u;
-			disp.ThreadGroupCountY = (2u * 32u + 8u - 1u) / 8u;
+			disp.ThreadGroupCountX = (2u * 64u + 8u - 1u) / 8u;
+			disp.ThreadGroupCountY = (2u * 64u + 8u - 1u) / 8u;
 			disp.ThreadGroupCountZ = 1;
 
 			pContext->DispatchCompute(disp);

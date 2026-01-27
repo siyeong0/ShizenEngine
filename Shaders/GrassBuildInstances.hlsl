@@ -18,7 +18,7 @@ RWByteAddressBuffer g_IndirectArgs;
 // uint Counter (4 bytes) at byte offset 0
 RWByteAddressBuffer g_Counter;
 
-static const uint kMaxInstances = 1u << 24; // 1,048,576
+static const uint kMaxInstances = 1u << 24;
 
 // Heightmap (R16_UNORM sampled as normalized float 0..1)
 Texture2D<float> g_HeightMap;
