@@ -1,15 +1,18 @@
 #include "HLSL_Structures.hlsli"
 #include "PBRLighting.hlsli"
 
+// Constant Buffers
 cbuffer FRAME_CONSTANTS
 {
     FrameConstants g_FrameCB;
 };
+
 cbuffer GRASS_RENDER_CONSTANTS
 {
     GrassRenderConstants g_GrassCB;
 };
 
+// Shadow Map
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
 
@@ -22,31 +25,52 @@ struct PSInput
     bool bFrontFace : SV_IsFrontFace;
 };
 
+// Helper: World ¡æ Shadow UVZ
 static float3 WorldToShadowUVZ(float3 worldPos)
 {
     float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
     ls.xyz /= max(ls.w, 1e-6);
 
     float2 uv = ls.xy * 0.5 + 0.5;
-    uv.y = 1.0 - uv.y;
+    uv.y = 1.0 - uv.y; // flip Y for texture space
+
     return float3(uv, ls.z);
 }
 
+// Lighting tuning parameters (hard-coded for now)
+// Can be moved to GrassRenderConstants later
+
+// Wrap diffuse lighting
+static const float LIGHT_WRAP = 0.35; // 0..1  : how much light wraps around grazing angles
+static const float LIGHT_WRAP_STRNGTH = 0.60; // 0..1  : strength of wrap diffuse contribution
+
+// Backlighting / subsurface scattering approximation
+static const float BACKLIGHTING_STRENGTH = 0.75; // 0..2  : transmission strength
+static const float BACKLIGHTING_POW = 2.0; // 1..8  : how concentrated the backlight is
+
+// Extra specular (very subtle, to avoid plastic look)
+static const float EXTRA_SPECULAR_STRENGTH = 0.08; // 0..0.3
+static const float EXTRA_SPECULAR_POW = 32.0; // 8..128
+
+// ----------------------------------------------------------------------------
+// Main 
+// ----------------------------------------------------------------------------
 float4 main(PSInput IN) : SV_TARGET0
 {
+	// Base color
     float4 baseColor4 = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
-
     if (g_GrassCB.AlphaCut > 0.0 && baseColor4.a < g_GrassCB.AlphaCut)
+    {
         discard;
+    }
+    float3 baseColor = baseColor4.rgb;
 
+	// Normal (two-sided grass)
     float3 N = normalize(IN.NormalWS);
-
-    // IMPORTANT:
-    // If you want grass to behave like deferred (which is typically single-sided),
-    // do NOT flip normal by front-face.
-    // If you want two-sided shading, keep this flip but accept small differences vs deferred.
-    if (!IN.bFrontFace)
+    if (!IN.bFrontFace) // Flip normal for back faces to keep lighting consistent
+    {
         N = -N;
+    }
 
     float3 worldPos = IN.PosWS;
     float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
@@ -54,32 +78,66 @@ float4 main(PSInput IN) : SV_TARGET0
 
     float NdotL = saturate(dot(N, L));
 
-    // Shadow (match deferred: no strength-lerp, apply to direct only)
+	// Shadow (direct light only)
     float shadow = 1.0;
     float3 sh = WorldToShadowUVZ(worldPos);
-    if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
+
+    if (sh.x >= 0.0 && sh.x <= 1.0 &&
+		sh.y >= 0.0 && sh.y <= 1.0 &&
+		sh.z >= 0.0 && sh.z <= 1.0)
     {
+		// Slope-scaled depth bias to reduce shadow acne
         float bias = 0.0001 + (1.0 - NdotL) * 0.001;
         shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
     }
 
-    // Grass material params (keep same as your intent)
-    float3 baseColor = baseColor4.rgb;
+	// Base PBR lighting (IBL + direct)
+	// - Grass uses non-metallic, fairly rough defaults
     float metallic = 0.0;
     float roughness = 0.85;
     float ao = 1.0;
-    float3 emissive = float3(0, 0, 0);
+    float3 emissive = 0.0;
 
-    float3 lit = ShadePBR_DeferredReference(
-        N, V, L,
-        baseColor, 
-        metallic,
-        roughness, 
-        ao,
-        emissive,
-        shadow,
-        g_FrameCB.LightColor, g_FrameCB.LightIntensity,
-        0.65);
+    float3 lit = Shade(
+		N, V, L,
+		baseColor,
+		metallic,
+		roughness,
+		ao,
+		emissive,
+		shadow,
+		g_FrameCB.LightColor,
+		g_FrameCB.LightIntensity,
+		0.20 // ambient factor
+	);
+
+	// Direct light color (already shadowed)
+    float3 directLight = g_FrameCB.LightColor * g_FrameCB.LightIntensity * shadow;
+
+	// Wrap diffuse lighting
+	// - Softens N¡¤L so grazing angles receive more light
+	// - Good for thin geometry like grass blades
+    float wrapNdotL = saturate((dot(N, L) + LIGHT_WRAP) / (1.0 + LIGHT_WRAP));
+    float wrapExtra = wrapNdotL - NdotL; // add only the extra part
+    lit += baseColor * directLight * (wrapExtra * LIGHT_WRAP_STRNGTH);
+
+	// Backlighting / subsurface approximation
+	// - Light passing through thin grass when lit from behind
+    float backNdotL = saturate(dot(-N, L)); // light hitting from behind
+    float backTerm = pow(backNdotL, BACKLIGHTING_POW);
+
+	// Use alpha as a cheap "thickness" approximation
+    float thickness = saturate(baseColor4.a);
+
+    lit += baseColor * directLight * (backTerm * BACKLIGHTING_STRENGTH * thickness);
+
+	// Very subtle additional specular
+	// - Helps avoid overly flat shading without making grass look plastic
+    float3 H = normalize(L + V);
+    float spec = pow(saturate(dot(N, H)), EXTRA_SPECULAR_POW) * EXTRA_SPECULAR_STRENGTH;
+
+	// Grass specular is usually close to white
+    lit += directLight * spec;
 
     return float4(lit, 1.0);
 }

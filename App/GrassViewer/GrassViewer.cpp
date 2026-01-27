@@ -35,8 +35,8 @@ namespace shz
 
 		static void setupCameraDefault(FirstPersonCamera& cam, float aspect)
 		{
-			cam.SetPos(float3(0.0f, 20.0f, 0.8f));
-			cam.SetRotation(0.0f, 0.0f);
+			cam.SetPos(float3(-2.9f, 5.0f, 0.0f));
+			cam.SetRotation(-0.8f, 0.0f);
 			cam.SetMoveSpeed(3.0f);
 			cam.SetSpeedUpScales(5.0f, 1.0f);
 			cam.SetRotationSpeed(0.01f);
@@ -161,7 +161,7 @@ namespace shz
 
 			StaticMesh terrainMesh;
 			Material tm("TerrainMaterial", "DefaultLit");
-			tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 1.f) / 255.f);
+			tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
 			//tm.SetFloat4("g_BaseColorFactor", float4(180.f, 75.f, 24.f, 1.f) / 255.f);
 			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 			tm.SetFloat("g_EmissiveIntensity", 0.0f);

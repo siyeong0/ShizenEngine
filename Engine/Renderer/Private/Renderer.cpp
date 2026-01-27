@@ -83,13 +83,9 @@ namespace shz
 			MaterialTemplate gbufferTemplate;
 			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
 
-			MaterialTemplate gbufferMaskedTemplate;
-			const bool ok1 = makeTemplate(gbufferMaskedTemplate, "DefaultLitMasked", "GBufferMasked.vsh", "GBufferMasked.psh");
-
 			ASSERT(ok0 && ok1, "Build initial material templates failed.");
 
 			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
-			m_TemplateLibrary[gbufferMaskedTemplate.GetName()] = gbufferMaskedTemplate;
 
 			Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		}

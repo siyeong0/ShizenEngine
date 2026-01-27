@@ -1,11 +1,16 @@
 #include "HLSL_Structures.hlsli"
 
+// Constant Buffers
 cbuffer MATERIAL_CONSTANTS
 {
+    // BaseColor/Opacity
     float4 g_BaseColorFactor; // rgb = base color, a = opacity
+
+    // Emissive
     float3 g_EmissiveFactor; // emissive rgb
     float g_EmissiveIntensity; // scalar
 
+    // PBR factors
     float g_RoughnessFactor; // scalar
     float g_NormalScale; // scalar
     float g_OcclusionStrength; // scalar
@@ -16,6 +21,7 @@ cbuffer MATERIAL_CONSTANTS
     uint2 _pad0; // 16-byte align
 }
 
+// Resources
 Texture2D g_BaseColorTex;
 Texture2D g_NormalTex;
 Texture2D g_MetallicRoughnessTex;
@@ -25,6 +31,7 @@ Texture2D g_HeightTex;
 
 SamplerState g_LinearWrapSampler;
 
+// Input / Output
 struct PSInput
 {
     float4 Pos : SV_POSITION;
@@ -32,68 +39,75 @@ struct PSInput
     float3 WorldPos : TEXCOORD1;
     float3 WorldN : TEXCOORD2;
     float3 WorldT : TEXCOORD3;
+
+    bool bFrontFace : SV_IsFrontFace;
 };
 
 struct PSOutput
 {
-	// GBuffer0: Albedo.rgb, Opacity(a)
+    // GBuffer0: Albedo.rgb, Opacity.a
     float4 GBuffer0 : SV_TARGET0;
 
-	// GBuffer1: Normal.xyz packed (0..1), unused or normal strength in w
+    // GBuffer1: Normal.xyz packed (0..1), unused or normal strength in w
     float4 GBuffer1 : SV_TARGET1;
 
-	// GBuffer2: Metallic, Roughness, AO, MaterialId(or Flags/Spec) in a
+    // GBuffer2: Metallic, Roughness, AO, MaterialId(or Flags/Spec) in a
     float4 GBuffer2 : SV_TARGET2;
 
-	// GBuffer3: Emissive.rgb, unused in a
+    // GBuffer3: Emissive.rgb, unused in a
     float4 GBuffer3 : SV_TARGET3;
 };
 
-static float3 unpackNormalTS(float3 n01)
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+float3 UnpackNormalTS(float3 n01)
 {
     return normalize(n01 * 2.0 - 1.0);
 }
 
-static float3 packNormal01(float3 n)
+float3 PackNormal01(float3 n)
 {
     return n * 0.5 + 0.5;
 }
 
-void main(in PSInput PSIn, out PSOutput PSOut)
+// ----------------------------------------------------------------------------
+// Main
+// ----------------------------------------------------------------------------
+void main(in PSInput IN, out PSOutput OUT)
 {
-    float2 uv = PSIn.UV;
-	
-	// ----------------------------
-	// BaseColor / Opacity
-	// ----------------------------
+    float2 uv = IN.UV;
+
+    // BaseColor / Opacity
     float4 baseColor = g_BaseColorFactor;
     if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
     {
         baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
     }
 
-	// Alpha (if you plan alpha test/mask, do it here)
-	// Example:
-	// if (g_MaterialCB.AlphaMode == ALPHA_MASK && baseColor.a < g_MaterialCB.AlphaCutoff) discard;
+    // Alpha cutout (MASK)
+    if (g_AlphaCutoff > 0.0 && baseColor.a < g_AlphaCutoff)
+    {
+        discard;
+    }
 
-	// ----------------------------
-	// Metallic / Roughness
-	// ----------------------------
+    // Metallic / Roughness
     float metallic = g_MetallicFactor;
     float roughness = g_RoughnessFactor;
 
     if ((g_MaterialFlags & MAT_HAS_MR) != 0)
     {
         float4 mr = g_MetallicRoughnessTex.Sample(g_LinearWrapSampler, uv);
-        metallic *= mr.b; // glTF: B = metallic
-        roughness *= mr.g; // glTF: G = roughness
+
+        // glTF convention: B = metallic, G = roughness
+        metallic *= mr.b;
+        roughness *= mr.g;
     }
+
     metallic = saturate(metallic);
     roughness = saturate(roughness);
 
-	// ----------------------------
-	// AO
-	// ----------------------------
+    // AO
     float ao = 1.0;
     if ((g_MaterialFlags & MAT_HAS_AO) != 0)
     {
@@ -101,52 +115,44 @@ void main(in PSInput PSIn, out PSOutput PSOut)
         ao = lerp(1.0, ao, g_OcclusionStrength);
     }
 
-	// ----------------------------
-	// Emissive
-	// ----------------------------
+    // Emissive
     float3 emissive = g_EmissiveFactor;
     if ((g_MaterialFlags & MAT_HAS_EMISSIVE) != 0)
+    {
         emissive *= g_EmissiveTex.Sample(g_LinearWrapSampler, uv).rgb;
+    }
+    emissive *= g_EmissiveIntensity;
 
-	// ----------------------------
-	// Normal (World Space)
-	// ----------------------------
-    float3 N = normalize(PSIn.WorldN);
+    // Normal (World Space) + flip
+    float3 N = normalize(IN.WorldN);
+
+    bool bFlipNormal = !IN.bFrontFace;
+    if (bFlipNormal)
+    {
+        N = -N;
+    }
 
     if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
     {
-        float3 T = normalize(PSIn.WorldT);
+        float3 T = normalize(IN.WorldT);
         float3 B = normalize(cross(N, T));
 
-        float3 nTS = unpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
+        float3 nTS = UnpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
         nTS.xy *= g_NormalScale;
+
+        // Keep normal map consistent on backfaces for two-sided shading
+        if (bFlipNormal)
+        {
+            nTS.xy = -nTS.xy;
+        }
 
         float3x3 TBN = float3x3(T, B, N);
         N = normalize(mul(nTS, TBN));
     }
 
-	// ----------------------------
-	// Pack to GBuffer
-	// ----------------------------
-    PSOut.GBuffer0 = float4(baseColor.rgb, baseColor.a);
-
-	// Normal packed to 0..1
-    PSOut.GBuffer1 = float4(packNormal01(N), 1.0);
-
-	// Material params
-	// - x: metallic
-	// - y: roughness
-	// - z: ao
-	// - w: material id or flags (choose what you need)
-	//
-	// If you want material id:
-	//   PSOut.GBuffer2.w = (float)g_MaterialCB.MaterialId / 255.0;  (example)
-	//
-	// If you want flags:
-	//   PSOut.GBuffer2.w = (float)(g_MaterialCB.Flags & 0xFFFF) / 65535.0;
-	//
-	// For now: pack 0 (reserved)
-    PSOut.GBuffer2 = float4(metallic, roughness, ao, 0.0);
-
-    PSOut.GBuffer3 = float4(emissive, 1.0);
+    // Pack to GBuffer
+    OUT.GBuffer0 = float4(baseColor.rgb, baseColor.a);
+    OUT.GBuffer1 = float4(PackNormal01(N), 1.0);
+    OUT.GBuffer2 = float4(metallic, roughness, ao, 0.0);
+    OUT.GBuffer3 = float4(emissive, 1.0);
 }

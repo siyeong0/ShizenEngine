@@ -127,7 +127,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
         shadow = 1.0;
     }
 	
-    float3 lit = ShadePBR_DeferredReference(
+    float3 lit = Shade(
         N, V, L, 
         baseColor, 
         metallic, 
