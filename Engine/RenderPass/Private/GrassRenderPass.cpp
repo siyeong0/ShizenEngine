@@ -74,9 +74,10 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Buffers: Instance(UAV/SRV), IndirectArgs, Counter
+		// Buffers: Instance(UAV/SRV), IndirectArgs, Counter, CBs
 		// ------------------------------------------------------------
 		{
+			// GrassInstanceBuffer (stride must match updated HLSL GrassInstance)
 			{
 				BufferDesc bd = {};
 				bd.Name = "GrassInstanceBuffer";
@@ -90,6 +91,7 @@ namespace shz
 				ASSERT(m_pGrassInstanceBuffer, "CreateBuffer(GrassInstanceBuffer) failed.");
 			}
 
+			// Indirect args (RAW 20 bytes)
 			{
 				BufferDesc bd = {};
 				bd.Name = "GrassIndirectArgs";
@@ -102,6 +104,7 @@ namespace shz
 				ASSERT(m_pIndirectArgsBuffer, "CreateBuffer(GrassIndirectArgs) failed.");
 			}
 
+			// Counter (RAW 4 bytes)
 			{
 				BufferDesc bd = {};
 				bd.Name = "GrassCounter";
@@ -114,28 +117,42 @@ namespace shz
 				ASSERT(m_pCounterBuffer, "CreateBuffer(GrassCounter) failed.");
 			}
 
+			// NEW: GrassGenConstantsCB (CS)
 			{
 				BufferDesc bd = {};
-				bd.Name = "GrassConstantsCB";
+				bd.Name = "GrassGenConstantsCB";
 				bd.Usage = USAGE_DYNAMIC;
 				bd.BindFlags = BIND_UNIFORM_BUFFER;
 				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = sizeof(hlsl::GrassConstants);
+				bd.Size = sizeof(hlsl::GrassGenConstants);
 
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassConstantsCB);
-				ASSERT(m_pGrassConstantsCB, "CreateBuffer(GrassConstantsCB) failed.");
+				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassGenConstantsCB);
+				ASSERT(m_pGrassGenConstantsCB, "CreateBuffer(GrassGenConstantsCB) failed.");
+			}
+
+			// NEW: GrassRenderConstantsCB (VS/PS)
+			{
+				BufferDesc bd = {};
+				bd.Name = "GrassRenderConstantsCB";
+				bd.Usage = USAGE_DYNAMIC;
+				bd.BindFlags = BIND_UNIFORM_BUFFER;
+				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+				bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassRenderConstantsCB);
+				ASSERT(m_pGrassRenderConstantsCB, "CreateBuffer(GrassRenderConstantsCB) failed.");
 			}
 		}
 
 		// ------------------------------------------------------------
 		// Compute PSO #1: GenerateGrassInstances
+		// - expects: FRAME_CONSTANTS + GRASS_GEN_CONSTANTS + g_OutInstances + g_Counter + g_HeightMap + sampler
 		// ------------------------------------------------------------
 		{
 			ShaderCreateInfo sci = {};
 			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 			sci.Desc.ShaderType = SHADER_TYPE_COMPUTE;
 			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
 			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
 
 			sci.Desc.Name = "GrassGenerateInstancesCS";
@@ -155,9 +172,12 @@ namespace shz
 
 			ShaderResourceVariableDesc vars[] =
 			{
-				{ SHADER_TYPE_COMPUTE, "g_OutInstances", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_COMPUTE, "g_Counter", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_COMPUTE, "g_HeightMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_OutInstances",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_Counter",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_HeightMap",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+				// NEW CB (mutable so we can set buffer)
+				{ SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 			rl.Variables = vars;
 			rl.NumVariables = _countof(vars);
@@ -195,6 +215,12 @@ namespace shz
 			{
 				var->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
 			}
+
+			// Bind CB
+			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+			{
+				var->Set(m_pGrassGenConstantsCB);
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -205,7 +231,6 @@ namespace shz
 			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 			sci.Desc.ShaderType = SHADER_TYPE_COMPUTE;
 			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
 			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
 
 			sci.Desc.UseCombinedTextureSamplers = false;
@@ -255,8 +280,8 @@ namespace shz
 
 		// ------------------------------------------------------------
 		// Grass PSO
-		// - Default STATIC
 		// - g_GrassInstances is MUTABLE
+		// - NEW: GRASS_RENDER_CONSTANTS as MUTABLE (VS/PS)
 		// ------------------------------------------------------------
 		{
 			ShaderCreateInfo vsCI = {};
@@ -288,20 +313,25 @@ namespace shz
 			psoCI.PSODesc.Name = "PSO_Grass";
 			psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-			// Default STATIC, and explicitly mark per-pass/per-frame data as MUTABLE
 			PipelineResourceLayoutDesc& rl = psoCI.PSODesc.ResourceLayout;
 			rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
 			ShaderResourceVariableDesc vars[] =
 			{
-				{ SHADER_TYPE_VERTEX, "g_GrassInstances", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "GRASS_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_ShadowMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				// Instances SRV (VS)
+				{ SHADER_TYPE_VERTEX, "g_GrassInstances",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 
-				{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				// NEW render constants CB (VS + PS, set same buffer)
+				{ SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL,  "GRASS_RENDER_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+				// Existing resources (PS)
+				{ SHADER_TYPE_PIXEL, "g_BaseColorTex",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_ShadowMap",              SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+				{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 
 			rl.Variables = vars;
@@ -325,7 +355,7 @@ namespace shz
 			ImmutableSamplerDesc samplers[] =
 			{
 				{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
-				{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler", shadowClamp },
+				{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
 			};
 
 			rl.ImmutableSamplers = samplers;
@@ -370,22 +400,29 @@ namespace shz
 			m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
 			ASSERT(m_pGrassSRB, "Create SRB for Grass failed.");
 
-			// Bind MUTABLE: instances SRV (ONLY here)
+			// Instances SRV
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
 			{
 				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 			}
 
-			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "GRASS_CONSTANTS"))
+			// Bind render constants CB to both stages if present
+			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
 			{
-				var->Set(m_pGrassConstantsCB);
+				var->Set(m_pGrassRenderConstantsCB);
+			}
+			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS"))
+			{
+				var->Set(m_pGrassRenderConstantsCB);
 			}
 
+			// Shadow map
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
 			{
 				var->Set(ctx.pShadowMapSrv);
 			}
 
+			// IBL
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 			{
 				if (ctx.pEnvDiffuseTex)
@@ -415,7 +452,6 @@ namespace shz
 		buildFramebufferForCurrentBackBuffer(ctx);
 	}
 
-
 	GrassRenderPass::~GrassRenderPass()
 	{
 		m_pFramebuffer.Release();
@@ -433,6 +469,9 @@ namespace shz
 		m_pGrassInstanceBuffer.Release();
 		m_pIndirectArgsBuffer.Release();
 		m_pCounterBuffer.Release();
+
+		m_pGrassGenConstantsCB.Release();
+		m_pGrassRenderConstantsCB.Release();
 	}
 
 	void GrassRenderPass::BeginFrame(RenderPassContext& ctx)
@@ -449,9 +488,7 @@ namespace shz
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
 
 		if (!ctx.HeightMap.Texture)
-		{
 			return;
-		}
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
@@ -459,7 +496,6 @@ namespace shz
 		// (0) Reset counter + init indirect args (GPU)
 		// ---------------------------------------------------------------------
 		{
-			// Counter = 0
 			const uint32 zero = 0;
 			pContext->UpdateBuffer(
 				m_pCounterBuffer,
@@ -468,7 +504,7 @@ namespace shz
 				&zero,
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-			// Indirect args = { IndexCount=6, InstanceCount=0, StartIndex=0, BaseVertex=0, StartInstance=0 }
+			// Keep current behavior (doesn't matter: WriteIndirectArgs will overwrite)
 			const uint32 args[5] = { 6u, 0u, 0u, 0u, 0u };
 			pContext->UpdateBuffer(
 				m_pIndirectArgsBuffer,
@@ -476,6 +512,74 @@ namespace shz
 				sizeof(args),
 				args,
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+		}
+
+		// GrassGenConstants
+		{
+			MapHelper<hlsl::GrassGenConstants> map(
+				pContext,
+				m_pGrassGenConstantsCB,
+				MAP_WRITE,
+				MAP_FLAG_DISCARD);
+
+			map->HeightScale = 100.0f;
+			map->HeightOffset = 0.0f;
+			map->YOffset = 0.0f;
+			map->_padT0 = 0.0f;
+
+			map->HFWidth = 1025;
+			map->HFHeight = 1025;
+			map->CenterXZ = 1;
+			map->_padT1 = 0;
+
+			map->SpacingX = 1.0f;
+			map->SpacingZ = 1.0f;
+			map->_padT2 = 0.0f;
+			map->_padT3 = 0.0f;
+
+			// Chunk placement
+			map->ChunkSize = 4.0f;
+			map->ChunkHalfExtent = 32;
+			map->SamplesPerChunk = 256;
+			map->Jitter = 0.95f;
+
+			map->SpawnProb = 0.95f;
+			map->KeepProb = 0.90f;
+			map->SpawnRadius = 500.0f;
+
+			map->MinScale = 4.5f;
+			map->MaxScale = 14.5f;
+
+			map->BendStrengthMin = 0.35f;
+			map->BendStrengthMax = 0.95f;
+
+			map->SeedSalt = 0xA53A9E37u;
+		}
+
+		// GrassRenderConstants
+		{
+			MapHelper<hlsl::GrassRenderConstants> map(
+				pContext,
+				m_pGrassRenderConstantsCB,
+				MAP_WRITE,
+				MAP_FLAG_DISCARD);
+
+			map->BaseColorFactor = float4{ 0.18f, 0.78f, 0.22f, 1.0f };
+			map->Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
+
+			map->AlphaCut = 0.5f;
+
+			map->Ambient = 0.30f;
+			map->ShadowStregth = 0.18f;
+			map->DirectLightStrength = 0.22f;
+
+			map->WindDirXZ = float2{ 0.80f, 0.60f };
+			map->WindStrength = 0.65f;
+			map->WindSpeed = 0.75f;
+
+			map->WindFreq = 0.035f;
+			map->WindGust = 0.22f;
+			map->MaxBendAngle = 0.55f;
 		}
 
 		// ---------------------------------------------------------------------
@@ -491,13 +595,14 @@ namespace shz
 			{
 				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pCounterBuffer,       RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.HeightMap.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.HeightMap.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
 			pContext->SetPipelineState(m_pGenCSO);
 			pContext->CommitShaderResources(m_pGenCSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
+			// Preserve current behavior: same dispatch grid as before
 			DispatchComputeAttribs disp = {};
 			disp.ThreadGroupCountX = (2u * 32u + 8u - 1u) / 8u;
 			disp.ThreadGroupCountY = (2u * 32u + 8u - 1u) / 8u;
@@ -505,6 +610,10 @@ namespace shz
 
 			pContext->DispatchCompute(disp);
 		}
+
+		// ---------------------------------------------------------------------
+		// (1.5) Compute: WriteIndirectArgs
+		// ---------------------------------------------------------------------
 		{
 			StateTransitionDesc tr[] =
 			{
@@ -525,31 +634,29 @@ namespace shz
 		}
 
 		// ---------------------------------------------------------------------
-		// (2) Prepare for graphics: SRV/Indirect + (optional) UAV barrier
+		// (2) Prepare for graphics: SRV/Indirect
 		// ---------------------------------------------------------------------
 		{
 			StateTransitionDesc tr2[] =
 			{
-				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pIndirectArgsBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr2), tr2);
 		}
 
 		// ------------------------------------------------------------
-		// (3) Graphics 준비: SRV/Indirect + VB/IB 상태 전이 (RenderPass 밖)
+		// (3) Graphics 준비: VB/IB 상태 전이 (RenderPass 밖)
 		// ------------------------------------------------------------
 		{
 			StateTransitionDesc trGfx[] =
 			{
-				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pIndirectArgsBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassInstanceBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pIndirectArgsBuffer,   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
 
 				// IMPORTANT: transitions must be OUTSIDE render pass
 				{ m_GrassMesh.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_GrassMesh.IndexBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-
-				// {m_BaseColorTexView->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE}
 			};
 			pContext->TransitionResourceStates(_countof(trGfx), trGfx);
 		}
@@ -569,23 +676,7 @@ namespace shz
 			pContext->SetPipelineState(m_pGrassPSO);
 			pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-			// Update GrassConstants
-			{
-				MapHelper<hlsl::GrassConstants> map(
-					ctx.pImmediateContext,
-					m_pGrassConstantsCB,
-					MAP_WRITE,
-					MAP_FLAG_DISCARD);
-
-				map->BaseColorFactor = float4{ 0.1f, 0.8f, 0.2f, 1.0f };
-				map->Tint = float4{ 1,1,1,1 };
-				map->AlphaCut = 0.5f;
-				map->MaterialFlags = 0; // hlsl::MAT_HAS_BASECOLOR;
-			}
-
-			// -----------------------------------------------------------------
-			// VB/IB bind: must TRANSITION, not VERIFY, because they're currently COPY_DEST
-			// -----------------------------------------------------------------
+			// VB/IB bind (keep VERIFY - state already transitioned above)
 			{
 				ASSERT(m_GrassMesh.VertexBuffer, "Grass mesh VB is null.");
 				ASSERT(m_GrassMesh.IndexBuffer, "Grass mesh IB is null.");
@@ -619,8 +710,6 @@ namespace shz
 #ifdef SHZ_DEBUG
 			ia.Flags = DRAW_FLAG_VERIFY_ALL;
 #endif
-
-			// Indirect args buffer is already transitioned above, so VERIFY ok
 			ia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
 			ia.pCounterBuffer = nullptr;
@@ -631,9 +720,7 @@ namespace shz
 
 			pContext->EndRenderPass();
 		}
-
 	}
-
 
 	void GrassRenderPass::EndFrame(RenderPassContext& ctx)
 	{
@@ -656,15 +743,9 @@ namespace shz
 
 	void GrassRenderPass::SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh)
 	{
+		(void)ctx;
 		ASSERT(m_pGrassPSO, "PSO is null.");
 		m_GrassMesh = mesh;
-
-		// BaseColor texture
-		//if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
-		//{
-		//	m_BaseColorTexView = m_GrassMesh.Sections[0].Material.BoundTextures[0].Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-		//	var->Set(m_BaseColorTexView);
-		//}
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)
@@ -674,7 +755,7 @@ namespace shz
 		ASSERT(ctx.pDepthDsv, "GrassRenderPass requires Depth DSV (ctx.pDepthDsv).");
 		ASSERT(m_pRenderPass, "Grass render pass is null.");
 
-		ITextureView* pRTV = ctx.pLightingRtv;;
+		ITextureView* pRTV = ctx.pLightingRtv;
 		ITextureView* pDSV = ctx.pDepthDsv;
 		ASSERT(pRTV, "BackBuffer RTV is null.");
 		ASSERT(pDSV, "Depth DSV is null.");

@@ -5,6 +5,11 @@ cbuffer FRAME_CONSTANTS
     FrameConstants g_FrameCB;
 };
 
+cbuffer GRASS_GEN_CONSTANTS
+{
+    GrassGenConstants g_GrassGenCB;
+};
+
 RWStructuredBuffer<GrassInstance> g_OutInstances;
 
 // 20 bytes: D3D12_DRAW_INDEXED_ARGUMENTS layout
@@ -20,81 +25,7 @@ Texture2D<float> g_HeightMap;
 SamplerState g_LinearWrapSampler;
 
 // ------------------------------------------------------------
-// Hard-coded Terrain params (match CPU TerrainHeightField + TerrainMeshBuilder)
-// ------------------------------------------------------------
-
-// Height decode (same as TerrainHeightFieldImportSetting)
-static const float kHeightScale = 100.0;
-static const float kHeightOffset = 0.0;
-
-// Heightfield resolution (match your heightmap: e.g. 1025x1025)
-static const uint kHFWidth = 1025;
-static const uint kHFHeight = 1025;
-
-// World spacing (same as TerrainHeightFieldImportSetting.WorldSpacingX/Z)
-static const float kSpacingX = 1.0;
-static const float kSpacingZ = 1.0;
-
-// Mesh builder options (match TerrainMeshBuildSettings)
-static const bool kCenterXZ = true; // settings.bCenterXZ
-static const float kYOffset = 0.0; // settings.YOffset
-
-// Derived (same as TerrainHeightField::GetWorldSizeX/Z used by builder)
-static const float kSizeX = float(kHFWidth - 1u) * kSpacingX;
-static const float kSizeZ = float(kHFHeight - 1u) * kSpacingZ;
-
-// Derived origin (same as TerrainMeshBuilder originX/originZ)
-static const float kOriginX = (kCenterXZ ? (-0.5 * kSizeX) : 0.0);
-static const float kOriginZ = (kCenterXZ ? (-0.5 * kSizeZ) : 0.0);
-
-// ------------------------------------------------------------
 // Helpers
-// ------------------------------------------------------------
-
-float WorldXZToU(float worldX)
-{
-    return (worldX - kOriginX) / max(kSizeX, 1e-6);
-}
-
-float WorldXZToV(float worldZ)
-{
-    return (worldZ - kOriginZ) / max(kSizeZ, 1e-6);
-}
-
-float SampleWorldHeight(float2 worldXZ)
-{
-    float2 uv;
-    uv.x = WorldXZToU(worldXZ.x);
-    uv.y = WorldXZToV(worldXZ.y);
-    uv = saturate(uv);
-    float hN = g_HeightMap.SampleLevel(g_LinearWrapSampler, uv, 0.0);
-    return kYOffset + (kHeightOffset + hN * kHeightScale);
-}
-
-// ------------------------------------------------------------
-// Chunk config
-// ------------------------------------------------------------
-static const float kChunkSize = 4.0f; // 8m x 8m
-static const int kChunkHalfExtent = 32; // (2*32)^2 = 4096 chunks around camera
-
-// Samples per chunk (trade quality/perf)
-static const uint kSamplesPerChunk = 256; // e.g. 16 points per 4x4m => density 조절
-
-// Jitter inside chunk (0..1 range)
-static const float kJitter = 0.9f;
-
-// Placement + appearance
-static const float kMinScale = 9.5f;
-static const float kMaxScale = 10.0f;
-
-// Density probability per sample (0..1). 0.05 = 5%
-static const float kSpawnProb = 0.99f;
-
-// Optional: radius culling in meters (camera-centered draw window)
-static const float kSpawnRadius = 1000.0f;
-
-// ------------------------------------------------------------
-// Hash / random
 // ------------------------------------------------------------
 uint wang_hash(uint seed)
 {
@@ -118,69 +49,150 @@ uint hash2i(int2 v, uint salt)
     return (x * 73856093u) ^ (y * 19349663u) ^ salt;
 }
 
+float2 normalizeSafe(float2 v)
+{
+    float len2 = dot(v, v);
+    if (len2 < 1e-8)
+        return float2(1, 0);
+    return v * rsqrt(len2);
+}
+
+// ------------------------------------------------------------
+// Terrain mapping (from CB)
+// ------------------------------------------------------------
+float GetSizeX()
+{
+    return float(max((int) g_GrassGenCB.HFWidth - 1, 0)) * g_GrassGenCB.SpacingX;
+}
+
+float GetSizeZ()
+{
+    return float(max((int) g_GrassGenCB.HFHeight - 1, 0)) * g_GrassGenCB.SpacingZ;
+}
+
+float GetOriginX()
+{
+    return (g_GrassGenCB.CenterXZ != 0) ? (-0.5 * GetSizeX()) : 0.0;
+}
+
+float GetOriginZ()
+{
+    return (g_GrassGenCB.CenterXZ != 0) ? (-0.5 * GetSizeZ()) : 0.0;
+}
+
+float WorldXZToU(float worldX)
+{
+    float sizeX = max(GetSizeX(), 1e-6);
+    return (worldX - GetOriginX()) / sizeX;
+}
+
+float WorldXZToV(float worldZ)
+{
+    float sizeZ = max(GetSizeZ(), 1e-6);
+    return (worldZ - GetOriginZ()) / sizeZ;
+}
+
+float SampleWorldHeight(float2 worldXZ)
+{
+    float2 uv;
+    uv.x = WorldXZToU(worldXZ.x);
+    uv.y = WorldXZToV(worldXZ.y);
+    uv = saturate(uv);
+
+    float hN = g_HeightMap.SampleLevel(g_LinearWrapSampler, uv, 0.0);
+    return g_GrassGenCB.YOffset + (g_GrassGenCB.HeightOffset + hN * g_GrassGenCB.HeightScale);
+}
+
 // ------------------------------------------------------------
 // Chunk-based generation
 // Each thread == one chunk
-// Dispatch size: (2*kChunkHalfExtent) x (2*kChunkHalfExtent)
+// Dispatch size: (2*HalfExtent) x (2*HalfExtent)
 // ------------------------------------------------------------
 [numthreads(8, 8, 1)]
 void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 {
-    int2 chunkGrid = int2((int) tid.x - kChunkHalfExtent, (int) tid.y - kChunkHalfExtent);
+    int halfExt = g_GrassGenCB.ChunkHalfExtent;
 
-    float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+    int2 chunkGrid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
 
-    int2 camChunk = int2(floor(camXZ / kChunkSize));
+    float2 camXZ = float2(g_FrameCB.CameraPosition.x,
+                          g_FrameCB.CameraPosition.z);
+
+    float chunkSize = g_GrassGenCB.ChunkSize;
+
+    int2 camChunk = int2(floor(camXZ / max(chunkSize, 1e-6)));
     int2 worldChunk = camChunk + chunkGrid;
 
-    float2 chunkOriginXZ = float2(worldChunk) * kChunkSize;
+    float2 chunkOriginXZ = float2(worldChunk) * chunkSize;
 
-    const uint chunkSeed = hash2i(worldChunk, 0xA53A9E37u);
+    uint chunkSeed = hash2i(worldChunk, g_GrassGenCB.SeedSalt);
 
     [loop]
-    for (uint s = 0; s < kSamplesPerChunk; ++s)
+    for (uint s = 0; s < g_GrassGenCB.SamplesPerChunk; ++s)
     {
         uint seed = wang_hash(chunkSeed ^ (s * 0x9E3779B9u));
 
-        if (rand01(seed ^ 0x7777u) > kSpawnProb)
+        // Spawn probability
+        if (rand01(seed ^ 0x1111u) > g_GrassGenCB.SpawnProb)
+        {
             continue;
+        }
 
-        float ux = rand01(seed ^ 0x1234u);
-        float uz = rand01(seed ^ 0xBEEFu);
+        // Random point inside chunk
+        float ux = rand01(seed ^ 0x2222u);
+        float uz = rand01(seed ^ 0x3333u);
 
-        float jx = (ux - 0.5f) * kJitter;
-        float jz = (uz - 0.5f) * kJitter;
+        float jx = (ux - 0.5f) * g_GrassGenCB.Jitter;
+        float jz = (uz - 0.5f) * g_GrassGenCB.Jitter;
 
-        float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * kChunkSize;
+        float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * chunkSize;
         float2 posXZ = chunkOriginXZ + localXZ;
 
+        // Radius culling
         float2 d = posXZ - camXZ;
-        float dist2 = dot(d, d);
-
-        if (dist2 > kSpawnRadius * kSpawnRadius)
+        if (dot(d, d) > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
+        {
             continue;
+        }
 
-        float keepProb = 0.95;
-        if (rand01(seed ^ 0x1357u) > keepProb)
+        // Optional thinning
+        if (rand01(seed ^ 0x4444u) > g_GrassGenCB.KeepProb)
+        {
             continue;
+        }
 
         uint idx;
         g_Counter.InterlockedAdd(0, 1, idx);
 
         if (idx >= kMaxInstances)
+        {
             return;
+        }
 
-        // --- HeightMap 적용 ---
+        // Height
         float y = SampleWorldHeight(posXZ);
 
-        GrassInstance inst = (GrassInstance) 0;
+        GrassInstance inst;
         inst.PosWS = float3(posXZ.x, y, posXZ.y);
-        inst.Yaw = rand01(seed ^ 0x9999u) * 6.2831853f;
-        inst.Scale = lerp(kMinScale, kMaxScale, rand01(seed ^ 0x2222u)) * 0.04;
+
+        // Scale
+        inst.Scale =
+            lerp(g_GrassGenCB.MinScale, g_GrassGenCB.MaxScale, rand01(seed ^ 0x5555u)) * 0.04f;
+
+        // Orientation
+        inst.Yaw = rand01(seed ^ 0x6666u) * 6.2831853f;
+
+        // Small initial lean (± ~15 degrees)
+        inst.Pitch = lerp(-0.25f, 0.25f, rand01(seed ^ 0x7777u));
+
+        // Bend stiffness
+        inst.BendStrength =
+            lerp(g_GrassGenCB.BendStrengthMin, g_GrassGenCB.BendStrengthMax, rand01(seed ^ 0x8888u));
 
         g_OutInstances[idx] = inst;
     }
 }
+
 
 // ------------------------------------------------------------
 // Indirect args

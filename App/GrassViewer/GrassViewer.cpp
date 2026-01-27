@@ -37,6 +37,7 @@ namespace shz
 			cam.SetPos(float3(0.0f, 20.0f, 0.8f));
 			cam.SetRotation(0.0f, 0.0f);
 			cam.SetMoveSpeed(3.0f);
+			cam.SetSpeedUpScales(5.0f, 1.0f);
 			cam.SetRotationSpeed(0.01f);
 
 			cam.SetProjAttribs(
@@ -184,7 +185,7 @@ namespace shz
 			AssetRef<StaticMesh> helmet = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 			RenderScene::RenderObject helmetObj;
 			helmetObj.Mesh = m_pRenderer->CreateStaticMesh(helmet);
-			helmetObj.Transform = Matrix4x4::TRS({ 0.0f, 15.0f, 5.0f }, { 0.0f, 0.15f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+			helmetObj.Transform = Matrix4x4::TRS({ 0.0f, 5.0f, 5.0f }, { 0.0f, 0.15f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 			helmetObj.bCastShadow = true;
 			m_pRenderScene->AddObject(std::move(helmetObj));
 		}

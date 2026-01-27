@@ -6,6 +6,11 @@ cbuffer FRAME_CONSTANTS
     FrameConstants g_FrameCB;
 };
 
+cbuffer GRASS_RENDER_CONSTANTS
+{
+    GrassRenderConstants g_GrassCB;
+};
+
 SamplerState g_LinearClampSampler;
 
 // Shadow map (Depth) + comparison sampler
@@ -27,16 +32,6 @@ struct PSInput
     bool bFrontFace : SV_IsFrontFace;
 };
 
-cbuffer GRASS_CONSTANTS
-{
-    GrassConstants g_GrassCB;
-};
-
-// ------------------------------------------------------------
-// Helpers (same as Lighting PS style)
-// ------------------------------------------------------------
-static const float PI = 3.14159265358979323846;
-
 static float Pow5(float x)
 {
     float x2 = x * x;
@@ -56,21 +51,15 @@ static float3 EvaluateIBL(
     float roughness,
     float ao)
 {
-    // F0 / Fresnel
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
     float NdotV = saturate(dot(N, V));
 
-    // Fresnel at view angle for IBL spec
     float3 F = FresnelSchlick(F0, NdotV);
-
-    // Energy conservation
     float3 kd = (1.0 - F) * (1.0 - metallic);
 
-    // Diffuse IBL
     float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
     float3 diffuseIBL = kd * baseColor * irradiance;
 
-    // Specular IBL (prefilter + BRDF LUT)
     float3 R = reflect(-V, N);
 
     uint w = 1, h = 1, mipLevels = 1;
@@ -98,19 +87,14 @@ static float3 WorldToShadowUVZ(float3 worldPos)
 
 float4 main(PSInput IN) : SV_TARGET0
 {
-    float4 baseColor = g_GrassCB.BaseColorFactor;
+    float4 baseColor = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
 
-    // alpha cut
     if (g_GrassCB.AlphaCut > 0.0 && baseColor.a < g_GrassCB.AlphaCut)
-    {
         discard;
-    }
 
     float3 N = normalize(IN.NormalWS);
     if (!IN.bFrontFace)
-    {
         N = -N;
-    }
 
     float3 worldPos = IN.PosWS;
     float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
@@ -118,31 +102,36 @@ float4 main(PSInput IN) : SV_TARGET0
 
     float ndl = saturate(dot(N, L));
 
-    // Shadow (same style as Lighting PS)
+    // Shadow
     float shadow = 1.0;
     float3 sh = WorldToShadowUVZ(worldPos);
 
     if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
     {
-        float ndl = saturate(dot(N, L));
         float bias = 0.0001 + (1.0 - ndl) * 0.001;
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
-    }
-    else
-    {
-        shadow = 1.0;
+        float rawShadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
+
+        // Blend shadow towards 1.0 to reduce its impact:
+        // kShadowStrength=0 -> always 1 (no shadow)
+        // kShadowStrength=1 -> original shadow
+        shadow = lerp(1.0, rawShadow, g_GrassCB.ShadowStregth);
     }
 
     float metallic = 0.0;
     float roughness = 0.85;
     float ao = 1.0;
 
-    float3 ibl = EvaluateIBL(N, V, baseColor.rgb, metallic, roughness, ao);
+    float3 ibl = EvaluateIBL(N, V, baseColor.rgb, metallic, roughness, ao) * 0.25;
 
-    float3 diffuse = baseColor.rgb * (ndl * g_FrameCB.LightIntensity) * g_FrameCB.LightColor;
-    diffuse *= shadow * shadow;
+    // Direct diffuse (weakened)
+    float3 direct = baseColor.rgb * (ndl * g_FrameCB.LightIntensity * g_GrassCB.DirectLightStrength) * g_FrameCB.LightColor;
 
-    float3 lit = ibl * 0.35 + diffuse;
+    direct *= shadow;
+
+    float3 lit = ibl + direct;
+
+    // small ambient floor to keep it from going too dark
+    lit += baseColor.rgb * g_GrassCB.Ambient;
+
     return float4(lit, 1.0);
 }

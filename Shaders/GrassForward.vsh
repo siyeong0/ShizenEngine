@@ -5,6 +5,11 @@ cbuffer FRAME_CONSTANTS
     FrameConstants g_FrameCB;
 };
 
+cbuffer GRASS_RENDER_CONSTANTS
+{
+    GrassRenderConstants g_GrassCB;
+};
+
 StructuredBuffer<GrassInstance> g_GrassInstances;
 
 struct VSInput
@@ -12,7 +17,7 @@ struct VSInput
     float3 Pos : ATTRIB0;
     float2 UV : ATTRIB1;
     float3 Normal : ATTRIB2;
-    float3 Tangent : ATTRIB3; 
+    float3 Tangent : ATTRIB3;
 };
 
 struct VSOutput
@@ -33,38 +38,88 @@ float3 ApplyYaw(float3 v, float yaw)
     return float3(x, v.y, z);
 }
 
+// Rotate vector around unit axis (Rodrigues)
+float3 RotateAroundAxis(float3 v, float3 axisUnit, float angle)
+{
+    float s = sin(angle);
+    float c = cos(angle);
+    return v * c + cross(axisUnit, v) * s + axisUnit * dot(axisUnit, v) * (1.0 - c);
+}
+
 VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
 {
     VSOutput OUT;
 
     GrassInstance inst = g_GrassInstances[instanceID];
 
-    // ----------------------------
-    // Position: local -> world
-    // ----------------------------
-    float3 p = IN.Pos;
+    // --------------------------------
+    // Local -> Scale
+    // --------------------------------
+    float3 p = IN.Pos * inst.Scale;
+    float3 n = IN.Normal;
+
+    // --------------------------------
+    // Yaw rotation
+    // --------------------------------
     p = ApplyYaw(p, inst.Yaw);
-    p *= inst.Scale;
+    n = ApplyYaw(n, inst.Yaw);
+
+    // --------------------------------
+    // Height-based weight (smooth)
+    // Assumption: blade base at y=0, tip around y=1 in the source mesh
+    // If your mesh is taller/shorter, this still works because we clamp
+    // --------------------------------
+    float height01 = saturate(IN.Pos.y);
+    float w = height01 * height01; // smoother than linear -> reduces "kinks"
+
+    // --------------------------------
+    // Wind (instance-coherent)
+    // --------------------------------
+    float2 windDir2 = normalize(g_GrassCB.WindDirXZ);
+    float phase =
+        dot(inst.PosWS.xz, windDir2) * g_GrassCB.WindFreq +
+        g_FrameCB.CurrTime * g_GrassCB.WindSpeed;
+
+    float wind = sin(phase);
+
+    // --------------------------------
+    // Total bend angle
+    // --------------------------------
+    float totalPitch =
+        inst.Pitch +
+        wind * inst.BendStrength * g_GrassCB.WindStrength;
+
+    float angle = clamp(totalPitch * w,
+                        -g_GrassCB.MaxBendAngle,
+                         g_GrassCB.MaxBendAngle);
+
+    // --------------------------------
+    // Bend pivot: rotate around blade base (root)
+    // IMPORTANT: this prevents zig-zag when mesh origin isn't at the base.
+    //
+    // If your mesh base is not exactly y=0, you can also set this to a constant
+    // known base offset, but using (0,0,0) is safe when the blade is authored at y=0.
+    // --------------------------------
+    float3 pivot = float3(0, 0, 0);
+
+    // Bend axis: local X after yaw (as you had)
+    float3 bendAxis = float3(1, 0, 0);
+
+    // Pivoted rotation
+    p = RotateAroundAxis(p - pivot, bendAxis, angle) + pivot;
+    n = RotateAroundAxis(n, bendAxis, angle);
+
+    // --------------------------------
+    // World translate
+    // --------------------------------
     p += inst.PosWS;
 
     OUT.PosWS = p;
+    OUT.NormalWS = normalize(n);
+    OUT.UV = IN.UV;
 
     // Clip
-    float4 worldPos4 = float4(p, 1.0);
-    OUT.Pos = mul(worldPos4, g_FrameCB.ViewProj);
-    
-    float3 n = IN.Normal;
-
-    // inverse scale (avoid div by zero)
-    float invScale = 1.0 / inst.Scale;
-
-    // Apply normal matrix approx for (Yaw * Scale):
-    // normal' = normalize( R * (n * invScale) )
-    n *= invScale;
-    n = ApplyYaw(n, inst.Yaw);
-    OUT.NormalWS = normalize(n);
-
-    OUT.UV = IN.UV;
+    OUT.Pos = mul(float4(p, 1.0), g_FrameCB.ViewProj);
 
     return OUT;
 }
