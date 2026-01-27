@@ -7,29 +7,13 @@
 
 namespace shz
 {
-	static inline uint32 clampMipDim(uint32 v) noexcept
-	{
-		if (v == 0)
-		{
-			return 0;
-		}
-		return (v > 0) ? v : 1;
-	}
-
 	static inline void setError(std::string* pOutError, const char* msg)
 	{
-		if (pOutError)
-		{
-			*pOutError = (msg != nullptr) ? msg : "Unknown error.";
-		}
+		if (pOutError) *pOutError = (msg != nullptr) ? msg : "Unknown error.";
 	}
-
 	static inline void setError(std::string* pOutError, const std::string& msg)
 	{
-		if (pOutError)
-		{
-			*pOutError = msg;
-		}
+		if (pOutError) *pOutError = msg;
 	}
 
 	std::unique_ptr<AssetObject> TextureImporter::operator()(
@@ -41,9 +25,6 @@ namespace shz
 		ASSERT(pOutResidentBytes != nullptr, "Invalid argument. pOutResidentBytes is null.");
 		*pOutResidentBytes = 0;
 
-		// ------------------------------------------------------------
-		// Validate meta
-		// ------------------------------------------------------------
 		if (meta.SourcePath.empty())
 		{
 			ASSERT(false, "TextureImporter: meta.SourcePath is empty.");
@@ -51,21 +32,11 @@ namespace shz
 			return {};
 		}
 
-		// Import settings are stored in meta payload (import/export only).
 		const TextureImportSettings* pSettings = meta.TryGetTextureMeta();
-		if (!pSettings)
-		{
-			// It's valid to have no payload, but then we use defaults.
-		}
 
-		// ------------------------------------------------------------
-		// Build TextureLoadInfo (force RGBA8 in system memory)
-		// ------------------------------------------------------------
 		TextureLoadInfo tli = {};
-		tli.Name = meta.Name.empty() ? "TextureAsset" : meta.Name.c_str();
+		tli.Name = meta.Name.empty() ? "Texture" : meta.Name.c_str();
 
-		// We are not creating GPU texture here, but TextureLoader still needs fields.
-		// Keep defaults.
 		tli.IsSRGB = (pSettings != nullptr) ? pSettings->bSRGB : false;
 		tli.GenerateMips = (pSettings != nullptr) ? pSettings->bGenerateMips : true;
 		tli.FlipVertically = (pSettings != nullptr) ? pSettings->bFlipVertically : false;
@@ -73,17 +44,20 @@ namespace shz
 
 		tli.MipFilter = (pSettings != nullptr) ? pSettings->MipFilter : TEXTURE_LOAD_MIP_FILTER_DEFAULT;
 		tli.CompressMode = TEXTURE_LOAD_COMPRESS_MODE_NONE;
-
 		tli.Swizzle = (pSettings != nullptr) ? pSettings->Swizzle : TextureComponentMapping::Identity();
 		tli.UniformImageClipDim = (pSettings != nullptr) ? pSettings->UniformImageClipDim : 0;
 
-		// IMPORTANT:
-		// We want system-memory RGBA8. Force loader output format to RGBA8.
-		tli.Format = TEX_FORMAT_RGBA8_UNORM;
+		// ------------------------------------------------------------
+		// Format selection
+		// ------------------------------------------------------------
+		// If you add a field like TextureImportSettings::ForceFormat, use it here.
+		// For now: keep previous behavior (RGBA8), with optional SRGB variant.
+		{
+			const bool bSRGB = tli.IsSRGB;
+			tli.Format = bSRGB ? TEX_FORMAT_RGBA8_UNORM_SRGB : TEX_FORMAT_RGBA8_UNORM;
+		}
 
 		RefCntAutoPtr<ITextureLoader> pLoader;
-
-		// Let loader detect the file format from content.
 		CreateTextureLoaderFromFile(meta.SourcePath.c_str(), IMAGE_FILE_FORMAT_UNKNOWN, tli, &pLoader);
 
 		if (!pLoader)
@@ -93,7 +67,6 @@ namespace shz
 		}
 
 		const TextureDesc& desc = pLoader->GetTextureDesc();
-
 		if (desc.Width == 0 || desc.Height == 0 || desc.MipLevels == 0)
 		{
 			ASSERT(false, "TextureImporter: Invalid texture desc from loader.");
@@ -101,13 +74,18 @@ namespace shz
 			return {};
 		}
 
-		// ------------------------------------------------------------
-		// Fill TextureAsset mips (RGBA8 tightly packed)
-		// ------------------------------------------------------------
-		// NOTE:
-		// This assumes TextureAsset is (or can be) returned as AssetObject.
-		// If TextureAsset does not inherit AssetObject, wrap it in an AssetObject.
+		// Use the actual output format from loader desc (should match tli.Format)
+		const TEXTURE_FORMAT outFmt = desc.Format;
+
+		const uint32 bpp = GetTextureFormatAttribs(outFmt).GetElementSize();
+		if (bpp == 0)
+		{
+			setError(pOutError, "TextureImporter: Unsupported texture format for CPU import.");
+			return {};
+		}
+
 		Texture tex = {};
+		tex.SetFormat(outFmt);
 
 		std::vector<TextureMip>& mips = tex.GetMips();
 		mips.clear();
@@ -133,16 +111,20 @@ namespace shz
 			tm.Width = mipW;
 			tm.Height = mipH;
 
-			const uint32 dstRowBytes = mipW * 4u; // RGBA8
-			tm.RGBA.resize(static_cast<size_t>(dstRowBytes) * static_cast<size_t>(mipH));
+			const uint32 dstRowBytes = mipW * bpp;
+			tm.Data.resize(static_cast<size_t>(dstRowBytes) * static_cast<size_t>(mipH));
 
-			// TextureLoader may return padded stride. Copy row-by-row safely.
 			const uint8* src = reinterpret_cast<const uint8*>(sub.pData);
 			const uint64 srcStride = sub.Stride;
 
-			ASSERT(srcStride >= dstRowBytes, "TextureImporter: Source stride is smaller than tightly packed row size.");
+			if (srcStride < dstRowBytes)
+			{
+				ASSERT(false, "TextureImporter: Source stride is smaller than tightly packed row size.");
+				setError(pOutError, "TextureImporter: Invalid stride from loader.");
+				return {};
+			}
 
-			uint8* dst = tm.RGBA.data();
+			uint8* dst = tm.Data.data();
 
 			for (uint32 y = 0; y < mipH; ++y)
 			{
@@ -151,25 +133,19 @@ namespace shz
 				std::memcpy(dstRow, srcRow, dstRowBytes);
 			}
 
-			totalBytes += static_cast<uint64>(tm.RGBA.size());
-
+			totalBytes += static_cast<uint64>(tm.Data.size());
 			mips.emplace_back(static_cast<TextureMip&&>(tm));
 		}
 
-		// Validate the asset we produced.
 		if (!tex.IsValid())
 		{
-			ASSERT(false, "TextureImporter: Produced TextureAsset is invalid.");
-			setError(pOutError, "TextureImporter: Produced TextureAsset is invalid.");
+			ASSERT(false, "TextureImporter: Produced Texture is invalid.");
+			setError(pOutError, "TextureImporter: Produced Texture is invalid.");
 			return {};
 		}
 
 		*pOutResidentBytes = totalBytes;
-
-		// ------------------------------------------------------------
-		// Return as AssetObject
-		// ------------------------------------------------------------
 		return std::make_unique<TypedAssetObject<Texture>>(tex);
 	}
+}
 
-} // namespace shz

@@ -172,11 +172,10 @@ namespace shz
 
 			ShaderResourceVariableDesc vars[] =
 			{
-				{ SHADER_TYPE_COMPUTE, "g_OutInstances",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_COMPUTE, "g_Counter",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_COMPUTE, "g_HeightMap",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-
-				// NEW CB (mutable so we can set buffer)
+				{ SHADER_TYPE_COMPUTE, "g_OutInstances",	SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_Counter",			SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_HeightMap",		SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_DensityField",	SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				{ SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 			rl.Variables = vars;
@@ -522,6 +521,7 @@ namespace shz
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
+			// --- Terrain / Height decode ---
 			map->HeightScale = 100.0f;
 			map->HeightOffset = 0.0f;
 			map->YOffset = 0.0f;
@@ -533,15 +533,16 @@ namespace shz
 			map->SpacingX = 1.0f;
 			map->SpacingZ = 1.0f;
 
-			// Chunk placement
+			// --- Chunk placement ---
 			map->ChunkSize = 4.0f;
 			map->ChunkHalfExtent = 64;
 			map->SamplesPerChunk = 1024;
 			map->Jitter = 0.95f;
 
-			map->SpawnProb = 0.95f;
+			map->SpawnProb = 0.75f;
 			map->SpawnRadius = 1000.0f;
 
+			// Scale
 			map->MinScale = 5.7f;
 			map->MaxScale = 11.1f;
 
@@ -549,7 +550,21 @@ namespace shz
 			map->BendStrengthMax = 1.55f;
 
 			map->SeedSalt = 0xA53A9E37u;
+
+			// Density field tuning
+			map->DensityTiling = 0.02f;
+			map->DensityContrast = 0.28f;  
+			map->DensityPow = 0.70f;
+			map->_padD0 = 0.0f;
+
+			// Slope/Height masks
+			map->SlopeToDensity = 0.15f;
+
+			map->HeightMinN = 0.00f; 
+			map->HeightMaxN = 1.00f;
+			map->HeightFadeN = 0.03f;  
 		}
+
 
 		// GrassRenderConstants
 		{
@@ -559,7 +574,7 @@ namespace shz
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
-			map->BaseColorFactor = float4{ 0.18f, 0.78f, 0.22f, 1.0f };
+			map->BaseColorFactor = float4(150.f, 200.f, 100.f, 255.f) / 255.f;
 			map->Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
 
 			map->AlphaCut = 0.5f;
@@ -586,11 +601,17 @@ namespace shz
 				var->Set(ctx.HeightMap.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			}
 
+			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
+			{
+				var->Set(m_GrassDensityFieldTex.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
+
 			StateTransitionDesc tr[] =
 			{
 				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pCounterBuffer,       RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.HeightMap.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_GrassDensityFieldTex.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -739,8 +760,15 @@ namespace shz
 	void GrassRenderPass::SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh)
 	{
 		(void)ctx;
-		ASSERT(m_pGrassPSO, "PSO is null.");
+		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
 		m_GrassMesh = mesh;
+	}
+
+	void GrassRenderPass::SetGrassDensityField(RenderPassContext& ctx, const TextureRenderData& tex)
+	{
+		(void)ctx;
+		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
+		m_GrassDensityFieldTex = tex;
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)

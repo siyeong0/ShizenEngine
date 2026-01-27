@@ -8,6 +8,8 @@
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
+#include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
+
 #include "Engine/Image/Public/TextureUtilities.h"
 
 #include "Engine/RenderPass/Public/RenderPassBase.h"
@@ -281,6 +283,14 @@ namespace shz
 
 			StaticMeshRenderData grassRenderData = CreateStaticMesh(*grassPtr);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, grassRenderData);
+
+			AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
+			AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
+
+			Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
+
+			TextureRenderData grassDensityFieldTex = CreateTexture(perlin);
+			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassDensityField(m_PassCtx, grassDensityFieldTex);
 		}
 
 		wirePassOutputs();
@@ -1086,7 +1096,7 @@ namespace shz
 			ASSERT(mip.Width != 0 && mip.Height != 0, "Invalid mip dimension.");
 
 			const uint64 expectedBytes = uint64(mip.Width) * uint64(mip.Height) * 4ull;
-			ASSERT(mip.RGBA.data(), "Mip RGBA data is null.");
+			ASSERT(!mip.Data.empty(), "Mip data is empty.");
 		}
 
 		TextureDesc desc = {};
@@ -1097,8 +1107,7 @@ namespace shz
 		desc.MipLevels = static_cast<uint32>(mips.size());
 		desc.ArraySize = 1;
 
-		// Since system-memory format is RGBA8,.
-		desc.Format = TEX_FORMAT_RGBA8_UNORM;
+		desc.Format = texture.GetFormat();
 
 		desc.Usage = USAGE_DEFAULT;
 		desc.BindFlags = BIND_SHADER_RESOURCE;
@@ -1111,8 +1120,8 @@ namespace shz
 			const TextureMip& mip = mips[i];
 
 			TextureSubResData sr = {};
-			sr.pData = mip.RGBA.data();
-			sr.Stride = mip.Width * 4; // tightly packed RGBA8 row pitch
+			sr.pData = mip.Data.data();
+			sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
 			sr.DepthStride = 0;
 
 			subres[i] = sr;

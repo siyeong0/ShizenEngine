@@ -103,13 +103,25 @@ struct GrassGenConstants
 
     float MinScale;
     float MaxScale;
-    float SpawnProb; // keep if rand <= SpawnProb
+    float SpawnProb; // base probability
     float SpawnRadius; // meters
 
-    float BendStrengthMin; // base bend random range
+    float BendStrengthMin;
     float BendStrengthMax;
-    uint SeedSalt; // salt for deterministic placement
+    uint SeedSalt;
     uint _padT4;
+
+    // Density field (world tiled) tuning
+    float DensityTiling; // meters -> uv. ex) 0.02 => 50m period (1/50)
+    float DensityContrast; // 0..0.49. ex) 0.25 => smoothstep(0.25, 0.75)
+    float DensityPow; // < 1 boosts mids. ex) 0.65
+    float _padD0;
+
+    // Slope/Height masks
+    float SlopeToDensity; // slope (tan-ish) -> 0..1 scale. ex) 0.12~0.25
+    float HeightMinN; // normalized 0..1 (heightmap space)
+    float HeightMaxN; // normalized 0..1
+    float HeightFadeN; // normalized fade width. ex) 0.02~0.05
 };
 
 // ----------------------------------------------

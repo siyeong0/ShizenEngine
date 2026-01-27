@@ -34,7 +34,7 @@ namespace shz
         IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
 
         void SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh);
-
+        void SetGrassDensityField(RenderPassContext& ctx, const TextureRenderData& tex);
     private:
         bool buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx);
 
@@ -65,5 +65,6 @@ namespace shz
         uint32 m_MaxInstances = 1u << 24;
 
         StaticMeshRenderData m_GrassMesh;
+        TextureRenderData m_GrassDensityFieldTex;
     };
 } // namespace shz
