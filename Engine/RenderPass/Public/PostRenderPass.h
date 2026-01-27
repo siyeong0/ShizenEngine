@@ -39,7 +39,7 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> m_pPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pSRB;
 
-		std::string m_VS = "PostCopy.vsh";
+		std::string m_VS = "FullScreen.vsh";
 		std::string m_PS = "PostCopy.psh";
 	};
 } // namespace shz

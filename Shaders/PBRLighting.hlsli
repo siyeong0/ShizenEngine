@@ -77,7 +77,7 @@ static float3 EvaluateIBL_PBR(float3 N, float3 V, float3 baseColor, float metall
 }
 
 // ------------------------------------------------------------
-// Deferred-reference lighting: direct PBR + IBL + emissive
+// Lighting function: direct PBR + IBL + emissive
 // Notes:
 // - shadow is expected 0..1 (0 fully shadowed)
 // - iblScale lets you keep your current "ibl * 0.25" policy

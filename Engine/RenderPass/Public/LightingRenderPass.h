@@ -55,7 +55,7 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> m_pPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pSRB;
 
-		std::string m_VS = "Lighting.vsh";
+		std::string m_VS = "FullScreen.vsh";
 		std::string m_PS = "Lighting.psh";
 	};
 } // namespace shz
