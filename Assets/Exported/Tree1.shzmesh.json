@@ -1,0 +1,510 @@
+{
+  "Bin": "Tree1.shzmesh.bin",
+  "Bounds": {
+    "Max": [
+      1.9202561378479004,
+      6.856752395629883,
+      1.498358964920044
+    ],
+    "Min": [
+      -2.1308679580688477,
+      -0.009869025088846684,
+      -1.2456235885620117
+    ]
+  },
+  "Format": "shzmesh",
+  "IndexCount": 25560,
+  "IndexType": "u16",
+  "Indices": {
+    "Count": 25560,
+    "Offset": 455884
+  },
+  "MaterialSlots": [
+    {
+      "Name": "NormalTree_Bark",
+      "Options": {
+        "BlendMode": 0,
+        "CullMode": 3,
+        "DepthEnable": true,
+        "DepthFunc": 4,
+        "DepthWriteEnable": true,
+        "FrontCounterClockwise": true,
+        "LinearWrapSamplerDesc": {
+          "AddressU": 1,
+          "AddressV": 1,
+          "AddressW": 1,
+          "BorderColor": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ComparisonFunc": 1,
+          "MagFilter": 2,
+          "MaxAnisotropy": 0,
+          "MaxLOD": 3.4028234663852886e+38,
+          "MinFilter": 2,
+          "MinLOD": 0.0,
+          "MipFilter": 2,
+          "MipLODBias": 0.0
+        },
+        "LinearWrapSamplerName": "g_LinearWrapSampler",
+        "TextureBindingMode": 1
+      },
+      "RenderPassName": "GBuffer",
+      "Resources": [
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_BaseColorTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Trees/_embedded_textures/tex_0.png",
+          "TextureAssetID": {
+            "Hi": 15377545078554575369,
+            "Lo": 5815293752363187684
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Trees/_embedded_textures/tex_1.png",
+          "TextureAssetID": {
+            "Hi": 16372231574069565402,
+            "Lo": 835067813003683959
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        }
+      ],
+      "TemplateName": "DefaultLit",
+      "Values": [
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_BaseColorFactor",
+          "Type": 4
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_EmissiveFactor",
+          "Type": 3
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveIntensity",
+          "Type": 1
+        },
+        {
+          "Data": [
+            105,
+            131,
+            13,
+            63
+          ],
+          "Name": "g_RoughnessFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_MetallicFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            3,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MaterialFlags",
+          "Type": 9
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "_pad0",
+          "Type": 10
+        }
+      ]
+    },
+    {
+      "Name": "NormalTree_Leaves",
+      "Options": {
+        "BlendMode": 1,
+        "CullMode": 3,
+        "DepthEnable": true,
+        "DepthFunc": 4,
+        "DepthWriteEnable": true,
+        "FrontCounterClockwise": true,
+        "LinearWrapSamplerDesc": {
+          "AddressU": 1,
+          "AddressV": 1,
+          "AddressW": 1,
+          "BorderColor": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ComparisonFunc": 1,
+          "MagFilter": 2,
+          "MaxAnisotropy": 0,
+          "MaxLOD": 3.4028234663852886e+38,
+          "MinFilter": 2,
+          "MinLOD": 0.0,
+          "MipFilter": 2,
+          "MipLODBias": 0.0
+        },
+        "LinearWrapSamplerName": "g_LinearWrapSampler",
+        "TextureBindingMode": 1
+      },
+      "RenderPassName": "GBuffer",
+      "Resources": [
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_BaseColorTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Trees/_embedded_textures/tex_2.png",
+          "TextureAssetID": {
+            "Hi": 13579592863060106243,
+            "Lo": 9516873290293272350
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        }
+      ],
+      "TemplateName": "DefaultLitMasked",
+      "Values": [
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_BaseColorFactor",
+          "Type": 4
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_EmissiveFactor",
+          "Type": 3
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveIntensity",
+          "Type": 1
+        },
+        {
+          "Data": [
+            205,
+            204,
+            76,
+            63
+          ],
+          "Name": "g_RoughnessFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MetallicFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MaterialFlags",
+          "Type": 9
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "_pad0",
+          "Type": 10
+        }
+      ]
+    }
+  ],
+  "Sections": [
+    {
+      "BaseVertex": 0,
+      "FirstIndex": 0,
+      "IndexCount": 14376,
+      "LocalBounds": {
+        "Max": [
+          1.4404239654541016,
+          6.185760498046875,
+          0.676365852355957
+        ],
+        "Min": [
+          -1.6520121097564697,
+          -0.009869025088846684,
+          -0.6190109848976135
+        ]
+      },
+      "MaterialSlot": 0
+    },
+    {
+      "BaseVertex": 2905,
+      "FirstIndex": 14376,
+      "IndexCount": 11184,
+      "LocalBounds": {
+        "Max": [
+          1.9202561378479004,
+          6.856752395629883,
+          1.4983588457107544
+        ],
+        "Min": [
+          -2.1308679580688477,
+          -0.009869025088846684,
+          -1.2456235885620117
+        ]
+      },
+      "MaterialSlot": 1
+    }
+  ],
+  "Streams": {
+    "Normals": {
+      "Count": 10361,
+      "Offset": 124332,
+      "Stride": 12
+    },
+    "Positions": {
+      "Count": 10361,
+      "Offset": 0,
+      "Stride": 12
+    },
+    "Tangents": {
+      "Count": 10361,
+      "Offset": 248664,
+      "Stride": 12
+    },
+    "TexCoord0": {
+      "Count": 10361,
+      "Offset": 372996,
+      "Stride": 8
+    }
+  },
+  "Version": 1,
+  "VertexCount": 10361
+}

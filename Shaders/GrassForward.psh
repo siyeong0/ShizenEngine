@@ -1,26 +1,17 @@
 #include "HLSL_Structures.hlsli"
-#include "DiskSamples.hlsli"
+#include "PBRLighting.hlsli"
 
 cbuffer FRAME_CONSTANTS
 {
     FrameConstants g_FrameCB;
 };
-
 cbuffer GRASS_RENDER_CONSTANTS
 {
     GrassRenderConstants g_GrassCB;
 };
 
-SamplerState g_LinearClampSampler;
-
-// Shadow map (Depth) + comparison sampler
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
-
-// IBL textures
-TextureCube<float4> g_IrradianceIBLTex;
-TextureCube<float4> g_SpecularIBLTex;
-Texture2D<float2> g_BrdfIBLTex;
 
 struct PSInput
 {
@@ -28,51 +19,8 @@ struct PSInput
     float3 PosWS : TEXCOORD0;
     float3 NormalWS : TEXCOORD1;
     float2 UV : TEXCOORD2;
-
     bool bFrontFace : SV_IsFrontFace;
 };
-
-static float Pow5(float x)
-{
-    float x2 = x * x;
-    return x2 * x2 * x;
-}
-
-static float3 FresnelSchlick(float3 F0, float cosTheta)
-{
-    return F0 + (1.0 - F0) * Pow5(saturate(1.0 - cosTheta));
-}
-
-static float3 EvaluateIBL(
-    float3 N,
-    float3 V,
-    float3 baseColor,
-    float metallic,
-    float roughness,
-    float ao)
-{
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
-    float NdotV = saturate(dot(N, V));
-
-    float3 F = FresnelSchlick(F0, NdotV);
-    float3 kd = (1.0 - F) * (1.0 - metallic);
-
-    float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
-    float3 diffuseIBL = kd * baseColor * irradiance;
-
-    float3 R = reflect(-V, N);
-
-    uint w = 1, h = 1, mipLevels = 1;
-    g_SpecularIBLTex.GetDimensions(0, w, h, mipLevels);
-
-    float mip = roughness * (float) (max((int) mipLevels - 1, 0));
-    float3 prefiltered = g_SpecularIBLTex.SampleLevel(g_LinearClampSampler, R, mip).rgb;
-
-    float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, roughness));
-    float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
-
-    return (diffuseIBL + specIBL) * ao;
-}
 
 static float3 WorldToShadowUVZ(float3 worldPos)
 {
@@ -81,18 +29,22 @@ static float3 WorldToShadowUVZ(float3 worldPos)
 
     float2 uv = ls.xy * 0.5 + 0.5;
     uv.y = 1.0 - uv.y;
-
     return float3(uv, ls.z);
 }
 
 float4 main(PSInput IN) : SV_TARGET0
 {
-    float4 baseColor = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
+    float4 baseColor4 = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
 
-    if (g_GrassCB.AlphaCut > 0.0 && baseColor.a < g_GrassCB.AlphaCut)
+    if (g_GrassCB.AlphaCut > 0.0 && baseColor4.a < g_GrassCB.AlphaCut)
         discard;
 
     float3 N = normalize(IN.NormalWS);
+
+    // IMPORTANT:
+    // If you want grass to behave like deferred (which is typically single-sided),
+    // do NOT flip normal by front-face.
+    // If you want two-sided shading, keep this flip but accept small differences vs deferred.
     if (!IN.bFrontFace)
         N = -N;
 
@@ -100,38 +52,34 @@ float4 main(PSInput IN) : SV_TARGET0
     float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
     float3 L = normalize(-g_FrameCB.LightDirWS);
 
-    float ndl = saturate(dot(N, L));
+    float NdotL = saturate(dot(N, L));
 
-    // Shadow
+    // Shadow (match deferred: no strength-lerp, apply to direct only)
     float shadow = 1.0;
     float3 sh = WorldToShadowUVZ(worldPos);
-
     if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
     {
-        float bias = 0.0001 + (1.0 - ndl) * 0.001;
-        float rawShadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
-
-        // Blend shadow towards 1.0 to reduce its impact:
-        // kShadowStrength=0 -> always 1 (no shadow)
-        // kShadowStrength=1 -> original shadow
-        shadow = lerp(1.0, rawShadow, g_GrassCB.ShadowStregth);
+        float bias = 0.0001 + (1.0 - NdotL) * 0.001;
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
     }
 
+    // Grass material params (keep same as your intent)
+    float3 baseColor = baseColor4.rgb;
     float metallic = 0.0;
     float roughness = 0.85;
     float ao = 1.0;
+    float3 emissive = float3(0, 0, 0);
 
-    float3 ibl = EvaluateIBL(N, V, baseColor.rgb, metallic, roughness, ao) * 0.25;
-
-    // Direct diffuse (weakened)
-    float3 direct = baseColor.rgb * (ndl * g_FrameCB.LightIntensity * g_GrassCB.DirectLightStrength) * g_FrameCB.LightColor;
-
-    direct *= shadow;
-
-    float3 lit = ibl + direct;
-
-    // small ambient floor to keep it from going too dark
-    lit += baseColor.rgb * g_GrassCB.Ambient;
+    float3 lit = ShadePBR_DeferredReference(
+        N, V, L,
+        baseColor, 
+        metallic,
+        roughness, 
+        ao,
+        emissive,
+        shadow,
+        g_FrameCB.LightColor, g_FrameCB.LightIntensity,
+        0.65);
 
     return float4(lit, 1.0);
 }

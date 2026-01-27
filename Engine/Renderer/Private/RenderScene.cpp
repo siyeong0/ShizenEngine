@@ -245,7 +245,7 @@ namespace shz
 			float3(0.0f, 0.0f, 0.0f),
 			float3(0.0f, 0.0f, 0.0f),
 			float3(1.0f, 1.0f, 1.0f));
-		terrainObj.bCastShadow = true;
+		terrainObj.bCastShadow = false;
 		m_TerrainMesh = AddObject(std::move(terrainObj));
 	}
 

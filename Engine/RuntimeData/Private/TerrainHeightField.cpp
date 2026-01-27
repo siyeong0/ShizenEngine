@@ -94,11 +94,17 @@ namespace shz
 		ASSERT(m_CI.WorldSpacingX > 0.f, "WorldSpacingX must be greater than zero.");
 		ASSERT(m_CI.WorldSpacingZ > 0.f, "WorldSpacingZ must be greater than zero.");
 
-		// World -> grid coordinate (float)
-		const float gx = worldX / m_CI.WorldSpacingX;
-		const float gz = worldZ / m_CI.WorldSpacingZ;
+		// Compute origin used by TerrainMeshBuilder
+		const float sizeX = GetWorldSizeX(); // (Width - 1) * spacingX
+		const float sizeZ = GetWorldSizeZ();
 
-		// Clamp to valid range
+		const float originX = -0.5f * sizeX;
+		const float originZ = -0.5f * sizeZ;
+
+		// World -> grid coordinate (float)
+		const float gx = (worldX - originX) / m_CI.WorldSpacingX;
+		const float gz = (worldZ - originZ) / m_CI.WorldSpacingZ;
+
 		const float maxX = static_cast<float>(m_CI.Width - 1);
 		const float maxZ = static_cast<float>(m_CI.Height - 1);
 
@@ -114,17 +120,16 @@ namespace shz
 		const float tx = x - static_cast<float>(x0);
 		const float tz = z - static_cast<float>(z0);
 
-		// Fetch 4 corners (already normalized 0..1)
 		const float h00 = GetNormalizedHeightAt(x0, z0);
 		const float h10 = GetNormalizedHeightAt(x1, z0);
 		const float h01 = GetNormalizedHeightAt(x0, z1);
 		const float h11 = GetNormalizedHeightAt(x1, z1);
 
-		// Bilinear
 		const float hx0 = h00 + (h10 - h00) * tx;
 		const float hx1 = h01 + (h11 - h01) * tx;
 		return Clamp01(hx0 + (hx1 - hx0) * tz);
 	}
+
 
 	float TerrainHeightField::SampleWorldHeight(float worldX, float worldZ) const
 	{

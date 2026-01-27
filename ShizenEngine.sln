@@ -61,6 +61,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\Lighting.psh = Shaders\Lighting.psh
 		Shaders\Lighting.vsh = Shaders\Lighting.vsh
+		Shaders\PBRLighting.hlsli = Shaders\PBRLighting.hlsli
 		Shaders\PostCopy.psh = Shaders\PostCopy.psh
 		Shaders\PostCopy.vsh = Shaders\PostCopy.vsh
 		Shaders\Shadow.psh = Shaders\Shadow.psh

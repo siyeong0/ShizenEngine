@@ -1,5 +1,5 @@
 #include "HLSL_Structures.hlsli"
-#include "DiskSamples.hlsli"
+#include "PBRLighting.hlsli"
 
 cbuffer FRAME_CONSTANTS
 {
@@ -13,16 +13,10 @@ Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, Reserved
 Texture2D<float4> g_GBuffer3; // Emissive.rgb, unused
 Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 
-SamplerState g_LinearClampSampler;
-
 // Shadow map (Depth) + comparison sampler
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
 
-TextureCube<float4> g_EnvMapTex;
-TextureCube<float4> g_IrradianceIBLTex;
-TextureCube<float4> g_SpecularIBLTex;
-Texture2D<float2> g_BrdfIBLTex;
 
 struct PSInput
 {
@@ -33,14 +27,6 @@ struct PSInput
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-
-static const float PI = 3.14159265358979323846;
-
-static float Pow5(float x)
-{
-    float x2 = x * x;
-    return x2 * x2 * x;
-}
 
 static float3 UnpackNormal01(float3 n01)
 {
@@ -85,85 +71,7 @@ static float3 ReconstructWorldRayDir(float2 uv)
     return normalize(wsFar.xyz - wsNear.xyz);
 }
 
-// ------------------------------------------------------------
-// PBR (GGX / Smith / Schlick Fresnel)
-// ------------------------------------------------------------
-
-static float3 FresnelSchlick(float3 F0, float cosTheta)
-{
-    return F0 + (1.0 - F0) * Pow5(saturate(1.0 - cosTheta));
-}
-
-static float D_GGX(float NdotH, float roughness)
-{
-    float a = max(roughness, 0.04);
-    float a2 = a * a;
-    float a4 = a2 * a2;
-
-    float d = (NdotH * NdotH) * (a4 - 1.0) + 1.0;
-    return a4 / max(PI * d * d, 1e-7);
-}
-
-static float G_SchlickGGX(float NdotV, float roughness)
-{
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-    return NdotV / max(NdotV * (1.0 - k) + k, 1e-7);
-}
-
-static float G_Smith(float NdotV, float NdotL, float roughness)
-{
-    return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
-}
-
-static float3 EvaluateIBL(
-	float3 N,
-	float3 V,
-	float3 baseColor,
-	float metallic,
-	float roughness,
-	float ao)
-{
-	// F0 / Fresnel
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
-    float NdotV = saturate(dot(N, V));
-
-	// Use Fresnel at view angle for IBL spec
-    float3 F = FresnelSchlick(F0, NdotV);
-
-	// Energy conservation
-    float3 kd = (1.0 - F) * (1.0 - metallic);
-
-	// ----------------------------
-	// Diffuse IBL
-	// ----------------------------
-    float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
-    float3 diffuseIBL = kd * baseColor * irradiance; // (Lambert PI term is "baked" into irradiance usually)
-
-	// ----------------------------
-	// Specular IBL (prefilter + BRDF LUT)
-	// ----------------------------
-    float3 R = reflect(-V, N);
-
-    uint w = 1, h = 1, mipLevels = 1;
-    g_SpecularIBLTex.GetDimensions(0, w, h, mipLevels); // mipLevels >= 1
-
-    float mip = roughness * (float) (max((int) mipLevels - 1, 0));
-    float3 prefiltered = g_SpecularIBLTex.SampleLevel(g_LinearClampSampler, R, mip).rgb;
-
-    float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, roughness));
-    float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
-
-	// AO: 보통 diffuse/spec 모두에 곱하거나, spec은 약하게만 적용(취향)
-    float3 ambientIBL = (diffuseIBL + specIBL) * ao;
-    return ambientIBL;
-}
-
-
-// ------------------------------------------------------------
 // Main
-// ------------------------------------------------------------
-
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
@@ -188,6 +96,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float opacity = gb0.a;
 
     float3 N = UnpackNormal01(gb1.xyz);
+
 
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
@@ -218,35 +127,17 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
         shadow = 1.0;
     }
 	
-	// ------------------------------------------------------------
-	// PBR shading (direct)
-	// ------------------------------------------------------------
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
-
-    float3 H = normalize(V + L);
-
-    float NdotH = saturate(dot(N, H));
-    float VdotH = saturate(dot(V, H));
-
-    float D = D_GGX(NdotH, roughness);
-    float G = G_Smith(NdotV, NdotL, roughness);
-    float3 F = FresnelSchlick(F0, VdotH);
-
-    float3 kd = (1.0 - F) * (1.0 - metallic);
-    float3 diffuseBRDF = kd * baseColor / PI;
-
-    float3 specBRDF = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-5);
-
-    float3 radiance = g_FrameCB.LightColor * g_FrameCB.LightIntensity;
-
-    float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
-    direct *= shadow;
-
-	// ------------------------------------------------------------
-	// Ambient (IBL) + emissive
-	// ------------------------------------------------------------
-    float3 ibl = EvaluateIBL(N, V, baseColor, metallic, roughness, ao);
-	
-    float3 lit = ibl * 0.35 + direct + emissive;
+    float3 lit = ShadePBR_DeferredReference(
+        N, V, L, 
+        baseColor, 
+        metallic, 
+        roughness, 
+        ao, 
+        emissive, 
+        shadow, 
+        g_FrameCB.LightColor, 
+        g_FrameCB.LightIntensity, 
+        0.20 /*iblScale*/);
+    
     OutColor = float4(lit, opacity);
 }

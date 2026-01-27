@@ -432,7 +432,7 @@ namespace shz
 			const float3 lightForward = lightDirWs;
 			const float3 centerWs = view.CameraPosition;
 
-			const float shadowDistance = 50.0f;
+			const float shadowDistance = 120.0f;
 			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
 
 			float3 up = float3(0, 1, 0);
@@ -443,9 +443,9 @@ namespace shz
 
 			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
-			const float radiusXY = 25.0f;
+			const float radiusXY = 120.0f;
 			const float nearZ = 0.1f;
-			const float farZ = 200.0f;
+			const float farZ = 400.0f;
 			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
 				-radiusXY, +radiusXY,
 				-radiusXY, +radiusXY,

@@ -26,12 +26,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float3 hdrColor = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb;
 
-    // Hardcoded exposure
-    const float Exposure = 0.6f;
-    hdrColor *= Exposure;
-
-    // Tone mapping
-    float3 ldrColor = ToneMapACES(hdrColor);
-
-    OutColor = float4(ldrColor, 1.0);
+    float3 toneMapped = ToneMapACES(hdrColor);
+    
+    OutColor = float4(toneMapped, 1.0);
 }

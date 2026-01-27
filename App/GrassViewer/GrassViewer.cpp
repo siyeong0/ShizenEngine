@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <random>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
@@ -180,9 +181,57 @@ namespace shz
 			m_pRenderScene->SetTerrain(
 				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
 				m_pRenderer->CreateStaticMesh(terrainMesh));
-		}
 
-		{
+			// Trees
+			AssetRef<StaticMesh> tree1Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree1.shzmesh.json");
+			AssetRef<StaticMesh> tree2Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree2.shzmesh.json");
+			AssetRef<StaticMesh> tree3Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree3.shzmesh.json");
+			AssetRef<StaticMesh> tree4Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree4.shzmesh.json");
+			AssetRef<StaticMesh> tree5Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree5.shzmesh.json");
+
+			StaticMeshRenderData treeMeshes[] =
+			{
+				m_pRenderer->CreateStaticMesh(tree1Asset),
+				m_pRenderer->CreateStaticMesh(tree2Asset),
+				m_pRenderer->CreateStaticMesh(tree3Asset),
+				m_pRenderer->CreateStaticMesh(tree4Asset),
+				m_pRenderer->CreateStaticMesh(tree5Asset),
+			};
+
+			constexpr uint TREE_MESH_COUNT = sizeof(treeMeshes) / sizeof(treeMeshes[0]);
+
+			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
+			constexpr uint NUM_TREES = 10000;
+
+			std::mt19937 rng(1337);
+			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);
+			std::uniform_real_distribution<float> distZ(SPAWN_RANGE.y, SPAWN_RANGE.w);
+			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+			std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
+			std::uniform_int_distribution<uint> distMesh(0, TREE_MESH_COUNT - 1);
+
+			for (uint i = 0; i < NUM_TREES; ++i)
+			{
+				const float x = distX(rng);
+				const float z = distZ(rng);
+				const float y = terrainPtr->SampleWorldHeight(x, z);
+
+				const float yaw = distYaw(rng);
+				const float scale = distScale(rng);
+
+				RenderScene::RenderObject treeObject;
+				treeObject.Mesh = treeMeshes[distMesh(rng)];
+				treeObject.Transform = Matrix4x4::TRS(
+					{ x, y, z },
+					{ 0.0f, yaw, 0.0f },
+					{ scale, scale, scale });
+
+				treeObject.bCastShadow = true;
+
+				m_pRenderScene->AddObject(std::move(treeObject));
+			}
+
+			// Helmet
 			AssetRef<StaticMesh> helmet = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 			RenderScene::RenderObject helmetObj;
 			helmetObj.Mesh = m_pRenderer->CreateStaticMesh(helmet);
