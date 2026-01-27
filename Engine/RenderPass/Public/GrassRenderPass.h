@@ -58,7 +58,7 @@ namespace shz
 		RefCntAutoPtr<IBuffer> m_pCounterBuffer;       // UAV (uint)
 		RefCntAutoPtr<IBuffer> m_pGrassConstantsCB;
 
-		RefCntAutoPtr<ITextureView> m_BaseColorTexView;
+		// RefCntAutoPtr<ITextureView> m_BaseColorTexView;
 
 		uint32 m_MaxInstances = 1u << 20;
 

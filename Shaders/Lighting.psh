@@ -209,7 +209,8 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
     {
-        float bias = 0.0001;
+        float ndl = saturate(dot(N, L));
+        float bias = 0.0001 + (1.0 - ndl) * 0.001;
         shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
     }
     else
@@ -239,13 +240,13 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float3 radiance = g_FrameCB.LightColor * g_FrameCB.LightIntensity;
 
     float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
-    direct *= shadow * shadow;
+    direct *= shadow;
 
 	// ------------------------------------------------------------
 	// Ambient (IBL) + emissive
 	// ------------------------------------------------------------
     float3 ibl = EvaluateIBL(N, V, baseColor, metallic, roughness, ao);
 	
-    float3 lit = ibl * 0.4 + direct + emissive;
+    float3 lit = ibl * 0.35 + direct + emissive;
     OutColor = float4(lit, opacity);
 }

@@ -1,12 +1,21 @@
 #include "HLSL_Structures.hlsli"
+#include "DiskSamples.hlsli"
 
 cbuffer FRAME_CONSTANTS
 {
     FrameConstants g_FrameCB;
 };
 
-Texture2D<float4> g_BaseColorTex;
-SamplerState g_LinearWrapSampler;
+SamplerState g_LinearClampSampler;
+
+// Shadow map (Depth) + comparison sampler
+Texture2D<float> g_ShadowMap;
+SamplerComparisonState g_ShadowCmpSampler;
+
+// IBL textures
+TextureCube<float4> g_IrradianceIBLTex;
+TextureCube<float4> g_SpecularIBLTex;
+Texture2D<float2> g_BrdfIBLTex;
 
 struct PSInput
 {
@@ -14,6 +23,8 @@ struct PSInput
     float3 PosWS : TEXCOORD0;
     float3 NormalWS : TEXCOORD1;
     float2 UV : TEXCOORD2;
+
+    bool bFrontFace : SV_IsFrontFace;
 };
 
 cbuffer GRASS_CONSTANTS
@@ -21,14 +32,74 @@ cbuffer GRASS_CONSTANTS
     GrassConstants g_GrassCB;
 };
 
+// ------------------------------------------------------------
+// Helpers (same as Lighting PS style)
+// ------------------------------------------------------------
+static const float PI = 3.14159265358979323846;
+
+static float Pow5(float x)
+{
+    float x2 = x * x;
+    return x2 * x2 * x;
+}
+
+static float3 FresnelSchlick(float3 F0, float cosTheta)
+{
+    return F0 + (1.0 - F0) * Pow5(saturate(1.0 - cosTheta));
+}
+
+static float3 EvaluateIBL(
+    float3 N,
+    float3 V,
+    float3 baseColor,
+    float metallic,
+    float roughness,
+    float ao)
+{
+    // F0 / Fresnel
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
+    float NdotV = saturate(dot(N, V));
+
+    // Fresnel at view angle for IBL spec
+    float3 F = FresnelSchlick(F0, NdotV);
+
+    // Energy conservation
+    float3 kd = (1.0 - F) * (1.0 - metallic);
+
+    // Diffuse IBL
+    float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
+    float3 diffuseIBL = kd * baseColor * irradiance;
+
+    // Specular IBL (prefilter + BRDF LUT)
+    float3 R = reflect(-V, N);
+
+    uint w = 1, h = 1, mipLevels = 1;
+    g_SpecularIBLTex.GetDimensions(0, w, h, mipLevels);
+
+    float mip = roughness * (float) (max((int) mipLevels - 1, 0));
+    float3 prefiltered = g_SpecularIBLTex.SampleLevel(g_LinearClampSampler, R, mip).rgb;
+
+    float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, roughness));
+    float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
+
+    return (diffuseIBL + specIBL) * ao;
+}
+
+static float3 WorldToShadowUVZ(float3 worldPos)
+{
+    float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
+    ls.xyz /= max(ls.w, 1e-6);
+
+    float2 uv = ls.xy * 0.5 + 0.5;
+    uv.y = 1.0 - uv.y;
+
+    return float3(uv, ls.z);
+}
+
 float4 main(PSInput IN) : SV_TARGET0
 {
     float4 baseColor = g_GrassCB.BaseColorFactor;
-    if ((g_GrassCB.MaterialFlags & MAT_HAS_BASECOLOR) != 0)
-    {
-        baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, IN.UV);
-    }
-    
+
     // alpha cut
     if (g_GrassCB.AlphaCut > 0.0 && baseColor.a < g_GrassCB.AlphaCut)
     {
@@ -36,13 +107,42 @@ float4 main(PSInput IN) : SV_TARGET0
     }
 
     float3 N = normalize(IN.NormalWS);
+    if (!IN.bFrontFace)
+    {
+        N = -N;
+    }
+
+    float3 worldPos = IN.PosWS;
+    float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
     float3 L = normalize(-g_FrameCB.LightDirWS);
 
-    float ndl = dot(N, L);
-    ndl = saturate(ndl);
+    float ndl = saturate(dot(N, L));
 
-    float3 ambient = baseColor.rgb * g_GrassCB.Ambient;
+    // Shadow (same style as Lighting PS)
+    float shadow = 1.0;
+    float3 sh = WorldToShadowUVZ(worldPos);
+
+    if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
+    {
+        float ndl = saturate(dot(N, L));
+        float bias = 0.0001 + (1.0 - ndl) * 0.001;
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
+        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
+    }
+    else
+    {
+        shadow = 1.0;
+    }
+
+    float metallic = 0.0;
+    float roughness = 0.85;
+    float ao = 1.0;
+
+    float3 ibl = EvaluateIBL(N, V, baseColor.rgb, metallic, roughness, ao);
+
     float3 diffuse = baseColor.rgb * (ndl * g_FrameCB.LightIntensity) * g_FrameCB.LightColor;
-    
-    return float4(ambient + diffuse, 1.0);
+    diffuse *= shadow * shadow;
+
+    float3 lit = ibl * 0.35 + diffuse;
+    return float4(lit, 1.0);
 }

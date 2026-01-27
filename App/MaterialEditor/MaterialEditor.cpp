@@ -1069,7 +1069,7 @@ namespace shz
 		if (pColor)
 		{
 			ImTextureID tid = reinterpret_cast<ImTextureID>(pColor);
-			ImGui::Image(tid, ImVec2((float)m_Viewport.Width, (float)m_Viewport.Height), ImVec2(0, 1), ImVec2(1, 0));
+			ImGui::Image(tid, ImVec2((float)m_Viewport.Width, (float)m_Viewport.Height), ImVec2(0, 0), ImVec2(1, 1));
 		}
 		else
 		{

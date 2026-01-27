@@ -244,8 +244,8 @@ namespace shz
 		terrainObj.Transform = Matrix4x4::TRS(
 			float3(0.0f, 0.0f, 0.0f),
 			float3(0.0f, 0.0f, 0.0f),
-			float3(0.5f, 0.5f, 0.5f));
-		terrainObj.bCastShadow = false;
+			float3(1.0f, 1.0f, 1.0f));
+		terrainObj.bCastShadow = true;
 		m_TerrainMesh = AddObject(std::move(terrainObj));
 	}
 

@@ -34,14 +34,14 @@ namespace shz
 
 		static void setupCameraDefault(FirstPersonCamera& cam, float aspect)
 		{
-			cam.SetPos(float3(0.0f, 0.6f, -0.8f));
+			cam.SetPos(float3(0.0f, 20.0f, 0.8f));
 			cam.SetRotation(0.0f, 0.0f);
 			cam.SetMoveSpeed(3.0f);
 			cam.SetRotationSpeed(0.01f);
 
 			cam.SetProjAttribs(
 				0.1f,
-				300.0f,
+				5000.0f,
 				aspect,
 				PI / 4.0f,
 				SURFACE_TRANSFORM_IDENTITY);
@@ -159,7 +159,7 @@ namespace shz
 
 			StaticMesh terrainMesh;
 			Material tm("TerrainMaterial", "DefaultLit");
-			tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.f));
+			tm.SetFloat4("g_BaseColorFactor", float4(27.f, 160.f, 0.f, 1.f) / 255.f);
 			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 			tm.SetFloat("g_EmissiveIntensity", 0.0f);
 			tm.SetFloat("g_RoughnessFactor", 0.85f);
@@ -167,18 +167,26 @@ namespace shz
 			tm.SetFloat("g_OcclusionStrength", 1.0f);
 			tm.SetFloat("g_AlphaCutoff", 0.5f);
 			tm.SetFloat("g_MetallicFactor", 0.0f);
-			tm.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR);
-			tm.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D,
-				m_pAssetManager->RegisterAsset<Texture>(diffusePath));
+			tm.SetUint("g_MaterialFlags", 0); // hlsl::MAT_HAS_BASECOLOR);
+			/*tm.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D,
+				m_pAssetManager->RegisterAsset<Texture>(diffusePath));*/
 
 			TerrainMeshBuilder meshBuilder;
 			TerrainMeshBuildSettings buildSettings = {};
-			buildSettings.YOffset = -10.0f;
 			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, std::move(tm), buildSettings);
 
 			m_pRenderScene->SetTerrain(
 				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
 				m_pRenderer->CreateStaticMesh(terrainMesh));
+		}
+
+		{
+			AssetRef<StaticMesh> helmet = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
+			RenderScene::RenderObject helmetObj;
+			helmetObj.Mesh = m_pRenderer->CreateStaticMesh(helmet);
+			helmetObj.Transform = Matrix4x4::TRS({ 0.0f, 15.0f, 5.0f }, { 0.0f, 0.15f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+			helmetObj.bCastShadow = true;
+			m_pRenderScene->AddObject(std::move(helmetObj));
 		}
 
 		// Grass grid

@@ -16,6 +16,7 @@
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
 #include "Engine/Renderer/Public/PipelineStateManager.h"
+#include "Engine/Renderer/Public/RenderData.h"
 
 namespace shz
 {
@@ -82,7 +83,7 @@ namespace shz
 		ITextureView* pDepthDsv = nullptr;
 		ITextureView* pLightingSrv = nullptr;
 
-		TextureRenderData HeightMap = {};
+		TextureRenderData HeightMap;
 
 		// ------------------------------------------------------------
 		// Per-frame barrier list

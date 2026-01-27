@@ -269,7 +269,7 @@ namespace shz
 			addPass(std::make_unique<GrassRenderPass>(m_PassCtx));
 			addPass(std::make_unique<PostRenderPass>(m_PassCtx));
 
-			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassPatch.shzmesh.json");
+			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
 			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load terrain height field.");
 			StaticMeshRenderData grassRenderData = CreateStaticMesh(*grassPtr);

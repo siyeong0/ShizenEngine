@@ -70,7 +70,7 @@ struct GrassConstants
     float4 Tint;
     
     float AlphaCut;
-    float Ambient;
+    float _pad0;
     uint MaterialFlags;
     uint _pad1;
 };

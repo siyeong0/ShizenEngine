@@ -46,8 +46,6 @@ namespace shz
 			atts[1].StoreOp = ATTACHMENT_STORE_OP_STORE;
 			atts[1].StencilLoadOp = ATTACHMENT_LOAD_OP_LOAD;
 			atts[1].StencilStoreOp = ATTACHMENT_STORE_OP_STORE;
-
-			// NOTE: you set DEPTH_READ here. If you later want to write depth, use DEPTH_WRITE.
 			atts[1].InitialState = RESOURCE_STATE_DEPTH_WRITE;
 			atts[1].FinalState = RESOURCE_STATE_DEPTH_WRITE;
 
@@ -158,10 +156,25 @@ namespace shz
 			ShaderResourceVariableDesc vars[] =
 			{
 				{ SHADER_TYPE_COMPUTE, "g_OutInstances", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_COMPUTE, "g_Counter",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_Counter", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_COMPUTE, "g_HeightMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 			rl.Variables = vars;
 			rl.NumVariables = _countof(vars);
+
+			SamplerDesc linearWrap =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			ImmutableSamplerDesc samplers[] =
+			{
+				{ SHADER_TYPE_COMPUTE, "g_LinearWrapSampler", linearWrap },
+			};
+
+			rl.ImmutableSamplers = samplers;
+			rl.NumImmutableSamplers = _countof(samplers);
 
 			psoCI.pCS = pCS;
 
@@ -173,12 +186,15 @@ namespace shz
 			m_pGenCSO->CreateShaderResourceBinding(&m_pGenCSRB, true);
 			ASSERT(m_pGenCSRB, "Create SRB for GrassGenerateInstances failed.");
 
-			auto* varOut = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstances");
-			auto* varCounter = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter");
-			ASSERT(varOut&& varCounter, "Compute SRB variables not found. Check HLSL names.");
+			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstances"))
+			{
+				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			}
 
-			varOut->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
-			varCounter->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
+			{
+				var->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -281,20 +297,35 @@ namespace shz
 				{ SHADER_TYPE_VERTEX, "g_GrassInstances", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				{ SHADER_TYPE_PIXEL, "GRASS_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_ShadowMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+				{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 
 			rl.Variables = vars;
 			rl.NumVariables = _countof(vars);
 
-			SamplerDesc linearWrap =
+			SamplerDesc linearClamp =
 			{
 				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 			};
+
+			SamplerDesc shadowClamp = {};
+			shadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+			shadowClamp.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+			shadowClamp.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+			shadowClamp.AddressU = TEXTURE_ADDRESS_CLAMP;
+			shadowClamp.AddressV = TEXTURE_ADDRESS_CLAMP;
+			shadowClamp.AddressW = TEXTURE_ADDRESS_CLAMP;
+			shadowClamp.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
 
 			ImmutableSamplerDesc samplers[] =
 			{
-				{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
+				{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+				{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler", shadowClamp },
 			};
 
 			rl.ImmutableSamplers = samplers;
@@ -311,7 +342,7 @@ namespace shz
 			gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
 			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
 
-			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+			gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 			gp.RasterizerDesc.FrontCounterClockwise = true;
 
 			gp.DepthStencilDesc.DepthEnable = true;
@@ -348,6 +379,33 @@ namespace shz
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "GRASS_CONSTANTS"))
 			{
 				var->Set(m_pGrassConstantsCB);
+			}
+
+			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
+			{
+				var->Set(ctx.pShadowMapSrv);
+			}
+
+			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
+			{
+				if (ctx.pEnvDiffuseTex)
+				{
+					var->Set(ctx.pEnvDiffuseTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+			}
+			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
+			{
+				if (ctx.pEnvSpecularTex)
+				{
+					var->Set(ctx.pEnvSpecularTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+			}
+			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
+			{
+				if (ctx.pEnvBrdfTex)
+				{
+					var->Set(ctx.pEnvBrdfTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			}
 		}
 
@@ -390,26 +448,12 @@ namespace shz
 		ASSERT(m_pRenderPass, "Grass RenderPass is null.");
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
 
+		if (!ctx.HeightMap.Texture)
+		{
+			return;
+		}
+
 		IDeviceContext* pContext = ctx.pImmediateContext;
-
-		Viewport vp = {};
-		vp.Width = static_cast<float>(ctx.pLightingRtv->GetTexture()->GetDesc().Width);
-		vp.Height = static_cast<float>(ctx.pLightingRtv->GetTexture()->GetDesc().Height);
-		vp.MinDepth = 0.f;
-		vp.MaxDepth = 1.f;
-		vp.TopLeftX = 0.0f;
-		vp.TopLeftY = 0.0f;
-		pContext->SetViewports(1, &vp, 0, 0);
-
-		Rect sc{};
-		sc.left = 0;
-		sc.top = 0;
-		sc.right = static_cast<int>(vp.Width);
-		sc.bottom = static_cast<int>(vp.Height);
-
-		IDeviceContext* dc = ctx.pImmediateContext;
-		dc->SetViewports(1, &vp, static_cast<uint32>(vp.Width), static_cast<uint32>(vp.Height));
-		dc->SetScissorRects(1, &sc, static_cast<uint32>(vp.Width), static_cast<uint32>(vp.Height));
 
 		// ---------------------------------------------------------------------
 		// (0) Reset counter + init indirect args (GPU)
@@ -438,10 +482,16 @@ namespace shz
 		// (1) Compute: GenerateGrassInstances
 		// ---------------------------------------------------------------------
 		{
+			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
+			{
+				var->Set(ctx.HeightMap.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
+
 			StateTransitionDesc tr[] =
 			{
 				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pCounterBuffer,       RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.HeightMap.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -499,7 +549,7 @@ namespace shz
 				{ m_GrassMesh.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_GrassMesh.IndexBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 
-				{m_BaseColorTexView->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE}
+				// {m_BaseColorTexView->GetTexture(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE}
 			};
 			pContext->TransitionResourceStates(_countof(trGfx), trGfx);
 		}
@@ -527,11 +577,10 @@ namespace shz
 					MAP_WRITE,
 					MAP_FLAG_DISCARD);
 
-				map->BaseColorFactor = float4{ 1,1,1,1 };
+				map->BaseColorFactor = float4{ 0.1f, 0.8f, 0.2f, 1.0f };
 				map->Tint = float4{ 1,1,1,1 };
 				map->AlphaCut = 0.5f;
-				map->Ambient = 0.2f;
-				map->MaterialFlags = hlsl::MAT_HAS_BASECOLOR;
+				map->MaterialFlags = 0; // hlsl::MAT_HAS_BASECOLOR;
 			}
 
 			// -----------------------------------------------------------------
@@ -611,11 +660,11 @@ namespace shz
 		m_GrassMesh = mesh;
 
 		// BaseColor texture
-		if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
-		{
-			m_BaseColorTexView = m_GrassMesh.Sections[0].Material.BoundTextures[0].Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			var->Set(m_BaseColorTexView);
-		}
+		//if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
+		//{
+		//	m_BaseColorTexView = m_GrassMesh.Sections[0].Material.BoundTextures[0].Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+		//	var->Set(m_BaseColorTexView);
+		//}
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)

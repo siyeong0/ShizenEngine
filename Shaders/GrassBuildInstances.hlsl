@@ -15,36 +15,66 @@ RWByteAddressBuffer g_Counter;
 
 static const uint kMaxInstances = 1u << 20; // 1,048,576
 
-// Heightmap (UNORM16)
+// Heightmap (R16_UNORM sampled as normalized float 0..1)
 Texture2D<float> g_HeightMap;
 SamplerState g_LinearWrapSampler;
 
-static const float kHeightScale = 1000.0;
-static const float kHeightOffset = -10.0;
+// ------------------------------------------------------------
+// Hard-coded Terrain params (match CPU TerrainHeightField + TerrainMeshBuilder)
+// ------------------------------------------------------------
 
-static const float2 kTerrainOriginXZ = float2(0.0, 0.0); // heightfield (0,0) at world
-static const float2 kTerrainSizeXZ = float2(4096.0, 4096.0); // world meters covered by heightmap (X,Z)
+// Height decode (same as TerrainHeightFieldImportSetting)
+static const float kHeightScale = 100.0;
+static const float kHeightOffset = 0.0;
+
+// Heightfield resolution (match your heightmap: e.g. 1025x1025)
+static const uint kHFWidth = 1025;
+static const uint kHFHeight = 1025;
+
+// World spacing (same as TerrainHeightFieldImportSetting.WorldSpacingX/Z)
+static const float kSpacingX = 1.0;
+static const float kSpacingZ = 1.0;
+
+// Mesh builder options (match TerrainMeshBuildSettings)
+static const bool kCenterXZ = true; // settings.bCenterXZ
+static const float kYOffset = 0.0; // settings.YOffset
+
+// Derived (same as TerrainHeightField::GetWorldSizeX/Z used by builder)
+static const float kSizeX = float(kHFWidth - 1u) * kSpacingX;
+static const float kSizeZ = float(kHFHeight - 1u) * kSpacingZ;
+
+// Derived origin (same as TerrainMeshBuilder originX/originZ)
+static const float kOriginX = (kCenterXZ ? (-0.5 * kSizeX) : 0.0);
+static const float kOriginZ = (kCenterXZ ? (-0.5 * kSizeZ) : 0.0);
 
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+float WorldXZToU(float worldX)
+{
+    return (worldX - kOriginX) / max(kSizeX, 1e-6);
+}
+
+float WorldXZToV(float worldZ)
+{
+    return (worldZ - kOriginZ) / max(kSizeZ, 1e-6);
+}
+
 float SampleWorldHeight(float2 worldXZ)
 {
-    // World -> UV
-    float2 uv = (worldXZ - kTerrainOriginXZ) / max(kTerrainSizeXZ, float2(1e-6, 1e-6));
+    float2 uv;
+    uv.x = WorldXZToU(worldXZ.x);
+    uv.y = WorldXZToV(worldXZ.y);
     uv = saturate(uv);
-
-    // Sample normalized (0..1)
     float hN = g_HeightMap.SampleLevel(g_LinearWrapSampler, uv, 0.0);
-
-    // Decode to world height
-    return kHeightOffset + hN * kHeightScale;
+    return kYOffset + (kHeightOffset + hN * kHeightScale);
 }
 
 // ------------------------------------------------------------
 // Chunk config
 // ------------------------------------------------------------
-static const float kChunkSize = 4.0f; // 4m x 4m
+static const float kChunkSize = 4.0f; // 8m x 8m
 static const int kChunkHalfExtent = 32; // (2*32)^2 = 4096 chunks around camera
 
 // Samples per chunk (trade quality/perf)
@@ -54,11 +84,11 @@ static const uint kSamplesPerChunk = 256; // e.g. 16 points per 4x4m => density 
 static const float kJitter = 0.9f;
 
 // Placement + appearance
-static const float kMinScale = 0.8f;
-static const float kMaxScale = 1.2f;
+static const float kMinScale = 9.5f;
+static const float kMaxScale = 10.0f;
 
 // Density probability per sample (0..1). 0.05 = 5%
-static const float kSpawnProb = 0.05f;
+static const float kSpawnProb = 0.99f;
 
 // Optional: radius culling in meters (camera-centered draw window)
 static const float kSpawnRadius = 1000.0f;
@@ -155,7 +185,7 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 // ------------------------------------------------------------
 // Indirect args
 // ------------------------------------------------------------
-static const uint kIndexCountPerInstance = 13344;
+static const uint kIndexCountPerInstance = 39;
 static const uint kStartIndexLocation = 0;
 static const uint kBaseVertexLocation = 0;
 static const uint kStartInstanceLocation = 0;

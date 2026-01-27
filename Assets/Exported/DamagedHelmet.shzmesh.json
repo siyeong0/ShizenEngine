@@ -1,0 +1,280 @@
+{
+  "Bin": "DamagedHelmet.shzmesh.bin",
+  "Bounds": {
+    "Max": [
+      0.9424954056739807,
+      0.900995135307312,
+      1.1871551275253296
+    ],
+    "Min": [
+      -0.9474585652351379,
+      -0.9009740948677063,
+      -0.8128451704978943
+    ]
+  },
+  "Format": "shzmesh",
+  "IndexCount": 46356,
+  "IndexType": "u16",
+  "Indices": {
+    "Count": 46356,
+    "Offset": 631664
+  },
+  "MaterialSlots": [
+    {
+      "Name": "Material_MR",
+      "Options": {
+        "BlendMode": 0,
+        "CullMode": 3,
+        "DepthEnable": true,
+        "DepthFunc": 4,
+        "DepthWriteEnable": true,
+        "FrontCounterClockwise": true,
+        "LinearWrapSamplerDesc": {
+          "AddressU": 1,
+          "AddressV": 1,
+          "AddressW": 1,
+          "BorderColor": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ComparisonFunc": 1,
+          "MagFilter": 2,
+          "MaxAnisotropy": 0,
+          "MaxLOD": 3.4028234663852886e+38,
+          "MinFilter": 2,
+          "MinLOD": 0.0,
+          "MipFilter": 2,
+          "MipLODBias": 0.0
+        },
+        "LinearWrapSamplerName": "g_LinearWrapSampler",
+        "TextureBindingMode": 1
+      },
+      "RenderPassName": "GBuffer",
+      "Resources": [
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_BaseColorTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/_embedded_textures/tex_0.jpg",
+          "TextureAssetID": {
+            "Hi": 12729671869399677998,
+            "Lo": 9918421466042477523
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_NormalTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/_embedded_textures/tex_2.jpg",
+          "TextureAssetID": {
+            "Hi": 14265293761685817576,
+            "Lo": 12992294720813107445
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_MetallicRoughnessTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/_embedded_textures/tex_1.jpg",
+          "TextureAssetID": {
+            "Hi": 11732092535770940001,
+            "Lo": 6767721048329529404
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_AOTex",
+          "SourcePath": "",
+          "TextureAssetID": {
+            "Hi": 0,
+            "Lo": 0
+          },
+          "Type": 1
+        },
+        {
+          "HasSamplerOverride": false,
+          "Name": "g_EmissiveTex",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/_embedded_textures/tex_4.jpg",
+          "TextureAssetID": {
+            "Hi": 9430280848900575426,
+            "Lo": 15867800481019093279
+          },
+          "Type": 1
+        }
+      ],
+      "TemplateName": "DefaultLit",
+      "Values": [
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_BaseColorFactor",
+          "Type": 4
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63,
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveFactor",
+          "Type": 3
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_EmissiveIntensity",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_RoughnessFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_NormalScale",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_OcclusionStrength",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            63
+          ],
+          "Name": "g_AlphaCutoff",
+          "Type": 1
+        },
+        {
+          "Data": [
+            0,
+            0,
+            128,
+            63
+          ],
+          "Name": "g_MetallicFactor",
+          "Type": 1
+        },
+        {
+          "Data": [
+            23,
+            0,
+            0,
+            0
+          ],
+          "Name": "g_MaterialFlags",
+          "Type": 9
+        },
+        {
+          "Data": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "Name": "_pad0",
+          "Type": 10
+        }
+      ]
+    }
+  ],
+  "Sections": [
+    {
+      "BaseVertex": 0,
+      "FirstIndex": 0,
+      "IndexCount": 46356,
+      "LocalBounds": {
+        "Max": [
+          0.9424954056739807,
+          0.900995135307312,
+          1.1871551275253296
+        ],
+        "Min": [
+          -0.9474585652351379,
+          -0.9009740948677063,
+          -0.8128451704978943
+        ]
+      },
+      "MaterialSlot": 0
+    }
+  ],
+  "Streams": {
+    "Normals": {
+      "Count": 14356,
+      "Offset": 172272,
+      "Stride": 12
+    },
+    "Positions": {
+      "Count": 14356,
+      "Offset": 0,
+      "Stride": 12
+    },
+    "Tangents": {
+      "Count": 14356,
+      "Offset": 344544,
+      "Stride": 12
+    },
+    "TexCoord0": {
+      "Count": 14356,
+      "Offset": 516816,
+      "Stride": 8
+    }
+  },
+  "Version": 1,
+  "VertexCount": 14356
+}
