@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Engine/Physics/Public/Physics.h"
+#include "Engine/Physics/Public/PhysicsEvent.h"
 
 namespace shz
 {
@@ -180,6 +181,10 @@ namespace shz
 		uint64 NextShapeId = 1;
 		std::unordered_map<uint64, JPH::RefConst<JPH::Shape>> Shapes = {};
 
+		// Contact
+		std::mutex ContactMutex = {};
+		std::vector<ContactEvent> ContactEvents = {}; // step 동안 누적
+
 		// Helpers
 		JPH::BodyInterface& BodyIF()
 		{
@@ -242,6 +247,81 @@ namespace shz
 			std::scoped_lock lock(ShapeMutex);
 			Shapes.erase(h.Value);
 		}
+		
+		class ContactListenerImpl final : public JPH::ContactListener
+		{
+		public:
+			Impl* pOwner = nullptr;
+
+			JPH::ValidateResult OnContactValidate(
+				const JPH::Body& inBody1,
+				const JPH::Body& inBody2,
+				JPH::RVec3Arg inBaseOffset,
+				const JPH::CollideShapeResult& inCollisionResult) override
+			{
+				return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
+			}
+
+			void OnContactAdded(
+				const JPH::Body& inBody1,
+				const JPH::Body& inBody2,
+				const JPH::ContactManifold& inManifold,
+				JPH::ContactSettings& /*ioSettings*/) override
+			{
+				if (!pOwner) return;
+
+				ContactEvent ev = {};
+				ev.Type = EContactEventType::Added;
+				ev.BodyA = Impl::MakeBodyHandle(inBody1.GetID());
+				ev.BodyB = Impl::MakeBodyHandle(inBody2.GetID());
+
+				// Optional contact info
+				ev.NormalWS = fromJPH(inManifold.mWorldSpaceNormal);
+				ev.PenetrationDepth = inManifold.mPenetrationDepth;
+
+				// Sensor 판단(버전/설정에 따라 다를 수 있으니 최소한 플래그로만)
+				// ev.bIsSensor = inBody1.IsSensor() || inBody2.IsSensor(); // 가능하면 이런 식
+
+				std::scoped_lock lock(pOwner->ContactMutex);
+				pOwner->ContactEvents.push_back(ev);
+			}
+
+			void OnContactPersisted(
+				const JPH::Body& inBody1,
+				const JPH::Body& inBody2,
+				const JPH::ContactManifold& inManifold,
+				JPH::ContactSettings& /*ioSettings*/) override
+			{
+				if (!pOwner) return;
+
+				ContactEvent ev = {};
+				ev.Type = EContactEventType::Persisted;
+				ev.BodyA = Impl::MakeBodyHandle(inBody1.GetID());
+				ev.BodyB = Impl::MakeBodyHandle(inBody2.GetID());
+				ev.NormalWS = fromJPH(inManifold.mWorldSpaceNormal);
+				ev.PenetrationDepth = inManifold.mPenetrationDepth;
+
+				std::scoped_lock lock(pOwner->ContactMutex);
+				pOwner->ContactEvents.push_back(ev);
+			}
+
+			void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override
+			{
+				if (!pOwner) return;
+
+				// Removed는 Body를 직접 안 주고 SubShapeIDPair를 주는 형태가 흔함(버전마다 다름).
+				// 그래도 pair에서 BodyID를 얻을 수 있음:
+				ContactEvent ev = {};
+				ev.Type = EContactEventType::Removed;
+				ev.BodyA = Impl::MakeBodyHandle(inSubShapePair.GetBody1ID());
+				ev.BodyB = Impl::MakeBodyHandle(inSubShapePair.GetBody2ID());
+
+				std::scoped_lock lock(pOwner->ContactMutex);
+				pOwner->ContactEvents.push_back(ev);
+			}
+		};
+
+		ContactListenerImpl ContactListener = {};
 	};
 
 	// ------------------------------------------------------------------------
