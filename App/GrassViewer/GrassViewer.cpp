@@ -397,6 +397,81 @@ namespace shz
 				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
 				m_pRenderer->CreateStaticMesh(terrainMesh));
 
+			{
+				ASSERT(pPhysics, "Physics is null.");
+				ASSERT(hf.IsValid(), "HeightField is invalid.");
+
+				const uint32 W = terrainPtr->GetWidth();
+				const uint32 H = terrainPtr->GetHeight();
+
+				// Jolt HeightFieldShapeSettings는 기본적으로 "정사각형 N x N"을 기대하는 경우가 많음.
+				// 너 데이터가 정사각형이 아니라면 MeshShape(삼각형 콜라이더)로 가는게 안전.
+				ASSERT(W == H, "Jolt HeightField collider: width/height must be equal (square).");
+
+				const uint32 N = W;
+
+				// 1) Convert your U16 (0..65535) -> normalized (0..1) -> world height (scale/offset)
+				const auto& src = terrainPtr->GetDataU16();
+				ASSERT(src.size() == size_t(N) * size_t(N), "HeightField data size mismatch.");
+
+				std::vector<float> samples;
+				samples.resize(src.size());
+
+				const float heightScale = terrainPtr->GetHeightScale();
+				const float heightOffset = terrainPtr->GetHeightOffset();
+
+				for (size_t i = 0; i < src.size(); ++i)
+				{
+					const float n = float(src[i]) / 65535.0f;
+					samples[i] = n * heightScale + heightOffset; // world meters
+				}
+
+				// 2) Jolt definition:
+				// vertex = offset + scale * (x, sample[x,y], y)
+				// 여기서 sample은 이미 world height이므로 scale.y = 1.0이 가장 직관적.
+				const float spacingX = terrainPtr->GetWorldSpacingX();
+				const float spacingZ = terrainPtr->GetWorldSpacingZ();
+
+				float worldOriginX = -terrainPtr->GetWorldSizeX() * 0.5f;
+				float worldOriginZ = -terrainPtr->GetWorldSizeZ() * 0.5f;
+
+				const JPH::Vec3 offset(worldOriginX, 0.0f, worldOriginZ);
+				const JPH::Vec3 scale(spacingX, 1.0f, spacingZ);
+
+				JPH::Ref<JPH::HeightFieldShapeSettings> settings =
+					new JPH::HeightFieldShapeSettings(
+						samples.data(),
+						offset,
+						scale,
+						(JPH::uint32)N,
+						/*materialIndices*/ nullptr,
+						/*materialList*/   JPH::PhysicsMaterialList()
+					);
+
+				// 튜닝: 기본값으로도 되는데, 우선 안전하게 보수적으로
+				settings->mBlockSize = 4;
+				settings->mBitsPerSample = 8;
+
+				auto shapeResult = settings->Create();
+				ASSERT(!shapeResult.HasError(), "Failed to create HeightField shape.");
+
+				JPH::Ref<JPH::Shape> shape = shapeResult.Get();
+
+				// 3) Static body
+				JPH::BodyCreationSettings bcs(
+					shape,
+					JPH::RVec3(0.0, 0.0, 0.0),        // offset이 shape에 들어가있음
+					JPH::Quat::sIdentity(),
+					JPH::EMotionType::Static,
+					PHYS_LAYER_NON_MOVING
+				);
+
+				bcs.mFriction = 0.9f;
+				bcs.mRestitution = 0.0f;
+
+				JPH::BodyID terrainBody = m_EcsCtx.pPhysics->CreateBody(bcs, /*activate*/ false);
+			}
+
 			// Trees (ECS entities)
 			AssetRef<StaticMesh> treeAssets[] =
 			{
@@ -470,14 +545,14 @@ namespace shz
 					m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 
 				// Spawn config
-				constexpr uint32 kHelmetCount = 30;
+				constexpr uint32 kHelmetCount = 300;
 				constexpr float  kMinY = 20.0f;
 				constexpr float  kMaxY = 50.0f;
 
 				// XZ grid offsets
 				constexpr int   kGridX = 6;                 // 6 columns
-				constexpr float kSpacingX = 4.0f;           // meters
-				constexpr float kSpacingZ = 4.0f;           // meters
+				constexpr float kSpacingX = 1.0f;           // meters
+				constexpr float kSpacingZ = 1.0;           // meters
 				constexpr float kBaseX = -10.0f;
 				constexpr float kBaseZ = 10.0f;
 
