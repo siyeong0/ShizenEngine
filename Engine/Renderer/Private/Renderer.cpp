@@ -713,7 +713,7 @@ namespace shz
 					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
 
 					const MaterialRenderData& rd = section.Material;
-					if (rd.RenderPassName != "GBuffer")
+					if (rd.RenderPassId != std::hash<std::string>{}("GBuffer"))
 					{
 						continue;
 					}
@@ -760,7 +760,7 @@ namespace shz
 					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
 
 					const MaterialRenderData& rd = section.Material;
-					if (rd.RenderPassName != "Grass")
+					if (rd.RenderPassId != std::hash<std::string>{}("Grass"))
 					{
 						continue;
 					}
@@ -1035,7 +1035,7 @@ namespace shz
 		}
 
 		MaterialRenderData out = {};
-		out.RenderPassName = material.GetRenderPassName();
+		out.RenderPassId = std::hash<std::string>{}(material.GetRenderPassName());
 
 		out.CBIndex = 0;
 		for (; out.CBIndex < material.GetTemplate().GetCBufferCount(); ++out.CBIndex)
@@ -1072,8 +1072,8 @@ namespace shz
 			}
 
 			RendererMaterialStaticBinder* binder = nullptr;
-			if (out.RenderPassName == "GBuffer") binder = m_pGBufferMaterialStaticBinder.get();
-			else if (out.RenderPassName == "Grass") binder = m_pGrassMaterialStaticBinder.get();
+			if (out.RenderPassId == std::hash<std::string>{}("GBuffer")) binder = m_pGBufferMaterialStaticBinder.get();
+			else if (out.RenderPassId == std::hash<std::string>{}("Grass")) binder = m_pGrassMaterialStaticBinder.get();
 			else ASSERT(false, "RenderPass (%s) not exist.", out.RenderPassName);
 
 			bool ok = binder->BindStatics(out.PSO);

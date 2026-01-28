@@ -33,7 +33,7 @@ namespace shz
 
 		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
 
-		std::string RenderPassName = {};
+		uint64 RenderPassId;
 	};
 
 	struct StaticMeshRenderData final
