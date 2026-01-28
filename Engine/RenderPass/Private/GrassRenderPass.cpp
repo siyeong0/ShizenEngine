@@ -486,7 +486,7 @@ namespace shz
 		ASSERT(m_pRenderPass, "Grass RenderPass is null.");
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
 
-		if (!ctx.HeightMap.Texture)
+		if (!ctx.pHeightMap->Texture)
 			return;
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
@@ -598,20 +598,20 @@ namespace shz
 		{
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
 			{
-				var->Set(ctx.HeightMap.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				var->Set(ctx.pHeightMap->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 			{
-				var->Set(m_GrassDensityFieldTex.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				var->Set(m_pGrassDensityFieldTex->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			}
 
 			StateTransitionDesc tr[] =
 			{
 				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pCounterBuffer,       RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.HeightMap.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_GrassDensityFieldTex.Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pHeightMap->Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassDensityFieldTex->Texture,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -671,8 +671,8 @@ namespace shz
 				{ m_pIndirectArgsBuffer,   RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
 
 				// IMPORTANT: transitions must be OUTSIDE render pass
-				{ m_GrassMesh.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_GrassMesh.IndexBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassMesh->IndexBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(trGfx), trGfx);
 		}
@@ -694,10 +694,10 @@ namespace shz
 
 			// VB/IB bind (keep VERIFY - state already transitioned above)
 			{
-				ASSERT(m_GrassMesh.VertexBuffer, "Grass mesh VB is null.");
-				ASSERT(m_GrassMesh.IndexBuffer, "Grass mesh IB is null.");
+				ASSERT(m_pGrassMesh->VertexBuffer, "Grass mesh VB is null.");
+				ASSERT(m_pGrassMesh->IndexBuffer, "Grass mesh IB is null.");
 
-				IBuffer* ppVertexBuffers[] = { m_GrassMesh.VertexBuffer };
+				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
 				uint64 offsets[] = { 0 };
 
 				pContext->SetVertexBuffers(
@@ -706,7 +706,7 @@ namespace shz
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pContext->SetIndexBuffer(
-					m_GrassMesh.IndexBuffer, 0,
+					m_pGrassMesh->IndexBuffer, 0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			}
 
@@ -717,7 +717,7 @@ namespace shz
 			}
 
 			DrawIndexedIndirectAttribs ia = {};
-			ia.IndexType = m_GrassMesh.IndexType;
+			ia.IndexType = m_pGrassMesh->IndexType;
 			ia.pAttribsBuffer = m_pIndirectArgsBuffer;
 			ia.DrawArgsOffset = 0;
 			ia.DrawCount = 1;
@@ -761,14 +761,14 @@ namespace shz
 	{
 		(void)ctx;
 		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
-		m_GrassMesh = mesh;
+		m_pGrassMesh = &mesh;
 	}
 
 	void GrassRenderPass::SetGrassDensityField(RenderPassContext& ctx, const TextureRenderData& tex)
 	{
 		(void)ctx;
 		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
-		m_GrassDensityFieldTex = tex;
+		m_pGrassDensityFieldTex = &tex;
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)

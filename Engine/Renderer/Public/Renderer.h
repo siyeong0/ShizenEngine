@@ -86,7 +86,7 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMesh(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 
-		const TextureRenderData CreateTextureFromHeightField(const TerrainHeightField& terrain);
+		const TextureRenderData& CreateTextureFromHeightField(const TerrainHeightField& terrain);
 
 		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
 		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
@@ -126,7 +126,7 @@ namespace shz
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
 		RenderResourceCache<MaterialRenderData> m_MaterialCache;
 
-		TextureRenderData m_ErrorTexture;
+		const TextureRenderData* m_pErrorTexture;
 
 		std::unique_ptr<RendererMaterialStaticBinder> m_pGBufferMaterialStaticBinder;
 		std::unique_ptr<RendererMaterialStaticBinder> m_pGrassMaterialStaticBinder;

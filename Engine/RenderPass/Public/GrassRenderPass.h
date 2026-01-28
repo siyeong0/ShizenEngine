@@ -64,7 +64,7 @@ namespace shz
 
         uint32 m_MaxInstances = 1u << 24;
 
-        StaticMeshRenderData m_GrassMesh;
-        TextureRenderData m_GrassDensityFieldTex;
+        const StaticMeshRenderData* m_pGrassMesh;
+        const TextureRenderData* m_pGrassDensityFieldTex;
     };
 } // namespace shz

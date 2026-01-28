@@ -58,7 +58,7 @@ namespace shz
 		// Store
 		// ------------------------------------------------------------
 		// Returns true if inserted new, false if replaced existing.
-		bool Store(KeyType key, const TRenderData& rd)
+		bool Store(KeyType key, const TRenderData&& rd)
 		{
 			if (key == 0)
 				return false;
@@ -72,7 +72,7 @@ namespace shz
 				return true;
 			}
 
-			it->second = rd;
+			it->second = std::move(rd);
 			return false;
 		}
 

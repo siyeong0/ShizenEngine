@@ -454,16 +454,16 @@ namespace shz
 				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree5.shzmesh.json"),
 			};
 
-			StaticMeshRenderData treeMeshes[] =
+			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				m_pRenderer->CreateStaticMesh(treeAssets[0]),
-				m_pRenderer->CreateStaticMesh(treeAssets[1]),
-				m_pRenderer->CreateStaticMesh(treeAssets[2]),
-				m_pRenderer->CreateStaticMesh(treeAssets[3]),
-				m_pRenderer->CreateStaticMesh(treeAssets[4]),
+				&(m_pRenderer->CreateStaticMesh(treeAssets[0])),
+				&(m_pRenderer->CreateStaticMesh(treeAssets[1])),
+				&(m_pRenderer->CreateStaticMesh(treeAssets[2])),
+				&(m_pRenderer->CreateStaticMesh(treeAssets[3])),
+				&(m_pRenderer->CreateStaticMesh(treeAssets[4])),
 			};
 
-			constexpr uint TREE_MESH_COUNT = sizeof(treeMeshes) / sizeof(treeMeshes[0]);
+			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
 			constexpr uint  NUM_TREES = 10000;
@@ -498,7 +498,7 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(treeMeshes[meshIdx], GrassViewer::ToMatrixTRS(tr), mr.bCastShadow);
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(*pTreeMeshes[meshIdx], GrassViewer::ToMatrixTRS(tr), mr.bCastShadow);
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -510,7 +510,7 @@ namespace shz
 			AssetRef<StaticMesh> helmetRef =
 				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 
-			const StaticMeshRenderData helmetMeshRD = m_pRenderer->CreateStaticMesh(helmetRef);
+			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMesh(helmetRef);
 
 			// Spawn config
 			constexpr uint32 kHelmetCount = 300;

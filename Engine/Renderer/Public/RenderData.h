@@ -20,6 +20,12 @@ namespace shz
 	{
 		RefCntAutoPtr<ITexture> Texture = {};
 		RefCntAutoPtr<ISampler> Sampler = {};
+
+		TextureRenderData() = default;
+		TextureRenderData(const TextureRenderData&) = delete;
+		TextureRenderData(TextureRenderData&&) = default;
+		TextureRenderData& operator=(const TextureRenderData&) = delete;
+		TextureRenderData& operator=(TextureRenderData&&) = default;
 	};
 
 	struct MaterialRenderData final
@@ -29,11 +35,17 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> ConstantBuffer = {};
 		uint32 CBIndex = 0;
-		std::vector<TextureRenderData> BoundTextures = {};
+		std::vector<const TextureRenderData*> BoundTextures = {};
 
 		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
 
 		uint64 RenderPassId;
+
+		MaterialRenderData() = default;
+		MaterialRenderData(const MaterialRenderData&) = delete;
+		MaterialRenderData(MaterialRenderData&&) = default;
+		MaterialRenderData& operator=(const MaterialRenderData&) = delete;
+		MaterialRenderData& operator=(MaterialRenderData&&) = default;
 	};
 
 	struct StaticMeshRenderData final
@@ -53,11 +65,17 @@ namespace shz
 			uint32 FirstIndex = 0;
 			uint32 IndexCount = 0;
 			uint32 BaseVertex = 0;
-			MaterialRenderData Material = {};
+			const MaterialRenderData* pMaterial = {};
 
 			Box LocalBounds = {};
 		};
 		std::vector<Section> Sections = {};
+
+		StaticMeshRenderData() = default;
+		StaticMeshRenderData(const StaticMeshRenderData&) = delete;
+		StaticMeshRenderData(StaticMeshRenderData&&) = default;
+		StaticMeshRenderData& operator=(const StaticMeshRenderData&) = delete;
+		StaticMeshRenderData& operator=(StaticMeshRenderData&&) = default;
 	};
 
 
@@ -96,9 +114,9 @@ namespace shz
 
 			// BoundTextures (order-sensitive)
 			this->m_Hasher(v.BoundTextures.size());
-			for (const auto& tex : v.BoundTextures)
+			for (const auto pTex : v.BoundTextures)
 			{
-				this->m_Hasher(tex);
+				this->m_Hasher(*pTex);
 			}
 		}
 	};
@@ -116,7 +134,7 @@ namespace shz
 				s.FirstIndex,
 				s.IndexCount,
 				s.BaseVertex,
-				s.Material,
+				s.pMaterial,
 				s.LocalBounds);
 		}
 	};
