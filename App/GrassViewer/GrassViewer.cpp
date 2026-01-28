@@ -189,17 +189,6 @@ namespace shz
 			m_pPhysicsSystem->Initialize(pci);
 		}
 
-		// ECS ctx (Renderer/Scene/Asset/PhysicsSystem)
-		{
-			m_EcsCtx.pRenderer = m_pRenderer.get();
-			m_EcsCtx.pRenderScene = m_pRenderScene.get();
-			m_EcsCtx.pAssetManager = m_pAssetManager.get();
-			m_EcsCtx.pPhysicsSystem = m_pPhysicsSystem.get();
-
-			auto& ecs = m_pEcs->World();
-			ecs.set_ctx(&m_EcsCtx);
-		}
-
 		// ECS: systems
 		{
 			// Install Physics <-> ECS systems (CreateBodies / PushTransform / WriteBack / OnRemove)
@@ -213,7 +202,7 @@ namespace shz
 							if (!mr.RenderObjectHandle.IsValid())
 								return;
 
-							m_EcsCtx.pRenderScene->UpdateObjectTransform(
+							m_pRenderScene->UpdateObjectTransform(
 								mr.RenderObjectHandle,
 								GrassViewer::ToMatrixTRS(tr));
 						});

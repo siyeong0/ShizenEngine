@@ -47,16 +47,6 @@ namespace shz
 		};
 
 	private:
-		struct EcsContext final
-		{
-			Renderer* pRenderer = nullptr;
-			RenderScene* pRenderScene = nullptr;
-			AssetManager* pAssetManager = nullptr;
-
-			PhysicsSystem* pPhysicsSystem = nullptr;
-		};
-
-	private:
 		void BuildSceneOnce();
 		static Matrix4x4 ToMatrixTRS(const CTransform& t);
 
@@ -69,8 +59,6 @@ namespace shz
 
 		std::unique_ptr<shz::EcsWorld>     m_pEcs = nullptr;
 		std::unique_ptr<PhysicsSystem>    m_pPhysicsSystem = nullptr;
-
-		EcsContext m_EcsCtx = {};
 
 		ViewportState     m_Viewport = {};
 		ViewFamily        m_ViewFamily = {};
