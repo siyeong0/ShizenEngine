@@ -1003,8 +1003,6 @@ namespace shz
 			pass->Execute(m_PassCtx);
 		}
 
-		auto scDesc = m_pSwapChain->GetDesc();
-
 		wirePassOutputs();
 	}
 
