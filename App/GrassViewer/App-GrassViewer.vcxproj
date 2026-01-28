@@ -149,6 +149,9 @@
     <ProjectReference Include="..\..\Engine\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Engine\ECS\Engine-ECS.vcxproj">
+      <Project>{530b7f9f-ffe6-413e-a672-018b84b8f262}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Engine\Framework\Engine-Framework.vcxproj">
       <Project>{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}</Project>
     </ProjectReference>

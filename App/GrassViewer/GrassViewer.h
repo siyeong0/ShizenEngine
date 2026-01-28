@@ -1,10 +1,7 @@
 #pragma once
-
 #include <string>
 #include <vector>
 #include <memory>
-
-#include <flecs.h>
 
 #include "Engine/Core/Runtime/Public/SampleBase.h"
 
@@ -19,6 +16,7 @@
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 
 #include "Engine/Physics/Public/Physics.h"
+#include "Engine/ECS/Public/EcsWorld.h"
 
 namespace shz
 {
@@ -78,7 +76,6 @@ namespace shz
         };
 
     private:
-        void RegisterEcsComponents();
         void BuildSceneOnce(); // 기존 로딩 로직 그대로
 
     private:
@@ -88,10 +85,8 @@ namespace shz
 
         RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-        // ECS (world 기본 생성자 없어서 포인터로)
-        std::unique_ptr<flecs::world> m_pEcs = nullptr;
+        std::unique_ptr<shz::EcsWorld> m_pEcs = nullptr;
 
-        // Physics
         std::unique_ptr<Physics> m_pPhysics = nullptr;
 
         ViewportState     m_Viewport = {};
