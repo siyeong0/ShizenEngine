@@ -167,6 +167,9 @@
     <ProjectReference Include="..\..\Engine\ImGui\Engine-ImGui.vcxproj">
       <Project>{7f85a29a-8214-48e6-9531-db5a4d102df5}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Engine\Physics\Engine-Physics.vcxproj">
+      <Project>{3644ea8f-a325-4b1c-9062-9102b4722eb7}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Engine\Renderer\Engine-Renderer.vcxproj">
       <Project>{434146a2-c1af-4d85-8e9b-2faf1727b469}</Project>
     </ProjectReference>
