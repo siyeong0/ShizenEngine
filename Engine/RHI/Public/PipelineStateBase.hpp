@@ -604,8 +604,8 @@ namespace shz
 
 			if ((m_ActiveShaderStages & ShaderType) == 0)
 			{
-				LOG_WARNING_MESSAGE("Unable to find static variable '", Name, "' in shader stage ", GetShaderTypeLiteralName(ShaderType),
-					" as the stage is inactive in PSO '", this->m_Desc.Name, "'.");
+				//LOG_WARNING_MESSAGE("Unable to find static variable '", Name, "' in shader stage ", GetShaderTypeLiteralName(ShaderType),
+				//	" as the stage is inactive in PSO '", this->m_Desc.Name, "'.");
 				return nullptr;
 			}
 
