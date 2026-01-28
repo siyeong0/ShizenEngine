@@ -273,7 +273,7 @@ namespace shz
 
 			grassPtr->RecomputeBounds();
 			const Box& b = grassPtr->GetBounds();
-			float yScale01 = 1.0f / b.Max.y - b.Min.y;
+			float yScale01 = 1.0f / (b.Max.y - b.Min.y);
 			grassPtr->ApplyUniformScale(yScale01);
 			grassPtr->MoveBottomToOrigin(true);
 
