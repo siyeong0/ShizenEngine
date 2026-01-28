@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <random>
+#include <cmath>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
@@ -165,26 +166,35 @@ namespace shz
 			ecs.component<CName>();
 			ecs.component<CTransform>();
 			ecs.component<CMeshRenderer>();
-			ecs.component<CRigidBody>();
+
+			// New physics components
+			ecs.component<CRigidbody>();
+			ecs.component<CBoxCollider>();
+			ecs.component<CSphereCollider>();
+			ecs.component<CHeightFieldCollider>();
 		}
 
-		// Physics
-		m_pPhysics = std::make_unique<Physics>();
+		// PhysicsSystem (encapsulated Jolt)
+		m_pPhysicsSystem = std::make_unique<PhysicsSystem>();
 		{
-			Physics::CreateInfo pci = {};
-			pci.MaxBodies = 65536;
-			pci.MaxBodyPairs = 65536;
-			pci.MaxContactConstraints = 10240;
-			pci.TempAllocatorSizeBytes = 16u * 1024u * 1024u;
-			m_pPhysics->Initialize(pci);
+			ASSERT(m_pPhysicsSystem, "PhysicsSystem is null.");
+
+			PhysicsSystem::CreateInfo pci = {};
+			pci.PhysicsCI.MaxBodies = 65536;
+			pci.PhysicsCI.MaxBodyPairs = 65536;
+			pci.PhysicsCI.MaxContactConstraints = 10240;
+			pci.PhysicsCI.TempAllocatorSizeBytes = 16u * 1024u * 1024u;
+			pci.PhysicsCI.Gravity = float3(0.0f, -9.81f, 0.0f);
+
+			m_pPhysicsSystem->Initialize(pci);
 		}
 
-		// ECS ctx (Physics/Renderer/Scene/Asset)
+		// ECS ctx (Renderer/Scene/Asset/PhysicsSystem)
 		{
-			m_EcsCtx.pPhysics = m_pPhysics.get();
 			m_EcsCtx.pRenderer = m_pRenderer.get();
 			m_EcsCtx.pRenderScene = m_pRenderScene.get();
 			m_EcsCtx.pAssetManager = m_pAssetManager.get();
+			m_EcsCtx.pPhysicsSystem = m_pPhysicsSystem.get();
 
 			auto& ecs = m_pEcs->World();
 			ecs.set_ctx(&m_EcsCtx);
@@ -193,37 +203,39 @@ namespace shz
 		// ECS: systems
 		{
 			auto& ecs = m_pEcs->World();
+
+			// Install Physics <-> ECS systems (CreateBodies / PushTransform / WriteBack / OnRemove)
+			auto physHandles = m_pPhysicsSystem->InstallEcsSystemsAndGetHandles(ecs);
+
 			// Fixed: Physics step
 			{
 				auto sys = ecs.system<>("Physics.Step")
 					.each([this]()
 						{
-							const float dt = m_pEcs->GetDeltaTime();
-							m_EcsCtx.pPhysics->Step(dt);
+							const float dtFixed = m_pEcs->GetFixedDeltaTime();
+							m_pPhysicsSystem->Step(dtFixed);
 						});
 				m_pEcs->RegisterFixedSystem(sys);
 			}
-			// 
-			{
-				auto sys = ecs.system<CTransform, CRigidBody>("Physics.SyncToTransform")
-					.each([this](CTransform& tr, CRigidBody& rb)
-						{
-							const JPH::BodyID id(rb.BodyId);
-							const float3 pos = m_EcsCtx.pPhysics->GetBodyPosition(id);
 
-							tr.Position = pos;
-							// 회전까지 동기화하려면 Physics 래퍼에 GetBodyRotation도 추가 추천
+			// Register physics systems:
+			if (physHandles.CreateBodies_Box.is_valid())        m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_Box);
+			if (physHandles.CreateBodies_Sphere.is_valid())     m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_Sphere);
+			if (physHandles.CreateBodies_HeightField.is_valid())m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_HeightField);
 
-						});
+			if (physHandles.PushTransform.is_valid())
+				m_pEcs->RegisterUpdateSystem(physHandles.PushTransform);
 
-				m_pEcs->RegisterFixedSystem(sys);
-			}
+			if (physHandles.WriteBack.is_valid())
+				m_pEcs->RegisterFixedSystem(physHandles.WriteBack);
+
 			// Update: Transform -> RenderScene sync
 			{
 				auto sys = ecs.system<CTransform, CMeshRenderer>("Render.SyncTransforms")
 					.each([this](CTransform& tr, CMeshRenderer& mr)
 						{
-							if (!mr.RenderObjectHandle.IsValid()) return;
+							if (!mr.RenderObjectHandle.IsValid())
+								return;
 
 							m_EcsCtx.pRenderScene->UpdateObjectTransform(
 								mr.RenderObjectHandle,
@@ -232,7 +244,6 @@ namespace shz
 				m_pEcs->RegisterUpdateSystem(sys);
 			}
 		}
-
 
 		// ViewFamily + Camera
 		setupDefaultViewFamily(m_ViewFamily);
@@ -243,7 +254,7 @@ namespace shz
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 		ASSERT(m_GlobalLightHandle.IsValid(), "Failed to add global light.");
 
-		// Build scene once (now: ECS-driven objects)
+		// Build scene once (ECS-driven objects)
 		BuildSceneOnce();
 
 		// Fill first view immediately
@@ -291,7 +302,6 @@ namespace shz
 	void GrassViewer::ReleaseSwapChainBuffers()
 	{
 		SampleBase::ReleaseSwapChainBuffers();
-
 		m_pRenderer->ReleaseSwapChainBuffers();
 	}
 
@@ -363,21 +373,27 @@ namespace shz
 		ImGui::End();
 	}
 
+	// ------------------------------------------------------------
+	// Scene build (same behavior, but physics now via ECS components)
+	// ------------------------------------------------------------
+
 	void GrassViewer::BuildSceneOnce()
 	{
-		ASSERT(m_pAssetManager && m_pRenderer && m_pRenderScene && m_pEcs, "Subsystem missing.");
+		ASSERT(m_pAssetManager && m_pRenderer && m_pRenderScene && m_pEcs && m_pPhysicsSystem, "Subsystem missing.");
 
 		auto& ecs = m_pEcs->World();
 
 		// Load terrain (RenderScene는 기존대로 유지)
+		const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+
+		AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
+		AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
+		ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
+
+		// Build terrain mesh + set RenderScene terrain
 		{
-			const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-
-			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
-			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
-			ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
-
 			StaticMesh terrainMesh;
+
 			Material tm("TerrainMaterial", "DefaultLit");
 			tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
 			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
@@ -396,83 +412,74 @@ namespace shz
 			m_pRenderScene->SetTerrain(
 				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
 				m_pRenderer->CreateStaticMesh(terrainMesh));
+		}
 
+		// ------------------------------------------------------------
+		// Physics Terrain: HeightFieldCollider + Static Rigidbody
+		// ------------------------------------------------------------
+		{
+			const uint32 W = terrainPtr->GetWidth();
+			const uint32 H = terrainPtr->GetHeight();
+
+			// 기존 코드에서도 "Jolt heightfield는 square 기대"라고 ASSERT 했었음.
+			// 새 Physics 래퍼는 square 강제는 안 하지만, 데이터가 square일 때 가장 안전.
+			ASSERT(W == H, "HeightField collider: width/height must be equal (square) for your current pipeline.");
+
+			// Convert to float heights (world meters)
+			const auto& src = terrainPtr->GetDataU16(); // 네 코드에 있었던 API 가정
+			ASSERT(src.size() == size_t(W) * size_t(H), "HeightField data size mismatch.");
+
+			std::vector<float> samples;
+			samples.resize(src.size());
+
+			const float heightScale = terrainPtr->GetHeightScale();
+			const float heightOffset = terrainPtr->GetHeightOffset();
+
+			for (size_t i = 0; i < src.size(); ++i)
 			{
-				ASSERT(pPhysics, "Physics is null.");
-				ASSERT(hf.IsValid(), "HeightField is invalid.");
-
-				const uint32 W = terrainPtr->GetWidth();
-				const uint32 H = terrainPtr->GetHeight();
-
-				// Jolt HeightFieldShapeSettings는 기본적으로 "정사각형 N x N"을 기대하는 경우가 많음.
-				// 너 데이터가 정사각형이 아니라면 MeshShape(삼각형 콜라이더)로 가는게 안전.
-				ASSERT(W == H, "Jolt HeightField collider: width/height must be equal (square).");
-
-				const uint32 N = W;
-
-				// 1) Convert your U16 (0..65535) -> normalized (0..1) -> world height (scale/offset)
-				const auto& src = terrainPtr->GetDataU16();
-				ASSERT(src.size() == size_t(N) * size_t(N), "HeightField data size mismatch.");
-
-				std::vector<float> samples;
-				samples.resize(src.size());
-
-				const float heightScale = terrainPtr->GetHeightScale();
-				const float heightOffset = terrainPtr->GetHeightOffset();
-
-				for (size_t i = 0; i < src.size(); ++i)
-				{
-					const float n = float(src[i]) / 65535.0f;
-					samples[i] = n * heightScale + heightOffset; // world meters
-				}
-
-				// 2) Jolt definition:
-				// vertex = offset + scale * (x, sample[x,y], y)
-				// 여기서 sample은 이미 world height이므로 scale.y = 1.0이 가장 직관적.
-				const float spacingX = terrainPtr->GetWorldSpacingX();
-				const float spacingZ = terrainPtr->GetWorldSpacingZ();
-
-				float worldOriginX = -terrainPtr->GetWorldSizeX() * 0.5f;
-				float worldOriginZ = -terrainPtr->GetWorldSizeZ() * 0.5f;
-
-				const JPH::Vec3 offset(worldOriginX, 0.0f, worldOriginZ);
-				const JPH::Vec3 scale(spacingX, 1.0f, spacingZ);
-
-				JPH::Ref<JPH::HeightFieldShapeSettings> settings =
-					new JPH::HeightFieldShapeSettings(
-						samples.data(),
-						offset,
-						scale,
-						(JPH::uint32)N,
-						/*materialIndices*/ nullptr,
-						/*materialList*/   JPH::PhysicsMaterialList()
-					);
-
-				// 튜닝: 기본값으로도 되는데, 우선 안전하게 보수적으로
-				settings->mBlockSize = 4;
-				settings->mBitsPerSample = 8;
-
-				auto shapeResult = settings->Create();
-				ASSERT(!shapeResult.HasError(), "Failed to create HeightField shape.");
-
-				JPH::Ref<JPH::Shape> shape = shapeResult.Get();
-
-				// 3) Static body
-				JPH::BodyCreationSettings bcs(
-					shape,
-					JPH::RVec3(0.0, 0.0, 0.0),        // offset이 shape에 들어가있음
-					JPH::Quat::sIdentity(),
-					JPH::EMotionType::Static,
-					PHYS_LAYER_NON_MOVING
-				);
-
-				bcs.mFriction = 0.9f;
-				bcs.mRestitution = 0.0f;
-
-				JPH::BodyID terrainBody = m_EcsCtx.pPhysics->CreateBody(bcs, /*activate*/ false);
+				const float n = float(src[i]) / 65535.0f;
+				samples[i] = n * heightScale + heightOffset;
 			}
 
-			// Trees (ECS entities)
+			const float spacingX = terrainPtr->GetWorldSpacingX();
+			const float spacingZ = terrainPtr->GetWorldSpacingZ();
+
+			// 기존 코드가 worldOrigin을 shape offset으로 넣었는데,
+			// 새 래퍼에서는 shape offset을 따로 안 받으므로 Transform 위치로 맞춰줌.
+			const float worldOriginX = -terrainPtr->GetWorldSizeX() * 0.5f;
+			const float worldOriginZ = -terrainPtr->GetWorldSizeZ() * 0.5f;
+
+			flecs::entity e = ecs.entity();
+			e.set<CName>({ "TerrainPhysics" });
+
+			CTransform tr = {};
+			tr.Position = { worldOriginX, 0.0f, worldOriginZ };
+			tr.Rotation = { 0.0f, 0.0f, 0.0f };
+			tr.Scale = { 1.0f, 1.0f, 1.0f };
+			e.set<CTransform>(tr);
+
+			CRigidbody rb = {};
+			rb.Motion = ERigidBodyMotion::Static;
+			rb.Layer = 0; // NonMoving
+			rb.bEnableGravity = false;
+			rb.bStartActive = false;
+			e.set<CRigidbody>(rb);
+
+			CHeightFieldCollider hf = {};
+			hf.Width = W;
+			hf.Height = H;
+			hf.CellSizeX = spacingX;
+			hf.CellSizeZ = spacingZ;
+			hf.HeightScale = 1.0f;   // samples already in world meters
+			hf.HeightOffset = 0.0f;
+			hf.Heights = std::move(samples);
+			e.set<CHeightFieldCollider>(hf);
+		}
+
+		// ------------------------------------------------------------
+		// Trees: render-only ECS entities (same as before)
+		// ------------------------------------------------------------
+		{
 			AssetRef<StaticMesh> treeAssets[] =
 			{
 				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree1.shzmesh.json"),
@@ -511,12 +518,9 @@ namespace shz
 
 				const float yaw = distYaw(rng);
 				const float scale = distScale(rng);
-
 				const uint meshIdx = distMesh(rng);
 
-				// Create ECS entity
 				flecs::entity e = ecs.entity();
-
 				e.set<CName>({ "Tree" });
 
 				CTransform tr = {};
@@ -529,7 +533,6 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				// Create RenderScene object now and keep handle
 				RenderScene::RenderObject obj;
 				obj.Mesh = treeMeshes[meshIdx];
 				obj.Transform = GrassViewer::ToMatrixTRS(tr);
@@ -538,132 +541,84 @@ namespace shz
 				mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
 				e.set<CMeshRenderer>(mr);
 			}
+		}
 
-			// Helmet (ECS entities) - spawn 30
+		// ------------------------------------------------------------
+		// Helmets: render + dynamic physics box collider
+		// ------------------------------------------------------------
+		{
+			AssetRef<StaticMesh> helmetRef =
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
+
+			const StaticMeshRenderData helmetMeshRD = m_pRenderer->CreateStaticMesh(helmetRef);
+
+			// Spawn config
+			constexpr uint32 kHelmetCount = 300;
+			constexpr float  kMinY = 20.0f;
+			constexpr float  kMaxY = 50.0f;
+
+			// XZ grid offsets
+			constexpr int   kGridX = 6;
+			constexpr float kSpacingX = 1.0f;
+			constexpr float kSpacingZ = 1.0f;
+			constexpr float kBaseX = -10.0f;
+			constexpr float kBaseZ = 10.0f;
+
+			std::mt19937 rng(1337);
+			std::uniform_real_distribution<float> distY(kMinY, kMaxY);
+			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+
+			for (uint32 i = 0; i < kHelmetCount; ++i)
 			{
-				AssetRef<StaticMesh> helmetRef =
-					m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
+				const int ix = (int)(i % kGridX);
+				const int iz = (int)(i / kGridX);
 
-				// Spawn config
-				constexpr uint32 kHelmetCount = 300;
-				constexpr float  kMinY = 20.0f;
-				constexpr float  kMaxY = 50.0f;
+				const float x = kBaseX + (float)ix * kSpacingX;
+				const float z = kBaseZ + (float)iz * kSpacingZ;
 
-				// XZ grid offsets
-				constexpr int   kGridX = 6;                 // 6 columns
-				constexpr float kSpacingX = 1.0f;           // meters
-				constexpr float kSpacingZ = 1.0;           // meters
-				constexpr float kBaseX = -10.0f;
-				constexpr float kBaseZ = 10.0f;
+				const float y = distY(rng);
+				const float yaw = distYaw(rng);
 
-				std::mt19937 rng(1337);
-				std::uniform_real_distribution<float> distY(kMinY, kMaxY);
-				std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+				flecs::entity e = ecs.entity();
+				e.set<CName>({ "Helmet" });
 
-				for (uint32 i = 0; i < kHelmetCount; ++i)
-				{
-					// XZ placement (grid)
-					const int ix = (int)(i % kGridX);
-					const int iz = (int)(i / kGridX);
+				CTransform tr = {};
+				tr.Position = { x, y, z };
+				tr.Rotation = { 0.0f, yaw, 0.0f };
+				tr.Scale = { 1.0f, 1.0f, 1.0f };
+				e.set<CTransform>(tr);
 
-					const float x = kBaseX + (float)ix * kSpacingX;
-					const float z = kBaseZ + (float)iz * kSpacingZ;
+				// Render object
+				RenderScene::RenderObject obj;
+				obj.Mesh = helmetMeshRD;
+				obj.Transform = GrassViewer::ToMatrixTRS(tr);
+				obj.bCastShadow = true;
 
-					// Y random in [20, 50]
-					const float y = distY(rng);
+				Box bounds = obj.Mesh.LocalBounds;
 
-					// Yaw random
-					const float yaw = distYaw(rng);
+				CMeshRenderer mr = {};
+				mr.MeshRef = helmetRef;
+				mr.bCastShadow = true;
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
+				e.set<CMeshRenderer>(mr);
 
-					flecs::entity e = ecs.entity();
-					e.set<CName>({ "Helmet" });
+				CBoxCollider box = {};
+				box.Box = bounds;
+				box.bIsSensor = false;
+				e.set<CBoxCollider>(box);
 
-					CTransform tr = {};
-					tr.Position = { x, y, z };
-					tr.Rotation = { 0.0f, yaw, 0.0f };
-					tr.Scale = { 1.0f, 1.0f, 1.0f };
-					e.set<CTransform>(tr);
-
-					// RenderScene object
-					RenderScene::RenderObject obj;
-					obj.Mesh = m_pRenderer->CreateStaticMesh(helmetRef);
-					obj.Transform = GrassViewer::ToMatrixTRS(tr);
-					obj.bCastShadow = true;
-
-					Box bounds = obj.Mesh.LocalBounds;
-
-					// Save mesh renderer comp
-					CMeshRenderer mr = {};
-					mr.MeshRef = helmetRef;
-					mr.bCastShadow = true;
-					mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
-					e.set<CMeshRenderer>(mr);
-
-					// ------------------------------------------------------------
-					// Physics: create rigid body from mesh local bounds (AABB -> Box)
-					// ------------------------------------------------------------
-					CRigidBody rb = {};
-					rb.bValid = false;
-					rb.BodyId = 0;
-					rb.bDynamic = true;
-
-					const float3 localMin = bounds.Min;
-					const float3 localMax = bounds.Max;
-
-					const float3 localCenter = (localMin + localMax) * 0.5f;
-					const float3 localHalf = (localMax - localMin) * 0.5f;
-
-					const float3 scaledHalf =
-					{
-						std::abs(localHalf.x * tr.Scale.x),
-						std::abs(localHalf.y * tr.Scale.y),
-						std::abs(localHalf.z * tr.Scale.z),
-					};
-
-					const float3 scaledLocalCenter =
-					{
-						localCenter.x * tr.Scale.x,
-						localCenter.y * tr.Scale.y,
-						localCenter.z * tr.Scale.z,
-					};
-
-					const Matrix4x4 M = GrassViewer::ToMatrixTRS(tr);
-					const float3 worldCenter = (float4(scaledLocalCenter, 1.0f) * M).ToVector3();
-
-					Physics::ShapeRef shape = m_pPhysics->CreateBoxShape(scaledHalf);
-
-					const float3 euler = tr.Rotation;
-					const JPH::Quat rot =
-						JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), euler.x) *
-						JPH::Quat::sRotation(JPH::Vec3(0, 1, 0), euler.y) *
-						JPH::Quat::sRotation(JPH::Vec3(0, 0, 1), euler.z);
-
-					JPH::BodyCreationSettings bcs(
-						shape,
-						JPH::RVec3(worldCenter.x, worldCenter.y, worldCenter.z),
-						rot,
-						rb.bDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static,
-						rb.bDynamic ? PHYS_LAYER_MOVING : PHYS_LAYER_NON_MOVING
-					);
-
-					bcs.mFriction = 0.6f;
-					bcs.mRestitution = 0.0f;
-
-					if (rb.bDynamic)
-					{
-						bcs.mMassPropertiesOverride.mMass = 1.0f;
-						bcs.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-					}
-
-					const JPH::BodyID bodyId = m_pPhysics->CreateBody(bcs, /*bActivate*/ true);
-
-					rb.BodyId = bodyId.GetIndexAndSequenceNumber();
-					rb.bValid = true;
-
-					e.set<CRigidBody>(rb);
-				}
+				CRigidbody rb = {};
+				rb.Motion = ERigidBodyMotion::Dynamic;
+				rb.Layer = 1; // Moving
+				rb.Mass = 1.0f;
+				rb.LinearDamping = 0.0f;
+				rb.AngularDamping = 0.0f;
+				rb.bEnableGravity = true;
+				rb.bAllowSleeping = true;
+				rb.bStartActive = true;
+				e.set<CRigidbody>(rb);
 			}
-
 		}
 	}
+
 } // namespace shz

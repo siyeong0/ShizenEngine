@@ -33,7 +33,16 @@
     <ClInclude Include="Public\CMeshRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\CRigidBody.h">
+    <ClInclude Include="Public\CRigidbody.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CBoxCollider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CSphereCollider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CHeightFieldCollider.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

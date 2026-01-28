@@ -12,7 +12,9 @@
 #include <vector>
 #include <algorithm>
 #include <thread>
-
+#include <unordered_map>
+#include <mutex>
+#include <cmath>
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/Factory.h>

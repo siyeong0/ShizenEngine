@@ -15,13 +15,13 @@
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
 
-#include "Engine/Physics/Public/Physics.h"
 #include "Engine/ECS/Public/EcsWorld.h"
 
 #include "Engine/ECS/Public/CName.h"
 #include "Engine/ECS/Public/CTransform.h"
 #include "Engine/ECS/Public/CMeshRenderer.h"
-#include "Engine/ECS/Public/CRigidBody.h"
+
+#include "Engine/Physics/Public/PhysicsSystem.h"
 
 namespace shz
 {
@@ -51,10 +51,11 @@ namespace shz
 	private:
 		struct EcsContext final
 		{
-			Physics* pPhysics = nullptr;
 			Renderer* pRenderer = nullptr;
 			RenderScene* pRenderScene = nullptr;
 			AssetManager* pAssetManager = nullptr;
+
+			PhysicsSystem* pPhysicsSystem = nullptr;
 		};
 
 	private:
@@ -68,8 +69,8 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		std::unique_ptr<shz::EcsWorld> m_pEcs = nullptr;
-		std::unique_ptr<Physics>       m_pPhysics = nullptr;
+		std::unique_ptr<shz::EcsWorld>     m_pEcs = nullptr;
+		std::unique_ptr<PhysicsSystem>    m_pPhysicsSystem = nullptr;
 
 		EcsContext m_EcsCtx = {};
 
