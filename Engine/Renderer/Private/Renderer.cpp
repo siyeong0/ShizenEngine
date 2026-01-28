@@ -1074,7 +1074,7 @@ namespace shz
 			RendererMaterialStaticBinder* binder = nullptr;
 			if (out.RenderPassId == std::hash<std::string>{}("GBuffer")) binder = m_pGBufferMaterialStaticBinder.get();
 			else if (out.RenderPassId == std::hash<std::string>{}("Grass")) binder = m_pGrassMaterialStaticBinder.get();
-			else ASSERT(false, "RenderPass (%s) not exist.", out.RenderPassName);
+			else ASSERT(false, "RenderPass not exist.");
 
 			bool ok = binder->BindStatics(out.PSO);
 			ASSERT(ok, "Failed to bind statics.");

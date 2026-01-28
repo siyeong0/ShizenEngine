@@ -50,6 +50,11 @@ namespace shz
 		// ------------------------------------------------------------
 		// Value API
 		// ------------------------------------------------------------
+		void Reset()
+		{
+			Destroy(*this);
+		}
+
 		constexpr bool IsValid() const noexcept
 		{
 			return m_Value != 0;
