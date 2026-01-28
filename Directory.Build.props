@@ -52,8 +52,10 @@
 				NOMINMAX;
 				_CRT_SECURE_NO_WARNINGS;
 
+				JPH_DEBUG_RENDERER;
 				JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;
 				JPH_OBJECT_STREAM;
+
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
 
@@ -85,7 +87,6 @@
 		<ClCompile>
 			<PreprocessorDefinitions>
 				SHZ_DEBUG;
-				JPH_DEBUG_RENDERER;
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
 		</ClCompile>

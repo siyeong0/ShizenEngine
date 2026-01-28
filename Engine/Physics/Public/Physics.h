@@ -40,6 +40,8 @@ namespace shz
 
 			uint32 TempAllocatorSizeBytes = 16u * 1024u * 1024u;
 			uint32 NumWorkerThreads = 0; // 0: auto
+
+			float3 Gravity = { 0.0f, -9.81f, 0.0f };
 		};
 
 		Physics();

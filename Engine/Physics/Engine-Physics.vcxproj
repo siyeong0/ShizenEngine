@@ -155,6 +155,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\Physics.h" />
+    <ClInclude Include="Public\PhysicsSystem.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -164,6 +165,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\Physics.cpp" />
+    <ClCompile Include="Private\PhysicsSystem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\Engine-Core.vcxproj">

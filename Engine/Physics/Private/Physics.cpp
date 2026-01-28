@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "Physics.h"
 
-
 namespace shz
 {
 	namespace
@@ -63,7 +62,9 @@ namespace shz
 		{
 			static bool s_Initialized = false;
 			if (s_Initialized)
+			{
 				return;
+			}
 
 			JPH::RegisterDefaultAllocator();
 			JPH::Factory::sInstance = new JPH::Factory();
@@ -99,6 +100,7 @@ namespace shz
 
 	bool Physics::Initialize(const CreateInfo& ci)
 	{
+		ASSERT(m_pImpl == nullptr, "Physics already initialized.");
 		EnsureJoltInitializedOnce();
 
 		m_pImpl = std::make_unique<Impl>();
@@ -123,21 +125,23 @@ namespace shz
 			m_pImpl->ObjVsBp,
 			m_pImpl->ObjPair);
 
+		m_pImpl->System.SetGravity(JPH::Vec3(ci.Gravity.x, ci.Gravity.y, ci.Gravity.z));
+
 		return true;
 	}
 
 	void Physics::Shutdown()
 	{
 		if (!m_pImpl)
+		{
 			return;
-
+		}
 		m_pImpl.reset();
 	}
 
 	void Physics::Step(float dt)
 	{
-		if (!m_pImpl)
-			return;
+		ASSERT(m_pImpl, "Physics not initialized.");
 
 		// One substep is fine as a default
 		m_pImpl->System.Update(dt, 1, m_pImpl->TempAlloc.get(), m_pImpl->JobSys.get());
@@ -145,8 +149,7 @@ namespace shz
 
 	JPH::BodyInterface* Physics::GetBodyInterface() const
 	{
-		if (!m_pImpl)
-			return nullptr;
+		ASSERT(m_pImpl, "Physics not initialized.");
 
 		return &m_pImpl->System.GetBodyInterface();
 	}
@@ -177,8 +180,7 @@ namespace shz
 
 	void Physics::DestroyBody(JPH::BodyID bodyId)
 	{
-		if (!m_pImpl)
-			return;
+		ASSERT(m_pImpl, "Physics not initialized.");
 
 		JPH::BodyInterface& bi = m_pImpl->System.GetBodyInterface();
 		bi.RemoveBody(bodyId);
@@ -187,8 +189,7 @@ namespace shz
 
 	void Physics::SetBodyPosition(JPH::BodyID bodyId, const float3& pos, bool bActivate)
 	{
-		if (!m_pImpl)
-			return;
+		ASSERT(m_pImpl, "Physics not initialized.");
 
 		JPH::BodyInterface& bi = m_pImpl->System.GetBodyInterface();
 		bi.SetPosition(
@@ -199,8 +200,7 @@ namespace shz
 
 	float3 Physics::GetBodyPosition(JPH::BodyID bodyId) const
 	{
-		if (!m_pImpl)
-			return float3(0, 0, 0);
+		ASSERT(m_pImpl, "Physics not initialized.");
 
 		const JPH::BodyInterface& bi = m_pImpl->System.GetBodyInterface();
 		const JPH::RVec3 p = bi.GetPosition(bodyId);
