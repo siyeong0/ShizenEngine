@@ -7,26 +7,31 @@
 #ifndef PCH_H
 #define PCH_H
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
-#include <algorithm>
 #include <thread>
 #include <unordered_map>
-#include <mutex>
-#include <cmath>
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/JobSystem.h>
+#include <Jolt/Core/Memory.h>
 
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
-
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
 
 #include <Jolt/RegisterTypes.h>
 

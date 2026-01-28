@@ -202,36 +202,12 @@ namespace shz
 
 		// ECS: systems
 		{
-			auto& ecs = m_pEcs->World();
-
 			// Install Physics <-> ECS systems (CreateBodies / PushTransform / WriteBack / OnRemove)
-			auto physHandles = m_pPhysicsSystem->InstallEcsSystemsAndGetHandles(ecs);
-
-			// Fixed: Physics step
-			{
-				auto sys = ecs.system<>("Physics.Step")
-					.each([this]()
-						{
-							const float dtFixed = m_pEcs->GetFixedDeltaTime();
-							m_pPhysicsSystem->Step(dtFixed);
-						});
-				m_pEcs->RegisterFixedSystem(sys);
-			}
-
-			// Register physics systems:
-			if (physHandles.CreateBodies_Box.is_valid())        m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_Box);
-			if (physHandles.CreateBodies_Sphere.is_valid())     m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_Sphere);
-			if (physHandles.CreateBodies_HeightField.is_valid())m_pEcs->RegisterUpdateSystem(physHandles.CreateBodies_HeightField);
-
-			if (physHandles.PushTransform.is_valid())
-				m_pEcs->RegisterUpdateSystem(physHandles.PushTransform);
-
-			if (physHandles.WriteBack.is_valid())
-				m_pEcs->RegisterFixedSystem(physHandles.WriteBack);
+			m_pPhysicsSystem->InstallEcsSystems(*m_pEcs);
 
 			// Update: Transform -> RenderScene sync
 			{
-				auto sys = ecs.system<CTransform, CMeshRenderer>("Render.SyncTransforms")
+				auto sys = m_pEcs->World().system<CTransform, CMeshRenderer>("Render.SyncTransforms")
 					.each([this](CTransform& tr, CMeshRenderer& mr)
 						{
 							if (!mr.RenderObjectHandle.IsValid())

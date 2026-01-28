@@ -7,58 +7,45 @@
 #include "Engine/ECS/Public/CSphereCollider.h"
 #include "Engine/ECS/Public/CHeightFieldCollider.h"
 
-#include <flecs.h>
+#include "Engine/ECS/Public/EcsWorld.h"
 
 namespace shz
 {
-    class PhysicsSystem final
-    {
-    public:
-        struct CreateInfo final
-        {
-            Physics::CreateInfo PhysicsCI = {};
-        };
+	class PhysicsSystem final
+	{
+	public:
+		struct CreateInfo final
+		{
+			Physics::CreateInfo PhysicsCI = {};
+		};
 
-        struct EcsHandles final
-        {
-            flecs::entity CreateBodies_Box = {};
-            flecs::entity CreateBodies_Sphere = {};
-            flecs::entity CreateBodies_HeightField = {};
+	public:
+		void Initialize(const CreateInfo& ci = {});
+		void Shutdown();
 
-            flecs::entity PushTransform = {};
-            flecs::entity WriteBack = {};
-            flecs::entity OnRemoveRigidBody = {};
-        };
+		Physics& GetPhysics() { return m_Physics; }
+		const Physics& GetPhysics() const { return m_Physics; }
 
-    public:
-        void Initialize(const CreateInfo& ci = {});
-        void Shutdown();
+		void Step(float dt) { m_Physics.Step(dt); }
 
-        Physics& GetPhysics() { return m_Physics; }
-        const Physics& GetPhysics() const { return m_Physics; }
+		void InstallEcsSystems(EcsWorld& ecs);
 
-        // fixed-step driver에서 호출
-        void Step(float dt) { m_Physics.Step(dt); }
+	private:
+		void ensureShapeCreated_Box(CBoxCollider& box);
+		void ensureShapeCreated_Sphere(CSphereCollider& sph);
+		void ensureShapeCreated_HeightField(CHeightFieldCollider& hf);
 
-        void InstallEcsSystems(flecs::world& ecs);
-        EcsHandles InstallEcsSystemsAndGetHandles(flecs::world& ecs);
+		void ensureBodyCreated(
+			CTransform& tr,
+			CRigidbody& rb,
+			CBoxCollider* box,
+			CSphereCollider* sphere,
+			CHeightFieldCollider* hf);
 
-    private:
-        void EnsureShapeCreated_Box(CBoxCollider& box);
-        void EnsureShapeCreated_Sphere(CSphereCollider& sph);
-        void EnsureShapeCreated_HeightField(CHeightFieldCollider& hf);
+		void DestroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf);
 
-        void EnsureBodyCreated(
-            CTransform& tr,
-            CRigidbody& rb,
-            CBoxCollider* box,
-            CSphereCollider* sphere,
-            CHeightFieldCollider* hf);
-
-        void DestroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf);
-
-    private:
-        Physics m_Physics = {};
-        bool m_bInstalled = false;
-    };
+	private:
+		Physics m_Physics = {};
+		bool m_bInstalled = false;
+	};
 }

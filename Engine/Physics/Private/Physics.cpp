@@ -1,43 +1,21 @@
 #include "pch.h"
 #include "Engine/Physics/Public/Physics.h"
 
-// Jolt
-#include <Jolt/Jolt.h>
-#include <Jolt/Core/Factory.h>
-#include <Jolt/Core/TempAllocator.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
-#include <Jolt/Core/JobSystem.h>
-#include <Jolt/Core/Memory.h>
-
-#include <Jolt/Physics/PhysicsSystem.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
-#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
-#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
-#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
-
-#include <Jolt/RegisterTypes.h>
-
 namespace shz
 {
-	// ------------------------------------------------------------------------
 	// Small math helpers (float3 <-> JPH)
-	// ------------------------------------------------------------------------
-	static inline JPH::Vec3 ToJPH(const float3& v)
+	static inline JPH::Vec3 toJPH(const float3& v)
 	{
 		return JPH::Vec3(v.x, v.y, v.z);
 	}
 
-	static inline float3 FromJPH(const JPH::Vec3& v)
+	static inline float3 fromJPH(const JPH::Vec3& v)
 	{
 		return float3{ v.GetX(), v.GetY(), v.GetZ() };
 	}
 
-	// Euler (XYZ) -> Quaternion
-	static inline JPH::Quat QuatFromEulerXYZ(const float3& eulerRad)
+	// Euler (XYZ) <-> Quaternion
+	static inline JPH::Quat quatFromEulerXYZ(const float3& eulerRad)
 	{
 		const float cx = std::cos(eulerRad.x * 0.5f);
 		const float sx = std::sin(eulerRad.x * 0.5f);
@@ -55,8 +33,7 @@ namespace shz
 		return JPH::Quat(x, y, z, w).Normalized();
 	}
 
-	// Quaternion -> Euler (XYZ)
-	static inline float3 EulerXYZFromQuat(const JPH::Quat& qIn)
+	static inline float3 eulerXYZFromQuat(const JPH::Quat& qIn)
 	{
 		const JPH::Quat q = qIn.Normalized();
 		const float x = q.GetX();
@@ -80,7 +57,7 @@ namespace shz
 		return float3{ rollX, pitchY, yawZ };
 	}
 
-	static inline JPH::EMotionType ToJPHMotionType(ERigidBodyType t)
+	static inline JPH::EMotionType toJPHMotionType(ERigidBodyType t)
 	{
 		switch (t)
 		{
@@ -91,7 +68,7 @@ namespace shz
 		}
 	}
 
-	static inline JPH::ObjectLayer ToJPHObjectLayer(EPhysicsObjectLayer layer)
+	static inline JPH::ObjectLayer toJPHObjectLayer(EPhysicsObjectLayer layer)
 	{
 		// 0 = NonMoving, 1 = Moving
 		return static_cast<JPH::ObjectLayer>(layer);
@@ -322,7 +299,7 @@ namespace shz
 			I.ObjLayerPairFilter);
 
 		// Gravity
-		I.System.SetGravity(ToJPH(ci.Gravity));
+		I.System.SetGravity(toJPH(ci.Gravity));
 
 		I.bInitialized = true;
 		return true;
@@ -378,7 +355,7 @@ namespace shz
 
 		Impl& I = *m_pImpl;
 
-		const JPH::Vec3 he = ToJPH(halfExtent);
+		const JPH::Vec3 he = toJPH(halfExtent);
 		// Jolt expects positive extents
 		ASSERT(he.GetX() > 0.0f && he.GetY() > 0.0f || he.GetZ() > 0.0f, "Expects positive extents.");
 
@@ -476,15 +453,15 @@ namespace shz
 		const JPH::RefConst<JPH::Shape> shape = I.GetShape(ci.Shape);
 		ASSERT(shape != nullptr, "Shape is null.");
 
-		const JPH::Vec3 pos = ToJPH(ci.Position);
-		const JPH::Quat rot = QuatFromEulerXYZ(ci.RotationEulerRad);
+		const JPH::Vec3 pos = toJPH(ci.Position);
+		const JPH::Quat rot = quatFromEulerXYZ(ci.RotationEulerRad);
 
 		JPH::BodyCreationSettings bcs(
 			shape,
 			pos,
 			rot,
-			ToJPHMotionType(ci.Type),
-			ToJPHObjectLayer(ci.Layer));
+			toJPHMotionType(ci.Type),
+			toJPHObjectLayer(ci.Layer));
 
 		// Sensor flag: in Jolt, use "IsSensor" on shape via material/subshape?
 		// There is BodyCreationSettings::mIsSensor for broad sensor behavior (depending on version).
@@ -553,8 +530,8 @@ namespace shz
 		const JPH::BodyID id = Impl::ToBodyID(body);
 		ASSERT(!id.IsInvalid(), "Invalid BodyID.");
 
-		const JPH::Vec3 p = ToJPH(pos);
-		const JPH::Quat q = QuatFromEulerXYZ(rotEulerRad);
+		const JPH::Vec3 p = toJPH(pos);
+		const JPH::Quat q = quatFromEulerXYZ(rotEulerRad);
 
 		JPH::BodyInterface& BI = I.BodyIF();
 		BI.SetPositionAndRotation(
@@ -579,13 +556,13 @@ namespace shz
 		if (outPos)
 		{
 			const JPH::Vec3 p = BI.GetPosition(id);
-			*outPos = FromJPH(p);
+			*outPos = fromJPH(p);
 		}
 
 		if (outRotEulerRad)
 		{
 			const JPH::Quat q = BI.GetRotation(id);
-			*outRotEulerRad = EulerXYZFromQuat(q);
+			*outRotEulerRad = eulerXYZFromQuat(q);
 		}
 	}
 
@@ -601,7 +578,7 @@ namespace shz
 		ASSERT(!id.IsInvalid(), "Invalid BodyID.");
 
 		const JPH::Vec3 jp = I.BodyIF().GetPosition(id);
-		return FromJPH(jp);
+		return fromJPH(jp);
 	}
 
 } // namespace shz
