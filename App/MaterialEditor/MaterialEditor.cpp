@@ -264,12 +264,10 @@ namespace shz
 			m_Main.Scale = float3{ uniformScale, uniformScale, uniformScale };
 		}
 
-		RenderScene::RenderObject obj = {};
-		obj.Mesh = m_Main.MeshRD;
-		obj.Transform = Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale);
-		obj.bCastShadow = m_Main.bCastShadow;
-
-		m_Main.ObjectId = m_pRenderScene->AddObject(std::move(obj));
+		m_Main.ObjectId = m_pRenderScene->AddObject(
+			m_Main.MeshRD, 
+			Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale), 
+			m_Main.bCastShadow);
 		ASSERT(m_Main.ObjectId.IsValid(), "Failed to add RenderObject.");
 
 		// UI state should be refreshed
@@ -768,15 +766,13 @@ namespace shz
 				nullptr,
 				m_pAssetManager.get());
 
-			RenderScene::RenderObject floorObj = {};
-			floorObj.Mesh = m_pRenderer->CreateStaticMesh(cpuFloorMesh);
-			floorObj.Transform = Matrix4x4::TRS(
-				{ 0.0f, -1.0f, 0.0f },
-				{ 0.0f, 0.0f, 0.0f },
-				{ 10.0f, 1.0f, 10.0f });
-			floorObj.bCastShadow = true;
-
-			m_Floor = m_pRenderScene->AddObject(std::move(floorObj));
+			m_Floor = m_pRenderScene->AddObject(
+				m_pRenderer->CreateStaticMesh(cpuFloorMesh),
+				Matrix4x4::TRS(
+					{ 0.0f, -1.0f, 0.0f },
+					{ 0.0f, 0.0f, 0.0f },
+					{ 10.0f, 1.0f, 10.0f }),
+				true);
 		}
 
 		// Main
@@ -1016,7 +1012,8 @@ namespace shz
 		{
 			if (RenderScene::RenderObject* obj = GetMainRenderObjectOrNull())
 			{
-				obj->Transform = Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale);
+				obj->World = Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale);
+				obj->WorldInvTranspose = obj->World.Inversed().Transposed();
 				obj->bCastShadow = m_Main.bCastShadow;
 			}
 		}
