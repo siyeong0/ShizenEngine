@@ -17,11 +17,9 @@
 
 #include "Engine/ECS/Public/EcsWorld.h"
 
-#include "Engine/ECS/Public/CName.h"
-#include "Engine/ECS/Public/CTransform.h"
-#include "Engine/ECS/Public/CMeshRenderer.h"
+#include "Engine/ECS/Public/Components.h"
 
-#include "Engine/Physics/Public/PhysicsSystem.h"
+#include "Engine/ECSIntegration/Public/PhysicsSystem.h"
 
 namespace shz
 {

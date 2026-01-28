@@ -152,15 +152,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\CBoxCollider.h" />
-    <ClInclude Include="Public\CHeightFieldCollider.h" />
-    <ClInclude Include="Public\Common.h" />
-    <ClInclude Include="Public\CMeshRenderer.h" />
-    <ClInclude Include="Public\CName.h" />
-    <ClInclude Include="Public\CSphereCollider.h" />
-    <ClInclude Include="Public\CTransform.h" />
+    <ClInclude Include="Public\Components.h" />
     <ClInclude Include="Public\EcsWorld.h" />
-    <ClInclude Include="Public\CRigidbody.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

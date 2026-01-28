@@ -1,12 +1,7 @@
 #pragma once
 #include "Engine/Physics/Public/Physics.h"
 
-#include "Engine/ECS/Public/CTransform.h"
-#include "Engine/ECS/Public/CRigidbody.h"
-#include "Engine/ECS/Public/CBoxCollider.h"
-#include "Engine/ECS/Public/CSphereCollider.h"
-#include "Engine/ECS/Public/CHeightFieldCollider.h"
-
+#include "Engine/ECS/Public/Components.h"
 #include "Engine/ECS/Public/EcsWorld.h"
 
 namespace shz

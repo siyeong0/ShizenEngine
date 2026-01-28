@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/Physics/Public/PhysicsSystem.h"
+#include "Engine/ECSIntegration/Public/PhysicsSystem.h"
 
 namespace shz
 {

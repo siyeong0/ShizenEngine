@@ -21,28 +21,7 @@
     <ClInclude Include="Public\EcsWorld.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\CTransform.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CName.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\Common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CMeshRenderer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CRigidbody.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CBoxCollider.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CSphereCollider.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\CHeightFieldCollider.h">
+    <ClInclude Include="Public\Components.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
