@@ -46,6 +46,11 @@ namespace shz
 	using float3x3 = Matrix3x3;
 	using float2x2 = Matrix2x2;
 
+	inline Vector4 operator*(const Vector4& v, const Matrix4x4 m)
+	{
+		return m.MulVector4(v);
+	}
+
 	constexpr inline uint32 BitInterleave16(uint16 _x, uint16 _y)
 	{
 		// https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN

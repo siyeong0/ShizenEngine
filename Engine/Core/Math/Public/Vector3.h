@@ -4,6 +4,8 @@
 
 namespace shz
 {
+	struct Vector4;
+
 	struct Vector3 final
 	{
 		float32 x;

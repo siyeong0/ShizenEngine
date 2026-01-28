@@ -18,84 +18,68 @@
 #include "Engine/Physics/Public/Physics.h"
 #include "Engine/ECS/Public/EcsWorld.h"
 
+#include "Engine/ECS/Public/CName.h"
+#include "Engine/ECS/Public/CTransform.h"
+#include "Engine/ECS/Public/CMeshRenderer.h"
+#include "Engine/ECS/Public/CRigidBody.h"
+
 namespace shz
 {
-    class GrassViewer final : public SampleBase
-    {
-    public:
-        void Initialize(const SampleInitInfo& InitInfo) override final;
+	class GrassViewer final : public SampleBase
+	{
+	public:
+		void Initialize(const SampleInitInfo& InitInfo) override final;
 
-        void Render() override final;
-        void Update(double CurrTime, double ElapsedTime, bool DoUpdateUI) override final;
+		void Render() override final;
+		void Update(double CurrTime, double ElapsedTime, bool DoUpdateUI) override final;
 
-        void ReleaseSwapChainBuffers() override final;
-        void WindowResize(uint32 Width, uint32 Height) override final;
+		void ReleaseSwapChainBuffers() override final;
+		void WindowResize(uint32 Width, uint32 Height) override final;
 
-        const Char* GetSampleName() const override final { return "GrassViewer"; }
+		const Char* GetSampleName() const override final { return "GrassViewer"; }
 
-    protected:
-        void UpdateUI() override final;
+	protected:
+		void UpdateUI() override final;
 
-    public:
-        struct ViewportState final
-        {
-            uint32 Width = 1;
-            uint32 Height = 1;
-        };
+	public:
+		struct ViewportState final
+		{
+			uint32 Width = 1;
+			uint32 Height = 1;
+		};
 
-    private:
-        // ECS components (minimal; 버전 차이 없는 단순 POD)
-        struct CName final { std::string Value = {}; };
+	private:
+		struct EcsContext final
+		{
+			Physics* pPhysics = nullptr;
+			Renderer* pRenderer = nullptr;
+			RenderScene* pRenderScene = nullptr;
+			AssetManager* pAssetManager = nullptr;
+		};
 
-        struct CTransform final
-        {
-            float3 Position = { 0, 0, 0 };
-            float3 Rotation = { 0, 0, 0 };
-            float3 Scale = { 1, 1, 1 };
-        };
+	private:
+		void BuildSceneOnce();
+		static Matrix4x4 ToMatrixTRS(const CTransform& t);
 
-        struct CRenderMesh final
-        {
-            std::string Path = {};
-            AssetRef<StaticMesh> MeshRef = {};
-            StaticMeshRenderData Mesh = {};
-            bool bCastShadow = true;
-            bool bAlphaMasked = false;
-        };
+	private:
+		std::unique_ptr<Renderer>     m_pRenderer = nullptr;
+		std::unique_ptr<RenderScene>  m_pRenderScene = nullptr;
+		std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
 
-        struct CRenderObjectHandle final
-        {
-            Handle<RenderScene::RenderObject> ObjectId = {};
-        };
+		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-        struct CPhysicsBody final
-        {
-            // BodyID는 Jolt 타입이라 include 상황에 따라 불편하면 uint64로 바꿔도 됨
-            // 지금은 "붙일 준비"만.
-            bool bValid = false;
-        };
+		std::unique_ptr<shz::EcsWorld> m_pEcs = nullptr;
+		std::unique_ptr<Physics>       m_pPhysics = nullptr;
 
-    private:
-        void BuildSceneOnce(); // 기존 로딩 로직 그대로
+		EcsContext m_EcsCtx = {};
 
-    private:
-        std::unique_ptr<Renderer>     m_pRenderer = nullptr;
-        std::unique_ptr<RenderScene>  m_pRenderScene = nullptr;
-        std::unique_ptr<AssetManager> m_pAssetManager = nullptr;
+		ViewportState     m_Viewport = {};
+		ViewFamily        m_ViewFamily = {};
+		FirstPersonCamera m_Camera = {};
 
-        RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+		RenderScene::LightObject         m_GlobalLight = {};
+		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
-        std::unique_ptr<shz::EcsWorld> m_pEcs = nullptr;
-
-        std::unique_ptr<Physics> m_pPhysics = nullptr;
-
-        ViewportState     m_Viewport = {};
-        ViewFamily        m_ViewFamily = {};
-        FirstPersonCamera m_Camera = {};
-
-        RenderScene::LightObject         m_GlobalLight = {};
-        Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
-
-        float m_Speed = 3.0f;
-    };
+		float m_Speed = 3.0f;
+	};
 } // namespace shz

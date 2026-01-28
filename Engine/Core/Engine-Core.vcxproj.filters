@@ -320,6 +320,9 @@
     <ClCompile Include="Common\Private\DebugOutput.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Math\Private\Vector4.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Common\Public\SearchRecursive.inl">

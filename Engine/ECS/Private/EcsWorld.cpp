@@ -16,28 +16,23 @@ namespace shz
 
 		m_CI = ci;
 
-		// flecs::world may not have a default ctor depending on version/config.
-		// Prefer explicit argc/argv ctor for maximum compatibility.
 		m_pWorld = std::make_unique<flecs::world>(m_CI.Argc, m_CI.Argv);
 
 		m_DeltaTime = 0.0f;
 		m_Accumulator = 0.0f;
 
-		// Optional: configure pipeline/threads here later if you want
-		// m_pWorld->set_threads(...);
-
-		// If you want "time" component to be consistent:
-		// m_pWorld->set_delta_time(m_CI.FixedDeltaTime); // don't force here; we set per step.
+		m_FixedSystems.clear();
+		m_UpdateSystems.clear();
 	}
 
 	void EcsWorld::Shutdown()
 	{
 		if (!m_pWorld)
-		{
 			return;
-		}
 
-		// Ensure all destructors run before shutdown returns
+		m_FixedSystems.clear();
+		m_UpdateSystems.clear();
+
 		m_pWorld.reset();
 
 		m_DeltaTime = 0.0f;
@@ -53,16 +48,55 @@ namespace shz
 	{
 		ASSERT(m_pWorld, "EcsWorld is not initialized.");
 
-		// Clamp negative dt (can happen during pauses or clock issues)
 		if (dt < 0.0f)
-		{
 			dt = 0.0f;
-		}
 
 		m_DeltaTime = dt;
-
-		// Accumulate for fixed-step
 		m_Accumulator += dt;
+	}
+
+	void EcsWorld::RegisterFixedSystem(const flecs::entity& sys)
+	{
+		ASSERT(m_pWorld, "EcsWorld is not initialized.");
+		ASSERT(sys.is_valid(), "RegisterFixedSystem: sys is invalid.");
+
+		m_FixedSystems.push_back(sys);
+
+		// Default: fixed systems are disabled during variable update
+		sys.disable();
+	}
+
+	void EcsWorld::RegisterUpdateSystem(const flecs::entity& sys)
+	{
+		ASSERT(m_pWorld, "EcsWorld is not initialized.");
+		ASSERT(sys.is_valid(), "RegisterUpdateSystem: sys is invalid.");
+
+		m_UpdateSystems.push_back(sys);
+
+		// Default: update systems enabled
+		sys.enable();
+	}
+
+	void EcsWorld::SetFixedEnabled(bool bEnabled)
+	{
+		for (auto& s : m_FixedSystems)
+		{
+			if (!s.is_valid())
+				continue;
+			if (bEnabled) s.enable();
+			else s.disable();
+		}
+	}
+
+	void EcsWorld::SetUpdateEnabled(bool bEnabled)
+	{
+		for (auto& s : m_UpdateSystems)
+		{
+			if (!s.is_valid())
+				continue;
+			if (bEnabled) s.enable();
+			else s.disable();
+		}
 	}
 
 	uint32 EcsWorld::RunFixedSteps()
@@ -75,19 +109,27 @@ namespace shz
 		const uint32 maxSteps = std::max(1u, m_CI.MaxFixedStepsPerFrame);
 
 		uint32 steps = 0;
+
+		// Only fixed systems run
+		SetUpdateEnabled(false);
+		SetFixedEnabled(true);
+
 		while (m_Accumulator >= fixedDt && steps < maxSteps)
 		{
-			// Run one fixed step
 			m_pWorld->progress(fixedDt);
 			m_Accumulator -= fixedDt;
 			++steps;
 		}
 
-		// If we hit the cap, drop the remainder to avoid spiral of death
+		// If we hit max steps, drop the remainder to avoid spiral of death.
 		if (steps == maxSteps)
 		{
 			m_Accumulator = 0.0f;
 		}
+
+		// Turn fixed systems off again (so Progress() won't accidentally run them)
+		SetFixedEnabled(false);
+		SetUpdateEnabled(true);
 
 		return steps;
 	}
@@ -96,7 +138,10 @@ namespace shz
 	{
 		ASSERT(m_pWorld, "EcsWorld is not initialized.");
 
-		// Run one "frame step" with variable dt
+		// Only update systems run
+		SetFixedEnabled(false);
+		SetUpdateEnabled(true);
+
 		m_pWorld->progress(m_DeltaTime);
 	}
 

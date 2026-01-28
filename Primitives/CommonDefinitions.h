@@ -49,7 +49,6 @@
 
 #define SHZ_INTERFACE __declspec(novtable)
 
-
 // Compiler-specific definition
 #ifdef _MSC_VER
 #    if _MSC_VER >= 1917

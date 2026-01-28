@@ -4,6 +4,9 @@
 
 namespace shz
 {
+	struct Vector2;
+	struct Vector3;
+
 	struct Vector4 final
 	{
 		float32 x;
@@ -13,9 +16,15 @@ namespace shz
 
 		constexpr Vector4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
 		constexpr Vector4(float32 x, float32 y, float32 z, float32 w) : x(x), y(y), z(z), w(w) {}
-		constexpr Vector4(const Vector4& other) = default;
+		Vector4(const Vector2& v, float z, float w);
+		Vector4(const Vector2& v1, const Vector2& v2);
+		Vector4(const Vector3& v, float w);
+		Vector4(const Vector4& other) = default;
 		Vector4& operator=(const Vector4& other) = default;
 		~Vector4() = default;
+
+		operator Vector3() const;
+		Vector3 ToVector3() const;
 
 		inline float32& operator[](size_t idx)
 		{

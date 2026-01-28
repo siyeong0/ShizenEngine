@@ -6,7 +6,7 @@ namespace shz
 	void PhysicsSystem::Initialize()
 	{
 		Physics::CreateInfo ci = {};
-		ci.Gravity = float3(0.0f, -9.81f, 0.0f);
+		ci.Gravity = float3(0.0f, -0.01f, 0.0f);
 		m_Physics.Initialize(ci);
 	}
 

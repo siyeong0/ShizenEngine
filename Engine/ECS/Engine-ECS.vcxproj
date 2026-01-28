@@ -152,7 +152,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\Common.h" />
+    <ClInclude Include="Public\CMeshRenderer.h" />
+    <ClInclude Include="Public\CName.h" />
+    <ClInclude Include="Public\CTransform.h" />
     <ClInclude Include="Public\EcsWorld.h" />
+    <ClInclude Include="Public\CRigidBody.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

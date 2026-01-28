@@ -224,6 +224,7 @@
     <ClCompile Include="Common\Private\BasicFileSystem.cpp" />
     <ClCompile Include="Common\Private\BasicPlatformMisc.cpp" />
     <ClCompile Include="Common\Private\DebugOutput.cpp" />
+    <ClCompile Include="Math\Private\Vector4.cpp" />
     <ClCompile Include="Memory\Private\DataBlobImpl.cpp" />
     <ClCompile Include="Memory\Private\DefaultRawMemoryAllocator.cpp" />
     <ClCompile Include="Memory\Private\EngineMemory.cpp" />

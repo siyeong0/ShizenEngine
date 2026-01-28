@@ -82,6 +82,18 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
+	// Helpers
+	// ------------------------------------------------------------
+
+	Matrix4x4 GrassViewer::ToMatrixTRS(const CTransform& t)
+	{
+		return Matrix4x4::TRS(
+			t.Position,
+			t.Rotation,
+			t.Scale);
+	}
+
+	// ------------------------------------------------------------
 	// Lifecycle
 	// ------------------------------------------------------------
 
@@ -141,18 +153,19 @@ namespace shz
 		{
 			ASSERT(m_pEcs, "ECS world is null.");
 			shz::EcsWorld::CreateInfo eci = {};
-			eci.FixedDeltaTime = 1.0f / 60.0f;  // 필요하면 나중에
+			eci.FixedDeltaTime = 1.0f / 60.0f;
 			eci.MaxFixedStepsPerFrame = 8;
 
 			m_pEcs->Initialize(eci);
 			ASSERT(m_pEcs->IsValid(), "EcsWorld is not initialized.");
+
 			auto& ecs = m_pEcs->World();
 
+			// Register components
 			ecs.component<CName>();
 			ecs.component<CTransform>();
-			ecs.component<CRenderMesh>();
-			ecs.component<CRenderObjectHandle>();
-			ecs.component<CPhysicsBody>();
+			ecs.component<CMeshRenderer>();
+			ecs.component<CRigidBody>();
 		}
 
 		// Physics
@@ -166,6 +179,61 @@ namespace shz
 			m_pPhysics->Initialize(pci);
 		}
 
+		// ECS ctx (Physics/Renderer/Scene/Asset)
+		{
+			m_EcsCtx.pPhysics = m_pPhysics.get();
+			m_EcsCtx.pRenderer = m_pRenderer.get();
+			m_EcsCtx.pRenderScene = m_pRenderScene.get();
+			m_EcsCtx.pAssetManager = m_pAssetManager.get();
+
+			auto& ecs = m_pEcs->World();
+			ecs.set_ctx(&m_EcsCtx);
+		}
+
+		// ECS: systems
+		{
+			auto& ecs = m_pEcs->World();
+			// Fixed: Physics step
+			{
+				auto sys = ecs.system<>("Physics.Step")
+					.each([this]()
+						{
+							const float dt = m_pEcs->GetDeltaTime();
+							m_EcsCtx.pPhysics->Step(dt);
+						});
+				m_pEcs->RegisterFixedSystem(sys);
+			}
+			// 
+			{
+				auto sys = ecs.system<CTransform, CRigidBody>("Physics.SyncToTransform")
+					.each([this](CTransform& tr, CRigidBody& rb)
+						{
+							const JPH::BodyID id(rb.BodyId);
+							const float3 pos = m_EcsCtx.pPhysics->GetBodyPosition(id);
+
+							tr.Position = pos;
+							// 회전까지 동기화하려면 Physics 래퍼에 GetBodyRotation도 추가 추천
+
+						});
+
+				m_pEcs->RegisterFixedSystem(sys);
+			}
+			// Update: Transform -> RenderScene sync
+			{
+				auto sys = ecs.system<CTransform, CMeshRenderer>("Render.SyncTransforms")
+					.each([this](CTransform& tr, CMeshRenderer& mr)
+						{
+							if (!mr.RenderObjectHandle.IsValid()) return;
+
+							m_EcsCtx.pRenderScene->UpdateObjectTransform(
+								mr.RenderObjectHandle,
+								GrassViewer::ToMatrixTRS(tr));
+						});
+				m_pEcs->RegisterUpdateSystem(sys);
+			}
+		}
+
+
 		// ViewFamily + Camera
 		setupDefaultViewFamily(m_ViewFamily);
 		setupCameraDefault(m_Camera, (float)m_Viewport.Width / (float)m_Viewport.Height);
@@ -175,7 +243,7 @@ namespace shz
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 		ASSERT(m_GlobalLightHandle.IsValid(), "Failed to add global light.");
 
-		// Build scene once (your original logic)
+		// Build scene once (now: ECS-driven objects)
 		BuildSceneOnce();
 
 		// Fill first view immediately
@@ -203,7 +271,6 @@ namespace shz
 		const float dt = (float)elapsedTime;
 		const float t = (float)currTime;
 
-		// Keep original behavior
 		m_Camera.Update(m_InputController, dt);
 
 		m_ViewFamily.DeltaTime = dt;
@@ -214,16 +281,9 @@ namespace shz
 		ASSERT(m_GlobalLightHandle.IsValid(), "GlobalLightHandle is invalid.");
 		m_pRenderScene->UpdateLight(m_GlobalLightHandle, m_GlobalLight);
 
-		// Physics step (new)
-		if (m_pPhysics)
-		{
-			m_pPhysics->Step(dt);
-		}
-
+		ASSERT(m_pEcs->IsValid(), "ECS world is not valid.");
 		if (m_pEcs->IsValid())
 		{
-			// 아직 fixed/phase를 안 나눴으니 Tick으로 통일.
-			// (나중에 Physics를 fixed로 옮길 때 m_Ecs.RunFixedSteps() 같은 걸 쓰면 됨)
 			m_pEcs->Tick(dt);
 		}
 	}
@@ -256,9 +316,6 @@ namespace shz
 
 	void GrassViewer::UpdateUI()
 	{
-		// ------------------------------------------------------------
-		// Settings window
-		// ------------------------------------------------------------
 		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -285,9 +342,6 @@ namespace shz
 		}
 		ImGui::End();
 
-		// ------------------------------------------------------------
-		// Profiling window (Draw calls per pass)
-		// ------------------------------------------------------------
 		ImGui::SetNextWindowPos(ImVec2(10, 220), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin("Profiling", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -311,12 +365,13 @@ namespace shz
 
 	void GrassViewer::BuildSceneOnce()
 	{
-		ASSERT(m_pAssetManager && m_pRenderer && m_pRenderScene, "Subsystem missing.");
+		ASSERT(m_pAssetManager && m_pRenderer && m_pRenderScene && m_pEcs, "Subsystem missing.");
 
-		// Load terrain
+		auto& ecs = m_pEcs->World();
+
+		// Load terrain (RenderScene는 기존대로 유지)
 		{
 			const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-			//const std::string diffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
 
 			AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
 			AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
@@ -342,33 +397,36 @@ namespace shz
 				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
 				m_pRenderer->CreateStaticMesh(terrainMesh));
 
-			// Trees
-			AssetRef<StaticMesh> tree1Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree1.shzmesh.json");
-			AssetRef<StaticMesh> tree2Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree2.shzmesh.json");
-			AssetRef<StaticMesh> tree3Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree3.shzmesh.json");
-			AssetRef<StaticMesh> tree4Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree4.shzmesh.json");
-			AssetRef<StaticMesh> tree5Asset = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree5.shzmesh.json");
+			// Trees (ECS entities)
+			AssetRef<StaticMesh> treeAssets[] =
+			{
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree1.shzmesh.json"),
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree2.shzmesh.json"),
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree3.shzmesh.json"),
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree4.shzmesh.json"),
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree5.shzmesh.json"),
+			};
 
 			StaticMeshRenderData treeMeshes[] =
 			{
-				m_pRenderer->CreateStaticMesh(tree1Asset),
-				m_pRenderer->CreateStaticMesh(tree2Asset),
-				m_pRenderer->CreateStaticMesh(tree3Asset),
-				m_pRenderer->CreateStaticMesh(tree4Asset),
-				m_pRenderer->CreateStaticMesh(tree5Asset),
+				m_pRenderer->CreateStaticMesh(treeAssets[0]),
+				m_pRenderer->CreateStaticMesh(treeAssets[1]),
+				m_pRenderer->CreateStaticMesh(treeAssets[2]),
+				m_pRenderer->CreateStaticMesh(treeAssets[3]),
+				m_pRenderer->CreateStaticMesh(treeAssets[4]),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(treeMeshes) / sizeof(treeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint NUM_TREES = 10000;
+			constexpr uint  NUM_TREES = 10000;
 
 			std::mt19937 rng(1337);
 			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);
 			std::uniform_real_distribution<float> distZ(SPAWN_RANGE.y, SPAWN_RANGE.w);
 			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
 			std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
-			std::uniform_int_distribution<uint> distMesh(0, TREE_MESH_COUNT - 1);
+			std::uniform_int_distribution<uint>  distMesh(0, TREE_MESH_COUNT - 1);
 
 			for (uint i = 0; i < NUM_TREES; ++i)
 			{
@@ -379,29 +437,158 @@ namespace shz
 				const float yaw = distYaw(rng);
 				const float scale = distScale(rng);
 
-				RenderScene::RenderObject treeObject;
-				treeObject.Mesh = treeMeshes[distMesh(rng)];
-				treeObject.Transform = Matrix4x4::TRS(
-					{ x, y, z },
-					{ 0.0f, yaw, 0.0f },
-					{ scale, scale, scale });
+				const uint meshIdx = distMesh(rng);
 
-				treeObject.bCastShadow = true;
+				// Create ECS entity
+				flecs::entity e = ecs.entity();
 
-				m_pRenderScene->AddObject(std::move(treeObject));
+				e.set<CName>({ "Tree" });
+
+				CTransform tr = {};
+				tr.Position = { x, y, z };
+				tr.Rotation = { 0.0f, yaw, 0.0f };
+				tr.Scale = { scale, scale, scale };
+				e.set<CTransform>(tr);
+
+				CMeshRenderer mr = {};
+				mr.MeshRef = treeAssets[meshIdx];
+				mr.bCastShadow = true;
+
+				// Create RenderScene object now and keep handle
+				RenderScene::RenderObject obj;
+				obj.Mesh = treeMeshes[meshIdx];
+				obj.Transform = GrassViewer::ToMatrixTRS(tr);
+				obj.bCastShadow = mr.bCastShadow;
+
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
+				e.set<CMeshRenderer>(mr);
 			}
 
-			// Helmet
-			AssetRef<StaticMesh> helmet = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
-			RenderScene::RenderObject helmetObj;
-			helmetObj.Mesh = m_pRenderer->CreateStaticMesh(helmet);
-			helmetObj.Transform = Matrix4x4::TRS({ 0.0f, 5.0f, 5.0f }, { 0.0f, 0.15f, 0.0f }, { 1.0f, 1.0f, 1.0f });
-			helmetObj.bCastShadow = true;
-			m_pRenderScene->AddObject(std::move(helmetObj));
-		}
+			// Helmet (ECS entities) - spawn 30
+			{
+				AssetRef<StaticMesh> helmetRef =
+					m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 
-		// NOTE:
-		// 지금은 "동작 그대로" 목적이므로, 기존처럼 RenderScene에 직접 객체 등록 유지.
-		// ECS는 이후에 오브젝트/피직스 바디를 관리하는 용도로 점진적으로 옮기면 됨.
+				// Spawn config
+				constexpr uint32 kHelmetCount = 30;
+				constexpr float  kMinY = 20.0f;
+				constexpr float  kMaxY = 50.0f;
+
+				// XZ grid offsets
+				constexpr int   kGridX = 6;                 // 6 columns
+				constexpr float kSpacingX = 4.0f;           // meters
+				constexpr float kSpacingZ = 4.0f;           // meters
+				constexpr float kBaseX = -10.0f;
+				constexpr float kBaseZ = 10.0f;
+
+				std::mt19937 rng(1337);
+				std::uniform_real_distribution<float> distY(kMinY, kMaxY);
+				std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+
+				for (uint32 i = 0; i < kHelmetCount; ++i)
+				{
+					// XZ placement (grid)
+					const int ix = (int)(i % kGridX);
+					const int iz = (int)(i / kGridX);
+
+					const float x = kBaseX + (float)ix * kSpacingX;
+					const float z = kBaseZ + (float)iz * kSpacingZ;
+
+					// Y random in [20, 50]
+					const float y = distY(rng);
+
+					// Yaw random
+					const float yaw = distYaw(rng);
+
+					flecs::entity e = ecs.entity();
+					e.set<CName>({ "Helmet" });
+
+					CTransform tr = {};
+					tr.Position = { x, y, z };
+					tr.Rotation = { 0.0f, yaw, 0.0f };
+					tr.Scale = { 1.0f, 1.0f, 1.0f };
+					e.set<CTransform>(tr);
+
+					// RenderScene object
+					RenderScene::RenderObject obj;
+					obj.Mesh = m_pRenderer->CreateStaticMesh(helmetRef);
+					obj.Transform = GrassViewer::ToMatrixTRS(tr);
+					obj.bCastShadow = true;
+
+					Box bounds = obj.Mesh.LocalBounds;
+
+					// Save mesh renderer comp
+					CMeshRenderer mr = {};
+					mr.MeshRef = helmetRef;
+					mr.bCastShadow = true;
+					mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
+					e.set<CMeshRenderer>(mr);
+
+					// ------------------------------------------------------------
+					// Physics: create rigid body from mesh local bounds (AABB -> Box)
+					// ------------------------------------------------------------
+					CRigidBody rb = {};
+					rb.bValid = false;
+					rb.BodyId = 0;
+					rb.bDynamic = true;
+
+					const float3 localMin = bounds.Min;
+					const float3 localMax = bounds.Max;
+
+					const float3 localCenter = (localMin + localMax) * 0.5f;
+					const float3 localHalf = (localMax - localMin) * 0.5f;
+
+					const float3 scaledHalf =
+					{
+						std::abs(localHalf.x * tr.Scale.x),
+						std::abs(localHalf.y * tr.Scale.y),
+						std::abs(localHalf.z * tr.Scale.z),
+					};
+
+					const float3 scaledLocalCenter =
+					{
+						localCenter.x * tr.Scale.x,
+						localCenter.y * tr.Scale.y,
+						localCenter.z * tr.Scale.z,
+					};
+
+					const Matrix4x4 M = GrassViewer::ToMatrixTRS(tr);
+					const float3 worldCenter = (float4(scaledLocalCenter, 1.0f) * M).ToVector3();
+
+					Physics::ShapeRef shape = m_pPhysics->CreateBoxShape(scaledHalf);
+
+					const float3 euler = tr.Rotation;
+					const JPH::Quat rot =
+						JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), euler.x) *
+						JPH::Quat::sRotation(JPH::Vec3(0, 1, 0), euler.y) *
+						JPH::Quat::sRotation(JPH::Vec3(0, 0, 1), euler.z);
+
+					JPH::BodyCreationSettings bcs(
+						shape,
+						JPH::RVec3(worldCenter.x, worldCenter.y, worldCenter.z),
+						rot,
+						rb.bDynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static,
+						rb.bDynamic ? PHYS_LAYER_MOVING : PHYS_LAYER_NON_MOVING
+					);
+
+					bcs.mFriction = 0.6f;
+					bcs.mRestitution = 0.0f;
+
+					if (rb.bDynamic)
+					{
+						bcs.mMassPropertiesOverride.mMass = 1.0f;
+						bcs.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+					}
+
+					const JPH::BodyID bodyId = m_pPhysics->CreateBody(bcs, /*bActivate*/ true);
+
+					rb.BodyId = bodyId.GetIndexAndSequenceNumber();
+					rb.bValid = true;
+
+					e.set<CRigidBody>(rb);
+				}
+			}
+
+		}
 	}
 } // namespace shz
