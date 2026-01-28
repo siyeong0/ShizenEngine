@@ -61,7 +61,7 @@ namespace shz
 	// RenderObjects
 	// ------------------------------------------------------------
 
-	Handle<RenderScene::RenderObject> RenderScene::AddObject(RenderObject&& obj)
+	Handle<RenderScene::RenderObject> RenderScene::AddObject(const StaticMeshRenderData& rd, const Matrix4x4& transform, bool bCastShadow)
 	{
 		UniqueHandle<RenderObject> owner = UniqueHandle<RenderObject>::Make();
 		const Handle<RenderObject> h = owner.Get();
@@ -75,6 +75,12 @@ namespace shz
 		ASSERT(!slot.bOccupied && !slot.Owner.Get().IsValid(), "RenderObject slot already occupied.");
 
 		const uint32 denseIndex = static_cast<uint32>(m_Objects.size());
+
+		RenderObject obj = {};
+		obj.Mesh = rd;
+		obj.World = transform;
+		obj.WorldInvTranspose = transform.Inversed().Transposed();
+		obj.bCastShadow = bCastShadow;
 
 		// Store dense
 		m_Objects.emplace_back(std::move(obj));
@@ -150,7 +156,8 @@ namespace shz
 		const uint32 denseIndex = findDenseIndex(h, m_ObjectSlots);
 		ASSERT(denseIndex != INVALID_INDEX, "Attempted to update non-existing RenderObject.");
 
-		m_Objects[denseIndex].Transform = world;
+		m_Objects[denseIndex].World = world;
+		m_Objects[denseIndex].WorldInvTranspose = world.Inversed().Transposed();
 	}
 
 	// ------------------------------------------------------------
@@ -239,14 +246,11 @@ namespace shz
 	void RenderScene::SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData terrainMesh)
 	{
 		m_TerrainHeightMap = heightMap;
-		RenderObject terrainObj = {};
-		terrainObj.Mesh = terrainMesh;
-		terrainObj.Transform = Matrix4x4::TRS(
+		Matrix4x4 transform = Matrix4x4::TRS(
 			float3(0.0f, 0.0f, 0.0f),
 			float3(0.0f, 0.0f, 0.0f),
 			float3(1.0f, 1.0f, 1.0f));
-		terrainObj.bCastShadow = false;
-		m_TerrainMesh = AddObject(std::move(terrainObj));
+		m_TerrainMesh = AddObject(terrainMesh, transform, true);
 	}
 
 	RenderScene::RenderObject* RenderScene::GetObjectOrNull(Handle<RenderObject> h) noexcept

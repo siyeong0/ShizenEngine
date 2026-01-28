@@ -509,12 +509,7 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				RenderScene::RenderObject obj;
-				obj.Mesh = treeMeshes[meshIdx];
-				obj.Transform = GrassViewer::ToMatrixTRS(tr);
-				obj.bCastShadow = mr.bCastShadow;
-
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(treeMeshes[meshIdx], GrassViewer::ToMatrixTRS(tr), mr.bCastShadow);
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -565,21 +560,14 @@ namespace shz
 				e.set<CTransform>(tr);
 
 				// Render object
-				RenderScene::RenderObject obj;
-				obj.Mesh = helmetMeshRD;
-				obj.Transform = GrassViewer::ToMatrixTRS(tr);
-				obj.bCastShadow = true;
-
-				Box bounds = obj.Mesh.LocalBounds;
-
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(std::move(obj));
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(helmetMeshRD, GrassViewer::ToMatrixTRS(tr), true);
 				e.set<CMeshRenderer>(mr);
 
 				CBoxCollider box = {};
-				box.Box = bounds;
+				box.Box = helmetMeshRD.LocalBounds;
 				box.bIsSensor = false;
 				e.set<CBoxCollider>(box);
 

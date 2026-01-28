@@ -19,7 +19,8 @@ namespace shz
 		struct RenderObject final
 		{
 			StaticMeshRenderData Mesh = {};
-			Matrix4x4 Transform = {};
+			Matrix4x4 World = {};
+			Matrix4x4 WorldInvTranspose = {};
 
 			bool bCastShadow = true;
 		};
@@ -47,7 +48,7 @@ namespace shz
 
 		void Reset();
 
-		Handle<RenderObject> AddObject(RenderObject&& obj);
+		Handle<RenderObject> AddObject(const StaticMeshRenderData& rd, const Matrix4x4& transform, bool bCastShadow = true);
 		void RemoveObject(Handle<RenderObject> h);
 		void UpdateObjectMesh(Handle<RenderObject> h, const StaticMeshRenderData& mesh);
 		void UpdateObjectTransform(Handle<RenderObject> h, const Matrix4x4& world);

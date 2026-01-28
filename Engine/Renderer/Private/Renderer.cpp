@@ -479,14 +479,14 @@ namespace shz
 
 				const Box& localBounds = obj.Mesh.LocalBounds;
 
-				if (IntersectsFrustum(frustumMain, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+				if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 				{
 					m_PassCtx.VisibleObjectIndexMain.push_back(i);
 				}
 
 				if (obj.bCastShadow)
 				{
-					if (IntersectsFrustum(frustumShadow, localBounds, obj.Transform, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+					if (IntersectsFrustum(frustumShadow, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 					{
 						m_PassCtx.VisibleObjectIndexShadow.push_back(i);
 					}
@@ -731,8 +731,8 @@ namespace shz
 						bi.Cursor += 1;
 
 						hlsl::ObjectConstants oc = {};
-						oc.World = obj.Transform;
-						oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
+						oc.World = obj.World;
+						oc.WorldInvTranspose = obj.WorldInvTranspose;
 
 						dst[writeIndex] = oc;
 					}
@@ -956,8 +956,8 @@ namespace shz
 						bi.Cursor += 1;
 
 						hlsl::ObjectConstants oc = {};
-						oc.World = obj.Transform;
-						oc.WorldInvTranspose = obj.Transform.Inversed().Transposed();
+						oc.World = obj.World;
+						oc.WorldInvTranspose = obj.WorldInvTranspose;
 
 						dst[writeIndex] = oc;
 					}
