@@ -370,10 +370,14 @@ namespace shz
 
 		const View& view = viewFamily.Views[0];
 
-		// Build frustums: Main / Shadow 
+		// ------------------------------------------------------------
+		// Build frustums: Main / Shadow
+		// ------------------------------------------------------------
 		ViewFrustumExt frustumMain = {};
-		const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-		ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+		{
+			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+			ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+		}
 
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
@@ -470,13 +474,15 @@ namespace shz
 			const auto& renderObjects = scene.GetObjects();
 			const uint32 count = static_cast<uint32>(renderObjects.size());
 
+			m_PassCtx.VisibleObjectIndexMain.clear();
+			m_PassCtx.VisibleObjectIndexShadow.clear();
+
 			m_PassCtx.VisibleObjectIndexMain.reserve(count);
 			m_PassCtx.VisibleObjectIndexShadow.reserve(count);
 
 			for (uint32 i = 0; i < count; ++i)
 			{
 				const RenderScene::RenderObject& obj = renderObjects[i];
-
 				const Box& localBounds = obj.Mesh.LocalBounds;
 
 				if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
@@ -516,7 +522,7 @@ namespace shz
 		auto& objectsMutable = scene.GetObjects();
 
 		// ------------------------------------------------------------
-		// Material RD apply
+		// Material RD apply (dedup per frame)
 		// ------------------------------------------------------------
 		std::unordered_set<MaterialRenderData*> appliedRD;
 		appliedRD.reserve(1024);
@@ -530,10 +536,6 @@ namespace shz
 
 			appliedRD.insert(&rd);
 
-			// Dynamic MaterialConstants 포함한 SRB 업데이트를 여기서 보장
-			// rd->Apply(m_PassCtx.pCache, ctx); //TODO: Apply?
-
-			// Barriers: mat CB / bound textures
 			if (rd.ConstantBuffer)
 			{
 				m_PassCtx.PushBarrier(rd.ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -555,12 +557,11 @@ namespace shz
 
 			for (auto& section : obj.Mesh.Sections)
 			{
-				MaterialRenderData& rd = section.Material;
-				applyMaterialIfNeeded(rd);
+				applyMaterialIfNeeded(section.Material);
 			}
 		}
 
-		// Shadow: alpha-masked only (opaque shadow SRB는 보통 material constants 필요 없음)
+		// Shadow: only objects that cast shadow
 		for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
 		{
 			RenderScene::RenderObject& obj = objectsMutable[objectIndex];
@@ -576,8 +577,7 @@ namespace shz
 			{
 				if (section.Material.ShadowSRB)
 				{
-					MaterialRenderData& rd = section.Material;
-					applyMaterialIfNeeded(rd);
+					applyMaterialIfNeeded(section.Material);
 				}
 			}
 		}
@@ -588,212 +588,209 @@ namespace shz
 			ctx->TransitionResourceStates(static_cast<uint32>(m_PassCtx.PreBarriers.size()), m_PassCtx.PreBarriers.data());
 		}
 
-
-		auto buildPassPacketsAndObjectTable = [](
-			IDeviceContext* ctx,
-			const std::vector<uint32>& visibleObjectIndices,
-			std::vector<RenderScene::RenderObject>& objectsMutable,
-			const std::string passName,
-			IBuffer* pObjectTableSB) -> std::vector<DrawPacket>
+		// ------------------------------------------------------------
+		// Build packets + fill ObjectTable (sorted batching, no hash map)
+		// ------------------------------------------------------------
+		struct DrawItem final
 		{
-			ASSERT(ctx, "Context is null.");
+			DrawPacketKey Key = {};
+			hlsl::ObjectConstants Obj = {};
+		};
+
+		auto lessKey = [&](const DrawPacketKey& a, const DrawPacketKey& b) -> bool
+		{
+			if (a.PSO != b.PSO) return a.PSO < b.PSO;
+			if (a.SRB != b.SRB) return a.SRB < b.SRB;
+			if (a.VB != b.VB) return a.VB < b.VB;
+			if (a.IB != b.IB) return a.IB < b.IB;
+
+			if (a.IndexType != b.IndexType) return a.IndexType < b.IndexType;
+			if (a.FirstIndexLocation != b.FirstIndexLocation) return a.FirstIndexLocation < b.FirstIndexLocation;
+			if (a.NumIndices != b.NumIndices) return a.NumIndices < b.NumIndices;
+			if (a.BaseVertex != b.BaseVertex) return a.BaseVertex < b.BaseVertex;
+
+			return false;
+		};
+
+		auto equalKey = [&](const DrawPacketKey& a, const DrawPacketKey& b) -> bool
+		{
+			return
+				a.PSO == b.PSO &&
+				a.SRB == b.SRB &&
+				a.VB == b.VB &&
+				a.IB == b.IB &&
+				a.IndexType == b.IndexType &&
+				a.NumIndices == b.NumIndices &&
+				a.FirstIndexLocation == b.FirstIndexLocation &&
+				a.BaseVertex == b.BaseVertex;
+		};
+
+		auto buildPacketsAndFillObjectTableSorted = [&](IBuffer* pObjectTableSB, std::vector<DrawItem>& items) -> std::vector<DrawPacket>
+		{
 			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-			ASSERT(!passName.empty(), "PassName is empty.");
 
-			std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
-			batches.reserve(visibleObjectIndices.size() * 4);
-
-			// -------------------------
-			// Pass 1: count instances
-			// -------------------------
-			uint32 totalInstances = 0;
-
-			for (uint32 objectIndex : visibleObjectIndices)
+			std::vector<DrawPacket> out;
+			if (items.empty())
 			{
-				RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+				return out;
+			}
+
+			std::sort(items.begin(), items.end(),
+				[&](const DrawItem& a, const DrawItem& b)
+				{
+					return lessKey(a.Key, b.Key);
+				});
+
+			ASSERT(items.size() < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity.");
+
+			// Fill SB (sorted order)
+			{
+				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::ObjectConstants* dst = map;
+
+				for (size_t i = 0; i < items.size(); ++i)
+				{
+					dst[i] = items[i].Obj;
+				}
+			}
+
+			// Build packets (runs)
+			out.reserve(items.size());
+
+			size_t runStart = 0;
+			while (runStart < items.size())
+			{
+				const DrawPacketKey& key = items[runStart].Key;
+
+				size_t runEnd = runStart + 1;
+				while (runEnd < items.size() && equalKey(items[runEnd].Key, key))
+				{
+					++runEnd;
+				}
+
+				DrawPacket pkt = {};
+				pkt.VertexBuffer = key.VB;
+				pkt.IndexBuffer = key.IB;
+				pkt.PSO = key.PSO;
+				pkt.SRB = key.SRB;
+				pkt.ObjectIndex = 0; // SB instance table path
+
+				pkt.DrawAttribs = {};
+				pkt.DrawAttribs.NumIndices = key.NumIndices;
+				pkt.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
+				pkt.DrawAttribs.BaseVertex = key.BaseVertex;
+				pkt.DrawAttribs.IndexType = key.IndexType;
+				pkt.DrawAttribs.NumInstances = static_cast<uint32>(runEnd - runStart);
+				pkt.DrawAttribs.FirstInstanceLocation = static_cast<uint32>(runStart);
+				pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+				out.push_back(pkt);
+				runStart = runEnd;
+			}
+
+			return out;
+		};
+
+		std::vector<DrawItem> items;
+		items.reserve(m_PassCtx.VisibleObjectIndexMain.size() * 4);
+
+		// -------------------------
+		// GBuffer
+		// -------------------------
+		{
+			items.clear();
+
+			for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
+			{
+				const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 
 				IBuffer* vb = obj.Mesh.VertexBuffer;
 				IBuffer* ib = obj.Mesh.IndexBuffer;
-				ASSERT(vb && ib, "Mesh buffers are invalid.");
-
 				const VALUE_TYPE indexType = obj.Mesh.IndexType;
 
-				for (auto& section : obj.Mesh.Sections)
+				for (const auto& section : obj.Mesh.Sections)
 				{
 					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
 
 					const MaterialRenderData& rd = section.Material;
-
-					if (rd.RenderPassName != passName)
+					if (rd.RenderPassName != "GBuffer")
 					{
 						continue;
 					}
 
 					ASSERT(rd.PSO && rd.SRB, "Material render data is invalid.");
 
-					DrawPacketKey key = {};
-					key.PSO = rd.PSO;
-					key.SRB = rd.SRB;
-					key.VB = vb;
-					key.IB = ib;
-					key.IndexType = indexType;
-					key.NumIndices = section.IndexCount;
-					key.FirstIndexLocation = section.FirstIndex;
-					key.BaseVertex = section.BaseVertex;
+					DrawItem di = {};
+					di.Key.PSO = rd.PSO;
+					di.Key.SRB = rd.SRB;
+					di.Key.VB = vb;
+					di.Key.IB = ib;
+					di.Key.IndexType = indexType;
+					di.Key.NumIndices = section.IndexCount;
+					di.Key.FirstIndexLocation = section.FirstIndex;
+					di.Key.BaseVertex = section.BaseVertex;
 
-					auto it = batches.find(key);
-					if (it == batches.end())
+					di.Obj = {};
+					di.Obj.World = obj.World;
+					di.Obj.WorldInvTranspose = obj.WorldInvTranspose;
+
+					items.push_back(di);
+				}
+			}
+
+			m_PassCtx.GBufferDrawPackets = buildPacketsAndFillObjectTableSorted(m_pObjectTableSBGBuffer, items);
+		}
+
+		// -------------------------
+		// Grass
+		// -------------------------
+		{
+			items.clear();
+
+			for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexMain)
+			{
+				const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+
+				IBuffer* vb = obj.Mesh.VertexBuffer;
+				IBuffer* ib = obj.Mesh.IndexBuffer;
+				const VALUE_TYPE indexType = obj.Mesh.IndexType;
+
+				for (const auto& section : obj.Mesh.Sections)
+				{
+					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
+
+					const MaterialRenderData& rd = section.Material;
+					if (rd.RenderPassName != "Grass")
 					{
-						BatchInfo bi = {};
-						bi.Packet = {};
-						bi.Packet.VertexBuffer = vb;
-						bi.Packet.IndexBuffer = ib;
-						bi.Packet.PSO = key.PSO;
-						bi.Packet.SRB = key.SRB;
-						bi.Packet.ObjectIndex = 0; // SB instance table path
-
-						bi.Packet.DrawAttribs = {};
-						bi.Packet.DrawAttribs.NumIndices = key.NumIndices;
-						bi.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
-						bi.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
-						bi.Packet.DrawAttribs.IndexType = key.IndexType;
-						bi.Packet.DrawAttribs.NumInstances = 0;              // finalize later
-						bi.Packet.DrawAttribs.FirstInstanceLocation = 0;     // finalize later
-						bi.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
-
-						auto [newIt, ok] = batches.emplace(key, bi);
-						ASSERT(ok, "Failed to emplace batch.");
-						it = newIt;
+						continue;
 					}
 
-					it->second.Count += 1;
-					totalInstances += 1;
+					ASSERT(rd.PSO && rd.SRB, "Material render data is invalid.");
+
+					DrawItem di = {};
+					di.Key.PSO = rd.PSO;
+					di.Key.SRB = rd.SRB;
+					di.Key.VB = vb;
+					di.Key.IB = ib;
+					di.Key.IndexType = indexType;
+					di.Key.NumIndices = section.IndexCount;
+					di.Key.FirstIndexLocation = section.FirstIndex;
+					di.Key.BaseVertex = section.BaseVertex;
+
+					di.Obj = {};
+					di.Obj.World = obj.World;
+					di.Obj.WorldInvTranspose = obj.WorldInvTranspose;
+
+					items.push_back(di);
 				}
 			}
 
-			ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity for pass: %s", passName.c_str());
+			m_PassCtx.GrassDrawPackets = buildPacketsAndFillObjectTableSorted(m_pObjectTableSBGrass, items);
+		}
 
-			// -------------------------
-			// Prefix sum
-			// -------------------------
-			{
-				uint32 cursor = 0;
-				for (auto& kv : batches)
-				{
-					BatchInfo& bi = kv.second;
-					bi.FirstInstance = cursor;
-					bi.Cursor = 0;
-					cursor += bi.Count;
-				}
-			}
-
-			// -------------------------
-			// Pass 2: fill object table
-			// -------------------------
-			if (totalInstances > 0)
-			{
-				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::ObjectConstants* dst = map;
-
-				for (uint32 objectIndex : visibleObjectIndices)
-				{
-					const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
-
-					IBuffer* vb = obj.Mesh.VertexBuffer;
-					IBuffer* ib = obj.Mesh.IndexBuffer;
-					const VALUE_TYPE indexType = obj.Mesh.IndexType;
-
-					for (auto& section : obj.Mesh.Sections)
-					{
-						const MaterialRenderData& rd = section.Material;
-
-						if (rd.RenderPassName != passName)
-						{
-							continue;
-						}
-
-						DrawPacketKey key = {};
-						key.PSO = rd.PSO;
-						key.SRB = rd.SRB;
-						key.VB = vb;
-						key.IB = ib;
-						key.IndexType = indexType;
-						key.NumIndices = section.IndexCount;
-						key.FirstIndexLocation = section.FirstIndex;
-						key.BaseVertex = section.BaseVertex;
-
-						auto it = batches.find(key);
-						ASSERT(it != batches.end(), "Batch not found: %s", passName.c_str());
-
-						BatchInfo& bi = it->second;
-
-						const uint32 writeIndex = bi.FirstInstance + bi.Cursor;
-						bi.Cursor += 1;
-
-						hlsl::ObjectConstants oc = {};
-						oc.World = obj.World;
-						oc.WorldInvTranspose = obj.WorldInvTranspose;
-
-						dst[writeIndex] = oc;
-					}
-				}
-			}
-
-			// -------------------------
-			// Finalize packets
-			// -------------------------
-			std::vector<DrawPacket> out;
-			out.reserve(batches.size());
-
-			for (auto& kv : batches)
-			{
-				BatchInfo& bi = kv.second;
-
-				bi.Packet.DrawAttribs.NumInstances = bi.Count;
-				bi.Packet.DrawAttribs.FirstInstanceLocation = bi.FirstInstance;
-
-				out.push_back(bi.Packet);
-			}
-
-			// Sort packets for state change minimization (SB layout은 prefix sum 기준으로 이미 결정됨)
-			std::sort(out.begin(), out.end(),
-				[](const DrawPacket& a, const DrawPacket& b)
-				{
-					if (a.PSO != b.PSO) return a.PSO < b.PSO;
-					if (a.SRB != b.SRB) return a.SRB < b.SRB;
-					if (a.VertexBuffer != b.VertexBuffer) return a.VertexBuffer < b.VertexBuffer;
-					if (a.IndexBuffer != b.IndexBuffer)  return a.IndexBuffer < b.IndexBuffer;
-
-					if (a.DrawAttribs.IndexType != b.DrawAttribs.IndexType) return a.DrawAttribs.IndexType < b.DrawAttribs.IndexType;
-					if (a.DrawAttribs.FirstIndexLocation != b.DrawAttribs.FirstIndexLocation) return a.DrawAttribs.FirstIndexLocation < b.DrawAttribs.FirstIndexLocation;
-					if (a.DrawAttribs.NumIndices != b.DrawAttribs.NumIndices) return a.DrawAttribs.NumIndices < b.DrawAttribs.NumIndices;
-					if (a.DrawAttribs.BaseVertex != b.DrawAttribs.BaseVertex) return a.DrawAttribs.BaseVertex < b.DrawAttribs.BaseVertex;
-
-					return a.DrawAttribs.FirstInstanceLocation < b.DrawAttribs.FirstInstanceLocation;
-				});
-
-			return out;
-		};
-
-		m_PassCtx.GBufferDrawPackets = buildPassPacketsAndObjectTable(
-			ctx,
-			m_PassCtx.VisibleObjectIndexMain,
-			objectsMutable,
-			"GBuffer",
-			m_pObjectTableSBGBuffer
-		);
-
-		m_PassCtx.GrassDrawPackets = buildPassPacketsAndObjectTable(
-			ctx,
-			m_PassCtx.VisibleObjectIndexMain,
-			objectsMutable,
-			"Grass",
-			m_pObjectTableSBGrass
-		);
-
-		// ============================================================
-		//  Build Shadow packets + pack ObjectTableSBShadow (2-pass)
-		// ============================================================
+		// -------------------------
+		// Shadow
+		// -------------------------
 		{
 			auto itPass = m_Passes.find("Shadow");
 			ASSERT(itPass != m_Passes.end(), "Shadow pass not found.");
@@ -809,15 +806,12 @@ namespace shz
 			ASSERT(shadowMaskedPSO, "ShadowMaskedPSO is null.");
 			ASSERT(shadowSRB, "ShadowSRB is null.");
 
-			std::unordered_map<DrawPacketKey, BatchInfo, DrawPacketKeyHasher> batches;
-			batches.reserve(m_PassCtx.VisibleObjectIndexShadow.size() * 4);
-
-			// Pass1 count
-			uint32 totalInstances = 0;
+			items.clear();
+			items.reserve(m_PassCtx.VisibleObjectIndexShadow.size() * 4);
 
 			for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
 			{
-				RenderScene::RenderObject& obj = objectsMutable[objectIndex];
+				const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
 				if (!obj.bCastShadow)
 				{
 					continue;
@@ -825,9 +819,8 @@ namespace shz
 
 				IBuffer* vb = obj.Mesh.VertexBuffer;
 				IBuffer* ib = obj.Mesh.IndexBuffer;
-				ASSERT(vb && ib, "Mesh buffers are invalid.");
-
 				const VALUE_TYPE indexType = obj.Mesh.IndexType;
+
 				for (const auto& section : obj.Mesh.Sections)
 				{
 					ASSERT(section.IndexCount > 0, "Invalid section. IndexCount == 0.");
@@ -843,154 +836,29 @@ namespace shz
 					}
 					else
 					{
-						IShaderResourceBinding* maskedShadowSRB = rd.ShadowSRB;
 						pso = shadowMaskedPSO;
-						srb = maskedShadowSRB;
+						srb = rd.ShadowSRB;
 					}
 
-					DrawPacketKey key = {};
-					key.PSO = pso;
-					key.SRB = srb;
-					key.VB = vb;
-					key.IB = ib;
-					key.IndexType = indexType;
-					key.NumIndices = section.IndexCount;
-					key.FirstIndexLocation = section.FirstIndex;
-					key.BaseVertex = section.BaseVertex;
+					DrawItem di = {};
+					di.Key.PSO = pso;
+					di.Key.SRB = srb;
+					di.Key.VB = vb;
+					di.Key.IB = ib;
+					di.Key.IndexType = indexType;
+					di.Key.NumIndices = section.IndexCount;
+					di.Key.FirstIndexLocation = section.FirstIndex;
+					di.Key.BaseVertex = section.BaseVertex;
 
-					auto it = batches.find(key);
-					if (it == batches.end())
-					{
-						BatchInfo bi = {};
-						bi.Packet = {};
-						bi.Packet.VertexBuffer = vb;
-						bi.Packet.IndexBuffer = ib;
-						bi.Packet.PSO = key.PSO;
-						bi.Packet.SRB = key.SRB;
-						bi.Packet.ObjectIndex = 0;
+					di.Obj = {};
+					di.Obj.World = obj.World;
+					di.Obj.WorldInvTranspose = obj.WorldInvTranspose;
 
-						bi.Packet.DrawAttribs = {};
-						bi.Packet.DrawAttribs.NumIndices = key.NumIndices;
-						bi.Packet.DrawAttribs.FirstIndexLocation = key.FirstIndexLocation;
-						bi.Packet.DrawAttribs.BaseVertex = key.BaseVertex;
-						bi.Packet.DrawAttribs.IndexType = key.IndexType;
-						bi.Packet.DrawAttribs.NumInstances = 0;
-						bi.Packet.DrawAttribs.FirstInstanceLocation = 0;
-						bi.Packet.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
-
-						auto [newIt, ok] = batches.emplace(key, bi);
-						ASSERT(ok, "Failed to emplace Shadow batch.");
-						it = newIt;
-					}
-
-					it->second.Count += 1;
-					totalInstances += 1;
+					items.push_back(di);
 				}
 			}
 
-			ASSERT(totalInstances < DEFAULT_MAX_OBJECT_COUNT, "Increase object table capacity (Shadow).");
-
-			// Prefix sum
-			{
-				uint32 cursor = 0;
-				for (auto& kv : batches)
-				{
-					BatchInfo& bi = kv.second;
-					bi.FirstInstance = cursor;
-					bi.Cursor = 0;
-					cursor += bi.Count;
-				}
-			}
-
-			// Pass2 fill SBShadow
-			{
-				MapHelper<hlsl::ObjectConstants> map(ctx, m_pObjectTableSBShadow, MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::ObjectConstants* dst = map;
-
-				for (uint32 objectIndex : m_PassCtx.VisibleObjectIndexShadow)
-				{
-					const RenderScene::RenderObject& obj = objectsMutable[objectIndex];
-					if (!obj.bCastShadow)
-					{
-						continue;
-					}
-
-					IBuffer* vb = obj.Mesh.VertexBuffer;
-					IBuffer* ib = obj.Mesh.IndexBuffer;
-					const VALUE_TYPE indexType = obj.Mesh.IndexType;
-
-					for (const auto& section : obj.Mesh.Sections)
-					{
-						IPipelineState* pso = nullptr;
-						IShaderResourceBinding* srb = nullptr;
-
-						const MaterialRenderData& rd = section.Material;
-						if (!rd.ShadowSRB)
-						{
-							pso = shadowPSO;
-							srb = shadowSRB;
-						}
-						else
-						{
-							IShaderResourceBinding* maskedShadowSRB = rd.ShadowSRB;
-							pso = shadowMaskedPSO;
-							srb = maskedShadowSRB;
-						}
-
-						DrawPacketKey key = {};
-						key.PSO = pso;
-						key.SRB = srb;
-						key.VB = vb;
-						key.IB = ib;
-						key.IndexType = indexType;
-						key.NumIndices = section.IndexCount;
-						key.FirstIndexLocation = section.FirstIndex;
-						key.BaseVertex = section.BaseVertex;
-
-						auto it = batches.find(key);
-						ASSERT(it != batches.end(), "Batch not found (Shadow).");
-
-						BatchInfo& bi = it->second;
-
-						const uint32 writeIndex = bi.FirstInstance + bi.Cursor;
-						bi.Cursor += 1;
-
-						hlsl::ObjectConstants oc = {};
-						oc.World = obj.World;
-						oc.WorldInvTranspose = obj.WorldInvTranspose;
-
-						dst[writeIndex] = oc;
-					}
-				}
-			}
-
-			// Finalize packets
-			m_PassCtx.ShadowDrawPackets.clear();
-			m_PassCtx.ShadowDrawPackets.reserve(batches.size());
-
-			for (auto& kv : batches)
-			{
-				BatchInfo& bi = kv.second;
-				bi.Packet.DrawAttribs.NumInstances = bi.Count;
-				bi.Packet.DrawAttribs.FirstInstanceLocation = bi.FirstInstance;
-				m_PassCtx.ShadowDrawPackets.push_back(bi.Packet);
-			}
-
-			std::sort(m_PassCtx.ShadowDrawPackets.begin(), m_PassCtx.ShadowDrawPackets.end(),
-				[](const DrawPacket& a, const DrawPacket& b)
-				{
-					if (a.PSO != b.PSO) return a.PSO < b.PSO;
-					if (a.SRB != b.SRB) return a.SRB < b.SRB;
-					if (a.VertexBuffer != b.VertexBuffer) return a.VertexBuffer < b.VertexBuffer;
-					if (a.IndexBuffer != b.IndexBuffer)  return a.IndexBuffer < b.IndexBuffer;
-
-					if (a.DrawAttribs.IndexType != b.DrawAttribs.IndexType) return a.DrawAttribs.IndexType < b.DrawAttribs.IndexType;
-					if (a.DrawAttribs.FirstIndexLocation != b.DrawAttribs.FirstIndexLocation) return a.DrawAttribs.FirstIndexLocation < b.DrawAttribs.FirstIndexLocation;
-					if (a.DrawAttribs.NumIndices != b.DrawAttribs.NumIndices) return a.DrawAttribs.NumIndices < b.DrawAttribs.NumIndices;
-					if (a.DrawAttribs.BaseVertex != b.DrawAttribs.BaseVertex) return a.DrawAttribs.BaseVertex < b.DrawAttribs.BaseVertex;
-
-					return a.DrawAttribs.FirstInstanceLocation < b.DrawAttribs.FirstInstanceLocation;
-				});
+			m_PassCtx.ShadowDrawPackets = buildPacketsAndFillObjectTableSorted(m_pObjectTableSBShadow, items);
 		}
 
 		// ------------------------------------------------------------
@@ -1005,6 +873,8 @@ namespace shz
 
 		wirePassOutputs();
 	}
+
+
 
 	void Renderer::EndFrame()
 	{
