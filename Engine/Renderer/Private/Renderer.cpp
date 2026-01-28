@@ -83,7 +83,7 @@ namespace shz
 			MaterialTemplate gbufferTemplate;
 			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
 
-			ASSERT(ok0 && ok1, "Build initial material templates failed.");
+			ASSERT(ok0, "Build initial material templates failed.");
 
 			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
 
