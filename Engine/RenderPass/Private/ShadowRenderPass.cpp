@@ -139,7 +139,8 @@ namespace shz
 			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
 
 			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+			// gp.RasterizerDesc.CullMode = CULL_MODE_BACK; // TODO: Only terrain?
+			gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 			gp.RasterizerDesc.FrontCounterClockwise = true;
 			gp.RasterizerDesc.SlopeScaledDepthBias = 0.0f;
 			gp.RasterizerDesc.DepthBias = 0;
