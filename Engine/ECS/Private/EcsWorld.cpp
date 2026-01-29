@@ -28,7 +28,9 @@ namespace shz
 	void EcsWorld::Shutdown()
 	{
 		if (!m_pWorld)
+		{
 			return;
+		}
 
 		m_FixedSystems.clear();
 		m_UpdateSystems.clear();
@@ -49,53 +51,67 @@ namespace shz
 		ASSERT(m_pWorld, "EcsWorld is not initialized.");
 
 		if (dt < 0.0f)
+		{
 			dt = 0.0f;
+		}
 
 		m_DeltaTime = dt;
 		m_Accumulator += dt;
 	}
 
-	void EcsWorld::RegisterFixedSystem(const flecs::entity& sys)
+	void EcsWorld::RegisterFixedSystem(const flecs::entity& system)
 	{
 		ASSERT(m_pWorld, "EcsWorld is not initialized.");
-		ASSERT(sys.is_valid(), "RegisterFixedSystem: sys is invalid.");
+		ASSERT(system.is_valid(), "RegisterFixedSystem: sys is invalid.");
 
-		m_FixedSystems.push_back(sys);
+		m_FixedSystems.push_back(system);
 
 		// Default: fixed systems are disabled during variable update
-		sys.disable();
+		system.disable();
 	}
 
-	void EcsWorld::RegisterUpdateSystem(const flecs::entity& sys)
+	void EcsWorld::RegisterUpdateSystem(const flecs::entity& system)
 	{
 		ASSERT(m_pWorld, "EcsWorld is not initialized.");
-		ASSERT(sys.is_valid(), "RegisterUpdateSystem: sys is invalid.");
+		ASSERT(system.is_valid(), "RegisterUpdateSystem: sys is invalid.");
 
-		m_UpdateSystems.push_back(sys);
+		m_UpdateSystems.push_back(system);
 
 		// Default: update systems enabled
-		sys.enable();
+		system.enable();
 	}
 
 	void EcsWorld::SetFixedEnabled(bool bEnabled)
 	{
-		for (auto& s : m_FixedSystems)
+		for (auto& system : m_FixedSystems)
 		{
-			if (!s.is_valid())
-				continue;
-			if (bEnabled) s.enable();
-			else s.disable();
+			ASSERT(system.is_valid(), "Invalid system in fixed phase.");
+
+			if (bEnabled)
+			{
+				system.enable();
+			}
+			else
+			{
+				system.disable();
+			}
 		}
 	}
 
 	void EcsWorld::SetUpdateEnabled(bool bEnabled)
 	{
-		for (auto& s : m_UpdateSystems)
+		for (auto& system : m_UpdateSystems)
 		{
-			if (!s.is_valid())
-				continue;
-			if (bEnabled) s.enable();
-			else s.disable();
+			ASSERT(system.is_valid(), "Invalid system in update phase.");
+
+			if (bEnabled)
+			{
+				system.enable();
+			}
+			else
+			{
+				system.disable();
+			}
 		}
 	}
 

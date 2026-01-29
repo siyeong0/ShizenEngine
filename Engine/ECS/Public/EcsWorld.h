@@ -50,11 +50,8 @@ namespace shz
 		float GetDeltaTime() const noexcept { return m_DeltaTime; }
 		float GetFixedDeltaTime() const noexcept { return m_CI.FixedDeltaTime; }
 
-		// IMPORTANT:
-		// Register systems into "fixed" group or "update" group.
-		// (Call these right after creating systems)
-		void RegisterFixedSystem(const flecs::entity& sys);
-		void RegisterUpdateSystem(const flecs::entity& sys);
+		void RegisterFixedSystem(const flecs::entity& system);
+		void RegisterUpdateSystem(const flecs::entity& system);
 
 	private:
 		void SetFixedEnabled(bool bEnabled);
