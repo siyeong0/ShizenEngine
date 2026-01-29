@@ -141,6 +141,9 @@ namespace shz
 			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
 			gp.RasterizerDesc.FrontCounterClockwise = true;
+			gp.RasterizerDesc.SlopeScaledDepthBias = 0.0f;
+			gp.RasterizerDesc.DepthBias = 0;
+			gp.RasterizerDesc.DepthBiasClamp = 0.0f;
 
 			gp.DepthStencilDesc.DepthEnable = true;
 			gp.DepthStencilDesc.DepthWriteEnable = true;

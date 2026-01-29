@@ -1,5 +1,6 @@
 #include "HLSL_Structures.hlsli"
 #include "PBRLighting.hlsli"
+#include "Shadow.hlsli"
 
 cbuffer FRAME_CONSTANTS
 {
@@ -43,17 +44,6 @@ static float3 ReconstructWorldPos(float2 uv, float depth01)
     return ws.xyz;
 }
 
-static float3 WorldToShadowUVZ(float3 worldPos)
-{
-    float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
-    ls.xyz /= max(ls.w, 1e-6);
-
-    float2 uv = ls.xy * 0.5 + 0.5;
-    uv.y = 1.0 - uv.y;
-
-    return float3(uv, ls.z);
-}
-
 static float3 ReconstructWorldRayDir(float2 uv)
 {
 	// NDC: xy in [-1,1], z=0(near) / 1(far) in D3D convention
@@ -91,12 +81,11 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
     float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
     float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-    
+	
     float3 baseColor = gb0.rgb;
     float opacity = gb0.a;
 
     float3 N = UnpackNormal01(gb1.xyz);
-
 
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
@@ -114,30 +103,21 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
 	// Shadow
     float shadow = 1.0;
-    float3 sh = WorldToShadowUVZ(worldPos);
-
-    if (sh.x >= 0.0 && sh.x <= 1.0 && sh.y >= 0.0 && sh.y <= 1.0 && sh.z >= 0.0 && sh.z <= 1.0)
-    {
-        float ndl = saturate(dot(N, L));
-        float bias = 0.0001 + (1.0 - ndl) * 0.001;
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
-    }
-    else
-    {
-        shadow = 1.0;
-    }
-	
-    float3 lit = Shade(
-        N, V, L, 
-        baseColor, 
-        metallic, 
-        roughness, 
-        ao, 
-        emissive, 
-        shadow, 
-        g_FrameCB.LightColor, 
-        g_FrameCB.LightIntensity, 
-        0.20 /*iblScale*/);
+    float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
+    float bias = 0.0005 + (1.0 - NdotL) * 0.0005;
+    shadow = SampleShadow_PCF16(g_ShadowMap, g_ShadowCmpSampler, sh, bias, 2.0);
     
+    float3 lit = Shade(
+		N, V, L,
+		baseColor,
+		metallic,
+		roughness,
+		ao,
+		emissive,
+		shadow,
+		g_FrameCB.LightColor,
+		g_FrameCB.LightIntensity,
+		0.20 /*iblScale*/);
+	
     OutColor = float4(lit, opacity);
 }

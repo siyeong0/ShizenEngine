@@ -415,7 +415,18 @@ namespace shz
 			cb->DeltaTime = viewFamily.DeltaTime;
 			cb->CurrTime = viewFamily.CurrentTime;
 
+			// ------------------------------------------------------------
+			// Shadow Visible Distance (your knob)
+			// ------------------------------------------------------------
+			const float ShadowVisibleDistance = 100.0f; // tweak this (world units)
+
+			// TODO: use actual shadow map size (from shadow depth texture desc)
+			const float shadowMapWidth = 4096.0f;
+			const float shadowMapHeight = 4096.0f;
+
+			// ------------------------------------------------------------
 			// Global light (first one)
+			// ------------------------------------------------------------
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights()) { globalLight = &l; break; }
 
@@ -423,37 +434,157 @@ namespace shz
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
 
-			const float3 lightForward = lightDirWs;
-			const float3 centerWs = view.CameraPosition;
-
-			const float shadowDistance = 120.0f;
-			const float3 lightPosWs = centerWs - lightForward * shadowDistance;
-
-			float3 up = float3(0, 1, 0);
-			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
-
-			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
-
-			const float radiusXY = 120.0f;
-			const float nearZ = 0.1f;
-			const float farZ = 400.0f;
-			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
-				-radiusXY, +radiusXY,
-				-radiusXY, +radiusXY,
-				nearZ, farZ);
-
-			lightViewProj = lightView * lightProj;
-
-			cb->LightViewProj = lightViewProj;
 			cb->LightDirWS = lightDirWs;
 			cb->LightColor = lightColor;
 			cb->LightIntensity = lightIntensity;
+
+			const float3 lightForward = lightDirWs;
+
+			// Stable up
+			float3 up = float3(0, 1, 0);
+			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
+
+			// ------------------------------------------------------------
+			// 1) Pair frustum corners robustly by (x,y) sign in NDC
+			//    Your Extract creates corners by bits:
+			//      bit0 => x sign, bit1 => y sign, bit2 => z(near/far)
+			//    So we can explicitly build indices:
+			//      Near: zbit=0, Far: zbit=1, same x/y bits.
+			// ------------------------------------------------------------
+			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
+			{
+				// xBit/yBit/zBit are 0 or 1
+				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+			};
+
+			// Build shadow frustum corners by clamping "far" along each ray
+			float3 shadowCornersWS[8] = {};
+			{
+				const float3 C = view.CameraPosition;
+
+				// iterate 4 x/y corners
+				for (int yBit = 0; yBit <= 1; ++yBit)
+				{
+					for (int xBit = 0; xBit <= 1; ++xBit)
+					{
+						const int idxNear = CornerIndex(xBit, yBit, 0);
+						const int idxFar = CornerIndex(xBit, yBit, 1);
+
+						const float3 N = frustumMain.FrustumCorners[idxNear];
+						const float3 F = frustumMain.FrustumCorners[idxFar];
+
+						// Store near corner as-is
+						shadowCornersWS[idxNear] = N;
+
+						// Clamp far corner to ShadowVisibleDistance measured from camera
+						// Compute t along segment N->F where |(lerp(N,F,t) - C)| == ShadowVisibleDistance
+						const float nearDist = (N - C).Length();
+						const float farDist = (F - C).Length();
+
+						float t = 1.0f;
+						if (farDist > nearDist + 1e-4f)
+						{
+							t = (ShadowVisibleDistance - nearDist) / (farDist - nearDist);
+						}
+						t = Clamp(t, 0.0f, 1.0f);
+
+						shadowCornersWS[idxFar] = Vector3::Lerp(N, F, t);
+					}
+				}
+			}
+
+			// ------------------------------------------------------------
+			// 2) Center = average of clamped corners (more stable than camera pos)
+			// ------------------------------------------------------------
+			float3 centerWs = float3(0, 0, 0);
+			for (int i = 0; i < 8; ++i)
+			{
+				centerWs += shadowCornersWS[i];
+			}
+			centerWs *= (1.0f / 8.0f);
+
+			// Place light camera back along direction
+			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
+
+			// Light view
+			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+
+			// ------------------------------------------------------------
+			// 3) Compute light-space AABB from clamped corners
+			// ------------------------------------------------------------
+			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
+			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+
+			for (int i = 0; i < 8; ++i)
+			{
+				const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView; // row-vector
+				minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
+				maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
+			}
+
+			// ------------------------------------------------------------
+			// 4) Padding first (important)
+			// ------------------------------------------------------------
+			const float pcfPadXY = 1.0f;   // tune
+			const float padZ = 10.0f;
+
+			minX -= pcfPadXY; minY -= pcfPadXY;
+			maxX += pcfPadXY; maxY += pcfPadXY;
+
+			float nearZ = minZ - padZ;
+			float farZ = maxZ + padZ;
+
+			// ------------------------------------------------------------
+			// 5) Make bounds square (stable against camera rotation)
+			// ------------------------------------------------------------
+			const float centerX = 0.5f * (minX + maxX);
+			const float centerY = 0.5f * (minY + maxY);
+
+			float extentX = (maxX - minX);
+			float extentY = (maxY - minY);
+			float extent = Max(extentX, extentY);
+
+			// ------------------------------------------------------------
+			// 6) Texel snap (extent + bounds)
+			// ------------------------------------------------------------
+			// square extent 기준 texel size
+			const float unitsPerTexelSqX = extent / shadowMapWidth;
+			const float unitsPerTexelSqY = extent / shadowMapHeight;
+			const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
+
+			// extent 자체를 texel 단위로 양자화(서브텍셀 크기 변동 방지)
+			extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
+
+			// square bounds 재구성
+			minX = centerX - extent * 0.5f;
+			maxX = centerX + extent * 0.5f;
+			minY = centerY - extent * 0.5f;
+			maxY = centerY + extent * 0.5f;
+
+			// min/max를 texel grid에 맞춤 (floor/ceil)
+			minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
+			minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
+			maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
+			maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
+
+			// ------------------------------------------------------------
+			// 7) Build LightViewProj
+			// ------------------------------------------------------------
+			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+				minX, maxX,
+				minY, maxY,
+				nearZ, farZ);
+
+			lightViewProj = lightView * lightProj;
+			cb->LightViewProj = lightViewProj;
 		}
 
 		{
 			MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
 			cb->LightViewProj = lightViewProj;
 		}
+
+
 
 		ViewFrustumExt frustumShadow = {};
 		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);

@@ -1,5 +1,6 @@
 #include "HLSL_Structures.hlsli"
 #include "PBRLighting.hlsli"
+#include "Shadow.hlsli"
 
 // Constant Buffers
 cbuffer FRAME_CONSTANTS
@@ -24,18 +25,6 @@ struct PSInput
     float2 UV : TEXCOORD2;
     bool bFrontFace : SV_IsFrontFace;
 };
-
-// Helper: World ¡æ Shadow UVZ
-static float3 WorldToShadowUVZ(float3 worldPos)
-{
-    float4 ls = mul(float4(worldPos, 1.0), g_FrameCB.LightViewProj);
-    ls.xyz /= max(ls.w, 1e-6);
-
-    float2 uv = ls.xy * 0.5 + 0.5;
-    uv.y = 1.0 - uv.y; // flip Y for texture space
-
-    return float3(uv, ls.z);
-}
 
 // Lighting tuning parameters (hard-coded for now)
 // Can be moved to GrassRenderConstants later
@@ -78,19 +67,11 @@ float4 main(PSInput IN) : SV_TARGET0
 
     float NdotL = saturate(dot(N, L));
 
-	// Shadow (direct light only)
-    float shadow = 1.0;
-    float3 sh = WorldToShadowUVZ(worldPos);
-
-    if (sh.x >= 0.0 && sh.x <= 1.0 &&
-		sh.y >= 0.0 && sh.y <= 1.0 &&
-		sh.z >= 0.0 && sh.z <= 1.0)
-    {
-		// Slope-scaled depth bias to reduce shadow acne
-        float bias = 0.0001 + (1.0 - NdotL) * 0.001;
-        shadow = g_ShadowMap.SampleCmpLevelZero(g_ShadowCmpSampler, sh.xy, sh.z - bias);
-    }
-
+	// Shadow
+    float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
+    float bias = 0.0005 + (1.0 - NdotL) * 0.0005;
+    float shadow = SampleShadow_PCF16(g_ShadowMap, g_ShadowCmpSampler, sh, bias, 2.0);
+    
 	// Base PBR lighting (IBL + direct)
 	// - Grass uses non-metallic, fairly rough defaults
     float metallic = 0.0;
