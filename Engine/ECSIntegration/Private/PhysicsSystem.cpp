@@ -24,42 +24,6 @@ namespace shz
 		m_Physics.ConsumeContactEvents(&m_FrameContactEvents);
 	}
 
-	void PhysicsSystem::DestroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf)
-	{
-		if (rb && rb->BodyHandle != 0)
-		{
-			PhysicsBodyHandle bh = {};
-			bh.Value = rb->BodyHandle;
-			m_Physics.DestroyBody(bh);
-			rb->BodyHandle = 0;
-		}
-
-		// Shapes are safe to keep shared, but for simplicity we release if component is removed.
-		if (box && box->ShapeHandle != 0)
-		{
-			PhysicsShapeHandle sh = {};
-			sh.Value = box->ShapeHandle;
-			m_Physics.ReleaseShape(sh);
-			box->ShapeHandle = 0;
-		}
-
-		if (sphere && sphere->ShapeHandle != 0)
-		{
-			PhysicsShapeHandle sh = {};
-			sh.Value = sphere->ShapeHandle;
-			m_Physics.ReleaseShape(sh);
-			sphere->ShapeHandle = 0;
-		}
-
-		if (hf && hf->ShapeHandle != 0)
-		{
-			PhysicsShapeHandle sh = {};
-			sh.Value = hf->ShapeHandle;
-			m_Physics.ReleaseShape(sh);
-			hf->ShapeHandle = 0;
-		}
-	}
-
 	// Install Flecs systems
 	void PhysicsSystem::InstallEcsSystems(EcsWorld& ecs)
 	{
@@ -75,22 +39,22 @@ namespace shz
 		ecs.RegisterFixedSystem(fixedStep);
 
 		// Create bodies when (Transform + Rigidbody + any collider)
-		auto createBoxBody = ecs.World().system<CTransform, CRigidbody, CBoxCollider>("Physics.CreateBody.Box")
-			.kind(flecs::OnUpdate)
+		auto createBoxBody = ecs.World().observer<CTransform, CRigidbody, CBoxCollider>("Physics.CreateBody.Box")
+			.event(flecs::OnSet)
 			.each([this](CTransform& tr, CRigidbody& rb, CBoxCollider& box)
 				{
 					ensureBodyCreated(tr, rb, &box, nullptr, nullptr);
 				});
 
-		auto createSphereBody = ecs.World().system<CTransform, CRigidbody, CSphereCollider>("Physics.CreateBody.Sphere")
-			.kind(flecs::OnUpdate)
+		auto createSphereBody = ecs.World().observer<CTransform, CRigidbody, CSphereCollider>("Physics.CreateBody.Sphere")
+			.event(flecs::OnSet)
 			.each([this](CTransform& tr, CRigidbody& rb, CSphereCollider& sph)
 				{
 					ensureBodyCreated(tr, rb, nullptr, &sph, nullptr);
 				});
 
-		auto createHeightFieldBody = ecs.World().system<CTransform, CRigidbody, CHeightFieldCollider>("Physics.CreateBody.HeightField")
-			.kind(flecs::OnUpdate)
+		auto createHeightFieldBody = ecs.World().observer<CTransform, CRigidbody, CHeightFieldCollider>("Physics.CreateBody.HeightField")
+			.event(flecs::OnSet)
 			.each([this](CTransform& tr, CRigidbody& rb, CHeightFieldCollider& hf)
 				{
 					ensureBodyCreated(tr, rb, nullptr, nullptr, &hf);
@@ -119,7 +83,6 @@ namespace shz
 					m_Physics.SetBodyTransform(bh, tr.Position, tr.Rotation, bActivate);
 				});
 		ecs.RegisterUpdateSystem(pushTransform);
-
 
 		// Write physics -> transform for Dynamic
 		auto writeBack = ecs.World().system<CTransform, CRigidbody>()
@@ -156,7 +119,7 @@ namespace shz
 					CSphereCollider& sph = e.get_mut<CSphereCollider>();
 					CHeightFieldCollider& hf = e.get_mut<CHeightFieldCollider>();
 
-					DestroyBodyAndShapes(&rb, &box, &sph, &hf);
+					destroyBodyAndShapes(&rb, &box, &sph, &hf);
 				});
 
 		m_bInstalled = true;
@@ -165,47 +128,37 @@ namespace shz
 	// Internal helpers: Shape
 	void PhysicsSystem::ensureShapeCreated_Box(CBoxCollider& box)
 	{
-		if (box.ShapeHandle != 0)
-		{
-			return;
-		}
+		ASSERT(box.ShapeHandle == 0, "Shape already created");
 
 		const PhysicsShapeHandle shape = m_Physics.CreateBoxShape(box.Box.Extents());
 		box.ShapeHandle = shape.Value;
 	}
 
-	void PhysicsSystem::ensureShapeCreated_Sphere(CSphereCollider& sph)
+	void PhysicsSystem::ensureShapeCreated_Sphere(CSphereCollider& sphere)
 	{
-		if (sph.ShapeHandle != 0)
-		{
-			return;
-		}
+		ASSERT(sphere.ShapeHandle == 0, "Shape already created");
 
-		const PhysicsShapeHandle shape = m_Physics.CreateSphereShape(sph.Radius);
-		sph.ShapeHandle = shape.Value;
+		const PhysicsShapeHandle shape = m_Physics.CreateSphereShape(sphere.Radius);
+		sphere.ShapeHandle = shape.Value;
 	}
 
-	void PhysicsSystem::ensureShapeCreated_HeightField(CHeightFieldCollider& hf)
+	void PhysicsSystem::ensureShapeCreated_HeightField(CHeightFieldCollider& heightField)
 	{
-		if (hf.ShapeHandle != 0)
-		{
-			return;
-		}
-
-		ASSERT(hf.Width > 1 && hf.Height > 1, "Invalid height field resolution.");
-		ASSERT(hf.Heights.size() == size_t(hf.Width) * size_t(hf.Height), "Height field size mismatch.");
+		ASSERT(heightField.ShapeHandle == 0, "Shape already created");
+		ASSERT(heightField.Width > 1 && heightField.Height > 1, "Invalid height field resolution.");
+		ASSERT(heightField.Heights.size() == size_t(heightField.Width) * size_t(heightField.Height), "Height field size mismatch.");
 
 		Physics::HeightFieldCreateInfo hci = {};
-		hci.pHeights = hf.Heights.data();
-		hci.Width = hf.Width;
-		hci.Height = hf.Height;
-		hci.CellSizeX = hf.CellSizeX;
-		hci.CellSizeZ = hf.CellSizeZ;
-		hci.HeightScale = hf.HeightScale;
-		hci.HeightOffset = hf.HeightOffset;
+		hci.pHeights = heightField.Heights.data();
+		hci.Width = heightField.Width;
+		hci.Height = heightField.Height;
+		hci.CellSizeX = heightField.CellSizeX;
+		hci.CellSizeZ = heightField.CellSizeZ;
+		hci.HeightScale = heightField.HeightScale;
+		hci.HeightOffset = heightField.HeightOffset;
 
 		const PhysicsShapeHandle shape = m_Physics.CreateHeightFieldShape(hci);
-		hf.ShapeHandle = shape.Value;
+		heightField.ShapeHandle = shape.Value;
 	}
 
 	// Internal helpers: Body creation/destruction
@@ -216,10 +169,7 @@ namespace shz
 		CSphereCollider* sphere,
 		CHeightFieldCollider* hf)
 	{
-		if (rb.BodyHandle != 0)
-		{
-			return;
-		}
+		ASSERT(rb.BodyHandle == 0, "Body already created.");
 
 		// Ensure shape exists (pick exactly one collider for now)
 		PhysicsShapeHandle shape = {};
@@ -279,5 +229,41 @@ namespace shz
 
 		const PhysicsBodyHandle body = m_Physics.CreateBody(bci);
 		rb.BodyHandle = body.Value;
+	}
+
+	void PhysicsSystem::destroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf)
+	{
+		if (rb && rb->BodyHandle != 0)
+		{
+			PhysicsBodyHandle bh = {};
+			bh.Value = rb->BodyHandle;
+			m_Physics.DestroyBody(bh);
+			rb->BodyHandle = 0;
+		}
+
+		// Shapes are safe to keep shared, but for simplicity we release if component is removed.
+		if (box && box->ShapeHandle != 0)
+		{
+			PhysicsShapeHandle sh = {};
+			sh.Value = box->ShapeHandle;
+			m_Physics.ReleaseShape(sh);
+			box->ShapeHandle = 0;
+		}
+
+		if (sphere && sphere->ShapeHandle != 0)
+		{
+			PhysicsShapeHandle sh = {};
+			sh.Value = sphere->ShapeHandle;
+			m_Physics.ReleaseShape(sh);
+			sphere->ShapeHandle = 0;
+		}
+
+		if (hf && hf->ShapeHandle != 0)
+		{
+			PhysicsShapeHandle sh = {};
+			sh.Value = hf->ShapeHandle;
+			m_Physics.ReleaseShape(sh);
+			hf->ShapeHandle = 0;
+		}
 	}
 } // namespace shz

@@ -40,7 +40,7 @@ namespace shz
 			CSphereCollider* sphere,
 			CHeightFieldCollider* hf);
 
-		void DestroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf);
+		void destroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf);
 
 	private:
 		Physics m_Physics = {};
