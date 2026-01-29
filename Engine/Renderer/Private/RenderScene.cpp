@@ -4,34 +4,6 @@
 namespace shz
 {
 	// ------------------------------------------------------------
-	// Common lookup
-	// ------------------------------------------------------------
-	template<typename T>
-	uint32 RenderScene::findDenseIndex(Handle<T> h, const std::vector<Slot<T>>& slots) const noexcept
-	{
-		ASSERT(h.IsValid(), "findDenseIndex() called with invalid handle.");
-		ASSERT(h.IsAlive(), "findDenseIndex() called with dead handle.");
-
-		const uint32 idx = h.GetIndex();
-		ASSERT(idx != 0, "findDenseIndex() called with invalid handle index.");
-		ASSERT(idx < static_cast<uint32>(slots.size()), "findDenseIndex() called with out-of-bounds handle index.");
-
-		const Slot<T>& slot = slots[idx];
-		if (!slot.bOccupied)
-		{
-			return INVALID_INDEX;
-		}
-
-		// CRITICAL: ensure this handle matches the slot owner (index + generation)
-		if (slot.Owner.Get() != h)
-		{
-			return INVALID_INDEX;
-		}
-
-		return slot.DenseIndex;
-	}
-
-	// ------------------------------------------------------------
 	// Reset
 	// ------------------------------------------------------------
 	void RenderScene::Reset()
@@ -70,258 +42,14 @@ namespace shz
 		m_TerrainMesh = {};
 	}
 
-	// ------------------------------------------------------------
-	// OcIndex allocator / dirty
-	// ------------------------------------------------------------
-	uint32 RenderScene::allocOcIndex()
-	{
-		uint32 idx = INVALID_INDEX;
-
-		if (!m_FreeOcIndices.empty())
-		{
-			idx = m_FreeOcIndices.back();
-			m_FreeOcIndices.pop_back();
-		}
-		else
-		{
-			idx = static_cast<uint32>(m_ObjectTableCPU.size());
-			m_ObjectTableCPU.emplace_back(hlsl::ObjectConstants{});
-			m_OcDirty.emplace_back(0);
-		}
-
-		ASSERT(idx != INVALID_INDEX, "allocOcIndex failed.");
-		return idx;
-	}
-
-	void RenderScene::freeOcIndex(uint32 ocIndex)
-	{
-		if (ocIndex == INVALID_INDEX)
-		{
-			return;
-		}
-
-		ASSERT(ocIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "freeOcIndex out of range.");
-		m_FreeOcIndices.push_back(ocIndex);
-
-		// dirty flag는 남겨도 되지만, 안전을 위해 0으로.
-		if (ocIndex < static_cast<uint32>(m_OcDirty.size()))
-		{
-			m_OcDirty[ocIndex] = 0;
-		}
-	}
-
-	void RenderScene::markOcDirty(uint32 ocIndex)
-	{
-		ASSERT(ocIndex != INVALID_INDEX, "markOcDirty called with invalid OcIndex.");
-		ASSERT(ocIndex < static_cast<uint32>(m_OcDirty.size()), "markOcDirty out of range.");
-
-		if (m_OcDirty[ocIndex] == 0)
-		{
-			m_OcDirty[ocIndex] = 1;
-			m_DirtyOcIndices.push_back(ocIndex);
-		}
-	}
-
 	void RenderScene::ClearDirtyOcIndices()
 	{
 		for (uint32 oc : m_DirtyOcIndices)
 		{
-			if (oc < static_cast<uint32>(m_OcDirty.size()))
-			{
-				m_OcDirty[oc] = 0;
-			}
+			ASSERT(oc < static_cast<uint32>(m_OcDirty.size()), "Object constant index out of bounds.");
+			m_OcDirty[oc] = 0;
 		}
 		m_DirtyOcIndices.clear();
-	}
-
-	// ------------------------------------------------------------
-	// Batch key
-	// ------------------------------------------------------------
-	RenderScene::DrawBatchKey RenderScene::makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
-	{
-		DrawBatchKey k = {};
-		k.MeshPtr = &mesh;
-		k.SectionIndex = sectionIndex;
-		k.PassKey = passKey;
-
-		k.bCastShadow = bCastShadow;
-		return k;
-	}
-
-	uint32 RenderScene::getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
-	{
-		auto it = m_BatchLookup.find(key);
-		if (it != m_BatchLookup.end())
-		{
-			return it->second;
-		}
-
-		const uint32 batchId = static_cast<uint32>(m_Batches.size());
-
-		Batch b = {};
-		b.Key = key;
-		b.pMesh = &mesh;
-		b.SectionIndex = sectionIndex;
-		b.bCastShadow = bCastShadow;
-
-		m_Batches.emplace_back(std::move(b));
-		m_BatchLookup.emplace(key, batchId);
-		return batchId;
-	}
-
-	void RenderScene::batchRemoveInstance(uint32 batchId, uint32 instanceIndex)
-	{
-		ASSERT(batchId < static_cast<uint32>(m_Batches.size()), "batchRemoveInstance: batchId out of range.");
-		Batch& batch = m_Batches[batchId];
-		ASSERT(instanceIndex < static_cast<uint32>(batch.Instances.size()), "batchRemoveInstance: instanceIndex out of range.");
-
-		const uint32 lastIndex = static_cast<uint32>(batch.Instances.size() - 1);
-		if (instanceIndex != lastIndex)
-		{
-			// swap-remove
-			BatchInstance moved = batch.Instances[lastIndex];
-			batch.Instances[instanceIndex] = moved;
-
-			// moved instance의 owner section handle 갱신
-			ASSERT(moved.OwnerObjectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "batchRemoveInstance: moved owner out of range.");
-			ObjectRecord& movedOwner = m_ObjectDense[moved.OwnerObjectDenseIndex];
-			ASSERT(moved.OwnerSectionSlot < movedOwner.Sections.size(), "batchRemoveInstance: moved owner section slot out of range.");
-
-			SectionHandle& movedHandle = movedOwner.Sections[moved.OwnerSectionSlot];
-			ASSERT(movedHandle.BatchId == batchId, "batchRemoveInstance: moved handle batch mismatch.");
-			ASSERT(movedHandle.InstanceIndex == lastIndex, "batchRemoveInstance: moved handle instance mismatch.");
-			movedHandle.InstanceIndex = instanceIndex;
-		}
-
-		batch.Instances.pop_back();
-	}
-
-	// ------------------------------------------------------------
-	// Object <-> batches
-	// ------------------------------------------------------------
-	void RenderScene::addObjectToBatches(uint32 objectDenseIndex)
-	{
-		ASSERT(objectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "addObjectToBatches: objectDenseIndex OOB.");
-
-		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
-		SceneObject& obj = rec.Obj;
-
-		// ObjectConstants CPU mirror update (최초 1회)
-		ASSERT(rec.OcIndex != INVALID_INDEX, "Object has no OcIndex.");
-		ASSERT(rec.OcIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
-
-		m_ObjectTableCPU[rec.OcIndex].World = obj.World;
-		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = obj.WorldInvTranspose;
-		markOcDirty(rec.OcIndex);
-
-		// NOTE:
-		// 여기서는 StaticMeshRenderData가 섹션을 가진다고 "가정"하고,
-		// 섹션 수를 얻는 API가 프로젝트마다 다를 수 있으므로 아래를 "최소 구현"으로 둔다.
-		//
-		// 실제 코드에서는:
-		//   const uint32 sectionCount = obj.Mesh.GetSectionCount();
-		// 또는:
-		//   obj.Mesh.Sections.size()
-		// 처럼 정확한 API로 바꿔줘야 한다.
-		//
-		// --------------------------------------------
-		const uint32 sectionCount = static_cast<uint32>(obj.pMesh->Sections.size());
-		// --------------------------------------------
-
-		rec.Sections.clear();
-		rec.Sections.resize(sectionCount);
-
-		for (uint32 si = 0; si < sectionCount; ++si)
-		{
-			// Pass별로 배치가 분리될 수 있다.
-			// 여기서는 Main/Shadow 둘 다 만든다. (Shadow는 bCastShadow가 false면 건너뜀)
-			{
-
-				BatchInstance inst = {};
-				inst.OcIndex = rec.OcIndex;
-				inst.OwnerObjectDenseIndex = objectDenseIndex;
-				inst.OwnerSectionSlot = static_cast<uint16>(si);
-
-				const DrawBatchKey key = makeBatchKey(obj.pMesh->Sections[si].pMaterial->RenderPassId, *obj.pMesh, si, obj.bCastShadow);
-				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
-
-				Batch& batch = m_Batches[batchId];
-				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
-
-				batch.Instances.emplace_back(inst);
-
-				// 이 섹션 슬롯은 "Main pass 배치"를 기본으로 기록한다.
-				// Shadow pass까지 별도 핸들이 필요하면 SectionHandle을 pass별로 나누는 구조로 확장하면 된다.
-				rec.Sections[si].BatchId = batchId;
-				rec.Sections[si].InstanceIndex = instIndex;
-			}
-
-			if (obj.bCastShadow)
-			{
-				const DrawBatchKey key = makeBatchKey(std::hash<std::string>{}("Shadow"), *obj.pMesh, si, obj.bCastShadow);
-				(void)getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
-
-				// Shadow pass는 DrawList 빌드 시 따로 인스턴스를 순회해도 되고,
-				// 배치를 pass별로 분리해서 여기서도 Instances를 추가해도 된다.
-				//
-				// "완전 단순"을 위해: Shadow 배치에도 동일 인스턴스를 넣는다.
-				const uint32 shadowBatchId = m_BatchLookup[key];
-				Batch& sb = m_Batches[shadowBatchId];
-				const uint32 instIndex = static_cast<uint32>(sb.Instances.size());
-
-				BatchInstance inst = {};
-				inst.OcIndex = rec.OcIndex;
-				inst.OwnerObjectDenseIndex = objectDenseIndex;
-				inst.OwnerSectionSlot = static_cast<uint16>(si);
-
-				sb.Instances.emplace_back(inst);
-			}
-		}
-	}
-
-	void RenderScene::removeObjectFromBatches(uint32 objectDenseIndex)
-	{
-		ASSERT(objectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "removeObjectFromBatches: objectDenseIndex OOB.");
-
-		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
-
-		// Main-pass SectionHandle 기반으로 제거 (Shadow 배치는 여기서 직접 탐색/제거)
-		// 더 깔끔하게 하려면 pass별 SectionHandle을 별도로 저장하는 구조로 확장 추천.
-		for (uint32 si = 0; si < static_cast<uint32>(rec.Sections.size()); ++si)
-		{
-			const SectionHandle sh = rec.Sections[si];
-			if (sh.BatchId != INVALID_INDEX && sh.InstanceIndex != INVALID_INDEX)
-			{
-				batchRemoveInstance(sh.BatchId, sh.InstanceIndex);
-			}
-
-			// Shadow 배치 제거: 동일 key로 찾아 제거
-			// (섹션 핸들을 pass별로 저장하면 이 부분이 O(1)로 깔끔해짐)
-			{
-				const DrawBatchKey skey = makeBatchKey(std::hash<std::string>{}("Shadow"), *rec.Obj.pMesh, si, rec.Obj.bCastShadow);
-				auto it = m_BatchLookup.find(skey);
-				if (it != m_BatchLookup.end())
-				{
-					const uint32 sbId = it->second;
-					Batch& sb = m_Batches[sbId];
-
-					// sb.Instances에서 (OwnerObjectDenseIndex, OwnerSectionSlot==si) 찾기
-					// NOTE: 이 선형 탐색은 "object remove가 드물다" 전제에서 OK.
-					// 제거가 빈번하면 shadow도 pass별 SectionHandle로 저장해라.
-					for (uint32 ii = 0; ii < static_cast<uint32>(sb.Instances.size()); ++ii)
-					{
-						const BatchInstance& inst = sb.Instances[ii];
-						if (inst.OwnerObjectDenseIndex == objectDenseIndex && inst.OwnerSectionSlot == static_cast<uint16>(si))
-						{
-							batchRemoveInstance(sbId, ii);
-							break;
-						}
-					}
-				}
-			}
-		}
-
-		rec.Sections.clear();
 	}
 
 	// ------------------------------------------------------------
@@ -468,7 +196,7 @@ namespace shz
 
 		ObjectRecord& rec = m_ObjectDense[denseIndex];
 
-		// 가장 안전한 정책: 기존 배치에서 제거 -> Mesh 교체 -> 다시 배치 삽입
+		// Safest approach: remove from the existing batch -> replace the mesh -> reinsert into the batch
 		removeObjectFromBatches(denseIndex);
 		rec.Obj.pMesh = &mesh;
 		addObjectToBatches(denseIndex);
@@ -492,19 +220,25 @@ namespace shz
 	RenderScene::SceneObject* RenderScene::GetObjectOrNull(Handle<SceneObject> h) noexcept
 	{
 		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
-		if (dense == INVALID_INDEX) return nullptr;
+		if (dense == INVALID_INDEX)
+		{
+			return nullptr;
+		}
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
 	const RenderScene::SceneObject* RenderScene::GetObjectOrNull(Handle<SceneObject> h) const noexcept
 	{
 		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
-		if (dense == INVALID_INDEX) return nullptr;
+		if (dense == INVALID_INDEX)
+		{
+			return nullptr;
+		}
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
 	// ------------------------------------------------------------
-	// Lights (기존 dense/sparse 유지)
+	// Lights 
 	// ------------------------------------------------------------
 	Handle<RenderScene::LightObject> RenderScene::AddLight(const LightObject& light)
 	{
@@ -620,14 +354,11 @@ namespace shz
 
 		for (uint32 objDense : visibleObjectDenseIndices)
 		{
-			if (objDense >= static_cast<uint32>(m_ObjectDense.size()))
-				continue;
+			ASSERT(objDense < static_cast<uint32>(m_ObjectDense.size()), "Object dense index out of bounds.");
 
 			const uint32 oc = m_ObjectDense[objDense].OcIndex;
-			if (oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()))
-			{
-				ocVisible[oc] = 1;
-			}
+			ASSERT(oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()), "Invalid object constant index.");
+			ocVisible[oc] = 1;
 		}
 
 		// Iterate batches -> select instances whose OcIndex is visible
@@ -635,23 +366,28 @@ namespace shz
 		{
 			const Batch& b = m_Batches[batchId];
 			if (b.IsEmpty())
+			{
 				continue;
+			}
 
 			if (b.Key.PassKey != passKey)
+			{
 				continue;
+			}
 
-			// Shadow pass인데 cast shadow false면 skip
-			// (주의: batch 자체가 bCastShadow로 묶여있다면 이 체크는 유지 가능)
+			// Shadow pass: skip objects that do not cast shadows
+			// (Note: if batches are already partitioned by bCastShadow,
+			//  this check remains valid.)
 			// if (passKey == kPassShadow && !b.bCastShadow) continue;
 
 			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
 			uint32 count = 0;
 
-			// NOTE: 여기서 visible인 인스턴스만 remap에 push
 			for (const BatchInstance& inst : b.Instances)
 			{
 				const uint32 oc = inst.OcIndex;
-				if (oc < static_cast<uint32>(ocVisible.size()) && ocVisible[oc])
+				ASSERT(oc < static_cast<uint32>(ocVisible.size()), "Object constant index out of bounds.");
+				if (ocVisible[oc])
 				{
 					outInstanceRemap.push_back(oc);
 					++count;
@@ -660,8 +396,7 @@ namespace shz
 
 			if (count == 0)
 			{
-				// 아무것도 안 보이면 이 batch는 드로우 안 함
-				continue;
+				continue; // If nothing is visible, do not draw this batch
 			}
 
 			DrawItem di = {};
@@ -675,10 +410,7 @@ namespace shz
 
 	bool RenderScene::TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept
 	{
-		if (batchId >= static_cast<uint32>(m_Batches.size()))
-		{
-			return false;
-		}
+		ASSERT(batchId < static_cast<uint32>(m_Batches.size()), "Batch ID out of bounds.");
 
 		const Batch& b = m_Batches[batchId];
 		outView.pMesh = b.pMesh;
@@ -689,16 +421,10 @@ namespace shz
 
 	void RenderScene::SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world)
 	{
-		// 기존 terrain이 있으면 제거
-		if (m_TerrainMesh.IsValid() && m_TerrainMesh.IsAlive())
-		{
-			RemoveObject(m_TerrainMesh);
-			m_TerrainMesh = {};
-		}
+		// Remove the existing terrain if present
+		ClearTerrain();
 
 		m_pTerrainHeightMap = &heightMap;
-
-		// terrain mesh를 씬 오브젝트로 등록 (그림자 캐스팅은 true가 보통)
 		m_TerrainMesh = AddObject(terrainMesh, world, /*bCastShadow=*/true);
 	}
 
@@ -712,4 +438,263 @@ namespace shz
 
 		m_pTerrainHeightMap = nullptr;
 	}
+
+	// ------------------------------------------------------------
+	// OcIndex allocator / dirty
+	// ------------------------------------------------------------
+	uint32 RenderScene::allocOcIndex()
+	{
+		uint32 idx = INVALID_INDEX;
+
+		if (!m_FreeOcIndices.empty())
+		{
+			idx = m_FreeOcIndices.back();
+			m_FreeOcIndices.pop_back();
+		}
+		else
+		{
+			idx = static_cast<uint32>(m_ObjectTableCPU.size());
+			m_ObjectTableCPU.emplace_back(hlsl::ObjectConstants{});
+			m_OcDirty.emplace_back(0);
+		}
+
+		ASSERT(idx != INVALID_INDEX, "allocOcIndex failed.");
+		return idx;
+	}
+
+	void RenderScene::freeOcIndex(uint32 ocIndex)
+	{
+		if (ocIndex == INVALID_INDEX)
+		{
+			return;
+		}
+
+		ASSERT(ocIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "freeOcIndex out of range.");
+		m_FreeOcIndices.push_back(ocIndex);
+
+		// dirty flag는 남겨도 되지만, 안전을 위해 0으로.
+		if (ocIndex < static_cast<uint32>(m_OcDirty.size()))
+		{
+			m_OcDirty[ocIndex] = 0;
+		}
+	}
+
+	void RenderScene::markOcDirty(uint32 ocIndex)
+	{
+		ASSERT(ocIndex != INVALID_INDEX, "markOcDirty called with invalid OcIndex.");
+		ASSERT(ocIndex < static_cast<uint32>(m_OcDirty.size()), "markOcDirty out of range.");
+
+		if (m_OcDirty[ocIndex] == 0)
+		{
+			m_OcDirty[ocIndex] = 1;
+			m_DirtyOcIndices.push_back(ocIndex);
+		}
+	}
+
+	// ------------------------------------------------------------
+	// Batch key
+	// ------------------------------------------------------------
+	RenderScene::DrawBatchKey RenderScene::makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
+	{
+		DrawBatchKey k = {};
+		k.MeshPtr = &mesh;
+		k.SectionIndex = sectionIndex;
+		k.PassKey = passKey;
+
+		k.bCastShadow = bCastShadow;
+		return k;
+	}
+
+	uint32 RenderScene::getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
+	{
+		auto it = m_BatchLookup.find(key);
+		if (it != m_BatchLookup.end())
+		{
+			return it->second;
+		}
+
+		const uint32 batchId = static_cast<uint32>(m_Batches.size());
+
+		Batch b = {};
+		b.Key = key;
+		b.pMesh = &mesh;
+		b.SectionIndex = sectionIndex;
+		b.bCastShadow = bCastShadow;
+
+		m_Batches.emplace_back(std::move(b));
+		m_BatchLookup.emplace(key, batchId);
+		return batchId;
+	}
+
+	void RenderScene::batchRemoveInstance(uint32 batchId, uint32 instanceIndex)
+	{
+		ASSERT(batchId < static_cast<uint32>(m_Batches.size()), "batchRemoveInstance: batchId out of range.");
+		Batch& batch = m_Batches[batchId];
+		ASSERT(instanceIndex < static_cast<uint32>(batch.Instances.size()), "batchRemoveInstance: instanceIndex out of range.");
+
+		const uint32 lastIndex = static_cast<uint32>(batch.Instances.size() - 1);
+		if (instanceIndex != lastIndex)
+		{
+			// swap-remove
+			BatchInstance moved = batch.Instances[lastIndex];
+			batch.Instances[instanceIndex] = moved;
+
+			// moved instance의 owner section handle 갱신
+			ASSERT(moved.OwnerObjectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "batchRemoveInstance: moved owner out of range.");
+			ObjectRecord& movedOwner = m_ObjectDense[moved.OwnerObjectDenseIndex];
+			ASSERT(moved.OwnerSectionSlot < movedOwner.Sections.size(), "batchRemoveInstance: moved owner section slot out of range.");
+
+			SectionHandle& movedHandle = movedOwner.Sections[moved.OwnerSectionSlot];
+			ASSERT(movedHandle.BatchId == batchId, "batchRemoveInstance: moved handle batch mismatch.");
+			ASSERT(movedHandle.InstanceIndex == lastIndex, "batchRemoveInstance: moved handle instance mismatch.");
+			movedHandle.InstanceIndex = instanceIndex;
+		}
+
+		batch.Instances.pop_back();
+	}
+
+	// ------------------------------------------------------------
+	// Object <-> batches
+	// ------------------------------------------------------------
+	void RenderScene::addObjectToBatches(uint32 objectDenseIndex)
+	{
+		ASSERT(objectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "addObjectToBatches: objectDenseIndex OOB.");
+
+		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
+		SceneObject& obj = rec.Obj;
+
+		// ObjectConstants CPU mirror update (최초 1회)
+		ASSERT(rec.OcIndex != INVALID_INDEX, "Object has no OcIndex.");
+		ASSERT(rec.OcIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
+
+		m_ObjectTableCPU[rec.OcIndex].World = obj.World;
+		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = obj.WorldInvTranspose;
+		markOcDirty(rec.OcIndex);
+
+		const uint32 sectionCount = static_cast<uint32>(obj.pMesh->Sections.size());
+
+		rec.Sections.clear();
+		rec.Sections.resize(sectionCount);
+
+		for (uint32 si = 0; si < sectionCount; ++si)
+		{
+			// Pass별로 배치가 분리될 수 있다.
+			// 여기서는 Main/Shadow 둘 다 만든다. (Shadow는 bCastShadow가 false면 건너뜀)
+			{
+
+				BatchInstance inst = {};
+				inst.OcIndex = rec.OcIndex;
+				inst.OwnerObjectDenseIndex = objectDenseIndex;
+				inst.OwnerSectionSlot = static_cast<uint16>(si);
+
+				const DrawBatchKey key = makeBatchKey(obj.pMesh->Sections[si].pMaterial->RenderPassId, *obj.pMesh, si, obj.bCastShadow);
+				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
+
+				Batch& batch = m_Batches[batchId];
+				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+
+				batch.Instances.emplace_back(inst);
+
+				// 이 섹션 슬롯은 "Main pass 배치"를 기본으로 기록한다.
+				// Shadow pass까지 별도 핸들이 필요하면 SectionHandle을 pass별로 나누는 구조로 확장하면 된다.
+				rec.Sections[si].BatchId = batchId;
+				rec.Sections[si].InstanceIndex = instIndex;
+			}
+
+			if (obj.bCastShadow)
+			{
+				const DrawBatchKey key = makeBatchKey(std::hash<std::string>{}("Shadow"), * obj.pMesh, si, obj.bCastShadow);
+				(void)getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
+
+				// Shadow pass는 DrawList 빌드 시 따로 인스턴스를 순회해도 되고,
+				// 배치를 pass별로 분리해서 여기서도 Instances를 추가해도 된다.
+				//
+				// "완전 단순"을 위해: Shadow 배치에도 동일 인스턴스를 넣는다.
+				const uint32 shadowBatchId = m_BatchLookup[key];
+				Batch& sb = m_Batches[shadowBatchId];
+				const uint32 instIndex = static_cast<uint32>(sb.Instances.size());
+
+				BatchInstance inst = {};
+				inst.OcIndex = rec.OcIndex;
+				inst.OwnerObjectDenseIndex = objectDenseIndex;
+				inst.OwnerSectionSlot = static_cast<uint16>(si);
+
+				sb.Instances.emplace_back(inst);
+			}
+		}
+	}
+
+	void RenderScene::removeObjectFromBatches(uint32 objectDenseIndex)
+	{
+		ASSERT(objectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "removeObjectFromBatches: objectDenseIndex OOB.");
+
+		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
+
+		// Main-pass SectionHandle 기반으로 제거 (Shadow 배치는 여기서 직접 탐색/제거)
+		// 더 깔끔하게 하려면 pass별 SectionHandle을 별도로 저장하는 구조로 확장 추천.
+		for (uint32 si = 0; si < static_cast<uint32>(rec.Sections.size()); ++si)
+		{
+			const SectionHandle sh = rec.Sections[si];
+			if (sh.BatchId != INVALID_INDEX && sh.InstanceIndex != INVALID_INDEX)
+			{
+				batchRemoveInstance(sh.BatchId, sh.InstanceIndex);
+			}
+
+			// Shadow 배치 제거: 동일 key로 찾아 제거
+			// (섹션 핸들을 pass별로 저장하면 이 부분이 O(1)로 깔끔해짐)
+			{
+				const DrawBatchKey skey = makeBatchKey(std::hash<std::string>{}("Shadow"), * rec.Obj.pMesh, si, rec.Obj.bCastShadow);
+				auto it = m_BatchLookup.find(skey);
+				if (it != m_BatchLookup.end())
+				{
+					const uint32 sbId = it->second;
+					Batch& sb = m_Batches[sbId];
+
+					// sb.Instances에서 (OwnerObjectDenseIndex, OwnerSectionSlot==si) 찾기
+					// NOTE: 이 선형 탐색은 "object remove가 드물다" 전제에서 OK.
+					// 제거가 빈번하면 shadow도 pass별 SectionHandle로 저장해라.
+					for (uint32 ii = 0; ii < static_cast<uint32>(sb.Instances.size()); ++ii)
+					{
+						const BatchInstance& inst = sb.Instances[ii];
+						if (inst.OwnerObjectDenseIndex == objectDenseIndex && inst.OwnerSectionSlot == static_cast<uint16>(si))
+						{
+							batchRemoveInstance(sbId, ii);
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		rec.Sections.clear();
+	}
+
+	// ------------------------------------------------------------
+	// Common lookup
+	// ------------------------------------------------------------
+	template<typename T>
+	uint32 RenderScene::findDenseIndex(Handle<T> h, const std::vector<Slot<T>>& slots) const noexcept
+	{
+		ASSERT(h.IsValid(), "findDenseIndex() called with invalid handle.");
+		ASSERT(h.IsAlive(), "findDenseIndex() called with dead handle.");
+
+		const uint32 idx = h.GetIndex();
+		ASSERT(idx != 0, "findDenseIndex() called with invalid handle index.");
+		ASSERT(idx < static_cast<uint32>(slots.size()), "findDenseIndex() called with out-of-bounds handle index.");
+
+		const Slot<T>& slot = slots[idx];
+		if (!slot.bOccupied)
+		{
+			return INVALID_INDEX;
+		}
+
+		// CRITICAL: ensure this handle matches the slot owner (index + generation)
+		if (slot.Owner.Get() != h)
+		{
+			return INVALID_INDEX;
+		}
+
+		return slot.DenseIndex;
+	}
+
 } // namespace shz

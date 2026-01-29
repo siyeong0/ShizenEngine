@@ -89,8 +89,7 @@ float4 main(PSInput IN) : SV_TARGET0
 		shadow,
 		g_FrameCB.LightColor,
 		g_FrameCB.LightIntensity,
-		0.20 // ambient factor
-	);
+		0.20 /*iblScale*/);
 
 	// Direct light color (already shadowed)
     float3 directLight = g_FrameCB.LightColor * g_FrameCB.LightIntensity * shadow;

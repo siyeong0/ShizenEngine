@@ -60,7 +60,10 @@ namespace shz
 		void Reset();
 
 		// Scene Objects
-		Handle<SceneObject> AddObject(const StaticMeshRenderData& rd, const Matrix4x4& transform, bool bCastShadow = true);
+		Handle<SceneObject> AddObject(
+			const StaticMeshRenderData& rd, 
+			const Matrix4x4& transform = Matrix4x4::Identity(), 
+			bool bCastShadow = true);
 		void RemoveObject(Handle<SceneObject> h);
 		void UpdateObjectMesh(Handle<SceneObject> h, const StaticMeshRenderData& mesh);
 		void UpdateObjectTransform(Handle<SceneObject> h, const Matrix4x4& world);
@@ -81,13 +84,9 @@ namespace shz
 		uint32 GetLightCount() const noexcept { return static_cast<uint32>(m_LightDense.size()); }
 		const std::vector<LightObject>& GetLights() const noexcept { return m_LightDense; }
 
-		// ------------------------------------------------------------
 		// ObjectConstants Table (CPU mirror)
-		// - Renderer는 dirty ranges만 GPU로 업로드하면 된다.
-		// ------------------------------------------------------------
 		const std::vector<hlsl::ObjectConstants>& GetObjectConstantsTableCPU() const noexcept { return m_ObjectTableCPU; }
 
-		// dirty OcIndex 목록(중복 없음, 순서 보장 없음)
 		const std::vector<uint32>& GetDirtyOcIndices() const noexcept { return m_DirtyOcIndices; }
 		void ClearDirtyOcIndices();
 
@@ -129,8 +128,6 @@ namespace shz
 
 		// ------------------------------------------------------------
 	   // Height field / Terrain
-	   // - HeightMap은 렌더/시뮬/잔디생성 등에서 공용으로 쓰일 수 있으니 씬이 보관
-	   // - TerrainMesh는 SceneObject로 추가되고, 핸들을 따로 들고 관리
 	   // ------------------------------------------------------------
 		void SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world = Matrix4x4::Identity());
 		void ClearTerrain();
