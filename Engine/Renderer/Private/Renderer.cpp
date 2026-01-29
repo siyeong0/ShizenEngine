@@ -363,6 +363,7 @@ namespace shz
 		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
 
 		m_PassCtx.pHeightMap = &scene.GetHeightMap();
+		scene.ConsumeInteractionStamps(&m_PassCtx.InteractionStamps);
 
 		const View& view = viewFamily.Views[0];
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "Primitives/BasicTypes.h"
-#include "Engine/Physics/Public/Physics.h"
+#include "Engine/Physics/Public/PhysicsBodyHandle.h"
 
 namespace shz
 {

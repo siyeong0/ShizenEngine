@@ -1,6 +1,5 @@
 #include "HLSL_Structures.hlsli"
 
-// Constant Buffers
 cbuffer FRAME_CONSTANTS
 {
     FrameConstants g_FrameCB;
@@ -11,10 +10,8 @@ cbuffer GRASS_RENDER_CONSTANTS
     GrassRenderConstants g_GrassCB;
 };
 
-// Resources
 StructuredBuffer<GrassInstance> g_GrassInstances;
 
-// Input / Output
 struct VSInput
 {
     float3 Pos : ATTRIB0;
@@ -31,26 +28,16 @@ struct VSOutput
     float2 UV : TEXCOORD2;
 };
 
-// Constants
 static const float EPS = 1e-8;
 static const float PI = 3.14159265;
-
-// ----------------------------------------------------------------------------
-// Helpers
-// ----------------------------------------------------------------------------
 
 float3 ApplyYaw(float3 v, float yaw)
 {
     const float s = sin(yaw);
     const float c = cos(yaw);
-
-    const float x = c * v.x - s * v.z;
-    const float z = s * v.x + c * v.z;
-
-    return float3(x, v.y, z);
+    return float3(c * v.x - s * v.z, v.y, s * v.x + c * v.z);
 }
 
-// Rodrigues rotation (axis must be unit-length)
 float3 RotateAroundAxis(float3 v, float3 axisUnit, float angle)
 {
     float s = sin(angle);
@@ -62,9 +49,7 @@ float3 NormalizeSafe3(float3 v, float3 fallback)
 {
     float len2 = dot(v, v);
     if (len2 < EPS)
-    {
         return fallback;
-    }
     return v * rsqrt(len2);
 }
 
@@ -72,103 +57,130 @@ float2 NormalizeSafe2(float2 v, float2 fallback)
 {
     float len2 = dot(v, v);
     if (len2 < EPS)
-    {
         return fallback;
-    }
     return v * rsqrt(len2);
 }
 
-// ----------------------------------------------------------------------------
-// Main
-// ----------------------------------------------------------------------------
 VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
 {
     VSOutput OUT;
 
     GrassInstance inst = g_GrassInstances[instanceID];
 
-	// Local -> Scale
+    // ------------------------------------------------------------
+    // Local -> Scale
+    // ------------------------------------------------------------
     float3 p = IN.Pos * inst.Scale;
     float3 n = IN.Normal;
 
-	// Base rigid orientation (Yaw + Pitch)
-	// - Yaw: rotate around world Y
-	// - Pitch: rotate around local X after yaw (stable lean direction)
+    // ------------------------------------------------------------
+    // Base rigid orientation (Yaw + Pitch)
+    // ------------------------------------------------------------
     p = ApplyYaw(p, inst.Yaw);
     n = ApplyYaw(n, inst.Yaw);
 
     float3 pitchAxis = ApplyYaw(float3(1, 0, 0), inst.Yaw);
     pitchAxis = NormalizeSafe3(pitchAxis, float3(1, 0, 0));
 
-	// Base pitch is a rigid tilt (not height-weighted)
     p = RotateAroundAxis(p, pitchAxis, inst.Pitch);
     n = RotateAroundAxis(n, pitchAxis, inst.Pitch);
 
-	// Height weight (tip moves more)
-	// NOTE: If IN.Pos.y is not normalized along blade height, switch to IN.UV.y.
+    // ------------------------------------------------------------
+    // Height weight (tip moves more)
+    // NOTE: if IN.Pos.y is not 0..1 along blade height, use IN.UV.y instead.
+    // ------------------------------------------------------------
     float height01 = saturate(IN.Pos.y);
-    float w = height01 * height01;
-    w = w * w; // h^4 tip emphasis
+    // float height01 = saturate(IN.UV.y); // alternative
+    float wTip = height01 * height01;
+    wTip = wTip * wTip; // h^4
 
-	// Wind direction in world (XZ)
+    // A second weight used for "full flatten" that should affect almost the whole blade.
+    // This keeps the root more stable but allows the entire blade to go down when pressed.
+    float wBlade = saturate(height01 * 1.35f); // more coverage than tip-only
+    wBlade = wBlade * wBlade; // h^2
+
+    // ------------------------------------------------------------
+    // Interaction 
+    // ------------------------------------------------------------
+    float press = saturate(inst.Press);
+    float pressHard = step(0.05f, press);
+
+    // Direction to flatten: cheap and stable (per-instance yaw).
+    // If you want "push direction" instead, feed it from stamps and store in instance.
+    float2 pressDir2 = float2(cos(inst.Yaw), sin(inst.Yaw));
+    float3 pressDirWS = float3(pressDir2.x, 0.0, pressDir2.y);
+
+    float3 pressAxis = cross(float3(0, 1, 0), pressDirWS);
+    pressAxis = NormalizeSafe3(pressAxis, float3(1, 0, 0));
+
+    // ------------------------------------------------------------
+    // Wind (pressed grass reduces wind response)
+    // ------------------------------------------------------------
     float2 windDir2 = NormalizeSafe2(g_GrassCB.WindDirXZ, float2(1, 0));
     float3 windDirWS = float3(windDir2.x, 0.0, windDir2.y);
 
-	// Optional per-instance direction variation (reduce perfect coherence)
-    static const float WIND_DIR_JITTER = 0.35; // 0 = identical, 1 = strong variation
+    // Slight per-instance direction variation
+    static const float WIND_DIR_JITTER = 0.35f;
     float3 windDirJittered = ApplyYaw(windDirWS, (inst.Yaw - PI) * WIND_DIR_JITTER);
     windDirJittered.y = 0.0;
     windDirJittered = NormalizeSafe3(windDirJittered, windDirWS);
 
-	// Wind bend axis: rotate "towards" the wind direction
-	// axis = Up x WindDir
     float3 windBendAxis = cross(float3(0, 1, 0), windDirJittered);
     windBendAxis = NormalizeSafe3(windBendAxis, float3(1, 0, 0));
 
-	// Wind signal (instance-coherent)
-    float phase = dot(inst.PosWS.xz, windDir2) * g_GrassCB.WindFreq + g_FrameCB.CurrTime * g_GrassCB.WindSpeed;
+    float phase = dot(inst.PosWS.xz, windDir2) * g_GrassCB.WindFreq
+                + g_FrameCB.CurrTime * g_GrassCB.WindSpeed;
+    phase += inst.Yaw * 0.37f;
 
-	// Per-instance phase offset (avoid perfect sync)
-    phase += inst.Yaw * 0.37;
+    // Optional gust
+    float gust = 1.0f + g_GrassCB.WindGust * sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + inst.Yaw);
 
     float windS = sin(phase);
-    float windMag = windS * 0.5 + 0.5; // 0..1
+    float windMag = windS * 0.5f + 0.5f; // 0..1
+    float windAngle = windMag * gust * inst.BendStrength * g_GrassCB.WindStrength;
 
-    float windAngle = windMag * inst.BendStrength * g_GrassCB.WindStrength;
+    // IMPORTANT: apply wind fade by press (WindFade=1 => pressed grass almost no wind)
+    float windFade = saturate(g_GrassCB.InteractionWindFade); // 0..1
+    float windKeep = lerp(1.0f, 1.0f - windFade, pressHard); // pressHard=1 => 1-windFade
+    windAngle *= windKeep;
 
-	// Directional response vs base lean direction
-	// - If wind comes opposite to the blade's current lean, bend less.
-    float3 upWS = float3(0, 1, 0);
-    float3 leanedUpWS = RotateAroundAxis(upWS, pitchAxis, inst.Pitch);
-
-    leanedUpWS.y = 0.0;
-    float3 leanDirWS = NormalizeSafe3(leanedUpWS, windDirJittered);
-
-    float align = dot(leanDirWS, windDirJittered); // [-1, 1]
-
-    static const float MIN_RESPONSE = 0.1;
-    float t = saturate(0.5 * (align + 1.0));
-    t = t * t; // sharpen
-
-    float response = lerp(MIN_RESPONSE, 1.0, t);
-    windAngle *= response;
-
-	// Clamp after response (more intuitive control)
     windAngle = clamp(windAngle, -g_GrassCB.MaxBendAngle, g_GrassCB.MaxBendAngle);
+    
+    // Apply wind first (tip-weighted)
+    p = RotateAroundAxis(p, windBendAxis, windAngle * wTip);
+    n = RotateAroundAxis(n, windBendAxis, windAngle * wTip);
 
-	// Apply wind bend around base pivot (height-weighted)
-    float3 pivot = float3(0, 0, 0);
+    // ------------------------------------------------------------
+    // Full flatten to ground when pressed (wins over wind)
+    // ------------------------------------------------------------
+    // Pivot at blade root (assumes mesh root at y=0; adjust if your mesh pivot differs).
+    float3 root = float3(0.0f, 0.0f, 0.0f);
 
-    p = RotateAroundAxis(p - pivot, windBendAxis, windAngle * w) + pivot;
-    n = RotateAroundAxis(n, windBendAxis, windAngle * w);
+    // Target "almost flat" angle (~89 degrees). Press=1 => near ground.
+    float targetFlat = 1.553343f; // radians (~89 deg)
+    float flattenAngle = targetFlat * pressHard;
 
-	// World translate & output
+    // Flatten affects most of blade, not only the tip.
+    float flattenW = pressHard * wBlade;
+
+    float3 local = p - root;
+    local = RotateAroundAxis(local, pressAxis, flattenAngle * flattenW);
+    p = local + root;
+
+    n = RotateAroundAxis(n, pressAxis, flattenAngle * flattenW);
+
+    // Extra sink so it "sticks" to ground when fully pressed
+    p.y -= pressHard * g_GrassCB.InteractionSink * wBlade;
+
+    // ------------------------------------------------------------
+    // World translate & output
+    // ------------------------------------------------------------
     p += inst.PosWS;
 
     OUT.PosWS = p;
     OUT.NormalWS = NormalizeSafe3(n, float3(0, 1, 0));
     OUT.UV = IN.UV;
+    OUT.Pos = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
 
-    OUT.Pos = mul(float4(p, 1.0), g_FrameCB.ViewProj);
     return OUT;
 }

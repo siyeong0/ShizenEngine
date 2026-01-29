@@ -139,6 +139,8 @@ namespace shz
 
 		const TextureRenderData& GetHeightMap() const noexcept { return *m_pTerrainHeightMap; }
 		const Handle<SceneObject>& GetTerrainMeshHandle() const noexcept { return m_TerrainMesh; }
+		void AddInteractionStamp(const hlsl::InteractionStamp& stamp) { m_InteractionStamps.emplace_back(stamp); }
+		void ConsumeInteractionStamps(std::vector<hlsl::InteractionStamp>* out) { out->swap(m_InteractionStamps); m_InteractionStamps.clear(); }
 
 	private:
 		static constexpr uint32 INVALID_INDEX = 0xFFFFFFFFu;
@@ -312,5 +314,7 @@ namespace shz
 		// ------------------------------------------------------------
 		const TextureRenderData* m_pTerrainHeightMap = {};
 		Handle<SceneObject> m_TerrainMesh = {};
+
+		std::vector<hlsl::InteractionStamp> m_InteractionStamps;
 	};
 } // namespace shz

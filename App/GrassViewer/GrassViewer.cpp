@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
+#include <unordered_set>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
@@ -206,6 +207,77 @@ namespace shz
 								mr.RenderObjectHandle,
 								GrassViewer::ToMatrixTRS(tr));
 						});
+				m_pEcs->RegisterUpdateSystem(sys);
+			}
+
+			{
+				auto sys = m_pEcs->World().system<CTransform, CRigidbody, CHeightFieldCollider>("World.UpdateInteractionField")
+					.each([this](const CTransform& tr, const CRigidbody& rb, const CHeightFieldCollider& hf)
+						{
+							const PhysicsBodyHandle terrainBody = PhysicsBodyHandle{ rb.BodyHandle };
+							const auto& events = m_pPhysicsSystem->GetContactEvents();
+
+							// Prevent stamping same dynamic body multiple times in this terrain iteration.
+							// Key: otherBody.Value (packed+1 handle value)
+							std::unordered_set<uint32> stampedThisFrame;
+							stampedThisFrame.reserve(64);
+
+							for (const ContactEvent& contact : events)
+							{
+								const bool bInvolved =
+									(contact.BodyA.Value == terrainBody.Value) ||
+									(contact.BodyB.Value == terrainBody.Value);
+
+								if (!bInvolved)
+								{
+									continue;
+								}
+
+								// Ignore removed for stamping (decay handles recovery).
+								if (contact.Type == EContactEventType::Removed)
+								{
+									continue;
+								}
+
+								const PhysicsBodyHandle otherBody =
+									(contact.BodyA.Value == terrainBody.Value) ? contact.BodyB : contact.BodyA;
+
+								// Only dynamic bodies create interaction stamps.
+								if (m_pPhysicsSystem->GetPhysics().GetBodyMotion(otherBody) != ERigidbodyType::Dynamic)
+								{
+									continue;
+								}
+
+								// Deduplicate per-frame per-body.
+								if (!stampedThisFrame.emplace(otherBody.Value).second)
+								{
+									continue;
+								}
+
+								const float3 pWS = m_pPhysicsSystem->GetPhysics().GetBodyPosition(otherBody);
+
+								hlsl::InteractionStamp stamp = {};
+								stamp.CenterXZ = float2{ pWS.x, pWS.z };
+								stamp.Radius = 1.0f;
+								stamp.FalloffPower = 1.0f;
+								stamp.TargetId = 0;
+
+								if (contact.Type == EContactEventType::Added)
+								{
+									stamp.Strength = 1.0f;
+									stamp.Flags = hlsl::INTERACTION_STAMP_MAX_BLEND; // still fine on Added
+								}
+								else // Persisted
+								{
+									// "Maintain" pressure: choose a slightly lower target than Added.
+									stamp.Strength = 0.65f;
+									stamp.Flags = hlsl::INTERACTION_STAMP_MAX_BLEND;
+								}
+
+								m_pRenderScene->AddInteractionStamp(stamp);
+							}
+						});
+
 				m_pEcs->RegisterUpdateSystem(sys);
 			}
 		}
@@ -424,7 +496,7 @@ namespace shz
 			e.set<CTransform>(tr);
 
 			CRigidbody rb = {};
-			rb.Motion = ERigidBodyMotion::Static;
+			rb.BodyType = ERigidbodyType::Static;
 			rb.Layer = 0; // NonMoving
 			rb.bEnableGravity = false;
 			rb.bStartActive = false;
@@ -561,13 +633,13 @@ namespace shz
 				e.set<CBoxCollider>(box);
 
 				CRigidbody rb = {};
-				rb.Motion = ERigidBodyMotion::Dynamic;
+				rb.BodyType = ERigidbodyType::Dynamic;
 				rb.Layer = 1; // Moving
 				rb.Mass = 1.0f;
 				rb.LinearDamping = 0.0f;
 				rb.AngularDamping = 0.0f;
 				rb.bEnableGravity = true;
-				rb.bAllowSleeping = true;
+				rb.bAllowSleeping = false;
 				rb.bStartActive = true;
 				e.set<CRigidbody>(rb);
 			}

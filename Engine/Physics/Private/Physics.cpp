@@ -58,13 +58,13 @@ namespace shz
 		return float3{ rollX, pitchY, yawZ };
 	}
 
-	static inline JPH::EMotionType toJPHMotionType(ERigidBodyType t)
+	static inline JPH::EMotionType toJPHMotionType(ERigidbodyType t)
 	{
 		switch (t)
 		{
-		case ERigidBodyType::Static:    return JPH::EMotionType::Static;
-		case ERigidBodyType::Dynamic:   return JPH::EMotionType::Dynamic;
-		case ERigidBodyType::Kinematic: return JPH::EMotionType::Kinematic;
+		case ERigidbodyType::Static:    return JPH::EMotionType::Static;
+		case ERigidbodyType::Dynamic:   return JPH::EMotionType::Dynamic;
+		case ERigidbodyType::Kinematic: return JPH::EMotionType::Kinematic;
 		default:                        return JPH::EMotionType::Static;
 		}
 	}
@@ -381,6 +381,10 @@ namespace shz
 		// Gravity
 		I.System.SetGravity(toJPH(ci.Gravity));
 
+		// Contact listener
+		I.ContactListener.pOwner = &I;
+		I.System.SetContactListener(&I.ContactListener);
+
 		I.bInitialized = true;
 		return true;
 	}
@@ -425,7 +429,13 @@ namespace shz
 
 		Impl& I = *m_pImpl;
 
-		// Typical: 1 collision step, 1 integration sub-step.
+		// Clear per-step events
+		{
+			std::scoped_lock lock(I.ContactMutex);
+			I.ContactEvents.clear();
+		}
+
+		// TODO: Typical: 1 collision step, 1 integration sub-step.
 		I.System.Update(dt, 1, I.pTempAllocator, I.pJobSystem);
 	}
 
@@ -561,7 +571,7 @@ namespace shz
 
 		// Mass: Jolt computes mass/inertia from shape if dynamic, but you can override.
 		// We'll apply mass override only for dynamic bodies.
-		if (ci.Type == ERigidBodyType::Dynamic)
+		if (ci.Type == ERigidbodyType::Dynamic)
 		{
 			// Let Jolt compute inertia; then scale to desired mass.
 			// This is a simple approximation. If you want exact mass properties, use MassProperties override.
@@ -659,6 +669,39 @@ namespace shz
 
 		const JPH::Vec3 jp = I.BodyIF().GetPosition(id);
 		return fromJPH(jp);
+	}
+
+	ERigidbodyType Physics::GetBodyMotion(PhysicsBodyHandle body) const
+	{
+		ASSERT(m_pImpl && m_pImpl->bInitialized, "Physics not initialized.");
+		ASSERT(body.IsValid(), "Body is invalid.");
+
+		const Impl& I = *m_pImpl;
+		const JPH::BodyID id = Impl::ToBodyID(body);
+		ASSERT(!id.IsInvalid(), "Invalid BodyID.");
+
+		const JPH::BodyInterface& BI = I.BodyIF();
+		const JPH::EMotionType mt = BI.GetMotionType(id);
+
+		switch (mt)
+		{
+		case JPH::EMotionType::Static:    return ERigidbodyType::Static;
+		case JPH::EMotionType::Dynamic:   return ERigidbodyType::Dynamic;
+		case JPH::EMotionType::Kinematic: return ERigidbodyType::Kinematic;
+		default: ASSERT(false, "Invalid body motion type.");
+		}
+
+		return ERigidbodyType::Static;
+	}
+
+	void Physics::ConsumeContactEvents(std::vector<ContactEvent>* outEvents)
+	{
+		ASSERT(outEvents, "outEvents is null.");
+		Impl& I = *m_pImpl;
+
+		std::scoped_lock lock(I.ContactMutex);
+		outEvents->swap(I.ContactEvents); // move-out
+		I.ContactEvents.clear();
 	}
 
 } // namespace shz

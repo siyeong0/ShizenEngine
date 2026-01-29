@@ -1,5 +1,6 @@
 #pragma once
 #include "Engine/Physics/Public/Physics.h"
+#include "Engine/Physics/Public/PhysicsEvent.h"
 
 #include "Engine/ECS/Public/Components.h"
 #include "Engine/ECS/Public/EcsWorld.h"
@@ -21,9 +22,11 @@ namespace shz
 		Physics& GetPhysics() { return m_Physics; }
 		const Physics& GetPhysics() const { return m_Physics; }
 
-		void Step(float dt) { m_Physics.Step(dt); }
+		void Step(float dt);
 
 		void InstallEcsSystems(EcsWorld& ecs);
+
+		const std::vector<ContactEvent>& GetContactEvents() const { return m_FrameContactEvents; }
 
 	private:
 		void ensureShapeCreated_Box(CBoxCollider& box);
@@ -42,5 +45,7 @@ namespace shz
 	private:
 		Physics m_Physics = {};
 		bool m_bInstalled = false;
+
+		std::vector<ContactEvent> m_FrameContactEvents;
 	};
 }

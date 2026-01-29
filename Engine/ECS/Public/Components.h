@@ -5,6 +5,7 @@
 #include "Engine/AssetManager/Public/AssetRef.hpp"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Physics/Public/Physics.h"
 
 #include <vector>
 
@@ -32,16 +33,9 @@ namespace shz
 	// Physics 
 	//
 
-	enum class ERigidBodyMotion : uint8
-	{
-		Static = 0,
-		Dynamic,
-		Kinematic,
-	};
-
 	COMPONENT CRigidbody final
 	{
-		ERigidBodyMotion Motion = ERigidBodyMotion::Static;
+		ERigidbodyType BodyType = ERigidbodyType::Static;
 		uint8 Layer = 0; // 0: NonMoving, 1: Moving
 
 		float Mass = 1.0f;

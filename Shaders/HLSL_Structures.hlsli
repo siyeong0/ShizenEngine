@@ -71,7 +71,7 @@ struct GrassInstance
     float Yaw;
     float Pitch;
     float BendStrength; // base bend amount (0..1-ish)
-    uint _pad0;
+    float Press; // Interaction (0..1): sampled from g_InteractionField in GenCS
 };
 
 // ----------------------------------------------
@@ -146,6 +146,11 @@ struct GrassRenderConstants
     float WindGust; // extra gust amplitude
     float MaxBendAngle; // radians, clamp total bend
     float _pad1;
+    
+    // Interaction bending (Zelda-ish)
+    float InteractionBendAngle; // radians, e.g. 1.1 (~63 deg)
+    float InteractionSink; // meters, e.g. 0.05
+    float InteractionWindFade; // 0..1, pressed -> reduce wind (e.g. 0.7)
 };
 
 // Must exist for C++ side too (Renderer.cpp includes this file under namespace hlsl)
@@ -155,6 +160,37 @@ struct ObjectIndexConstants
     uint _pad0;
     uint _pad1;
     uint _pad2;
+};
+
+
+// Interaction
+static const uint INTERACTION_STAMP_NONE = 0;
+static const uint INTERACTION_STAMP_SUBTRACT = 1u << 0;
+static const uint INTERACTION_STAMP_MAX_BLEND = 1u << 1;
+
+struct InteractionStamp
+{
+    float2 CenterXZ;
+    float Radius;
+    float Strength;
+
+    uint TargetId;
+    uint Flags;
+    float FalloffPower;
+    float _Pad0;
+};
+
+struct InteractionConstants
+{
+    uint FieldWidth;
+    uint FieldHeight;
+    uint NumStamps;
+    float DeltaTime;
+
+    float DecayPerSec; // e.g. 1.5 (press value decreases by 1.5 per second)
+    float ClampMax; // e.g. 1.0
+    float ClampMin; // e.g. 0.0
+    float _Pad0;
 };
 
 #endif // HLSL_STRUCTURES_HLSLI

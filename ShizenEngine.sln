@@ -58,6 +58,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GrassForward.psh = Shaders\GrassForward.psh
 		Shaders\GrassForward.vsh = Shaders\GrassForward.vsh
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
+		Shaders\InteractionFieldUpdate.hlsl = Shaders\InteractionFieldUpdate.hlsl
 		Shaders\Lighting.psh = Shaders\Lighting.psh
 		Shaders\PBRLighting.hlsli = Shaders\PBRLighting.hlsli
 		Shaders\PostCopy.psh = Shaders\PostCopy.psh

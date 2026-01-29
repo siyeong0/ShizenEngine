@@ -20,6 +20,11 @@
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	}// namespace hlsl
+
 	class AssetManager;
 	class IMaterialStaticBinder;
 
@@ -33,7 +38,7 @@ namespace shz
 
 		AssetManager* pAssetManager = nullptr;
 		PipelineStateManager* pPipelineStateManager = nullptr;
-		
+
 		IMaterialStaticBinder* pGBufferMaterialStaticBinder = nullptr;
 		IMaterialStaticBinder* pGrassMaterialStaticBinder = nullptr;
 		IMaterialStaticBinder* pShadowMaterialStaticBinder = nullptr;
@@ -84,7 +89,7 @@ namespace shz
 		ITextureView* pLightingSrv = nullptr;
 
 		const TextureRenderData* pHeightMap = nullptr;
-
+		std::vector<hlsl::InteractionStamp> InteractionStamps = {};
 		// ------------------------------------------------------------
 		// Per-frame barrier list
 		// ------------------------------------------------------------

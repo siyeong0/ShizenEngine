@@ -1,6 +1,8 @@
 #pragma once
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
+#include "Engine/Physics/Public/PhysicsBodyHandle.h"
+#include "Engine/Physics/Public/PhysicsEvent.h"
 
 namespace shz
 {
@@ -11,23 +13,11 @@ namespace shz
         Count
     };
 
-    enum class ERigidBodyType : uint8
+    enum class ERigidbodyType : uint8
     {
         Static = 0,
         Dynamic,
         Kinematic,
-    };
-
-    struct PhysicsBodyHandle final
-    {
-        uint32 Value = 0; // 0 = invalid
-        constexpr bool IsValid() const noexcept { return Value != 0; }
-    };
-
-    struct PhysicsShapeHandle final
-    {
-        uint64 Value = 0; // 0 = invalid
-        constexpr bool IsValid() const noexcept { return Value != 0; }
     };
 
     class Physics final
@@ -52,7 +42,7 @@ namespace shz
             float3 Position = { 0, 0, 0 };
             float3 RotationEulerRad = { 0, 0, 0 };
 
-            ERigidBodyType Type = ERigidBodyType::Static;
+            ERigidbodyType Type = ERigidbodyType::Static;
             EPhysicsObjectLayer Layer = EPhysicsObjectLayer::NonMoving;
 
             float Mass = 1.0f;
@@ -100,6 +90,11 @@ namespace shz
         void GetBodyTransform(PhysicsBodyHandle body, float3* outPos, float3* outRotEulerRad) const;
 
         float3 GetBodyPosition(PhysicsBodyHandle body) const;
+
+        ERigidbodyType GetBodyMotion(PhysicsBodyHandle body) const;
+
+        // Move-out/Consume
+        void ConsumeContactEvents(std::vector<ContactEvent>* outEvents);
 
     private:
         struct Impl;

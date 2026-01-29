@@ -16,6 +16,14 @@ namespace shz
 		m_bInstalled = false;
 	}
 
+	void PhysicsSystem::Step(float dt) 
+	{
+		m_Physics.Step(dt); 
+
+		m_FrameContactEvents.clear();
+		m_Physics.ConsumeContactEvents(&m_FrameContactEvents);
+	}
+
 	void PhysicsSystem::DestroyBodyAndShapes(CRigidbody* rb, CBoxCollider* box, CSphereCollider* sphere, CHeightFieldCollider* hf)
 	{
 		if (rb && rb->BodyHandle != 0)
@@ -99,7 +107,7 @@ namespace shz
 				{
 					ASSERT(rb.BodyHandle != 0, "Invalid body handle.");
 
-					if (rb.Motion == ERigidBodyMotion::Dynamic)
+					if (rb.BodyType == ERigidbodyType::Dynamic)
 					{
 						return; // dynamic driven by physics
 					}
@@ -107,7 +115,7 @@ namespace shz
 					PhysicsBodyHandle bh = {};
 					bh.Value = rb.BodyHandle;
 
-					const bool bActivate = (rb.Motion == ERigidBodyMotion::Kinematic);
+					const bool bActivate = (rb.BodyType == ERigidbodyType::Kinematic);
 					m_Physics.SetBodyTransform(bh, tr.Position, tr.Rotation, bActivate);
 				});
 		ecs.RegisterUpdateSystem(pushTransform);
@@ -120,7 +128,7 @@ namespace shz
 				{
 					ASSERT(rb.BodyHandle != 0, "Invalid body handle.");
 
-					if (rb.Motion != ERigidBodyMotion::Dynamic)
+					if (rb.BodyType != ERigidbodyType::Dynamic)
 					{
 						return;
 					}
@@ -250,12 +258,12 @@ namespace shz
 		bci.RotationEulerRad = tr.Rotation;
 
 		// Motion
-		switch (rb.Motion)
+		switch (rb.BodyType)
 		{
-		case ERigidBodyMotion::Static:    bci.Type = ERigidBodyType::Static;    break;
-		case ERigidBodyMotion::Dynamic:   bci.Type = ERigidBodyType::Dynamic;   break;
-		case ERigidBodyMotion::Kinematic: bci.Type = ERigidBodyType::Kinematic; break;
-		default:                          bci.Type = ERigidBodyType::Static;    break;
+		case ERigidbodyType::Static:    bci.Type = ERigidbodyType::Static;    break;
+		case ERigidbodyType::Dynamic:   bci.Type = ERigidbodyType::Dynamic;   break;
+		case ERigidbodyType::Kinematic: bci.Type = ERigidbodyType::Kinematic; break;
+		default:                          bci.Type = ERigidbodyType::Static;    break;
 		}
 
 		// Layer
