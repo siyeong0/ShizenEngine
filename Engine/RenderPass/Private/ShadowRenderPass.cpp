@@ -17,7 +17,7 @@ namespace shz
 	}
 	namespace
 	{
-		static constexpr uint32 SHADOW_MAP_SIZE = 1024 * 16; // TODO: Runtime setting?
+		static constexpr uint32 SHADOW_MAP_SIZE = 4096;
 	}
 
 	ShadowRenderPass::ShadowRenderPass(RenderPassContext& ctx)
