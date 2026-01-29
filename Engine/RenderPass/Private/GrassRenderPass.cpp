@@ -735,8 +735,8 @@ namespace shz
 
 			// --- Chunk placement ---
 			map->ChunkSize = 4.0f;
-			map->ChunkHalfExtent = 64;
-			map->SamplesPerChunk = 4096;
+			map->ChunkHalfExtent = 32;
+			map->SamplesPerChunk = 2048;
 			map->Jitter = 0.95f;
 
 			map->MinScale = 5.7f;
@@ -841,9 +841,9 @@ namespace shz
 			map->FieldWidth = m_InteractionW;
 			map->FieldHeight = m_InteractionH;
 			map->NumStamps = stampCount;
-			map->DeltaTime = 1.0f / 60.0f; // fallback (if you want exact dt, pass it through FrameConstants or RenderPassContext)
+			map->DeltaTime = ctx.DeltaTime;
 
-			map->DecayPerSec = 1.35f;
+			map->DecayPerSec = 0.15f;
 			map->ClampMax = 1.0f;
 			map->ClampMin = 0.0f;
 			map->_Pad0 = 0.0f;
@@ -920,8 +920,8 @@ namespace shz
 			pContext->CommitShaderResources(m_pGenCSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 			DispatchComputeAttribs disp = {};
-			disp.ThreadGroupCountX = (2u * 64u + 8u - 1u) / 8u;
-			disp.ThreadGroupCountY = (2u * 64u + 8u - 1u) / 8u;
+			disp.ThreadGroupCountX = (2u * 32u + 8u - 1u) / 8u;
+			disp.ThreadGroupCountY = (2u * 32u + 8u - 1u) / 8u;
 			disp.ThreadGroupCountZ = 1;
 
 			pContext->DispatchCompute(disp);

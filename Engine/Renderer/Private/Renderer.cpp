@@ -365,6 +365,8 @@ namespace shz
 		m_PassCtx.pHeightMap = &scene.GetHeightMap();
 		scene.ConsumeInteractionStamps(&m_PassCtx.InteractionStamps);
 
+		m_PassCtx.DeltaTime = viewFamily.DeltaTime;
+
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------

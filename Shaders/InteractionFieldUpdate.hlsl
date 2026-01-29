@@ -52,20 +52,9 @@ void ApplyInteractionStamps(uint3 tid : SV_DispatchThreadID)
     if (tid.x >= g_InteractionCB.FieldWidth || tid.y >= g_InteractionCB.FieldHeight)
         return;
 
-    // Pixel -> world mapping:
-    // We assume InteractionField is in the SAME UV space as terrain heightmap (0..1).
-    // So pixel uv = (x+0.5)/W, (y+0.5)/H.
-    float2 uv = (float2(tid.x + 0.5f, tid.y + 0.5f) / float2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight));
+    float2 uv = (float2(tid.x + 0.5f, tid.y + 0.5f) /
+                 float2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight));
 
-    // Convert to world XZ with the SAME mapping you used in GrassBuildInstances:
-    // We can’t access GrassGenConstants here (different CB), so we assume:
-    // - CPU builds stamps in world XZ
-    // - CPU also passes terrain origin/size OR you keep stamps already normalized.
-    //
-    // 권장: Stamp의 CenterXZ를 “world”가 아니라 “terrain-uv(0..1)”로 넣는 방식.
-    // 그러면 여기서 world 변환이 필요 없고, 바로 uv거리로 계산 가능.
-    //
-    // 아래는 “CenterXZ가 UV(0..1)”라고 가정한 버전:
     float2 p = uv;
 
     float outV = g_RWInteractionField[int2(tid.xy)];
@@ -75,30 +64,37 @@ void ApplyInteractionStamps(uint3 tid : SV_DispatchThreadID)
     {
         InteractionStamp s = g_Stamps[i];
 
-        // CenterXZ: UV space(0..1)라고 가정
         float2 d = p - s.CenterXZ;
 
-        // Radius도 UV 스케일이라고 가정 (ex: 0.01 ~ 0.05)
         float r = max(s.Radius, 1e-6);
         float dist = length(d);
+
+        // 밖이면 영향 없음
         if (dist >= r)
             continue;
 
+        // 0..1 마스크 (가장자리 부드럽게)
         float f = StampFalloff(dist / r, s.FalloffPower);
-        float delta = f * s.Strength;
 
         if ((s.Flags & INTERACTION_STAMP_SUBTRACT) != 0)
         {
-            outV = max(outV - delta, 0.0f);
-        }
-        else if ((s.Flags & INTERACTION_STAMP_MAX_BLEND) != 0)
-        {
-            outV = max(outV, delta);
+            // "감소"는 기존처럼 천천히 하고 싶다면 굳이 stamp로 빼지 말고 decay에 맡기는 게 더 안정적.
+            // 그래도 필요하면: outV = max(outV - f * s.Strength, 0.0f);
+            outV = max(outV - f * s.Strength, 0.0f);
         }
         else
         {
-            // default: additive then clamp
-            outV += delta;
+            // -------------------------------
+            // 증가할 때: '무조건 1.0' 스냅
+            // -------------------------------
+            // f를 마스크로 써서 "영역 가장자리"만 부드럽게.
+            // f가 1이면 즉시 1, f가 0.2면 outV를 1로 끌어올리는 비율 0.2
+            // (프레임레이트/스탬프 수에 덜 민감)
+            float snap = saturate(f * s.Strength); // Strength를 마스크 강도로 사용 (보통 1)
+            outV = lerp(outV, 1.0f, snap);
+
+            // 만약 “영역 안이면 무조건 1”을 진짜 원하면(완전 스냅):
+            // if (snap > 0.001f) outV = 1.0f;
         }
     }
 

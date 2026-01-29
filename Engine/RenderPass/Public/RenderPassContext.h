@@ -43,6 +43,8 @@ namespace shz
 		IMaterialStaticBinder* pGrassMaterialStaticBinder = nullptr;
 		IMaterialStaticBinder* pShadowMaterialStaticBinder = nullptr;
 
+		float DeltaTime = 0.0f;
+
 		// ------------------------------------------------------------
 		// Visibility
 		// ------------------------------------------------------------
