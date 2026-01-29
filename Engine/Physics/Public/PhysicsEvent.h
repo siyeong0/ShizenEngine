@@ -21,6 +21,6 @@ namespace shz
         float3 NormalWS = { 0, 1, 0 };
         float PenetrationDepth = 0.0f;
 
-        bool bIsSensor = false;
+        bool bSensor = false;
     };
 }
