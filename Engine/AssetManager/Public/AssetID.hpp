@@ -40,8 +40,8 @@ namespace shz
 			const std::string relativeSourcePath = std::filesystem::relative(SourcePath).string();
 
 			// Make deterministic asset ID from path.
-			const size_t h0 = std::hash<std::string>{}(relativeSourcePath);
-			const size_t h1 = std::hash<std::string>{}(relativeSourcePath + std::to_string(static_cast<uint64>(typeID)));
+			const size_t h0 = STRING_HASH(relativeSourcePath);
+			const size_t h1 = STRING_HASH(relativeSourcePath + std::to_string(static_cast<uint64>(typeID)));
 
 			Hi = static_cast<uint64>(h0) ^ (static_cast<uint64>(typeID) * 0x9E3779B185EBCA87ull);
 			Lo = static_cast<uint64>(h1) ^ (static_cast<uint64>(typeID) * 0xC2B2AE3D27D4EB4Full);

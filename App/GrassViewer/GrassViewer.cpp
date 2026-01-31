@@ -447,8 +447,8 @@ namespace shz
 			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, std::move(tm), buildSettings);
 
 			m_pRenderScene->SetTerrain(
-				m_pRenderer->CreateTextureFromHeightField(*terrainPtr),
-				m_pRenderer->CreateStaticMesh(terrainMesh));
+				m_pRenderer->CreateTextureRenderDataFromHeightField(*terrainPtr),
+				m_pRenderer->CreateStaticMeshRenderData(terrainMesh));
 		}
 
 		// ------------------------------------------------------------
@@ -528,11 +528,11 @@ namespace shz
 
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				&(m_pRenderer->CreateStaticMesh(treeAssets[0])),
-				&(m_pRenderer->CreateStaticMesh(treeAssets[1])),
-				&(m_pRenderer->CreateStaticMesh(treeAssets[2])),
-				&(m_pRenderer->CreateStaticMesh(treeAssets[3])),
-				&(m_pRenderer->CreateStaticMesh(treeAssets[4])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[0])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[1])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[2])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[3])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[4])),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
@@ -582,7 +582,7 @@ namespace shz
 			AssetRef<StaticMesh> helmetRef =
 				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
 
-			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMesh(helmetRef);
+			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
 
 			// Spawn config
 			constexpr uint32 kHelmetCount = 300;

@@ -1,3 +1,5 @@
+// Engine/RenderPass/Public/RenderPassContext.h
+
 #pragma once
 #include <vector>
 
@@ -20,6 +22,8 @@
 
 namespace shz
 {
+	class RenderResourceRegistry; // <-- 추가: forward decl
+
 	namespace hlsl
 	{
 #include "Shaders/HLSL_Structures.hlsli"
@@ -43,6 +47,8 @@ namespace shz
 		IMaterialStaticBinder* pGrassMaterialStaticBinder = nullptr;
 		IMaterialStaticBinder* pShadowMaterialStaticBinder = nullptr;
 
+		RenderResourceRegistry* pRegistry = nullptr; // <-- 추가: Registry 접근 포인터
+
 		float DeltaTime = 0.0f;
 
 		// ------------------------------------------------------------
@@ -56,7 +62,6 @@ namespace shz
 		// ------------------------------------------------------------
 		std::vector<DrawPacket> GBufferDrawPackets = {};
 		std::vector<DrawPacket> GrassDrawPackets = {};
-
 		std::vector<DrawPacket> ShadowDrawPackets = {};
 
 		// ------------------------------------------------------------
@@ -92,6 +97,7 @@ namespace shz
 
 		const TextureRenderData* pHeightMap = nullptr;
 		std::vector<hlsl::InteractionStamp> InteractionStamps = {};
+
 		// ------------------------------------------------------------
 		// Per-frame barrier list
 		// ------------------------------------------------------------
@@ -130,5 +136,4 @@ namespace shz
 			*map = objectIndex;
 		}
 	};
-
 } // namespace shz

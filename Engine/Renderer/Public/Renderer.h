@@ -35,8 +35,9 @@
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 
 #include "Engine/Renderer/Public/RenderData.h"
-
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
+
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -79,19 +80,53 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
-		const TextureRenderData& CreateTexture(const AssetRef<Texture>& assetRef, const std::string& name = "");
-		const TextureRenderData& CreateTexture(const Texture& texture, uint64 key = 0, const std::string& name = "");
-		const MaterialRenderData& CreateMaterial(const AssetRef<Material>& assetRef, const std::string& name = "");
-		const MaterialRenderData& CreateMaterial(const Material& material, uint64 key = 0, const std::string& name = "");
-		const StaticMeshRenderData& CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
-		const StaticMeshRenderData& CreateStaticMesh(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
+		// ---------------------------------------------------------------------
+		// Resource factory wrappers (Renderer-owned shared resources)
+		// ---------------------------------------------------------------------
+		RefCntAutoPtr<ITexture> CreateTexture(
+			const TextureDesc& desc,
+			const TextureData* pInitData = nullptr);
 
-		const TextureRenderData& CreateTextureFromHeightField(const TerrainHeightField& terrain);
+		RefCntAutoPtr<IBuffer> CreateBuffer(
+			const BufferDesc& desc,
+			const BufferData* pInitData = nullptr);
 
-		ITextureView* GetLightingSRV() const noexcept { return m_PassCtx.pLightingSrv; }
-		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_PassCtx.pGBufferSrv[index]; }
-		ITextureView* GetDepthSRV() const noexcept { return m_PassCtx.pDepthSrv; }
-		ITextureView* GetShadowMapSRV() const noexcept { return m_PassCtx.pShadowMapSrv; }
+		// ---------------------------------------------------------------------
+		// Resource update wrappers
+		// ---------------------------------------------------------------------
+		void UpdateBuffer(
+			IDeviceContext* pCtx,
+			IBuffer* pBuffer,
+			uint32 offsetBytes,
+			uint32 sizeBytes,
+			const void* pData,
+			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
+
+		// Simplified texture update helper (2D)
+		// NOTE: For full generality, add box/mip/slice parameters as needed.
+		void UpdateTexture2D(
+			IDeviceContext* pCtx,
+			ITexture* pTexture,
+			uint32 mipLevel,
+			uint32 arraySlice,
+			const TextureSubResData& subRes,
+			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
+
+		// ---------------------------------------------------------------------
+		// RenderData caches (unchanged)
+		// ---------------------------------------------------------------------
+		const TextureRenderData& CreateTextureRenderData(const AssetRef<Texture>& assetRef, const std::string& name = "");
+		const TextureRenderData& CreateTextureRenderData(const Texture& texture, uint64 key = 0, const std::string& name = "");
+		const MaterialRenderData& CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name = "");
+		const MaterialRenderData& CreateMaterialRenderData(const Material& material, uint64 key = 0, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
+
+		const TextureRenderData& CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
+
+		// Registry access (Renderer getters for SRV/RTV are removed)
+		RenderResourceRegistry& GetRegistry() noexcept { return m_Registry; }
+		const RenderResourceRegistry& GetRegistry() const noexcept { return m_Registry; }
 
 		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
 
@@ -103,8 +138,11 @@ namespace shz
 		void wirePassOutputs();
 		void addPass(std::unique_ptr<RenderPassBase> pass);
 
+		// Common shared resource ids
+		static uint64 MakeResID(const char* name);
+
 	private:
-		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1 << 20;
+		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
 
 		RendererCreateInfo m_CreateInfo = {};
 		RefCntAutoPtr<IRenderDevice> m_pDevice;
@@ -119,32 +157,18 @@ namespace shz
 		uint32 m_Height = 0;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
-
-		std::unique_ptr< PipelineStateManager> m_pPipelineStateManager;
+		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<TextureRenderData> m_TextureCache;
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
 		RenderResourceCache<MaterialRenderData> m_MaterialCache;
 
-		const TextureRenderData* m_pErrorTexture;
-
 		std::unique_ptr<RendererMaterialStaticBinder> m_pGBufferMaterialStaticBinder;
 		std::unique_ptr<RendererMaterialStaticBinder> m_pGrassMaterialStaticBinder;
 		std::unique_ptr<RendererMaterialStaticBinder> m_pShadowMaterialStaticBinder;
 
-		RefCntAutoPtr<IBuffer> m_pFrameCB;
-		RefCntAutoPtr<IBuffer> m_pDrawCB;
-		RefCntAutoPtr<IBuffer> m_pShadowCB;
-
-		RefCntAutoPtr<IBuffer> m_pObjectTableSBGBuffer;
-		RefCntAutoPtr<IBuffer> m_pObjectTableSBGrass;
-		RefCntAutoPtr<IBuffer> m_pObjectTableSBShadow;
-		RefCntAutoPtr<IBuffer> m_pObjectIndexVB;
-
-		RefCntAutoPtr<ITexture> m_EnvTex;
-		RefCntAutoPtr<ITexture> m_EnvDiffuseTex;
-		RefCntAutoPtr<ITexture> m_EnvSpecularTex;
-		RefCntAutoPtr<ITexture> m_EnvBrdfTex;
+		// NEW: Shared render resources live here
+		RenderResourceRegistry m_Registry;
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;

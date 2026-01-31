@@ -256,7 +256,7 @@ namespace shz
 		ASSERT(cpu, "CPU mesh is null.");
 
 		// Build GPU render data
-		m_Main.MeshRD = m_pRenderer->CreateStaticMesh(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh");
+		m_Main.MeshRD = m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh");
 
 		if (m_bUniformScale)
 		{
@@ -289,7 +289,7 @@ namespace shz
 		if (!obj)
 			return false;
 
-		m_Main.MeshRD = m_pRenderer->CreateStaticMesh(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh (Rebuild)");
+		m_Main.MeshRD = m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh (Rebuild)");
 		obj->Mesh = m_Main.MeshRD;
 
 		return true;
@@ -767,7 +767,7 @@ namespace shz
 				m_pAssetManager.get());
 
 			m_Floor = m_pRenderScene->AddObject(
-				m_pRenderer->CreateStaticMesh(cpuFloorMesh),
+				m_pRenderer->CreateStaticMeshRenderData(cpuFloorMesh),
 				Matrix4x4::TRS(
 					{ 0.0f, -1.0f, 0.0f },
 					{ 0.0f, 0.0f, 0.0f },

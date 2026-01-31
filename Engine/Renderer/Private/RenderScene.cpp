@@ -157,7 +157,7 @@ namespace shz
 			// (최적화: shadow도 pass별 SectionHandle로 저장해 O(sections) 갱신)
 			for (Batch& b : m_Batches)
 			{
-				if (b.Key.PassKey != std::hash<std::string>{}("Shadow"))
+				if (b.Key.PassKey != STRING_HASH("Shadow"))
 				{
 					continue;
 				}
@@ -603,7 +603,7 @@ namespace shz
 
 			if (obj.bCastShadow)
 			{
-				const DrawBatchKey key = makeBatchKey(std::hash<std::string>{}("Shadow"), * obj.pMesh, si, obj.bCastShadow);
+				const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), * obj.pMesh, si, obj.bCastShadow);
 				(void)getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
 
 				// Shadow pass는 DrawList 빌드 시 따로 인스턴스를 순회해도 되고,
@@ -643,7 +643,7 @@ namespace shz
 			// Shadow 배치 제거: 동일 key로 찾아 제거
 			// (섹션 핸들을 pass별로 저장하면 이 부분이 O(1)로 깔끔해짐)
 			{
-				const DrawBatchKey skey = makeBatchKey(std::hash<std::string>{}("Shadow"), * rec.Obj.pMesh, si, rec.Obj.bCastShadow);
+				const DrawBatchKey skey = makeBatchKey(STRING_HASH("Shadow"), * rec.Obj.pMesh, si, rec.Obj.bCastShadow);
 				auto it = m_BatchLookup.find(skey);
 				if (it != m_BatchLookup.end())
 				{

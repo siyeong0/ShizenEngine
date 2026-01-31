@@ -55,6 +55,7 @@ namespace shz
 
 	using Char = char; ///< Character type
 	using String = std::basic_string<Char>; ///< String variable
+#define STRING_HASH(str) (std::hash<std::string>{}(str))
 
 	struct int2
 	{

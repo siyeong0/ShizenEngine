@@ -29,6 +29,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)IMemoryAllocator.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Object.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)ReferenceCounters.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)StringHash.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)UniqueHandle.hpp" />
   </ItemGroup>
 </Project>

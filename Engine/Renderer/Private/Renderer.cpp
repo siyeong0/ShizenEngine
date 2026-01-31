@@ -7,13 +7,10 @@
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
-
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
-
 #include "Engine/Image/Public/TextureUtilities.h"
 
 #include "Engine/RenderPass/Public/RenderPassBase.h"
-
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
 #include "Engine/RenderPass/Public/GBufferRenderPass.h"
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
@@ -29,10 +26,110 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	static const uint64 kPassGBuffer = std::hash<std::string>{}("GBuffer");
-	static const uint64 kPassGrass = std::hash<std::string>{}("Grass");
-	static const uint64 kPassShadow = std::hash<std::string>{}("Shadow");
+	static const uint64 kPassGBuffer = STRING_HASH("GBuffer");
+	static const uint64 kPassGrass = STRING_HASH("Grass");
+	static const uint64 kPassShadow = STRING_HASH("Shadow");
 
+	// ------------------------------------------------------------
+	// Common shared resource ids (registry keys)
+	// ------------------------------------------------------------
+	static const uint64 kRes_FrameCB = STRING_HASH("FrameCB");
+	static const uint64 kRes_DrawCB = STRING_HASH("DrawCB");
+	static const uint64 kRes_ShadowCB = STRING_HASH("ShadowCB");
+
+	static const uint64 kRes_ObjectTable_GB = STRING_HASH("ObjectTableSB.GBuffer");
+	static const uint64 kRes_ObjectTable_GR = STRING_HASH("ObjectTableSB.Grass");
+	static const uint64 kRes_ObjectTable_SH = STRING_HASH("ObjectTableSB.Shadow");
+	static const uint64 kRes_ObjectIndexVB = STRING_HASH("ObjectIndexInstanceVB");
+
+	static const uint64 kRes_EnvTex = STRING_HASH("EnvTex");
+	static const uint64 kRes_EnvDiffuseTex = STRING_HASH("EnvDiffuseTex");
+	static const uint64 kRes_EnvSpecularTex = STRING_HASH("EnvSpecularTex");
+	static const uint64 kRes_EnvBrdfTex = STRING_HASH("EnvBrdfTex");
+
+	const uint64 kRes_ErrorTex = STRING_HASH("ErrorTex");
+
+	// Pass outputs (external views)
+	static const uint64 kRes_ShadowMapSRV = STRING_HASH("Out.ShadowMapSRV");
+	static const uint64 kRes_DepthSRV = STRING_HASH("Out.DepthSRV");
+	static const uint64 kRes_DepthDSV = STRING_HASH("Out.DepthDSV");
+	static const uint64 kRes_LightingSRV = STRING_HASH("Out.LightingSRV");
+	static const uint64 kRes_LightingRTV = STRING_HASH("Out.LightingRTV");
+
+	static const uint64 kRes_GBufferSRV0 = STRING_HASH("Out.GBufferSRV0");
+	static const uint64 kRes_GBufferSRV1 = STRING_HASH("Out.GBufferSRV1");
+	static const uint64 kRes_GBufferSRV2 = STRING_HASH("Out.GBufferSRV2");
+	static const uint64 kRes_GBufferSRV3 = STRING_HASH("Out.GBufferSRV3");
+
+	uint64 Renderer::MakeResID(const char* name)
+	{
+		ASSERT(name && name[0] != '\0', "MakeResID: name is empty.");
+		return STRING_HASH(name);
+	}
+
+	// ---------------------------------------------------------------------
+	// Resource wrappers
+	// ---------------------------------------------------------------------
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const TextureDesc& desc, const TextureData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<ITexture> tex;
+		m_pDevice->CreateTexture(desc, pInitData, &tex);
+		return tex;
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::CreateBuffer(const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<IBuffer> buf;
+		m_pDevice->CreateBuffer(desc, pInitData, &buf);
+		return buf;
+	}
+
+	void Renderer::UpdateBuffer(
+		IDeviceContext* pCtx,
+		IBuffer* pBuffer,
+		uint32 offsetBytes,
+		uint32 sizeBytes,
+		const void* pData,
+		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
+	{
+		ASSERT(pCtx, "Context is null.");
+		ASSERT(pBuffer, "Buffer is null.");
+		ASSERT(pData || sizeBytes == 0, "UpdateBuffer: data is null.");
+
+		pCtx->UpdateBuffer(
+			pBuffer,
+			offsetBytes,
+			sizeBytes,
+			pData,
+			transitionMode
+		);
+	}
+
+	void Renderer::UpdateTexture2D(
+		IDeviceContext* pCtx,
+		ITexture* pTexture,
+		uint32 mipLevel,
+		uint32 arraySlice,
+		const TextureSubResData& subRes,
+		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
+	{
+		ASSERT(pCtx, "Context is null.");
+		ASSERT(pTexture, "Texture is null.");
+
+		// Update entire subresource (no box)
+		IBox box = {}; // empty -> full resource
+		pCtx->UpdateTexture(
+			pTexture,
+			mipLevel,
+			arraySlice,
+			box,
+			subRes,
+			transitionMode,
+			RESOURCE_STATE_TRANSITION_MODE_NONE
+		);
+	}
 
 	bool Renderer::Initialize(const RendererCreateInfo& createInfo)
 	{
@@ -50,48 +147,48 @@ namespace shz
 		m_pAssetManager = createInfo.pAssetManager;
 		m_pShaderSourceFactory = createInfo.pShaderSourceFactory;
 
+		m_Registry.Initialize();
+
 		// Build fixed templates + prepare cache map
 		{
 			auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
-			{
-				MaterialTemplateCreateInfo tci = {};
-				tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-				tci.TemplateName = name;
+				{
+					MaterialTemplateCreateInfo tci = {};
+					tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
+					tci.TemplateName = name;
 
-				tci.ShaderStages.clear();
-				tci.ShaderStages.reserve(2);
+					tci.ShaderStages.clear();
+					tci.ShaderStages.reserve(2);
 
-				MaterialShaderStageDesc sVS = {};
-				sVS.ShaderType = SHADER_TYPE_VERTEX;
-				sVS.DebugName = "VS";
-				sVS.FilePath = vs;
-				sVS.EntryPoint = "main";
-				sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-				sVS.UseCombinedTextureSamplers = false;
+					MaterialShaderStageDesc sVS = {};
+					sVS.ShaderType = SHADER_TYPE_VERTEX;
+					sVS.DebugName = "VS";
+					sVS.FilePath = vs;
+					sVS.EntryPoint = "main";
+					sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+					sVS.UseCombinedTextureSamplers = false;
 
-				MaterialShaderStageDesc sPS = {};
-				sPS.ShaderType = SHADER_TYPE_PIXEL;
-				sPS.DebugName = "PS";
-				sPS.FilePath = ps;
-				sPS.EntryPoint = "main";
-				sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-				sPS.UseCombinedTextureSamplers = false;
+					MaterialShaderStageDesc sPS = {};
+					sPS.ShaderType = SHADER_TYPE_PIXEL;
+					sPS.DebugName = "PS";
+					sPS.FilePath = ps;
+					sPS.EntryPoint = "main";
+					sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+					sPS.UseCombinedTextureSamplers = false;
 
-				tci.ShaderStages.push_back(sVS);
-				tci.ShaderStages.push_back(sPS);
+					tci.ShaderStages.push_back(sVS);
+					tci.ShaderStages.push_back(sPS);
 
-				return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
-			};
+					return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
+				};
 
 			MaterialTemplate gbufferTemplate;
 			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
-
 			ASSERT(ok0, "Build initial material templates failed.");
 
 			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
-
 			Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		}
 
@@ -102,35 +199,83 @@ namespace shz
 		m_pPipelineStateManager = std::make_unique<PipelineStateManager>();
 		m_pPipelineStateManager->Initialize(m_pDevice);
 
-		AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Error.jpg");
-		m_pErrorTexture = &CreateTexture(ref);
+		// -----------------------------------------------------------------
+		// Create error texture -> register to registry
+		// -----------------------------------------------------------------
+		{
+			AssetRef<Texture> errorTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Error.jpg");
+			AssetPtr<Texture> errorTexPtr = m_pAssetManager->Acquire(errorTexRef);
+
+			Texture* pErrorTex = errorTexPtr.Get();
+			const auto& mips = pErrorTex->GetMips();
+			ASSERT(!mips.empty(), "TextureAsset has no mips.");
+
+			const uint32 width = mips[0].Width;
+			const uint32 height = mips[0].Height;
+
+			TextureDesc desc = {};
+			desc.Name = "ErrorTexture";
+			desc.Type = RESOURCE_DIM_TEX_2D;
+			desc.Width = width;
+			desc.Height = height;
+			desc.MipLevels = static_cast<uint32>(mips.size());
+			desc.ArraySize = 1;
+			desc.Format = pErrorTex->GetFormat();
+			desc.Usage = USAGE_DEFAULT;
+			desc.BindFlags = BIND_SHADER_RESOURCE;
+
+			std::vector<TextureSubResData> subres;
+			subres.resize(mips.size());
+
+			for (size_t i = 0; i < mips.size(); ++i)
+			{
+				const TextureMip& mip = mips[i];
+				TextureSubResData sr = {};
+				sr.pData = mip.Data.data();
+				sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+				sr.DepthStride = 0;
+				subres[i] = sr;
+			}
+
+			TextureData initData = {};
+			initData.pSubResources = subres.data();
+			initData.NumSubresources = static_cast<uint32>(subres.size());
+
+			RefCntAutoPtr<ITexture> errorTex = CreateTexture(desc, &initData);
+			ASSERT(errorTex, "CreateTexture failed.");
+
+			m_Registry.RegisterTexture(kRes_ErrorTex, std::move(errorTex));
+		}
 
 		m_pGBufferMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 		m_pGrassMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 		m_pShadowMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 
-		// Create shared buffers
+		// -----------------------------------------------------------------
+		// Create shared buffers -> register to registry
+		// -----------------------------------------------------------------
 		{
-			ASSERT(m_CreateInfo.pDevice, "Device is null.");
-			ASSERT(m_CreateInfo.pImmediateContext, "Context is null.");
+			IRenderDevice* dev = m_pDevice.RawPtr();
+			ASSERT(dev, "Device is null.");
 
-			IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
+			RefCntAutoPtr<IBuffer> frameCB;
+			RefCntAutoPtr<IBuffer> drawCB;
+			RefCntAutoPtr<IBuffer> shadowCB;
 
-			CreateUniformBuffer(dev, sizeof(hlsl::FrameConstants), "Frame constants", &m_pFrameCB);
-			CreateUniformBuffer(dev, sizeof(hlsl::DrawConstants), "Draw constants", &m_pDrawCB);
-			CreateUniformBuffer(dev, sizeof(hlsl::ShadowConstants), "Shadow constants", &m_pShadowCB);
+			CreateUniformBuffer(dev, sizeof(hlsl::FrameConstants), "Frame constants", &frameCB);
+			CreateUniformBuffer(dev, sizeof(hlsl::DrawConstants), "Draw constants", &drawCB);
+			CreateUniformBuffer(dev, sizeof(hlsl::ShadowConstants), "Shadow constants", &shadowCB);
 
-			ASSERT(m_pFrameCB, "Frame CB create failed.");
-			ASSERT(m_pDrawCB, "Frame CB create failed.");
-			ASSERT(m_pShadowCB, "Shadow CB create failed.");
+			ASSERT(frameCB, "Frame CB create failed.");
+			ASSERT(drawCB, "Draw CB create failed.");
+			ASSERT(shadowCB, "Shadow CB create failed.");
 
-			// Create object index instance buffer
+			m_Registry.RegisterBuffer(kRes_FrameCB, std::move(frameCB));
+			m_Registry.RegisterBuffer(kRes_DrawCB, std::move(drawCB));
+			m_Registry.RegisterBuffer(kRes_ShadowCB, std::move(shadowCB));
+
+			// ObjectIndexInstanceVB
 			{
-				IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
-				ASSERT(dev, "Device is null.");
-
-				ASSERT(m_pObjectIndexVB == nullptr, "m_pObjectIndexVB is already initilaized");
-
 				BufferDesc desc = {};
 				desc.Name = "ObjectIndexInstanceVB";
 				desc.Usage = USAGE_DYNAMIC;
@@ -138,130 +283,124 @@ namespace shz
 				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
 				desc.Size = sizeof(uint32);
 
-				dev->CreateBuffer(desc, nullptr, &m_pObjectIndexVB);
-				ASSERT(m_pObjectIndexVB, "Object index VB create failed.");
+				RefCntAutoPtr<IBuffer> vb = CreateBuffer(desc, nullptr);
+				ASSERT(vb, "Object index VB create failed.");
+
+				m_Registry.RegisterBuffer(kRes_ObjectIndexVB, std::move(vb));
 			}
 
-			// Allocate object table
-			{
-				IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
-				ASSERT(dev, "Device is null.");
+			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
+				{
+					BufferDesc desc = {};
+					desc.Name = name;
+					desc.Usage = USAGE_DYNAMIC;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+					desc.Mode = BUFFER_MODE_STRUCTURED;
+					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-				BufferDesc desc = {};
-				desc.Name = "ObjectTableSB";
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Mode = BUFFER_MODE_STRUCTURED;
-				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+					ASSERT(sb, "Object table create failed.");
+					return sb;
+				};
 
-				RefCntAutoPtr<IBuffer> newBuf;
-				dev->CreateBuffer(desc, nullptr, &newBuf);
-				ASSERT(newBuf, "Object table create failed.");
-
-				m_pObjectTableSBGBuffer = newBuf;
-			}
-
-			{
-				IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
-				ASSERT(dev, "Device is null.");
-
-				BufferDesc desc = {};
-				desc.Name = "ObjectTableSB";
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Mode = BUFFER_MODE_STRUCTURED;
-				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
-
-				RefCntAutoPtr<IBuffer> newBuf;
-				dev->CreateBuffer(desc, nullptr, &newBuf);
-				ASSERT(newBuf, "Object table create failed.");
-
-				m_pObjectTableSBGrass = newBuf;
-			}
-
-			{
-				IRenderDevice* dev = m_CreateInfo.pDevice.RawPtr();
-				ASSERT(dev, "Device is null.");
-
-				BufferDesc desc = {};
-				desc.Name = "ObjectTableSBShadow";
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Mode = BUFFER_MODE_STRUCTURED;
-				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
-
-				RefCntAutoPtr<IBuffer> newBuf;
-				dev->CreateBuffer(desc, nullptr, &newBuf);
-				ASSERT(newBuf, "Object table create failed.");
-
-				m_pObjectTableSBShadow = newBuf;
-			}
+			m_Registry.RegisterBuffer(kRes_ObjectTable_GB, std::move(createObjectTable("ObjectTableSB.GBuffer")));
+			m_Registry.RegisterBuffer(kRes_ObjectTable_GR, std::move(createObjectTable("ObjectTableSB.Grass")));
+			m_Registry.RegisterBuffer(kRes_ObjectTable_SH, std::move(createObjectTable("ObjectTableSB.Shadow")));
 		}
 
-		// Create env textures
+		// -----------------------------------------------------------------
+		// Create env textures -> register to registry
+		// -----------------------------------------------------------------
 		{
 			TextureLoadInfo tli = {};
-			CreateTextureFromFile(m_CreateInfo.EnvTexturePath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvTex);
-			CreateTextureFromFile(m_CreateInfo.DiffuseIrradianceTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvDiffuseTex);
-			CreateTextureFromFile(m_CreateInfo.SpecularIrradianceTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvSpecularTex);
-			CreateTextureFromFile(m_CreateInfo.BrdfLUTTexPath.c_str(), tli, m_CreateInfo.pDevice, &m_EnvBrdfTex);
+			RefCntAutoPtr<ITexture> env, diff, spec, brdf;
 
-			ASSERT(m_EnvTex, "Env tex load failed.");
-			ASSERT(m_EnvDiffuseTex, "Env diffuse load failed.");
-			ASSERT(m_EnvSpecularTex, "Env specular load failed.");
-			ASSERT(m_EnvBrdfTex, "Env brdf load failed.");
+			CreateTextureFromFile(m_CreateInfo.EnvTexturePath.c_str(), tli, m_pDevice, &env);
+			CreateTextureFromFile(m_CreateInfo.DiffuseIrradianceTexPath.c_str(), tli, m_pDevice, &diff);
+			CreateTextureFromFile(m_CreateInfo.SpecularIrradianceTexPath.c_str(), tli, m_pDevice, &spec);
+			CreateTextureFromFile(m_CreateInfo.BrdfLUTTexPath.c_str(), tli, m_pDevice, &brdf);
+
+			ASSERT(env, "Env tex load failed.");
+			ASSERT(diff, "Env diffuse load failed.");
+			ASSERT(spec, "Env specular load failed.");
+			ASSERT(brdf, "Env brdf load failed.");
+
+			m_Registry.RegisterTexture(kRes_EnvTex, std::move(env));
+			m_Registry.RegisterTexture(kRes_EnvDiffuseTex, std::move(diff));
+			m_Registry.RegisterTexture(kRes_EnvSpecularTex, std::move(spec));
+			m_Registry.RegisterTexture(kRes_EnvBrdfTex, std::move(brdf));
 		}
 
-		m_pGBufferMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
-		m_pGBufferMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
-		m_pGBufferMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBGBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+		// -----------------------------------------------------------------
+		// Setup binders (now fetch buffers from registry)
+		// -----------------------------------------------------------------
+		{
+			IBuffer* pFrameCB = m_Registry.GetBuffer(kRes_FrameCB);
+			IBuffer* pDrawCB = m_Registry.GetBuffer(kRes_DrawCB);
 
-		m_pGrassMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
-		m_pGrassMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
-		m_pGrassMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBGrass->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+			IBuffer* pSB_GB = m_Registry.GetBuffer(kRes_ObjectTable_GB);
+			IBuffer* pSB_GR = m_Registry.GetBuffer(kRes_ObjectTable_GR);
+			IBuffer* pSB_SH = m_Registry.GetBuffer(kRes_ObjectTable_SH);
 
-		m_pShadowMaterialStaticBinder->SetFrameConstants(m_pFrameCB);
-		m_pShadowMaterialStaticBinder->SetDrawConstants(m_pDrawCB);
-		m_pShadowMaterialStaticBinder->SetObjectTableSRV(m_pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+			ASSERT(pFrameCB && pDrawCB, "Common CB invalid.");
+			ASSERT(pSB_GB && pSB_GR && pSB_SH, "Object tables invalid.");
 
+			m_pGBufferMaterialStaticBinder->SetFrameConstants(pFrameCB);
+			m_pGBufferMaterialStaticBinder->SetDrawConstants(pDrawCB);
+			m_pGBufferMaterialStaticBinder->SetObjectTableSRV(pSB_GB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+
+			m_pGrassMaterialStaticBinder->SetFrameConstants(pFrameCB);
+			m_pGrassMaterialStaticBinder->SetDrawConstants(pDrawCB);
+			m_pGrassMaterialStaticBinder->SetObjectTableSRV(pSB_GR->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+
+			m_pShadowMaterialStaticBinder->SetFrameConstants(pFrameCB);
+			m_pShadowMaterialStaticBinder->SetDrawConstants(pDrawCB);
+			m_pShadowMaterialStaticBinder->SetObjectTableSRV(pSB_SH->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+		}
+
+		// -----------------------------------------------------------------
+		// Fill PassContext from registry (shared resources)
+		// -----------------------------------------------------------------
 		m_PassCtx = {};
-		m_PassCtx.pDevice = m_CreateInfo.pDevice.RawPtr();
-		m_PassCtx.pImmediateContext = m_CreateInfo.pImmediateContext.RawPtr();
-		m_PassCtx.pSwapChain = m_CreateInfo.pSwapChain.RawPtr();
+		m_PassCtx.pDevice = m_pDevice.RawPtr();
+		m_PassCtx.pImmediateContext = m_pImmediateContext.RawPtr();
+		m_PassCtx.pSwapChain = m_pSwapChain.RawPtr();
 		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
 		m_PassCtx.pAssetManager = m_pAssetManager;
 		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
+		m_PassCtx.pRegistry = &m_Registry;
 
 		m_PassCtx.pGBufferMaterialStaticBinder = m_pGBufferMaterialStaticBinder.get();
 		m_PassCtx.pGrassMaterialStaticBinder = m_pGrassMaterialStaticBinder.get();
 		m_PassCtx.pShadowMaterialStaticBinder = m_pShadowMaterialStaticBinder.get();
 
-		m_PassCtx.pFrameCB = m_pFrameCB.RawPtr();
-		m_PassCtx.pDrawCB = m_pDrawCB.RawPtr();
-		m_PassCtx.pShadowCB = m_pShadowCB.RawPtr();
-		m_PassCtx.pObjectTableSBGBuffer = m_pObjectTableSBGBuffer.RawPtr();
-		m_PassCtx.pObjectTableSBGrass = m_pObjectTableSBGrass.RawPtr();
-		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
-		m_PassCtx.pObjectIndexVB = m_pObjectIndexVB.RawPtr();
+		m_PassCtx.pFrameCB = m_Registry.GetBuffer(kRes_FrameCB);
+		m_PassCtx.pDrawCB = m_Registry.GetBuffer(kRes_DrawCB);
+		m_PassCtx.pShadowCB = m_Registry.GetBuffer(kRes_ShadowCB);
 
-		m_PassCtx.pEnvTex = m_EnvTex.RawPtr();
-		m_PassCtx.pEnvDiffuseTex = m_EnvDiffuseTex.RawPtr();
-		m_PassCtx.pEnvSpecularTex = m_EnvSpecularTex.RawPtr();
-		m_PassCtx.pEnvBrdfTex = m_EnvBrdfTex.RawPtr();
+		m_PassCtx.pObjectTableSBGBuffer = m_Registry.GetBuffer(kRes_ObjectTable_GB);
+		m_PassCtx.pObjectTableSBGrass = m_Registry.GetBuffer(kRes_ObjectTable_GR);
+		m_PassCtx.pObjectTableSBShadow = m_Registry.GetBuffer(kRes_ObjectTable_SH);
+
+		m_PassCtx.pObjectIndexVB = m_Registry.GetBuffer(kRes_ObjectIndexVB);
+
+		m_PassCtx.pEnvTex = m_Registry.GetTexture(kRes_EnvTex);
+		m_PassCtx.pEnvDiffuseTex = m_Registry.GetTexture(kRes_EnvDiffuseTex);
+		m_PassCtx.pEnvSpecularTex = m_Registry.GetTexture(kRes_EnvSpecularTex);
+		m_PassCtx.pEnvBrdfTex = m_Registry.GetTexture(kRes_EnvBrdfTex);
 
 		m_PassCtx.BackBufferWidth = m_Width;
 		m_PassCtx.BackBufferHeight = m_Height;
 
+		// -----------------------------------------------------------------
 		// Create render passes
+		// -----------------------------------------------------------------
 		{
 			ASSERT(m_Passes.empty(), "m_Passes are already initilaized.");
 			ASSERT(m_PassOrder.empty(), "m_PassOrder are already initilaized.");
+
 			addPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
 			addPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
 			addPass(std::make_unique<LightingRenderPass>(m_PassCtx));
@@ -274,7 +413,7 @@ namespace shz
 
 			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load terrain height field.");
+			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
 
 			grassPtr->RecomputeBounds();
 			const Box& b = grassPtr->GetBounds();
@@ -282,20 +421,18 @@ namespace shz
 			grassPtr->ApplyUniformScale(yScale01);
 			grassPtr->MoveBottomToOrigin(true);
 
-			const StaticMeshRenderData* grassRenderData = &CreateStaticMesh(*grassPtr);
+			const StaticMeshRenderData* grassRenderData = &CreateStaticMeshRenderData(*grassPtr);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, *grassRenderData);
 
 			AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
 			AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
 
 			Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
-
-			const TextureRenderData* grassDensityFieldTex = &CreateTexture(perlin);
+			const TextureRenderData* grassDensityFieldTex = &CreateTextureRenderData(perlin);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassDensityField(m_PassCtx, *grassDensityFieldTex);
 		}
 
 		wirePassOutputs();
-
 		return true;
 	}
 
@@ -307,19 +444,6 @@ namespace shz
 		m_PassOrder.clear();
 		m_RHIRenderPasses.clear();
 
-		m_EnvTex.Release();
-		m_EnvDiffuseTex.Release();
-		m_EnvSpecularTex.Release();
-		m_EnvBrdfTex.Release();
-
-		m_pObjectIndexVB.Release();
-		m_pObjectTableSBGBuffer.Release();
-		m_pObjectTableSBGrass.Release();
-		m_pObjectTableSBShadow.Release();
-
-		m_pShadowCB.Release();
-		m_pFrameCB.Release();
-
 		m_TextureCache.Clear();
 		m_StaticMeshCache.Clear();
 		m_MaterialCache.Clear();
@@ -328,15 +452,26 @@ namespace shz
 		m_pGrassMaterialStaticBinder.reset();
 		m_pShadowMaterialStaticBinder.reset();
 
+		if (m_pPipelineStateManager)
+		{
+			m_pPipelineStateManager->Clear();
+			m_pPipelineStateManager.reset();
+		}
+
 		m_pShaderSourceFactory.Release();
 		m_pAssetManager = nullptr;
-		m_pPipelineStateManager->Clear();
-		m_pPipelineStateManager.reset();
+
+		m_Registry.Shutdown();
 
 		m_CreateInfo = {};
 		m_PassCtx = {};
 		m_Width = 0;
 		m_Height = 0;
+
+		m_pSwapChain.Release();
+		m_pImmediateContext.Release();
+		m_pDeferredContexts.clear();
+		m_pDevice.Release();
 	}
 
 	void Renderer::BeginFrame()
@@ -357,10 +492,45 @@ namespace shz
 		IDeviceContext* ctx = m_PassCtx.pImmediateContext;
 		m_PassCtx.ResetFrame();
 
-		// Wire SB pointers
-		m_PassCtx.pObjectTableSBGBuffer = m_pObjectTableSBGBuffer.RawPtr();
-		m_PassCtx.pObjectTableSBGrass = m_pObjectTableSBGrass.RawPtr();
-		m_PassCtx.pObjectTableSBShadow = m_pObjectTableSBShadow.RawPtr();
+		// ---------------------------------------------------------------------
+		// Pull shared renderer resources from registry
+		// ---------------------------------------------------------------------
+		IBuffer* pFrameCB = m_PassCtx.pRegistry->GetBuffer(kRes_FrameCB);
+		IBuffer* pDrawCB = m_PassCtx.pRegistry->GetBuffer(kRes_DrawCB);
+		IBuffer* pShadowCB =m_PassCtx.pRegistry->GetBuffer(kRes_ShadowCB);
+
+		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GB);
+		IBuffer* pObjSB_Grass = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GR);
+		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_SH);
+		IBuffer* pObjIndexVB = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectIndexVB);
+
+		ITexture* pEnvTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvTex);
+		ITexture* pEnvDiffTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvDiffuseTex);
+		ITexture* pEnvSpecTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvSpecularTex);
+		ITexture* pEnvBrdfTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvBrdfTex);
+		ITexture* pErrorTex = m_PassCtx.pRegistry->GetTexture(kRes_ErrorTex);
+
+		ASSERT(pFrameCB, "FrameCB missing (registry).");
+		ASSERT(pDrawCB, "DrawCB missing (registry).");
+		ASSERT(pShadowCB, "ShadowCB missing (registry).");
+		ASSERT(pObjSB_GB && pObjSB_Grass && pObjSB_Shadow, "ObjectTable SB missing (registry).");
+		ASSERT(pObjIndexVB, "ObjectIndexVB missing (registry).");
+		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
+		ASSERT(pErrorTex, "Error texture missing (registry).");
+
+		// Wire pass ctx (this is what passes will use)
+		m_PassCtx.pFrameCB = pFrameCB;
+		m_PassCtx.pDrawCB = pDrawCB;
+		m_PassCtx.pShadowCB = pShadowCB;
+		m_PassCtx.pObjectTableSBGBuffer = pObjSB_GB;
+		m_PassCtx.pObjectTableSBGrass = pObjSB_Grass;
+		m_PassCtx.pObjectTableSBShadow = pObjSB_Shadow;
+		m_PassCtx.pObjectIndexVB = pObjIndexVB;
+
+		m_PassCtx.pEnvTex = pEnvTex;
+		m_PassCtx.pEnvDiffuseTex = pEnvDiffTex;
+		m_PassCtx.pEnvSpecularTex = pEnvSpecTex;
+		m_PassCtx.pEnvBrdfTex = pEnvBrdfTex;
 
 		m_PassCtx.pHeightMap = &scene.GetHeightMap();
 		scene.ConsumeInteractionStamps(&m_PassCtx.InteractionStamps);
@@ -383,7 +553,7 @@ namespace shz
 		// ------------------------------------------------------------
 		Matrix4x4 lightViewProj = {};
 		{
-			MapHelper<hlsl::FrameConstants> cb(ctx, m_pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::FrameConstants> cb(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
 			cb->View = view.ViewMatrix;
 			cb->Proj = view.ProjMatrix;
@@ -415,18 +585,7 @@ namespace shz
 			cb->DeltaTime = viewFamily.DeltaTime;
 			cb->CurrTime = viewFamily.CurrentTime;
 
-			// ------------------------------------------------------------
-			// Shadow Visible Distance (your knob)
-			// ------------------------------------------------------------
-			const float ShadowVisibleDistance = 100.0f; // tweak this (world units)
-
-			// TODO: use actual shadow map size (from shadow depth texture desc)
-			const float shadowMapWidth = 4096.0f;
-			const float shadowMapHeight = 4096.0f;
-
-			// ------------------------------------------------------------
 			// Global light (first one)
-			// ------------------------------------------------------------
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights()) { globalLight = &l; break; }
 
@@ -438,31 +597,27 @@ namespace shz
 			cb->LightColor = lightColor;
 			cb->LightIntensity = lightIntensity;
 
+			// ---- Shadow lightViewProj (your existing block, unchanged) ----
+			const float ShadowVisibleDistance = 100.0f;
+
+			// TODO: replace with actual shadow map size if you store it
+			const float shadowMapWidth = 4096.0f;
+			const float shadowMapHeight = 4096.0f;
+
 			const float3 lightForward = lightDirWs;
 
-			// Stable up
 			float3 up = float3(0, 1, 0);
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
-			// ------------------------------------------------------------
-			// 1) Pair frustum corners robustly by (x,y) sign in NDC
-			//    Your Extract creates corners by bits:
-			//      bit0 => x sign, bit1 => y sign, bit2 => z(near/far)
-			//    So we can explicitly build indices:
-			//      Near: zbit=0, Far: zbit=1, same x/y bits.
-			// ------------------------------------------------------------
 			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-			{
-				// xBit/yBit/zBit are 0 or 1
-				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-			};
+				{
+					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+				};
 
-			// Build shadow frustum corners by clamping "far" along each ray
 			float3 shadowCornersWS[8] = {};
 			{
 				const float3 C = view.CameraPosition;
 
-				// iterate 4 x/y corners
 				for (int yBit = 0; yBit <= 1; ++yBit)
 				{
 					for (int xBit = 0; xBit <= 1; ++xBit)
@@ -473,11 +628,8 @@ namespace shz
 						const float3 N = frustumMain.FrustumCorners[idxNear];
 						const float3 F = frustumMain.FrustumCorners[idxFar];
 
-						// Store near corner as-is
 						shadowCornersWS[idxNear] = N;
 
-						// Clamp far corner to ShadowVisibleDistance measured from camera
-						// Compute t along segment N->F where |(lerp(N,F,t) - C)| == ShadowVisibleDistance
 						const float nearDist = (N - C).Length();
 						const float farDist = (F - C).Length();
 
@@ -493,39 +645,24 @@ namespace shz
 				}
 			}
 
-			// ------------------------------------------------------------
-			// 2) Center = average of clamped corners (more stable than camera pos)
-			// ------------------------------------------------------------
 			float3 centerWs = float3(0, 0, 0);
-			for (int i = 0; i < 8; ++i)
-			{
-				centerWs += shadowCornersWS[i];
-			}
+			for (int i = 0; i < 8; ++i) { centerWs += shadowCornersWS[i]; }
 			centerWs *= (1.0f / 8.0f);
 
-			// Place light camera back along direction
 			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
-
-			// Light view
 			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
-			// ------------------------------------------------------------
-			// 3) Compute light-space AABB from clamped corners
-			// ------------------------------------------------------------
 			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
 			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
 
 			for (int i = 0; i < 8; ++i)
 			{
-				const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView; // row-vector
+				const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView;
 				minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
 				maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
 			}
 
-			// ------------------------------------------------------------
-			// 4) Padding first (important)
-			// ------------------------------------------------------------
-			const float pcfPadXY = 1.0f;   // tune
+			const float pcfPadXY = 1.0f;
 			const float padZ = 10.0f;
 
 			minX -= pcfPadXY; minY -= pcfPadXY;
@@ -534,9 +671,6 @@ namespace shz
 			float nearZ = minZ - padZ;
 			float farZ = maxZ + padZ;
 
-			// ------------------------------------------------------------
-			// 5) Make bounds square (stable against camera rotation)
-			// ------------------------------------------------------------
 			const float centerX = 0.5f * (minX + maxX);
 			const float centerY = 0.5f * (minY + maxY);
 
@@ -544,32 +678,22 @@ namespace shz
 			float extentY = (maxY - minY);
 			float extent = Max(extentX, extentY);
 
-			// ------------------------------------------------------------
-			// 6) Texel snap (extent + bounds)
-			// ------------------------------------------------------------
-			// square extent 기준 texel size
 			const float unitsPerTexelSqX = extent / shadowMapWidth;
 			const float unitsPerTexelSqY = extent / shadowMapHeight;
 			const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
 
-			// extent 자체를 texel 단위로 양자화(서브텍셀 크기 변동 방지)
 			extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
 
-			// square bounds 재구성
 			minX = centerX - extent * 0.5f;
 			maxX = centerX + extent * 0.5f;
 			minY = centerY - extent * 0.5f;
 			maxY = centerY + extent * 0.5f;
 
-			// min/max를 texel grid에 맞춤 (floor/ceil)
 			minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
 			minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
 			maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
 			maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
 
-			// ------------------------------------------------------------
-			// 7) Build LightViewProj
-			// ------------------------------------------------------------
 			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
 				minX, maxX,
 				minY, maxY,
@@ -580,11 +704,9 @@ namespace shz
 		}
 
 		{
-			MapHelper<hlsl::ShadowConstants> cb(ctx, m_pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::ShadowConstants> cb(ctx, pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
 			cb->LightViewProj = lightViewProj;
 		}
-
-
 
 		ViewFrustumExt frustumShadow = {};
 		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);
@@ -626,21 +748,20 @@ namespace shz
 		// ------------------------------------------------------------
 		// Common barriers
 		// ------------------------------------------------------------
-		m_PassCtx.PushBarrier(m_pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		m_PassCtx.PushBarrier(m_pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		m_PassCtx.PushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		m_PassCtx.PushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		m_PassCtx.PushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		m_PassCtx.PushBarrier(m_pObjectTableSBGBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(m_pObjectTableSBGrass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(m_pObjectTableSBShadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pObjSB_Grass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
-		m_PassCtx.PushBarrier(m_PassCtx.pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		m_PassCtx.PushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pEnvSpecTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pEnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
-		m_PassCtx.PushBarrier(m_EnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(m_EnvDiffuseTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(m_EnvSpecularTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(m_EnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-
-		m_PassCtx.PushBarrier(m_pErrorTexture->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		m_PassCtx.PushBarrier(pErrorTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
 		// ------------------------------------------------------------
 		// Visible objects: VB/IB + Material textures/CB barriers (dedup)
@@ -649,28 +770,26 @@ namespace shz
 		appliedRD.reserve(1024);
 
 		auto applyMaterialIfNeeded = [&](const MaterialRenderData* rd)
-		{
-			ASSERT(rd, "Material render data is null.");
-
-			if (appliedRD.find(rd) != appliedRD.end())
 			{
-				return;
-			}
+				ASSERT(rd, "Material render data is null.");
 
-			appliedRD.insert(rd);
+				if (appliedRD.find(rd) != appliedRD.end())
+					return;
 
-			if (rd->ConstantBuffer)
-			{
-				m_PassCtx.PushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-			}
+				appliedRD.insert(rd);
 
-			for (const auto pTex : rd->BoundTextures)
-			{
-				m_PassCtx.PushBarrier(pTex->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			}
-		};
+				if (rd->ConstantBuffer)
+				{
+					m_PassCtx.PushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+				}
 
-		// Main visible
+				for (const auto pTexRD : rd->BoundTextures)
+				{
+					ASSERT(pTexRD && pTexRD->Texture, "Bound texture render data invalid.");
+					m_PassCtx.PushBarrier(pTexRD->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+				}
+			};
+
 		for (uint32 objDense : m_PassCtx.VisibleObjectIndexMain)
 		{
 			const auto& obj = scene.GetObjectByDenseIndex(objDense);
@@ -685,16 +804,13 @@ namespace shz
 			}
 		}
 
-		// Shadow visible
 		for (uint32 objDense : m_PassCtx.VisibleObjectIndexShadow)
 		{
 			const auto& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
 			if (!obj.bCastShadow)
-			{
 				continue;
-			}
 
 			m_PassCtx.PushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 			m_PassCtx.PushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
@@ -714,133 +830,132 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Helper: build packets + pack object table using scene batches
+		// Helper: pack object table using instanceRemap
+		// ------------------------------------------------------------
+		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
+			{
+				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::ObjectConstants* dst = map;
+
+				for (size_t i = 0; i < remap.size(); ++i)
+				{
+					const uint32 oc = remap[i];
+					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+					dst[i] = tableCPU[oc];
+				}
+			};
+
+		// ------------------------------------------------------------
+		// Helper: build packets from draw items
+		// ------------------------------------------------------------
+		auto buildPacketsFromDrawItems = [&](uint64 passKey, const std::vector<RenderScene::DrawItem>& items) -> std::vector<DrawPacket>
+			{
+				std::vector<DrawPacket> out;
+				out.reserve(items.size());
+
+				// Shadow PSO/SRB sources
+				IPipelineState* shadowPSO = nullptr;
+				IPipelineState* shadowMaskedPSO = nullptr;
+				IShaderResourceBinding* shadowOpaqueSRB = nullptr;
+
+				if (passKey == kPassShadow)
+				{
+					auto itPass = m_Passes.find("Shadow");
+					ASSERT(itPass != m_Passes.end(), "Shadow pass not found.");
+					auto* shadowPass = static_cast<ShadowRenderPass*>(itPass->second.get());
+					ASSERT(shadowPass, "Shadow pass cast failed.");
+
+					shadowPSO = shadowPass->GetShadowPSO();
+					shadowMaskedPSO = shadowPass->GetShadowMaskedPSO();
+					shadowOpaqueSRB = shadowPass->GetOpaqueShadowSRB();
+
+					ASSERT(shadowPSO && shadowMaskedPSO && shadowOpaqueSRB, "Shadow PSO/SRB invalid.");
+				}
+
+				for (const auto& di : items)
+				{
+					RenderScene::BatchView bv = {};
+					bool ok = scene.TryGetBatchView(di.BatchId, bv);
+					ASSERT(ok, "Invalid batch id.");
+
+					const StaticMeshRenderData* mesh = bv.pMesh;
+					ASSERT(mesh, "Batch mesh is null.");
+					ASSERT(bv.SectionIndex < static_cast<uint32>(mesh->Sections.size()), "SectionIndex OOB.");
+
+					const auto& sec = mesh->Sections[bv.SectionIndex];
+					const MaterialRenderData* mat = sec.pMaterial;
+
+					DrawPacket pkt = {};
+					pkt.VertexBuffer = mesh->VertexBuffer;
+					pkt.IndexBuffer = mesh->IndexBuffer;
+
+					pkt.DrawAttribs = {};
+					pkt.DrawAttribs.IndexType = mesh->IndexType;
+					pkt.DrawAttribs.NumIndices = sec.IndexCount;
+					pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+					pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+					pkt.DrawAttribs.NumInstances = di.InstanceCount;
+					pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
+					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+					if (passKey == kPassGBuffer || passKey == kPassGrass)
+					{
+						ASSERT(mat && mat->PSO && mat->SRB, "Material PSO/SRB invalid.");
+						pkt.PSO = mat->PSO;
+						pkt.SRB = mat->SRB;
+					}
+					else if (passKey == kPassShadow)
+					{
+						if (mat && mat->ShadowSRB)
+						{
+							pkt.PSO = shadowMaskedPSO;
+							pkt.SRB = mat->ShadowSRB;
+						}
+						else
+						{
+							pkt.PSO = shadowPSO;
+							pkt.SRB = shadowOpaqueSRB;
+						}
+					}
+					else
+					{
+						ASSERT(false, "Unknown passKey.");
+					}
+
+					pkt.ObjectIndex = 0;
+					out.push_back(pkt);
+				}
+
+				return out;
+			};
+
+		// ------------------------------------------------------------
+		// Build draw lists + pack object tables + build packets
 		// ------------------------------------------------------------
 		std::vector<RenderScene::DrawItem> drawItems;
 		std::vector<uint32> instanceRemap;
 
-		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
-		{
-			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-
-			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-			hlsl::ObjectConstants* dst = map;
-
-			for (size_t i = 0; i < remap.size(); ++i)
-			{
-				const uint32 oc = remap[i];
-				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-				dst[i] = tableCPU[oc];
-			}
-		};
-
-		auto buildPacketsFromDrawItems = [&](uint64 passKey, const std::vector<RenderScene::DrawItem>& items) -> std::vector<DrawPacket>
-		{
-			std::vector<DrawPacket> out;
-			out.reserve(items.size());
-
-			// Shadow PSO/SRB sources (existing Shadow pass)
-			IPipelineState* shadowPSO = nullptr;
-			IPipelineState* shadowMaskedPSO = nullptr;
-			IShaderResourceBinding* shadowOpaqueSRB = nullptr;
-
-			if (passKey == kPassShadow)
-			{
-				auto itPass = m_Passes.find("Shadow");
-				ASSERT(itPass != m_Passes.end(), "Shadow pass not found.");
-				auto* shadowPass = static_cast<ShadowRenderPass*>(itPass->second.get());
-				ASSERT(shadowPass, "Shadow pass cast failed.");
-
-				shadowPSO = shadowPass->GetShadowPSO();
-				shadowMaskedPSO = shadowPass->GetShadowMaskedPSO();
-				shadowOpaqueSRB = shadowPass->GetOpaqueShadowSRB();
-
-				ASSERT(shadowPSO && shadowMaskedPSO && shadowOpaqueSRB, "Shadow PSO/SRB invalid.");
-			}
-
-			for (const auto& di : items)
-			{
-				RenderScene::BatchView bv = {};
-				bool ok = scene.TryGetBatchView(di.BatchId, bv);
-				ASSERT(ok, "Invalid batch id.");
-
-				const StaticMeshRenderData* mesh = bv.pMesh;
-				ASSERT(mesh, "Batch mesh is null.");
-				ASSERT(bv.SectionIndex < static_cast<uint32>(mesh->Sections.size()), "SectionIndex OOB.");
-
-				const auto& sec = mesh->Sections[bv.SectionIndex];
-				const MaterialRenderData* mat = sec.pMaterial;
-
-				DrawPacket pkt = {};
-				pkt.VertexBuffer = mesh->VertexBuffer;
-				pkt.IndexBuffer = mesh->IndexBuffer;
-
-				pkt.DrawAttribs = {};
-				pkt.DrawAttribs.IndexType = mesh->IndexType;
-				pkt.DrawAttribs.NumIndices = sec.IndexCount;
-				pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
-				pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
-				pkt.DrawAttribs.NumInstances = di.InstanceCount;
-				pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
-				pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
-
-				// Per-pass bindings
-				if (passKey == kPassGBuffer || passKey == kPassGrass)
-				{
-					ASSERT(mat && mat->PSO && mat->SRB, "Material PSO/SRB invalid.");
-					pkt.PSO = mat->PSO;
-					pkt.SRB = mat->SRB;
-				}
-				else if (passKey == kPassShadow)
-				{
-					// masked vs opaque
-					if (mat && mat->ShadowSRB)
-					{
-						pkt.PSO = shadowMaskedPSO;
-						pkt.SRB = mat->ShadowSRB;
-					}
-					else
-					{
-						pkt.PSO = shadowPSO;
-						pkt.SRB = shadowOpaqueSRB;
-					}
-				}
-				else
-				{
-					ASSERT(false, "Unknown passKey.");
-				}
-
-				// ObjectIndex는 instance table path라 0으로 유지(기존 코드와 동일)
-				pkt.ObjectIndex = 0;
-
-				out.push_back(pkt);
-			}
-
-			return out;
-		};
-
-		// -------------------------
 		// GBuffer
-		// -------------------------
 		scene.BuildDrawList(kPassGBuffer, m_PassCtx.VisibleObjectIndexMain, drawItems, instanceRemap);
-		packObjectTableFromRemap(m_pObjectTableSBGBuffer, instanceRemap);
+		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
 		m_PassCtx.GBufferDrawPackets = buildPacketsFromDrawItems(kPassGBuffer, drawItems);
 
-		// -------------------------
 		// Grass
-		// -------------------------
 		scene.BuildDrawList(kPassGrass, m_PassCtx.VisibleObjectIndexMain, drawItems, instanceRemap);
-		packObjectTableFromRemap(m_pObjectTableSBGrass, instanceRemap);
+		packObjectTableFromRemap(pObjSB_Grass, instanceRemap);
 		m_PassCtx.GrassDrawPackets = buildPacketsFromDrawItems(kPassGrass, drawItems);
 
-		// -------------------------
 		// Shadow
-		// -------------------------
 		scene.BuildDrawList(kPassShadow, m_PassCtx.VisibleObjectIndexShadow, drawItems, instanceRemap);
-		packObjectTableFromRemap(m_pObjectTableSBShadow, instanceRemap);
+		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
 		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(kPassShadow, drawItems);
+
+		// Sanity: if this is 0, you will see nothing (this is the #1 failure)
+		// (leave as ASSERT while migrating; you can relax later)
+		// ASSERT(!m_PassCtx.GBufferDrawPackets.empty(), "No GBuffer draw packets.");
 
 		// ------------------------------------------------------------
 		// Execute passes
@@ -895,7 +1010,11 @@ namespace shz
 		wirePassOutputs();
 	}
 
-	const TextureRenderData& Renderer::CreateTexture(const AssetRef<Texture>& assetRef, const std::string& name)
+	// ----------------------------
+	// RenderData caches below are mostly unchanged from your code
+	// ----------------------------
+
+	const TextureRenderData& Renderer::CreateTextureRenderData(const AssetRef<Texture>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const TextureRenderData* cached = m_TextureCache.Acquire(key);
@@ -909,19 +1028,19 @@ namespace shz
 
 		if (name == "")
 		{
-			return CreateTexture(*assetPtr, key, assetPtr.GetSourcePath());
+			return CreateTextureRenderData(*assetPtr, key, assetPtr.GetSourcePath());
 		}
 		else
 		{
-			return CreateTexture(*assetPtr, key, name);
+			return CreateTextureRenderData(*assetPtr, key, name);
 		}
 	}
 
-	const TextureRenderData& Renderer::CreateTexture(const Texture& texture, uint64 key, const std::string& name)
+	const TextureRenderData& Renderer::CreateTextureRenderData(const Texture& texture, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
-			key = std::rand(); // TODO: better hash or REMOVE CreateTexture overload
+			key = std::rand();
 		}
 
 		TextureRenderData out;
@@ -932,16 +1051,6 @@ namespace shz
 		const uint32 width = mips[0].Width;
 		const uint32 height = mips[0].Height;
 
-		// Validate mip chain
-		for (size_t i = 0; i < mips.size(); ++i)
-		{
-			const TextureMip& mip = mips[i];
-			ASSERT(mip.Width != 0 && mip.Height != 0, "Invalid mip dimension.");
-
-			const uint64 expectedBytes = uint64(mip.Width) * uint64(mip.Height) * 4ull;
-			ASSERT(!mip.Data.empty(), "Mip data is empty.");
-		}
-
 		TextureDesc desc = {};
 		desc.Name = name.c_str();
 		desc.Type = RESOURCE_DIM_TEX_2D;
@@ -949,9 +1058,7 @@ namespace shz
 		desc.Height = height;
 		desc.MipLevels = static_cast<uint32>(mips.size());
 		desc.ArraySize = 1;
-
 		desc.Format = texture.GetFormat();
-
 		desc.Usage = USAGE_DEFAULT;
 		desc.BindFlags = BIND_SHADER_RESOURCE;
 
@@ -961,12 +1068,10 @@ namespace shz
 		for (size_t i = 0; i < mips.size(); ++i)
 		{
 			const TextureMip& mip = mips[i];
-
 			TextureSubResData sr = {};
 			sr.pData = mip.Data.data();
 			sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
 			sr.DepthStride = 0;
-
 			subres[i] = sr;
 		}
 
@@ -974,7 +1079,7 @@ namespace shz
 		initData.pSubResources = subres.data();
 		initData.NumSubresources = static_cast<uint32>(subres.size());
 
-		m_pDevice->CreateTexture(desc, &initData, &out.Texture);
+		out.Texture = CreateTexture(desc, &initData);
 		ASSERT(out.Texture, "CreateTexture failed.");
 		out.Sampler = nullptr;
 
@@ -982,8 +1087,7 @@ namespace shz
 		return *m_TextureCache.Acquire(key);
 	}
 
-
-	const MaterialRenderData& Renderer::CreateMaterial(const AssetRef<Material>& assetRef, const std::string& name)
+	const MaterialRenderData& Renderer::CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const MaterialRenderData* cached = m_MaterialCache.Acquire(key);
@@ -997,15 +1101,15 @@ namespace shz
 
 		if (name == "")
 		{
-			return CreateMaterial(*assetPtr, key, assetPtr.GetSourcePath());
+			return CreateMaterialRenderData(*assetPtr, key, assetPtr.GetSourcePath());
 		}
 		else
 		{
-			return CreateMaterial(*assetPtr, key, name);
+			return CreateMaterialRenderData(*assetPtr, key, name);
 		}
 	}
 
-	const MaterialRenderData& Renderer::CreateMaterial(const Material& material, uint64 key, const std::string& name)
+	const MaterialRenderData& Renderer::CreateMaterialRenderData(const Material& material, uint64 key, const std::string& name)
 	{
 		ASSERT(m_pDevice, "Device is null.");
 		if (key == 0)
@@ -1014,7 +1118,7 @@ namespace shz
 		}
 
 		MaterialRenderData out = {};
-		out.RenderPassId = std::hash<std::string>{}(material.GetRenderPassName());
+		out.RenderPassId = STRING_HASH(material.GetRenderPassName());
 
 		out.CBIndex = 0;
 		for (; out.CBIndex < material.GetTemplate().GetCBufferCount(); ++out.CBIndex)
@@ -1165,13 +1269,13 @@ namespace shz
 
 					if (b.TextureRef.has_value())
 					{
-						const TextureRenderData& texture = CreateTexture(*b.TextureRef);
+						const TextureRenderData& texture = CreateTextureRenderData(*b.TextureRef);
 						pView = texture.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 						out.BoundTextures.push_back(&texture);
 					}
 					else
 					{
-						pView = m_pErrorTexture->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+						pView = m_Registry.GetTexture(kRes_ErrorTex)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 					}
 
 					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
@@ -1203,7 +1307,7 @@ namespace shz
 		return *m_MaterialCache.Acquire(key);
 	}
 
-	const StaticMeshRenderData& Renderer::CreateStaticMesh(const AssetRef<StaticMesh>& assetRef, const std::string& name)
+	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
 		const StaticMeshRenderData* cached = m_StaticMeshCache.Acquire(key);
@@ -1217,15 +1321,15 @@ namespace shz
 
 		if (name == "")
 		{
-			return CreateStaticMesh(*assetPtr, key, assetPtr.GetSourcePath());
+			return CreateStaticMeshRenderData(*assetPtr, key, assetPtr.GetSourcePath());
 		}
 		else
 		{
-			return CreateStaticMesh(*assetPtr, key, name);
+			return CreateStaticMeshRenderData(*assetPtr, key, name);
 		}
 	}
 
-	const StaticMeshRenderData& Renderer::CreateStaticMesh(const StaticMesh& mesh, uint64 key, const std::string& name)
+	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key, const std::string& name)
 	{
 		if (key == 0)
 		{
@@ -1267,19 +1371,19 @@ namespace shz
 		}
 
 		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-		{
-			BufferDesc desc = {};
-			desc.Name = name;
-			desc.Size = dataSize;
-			desc.Usage = USAGE_IMMUTABLE;
-			desc.BindFlags = bindFlags;
-			BufferData initData = {};
-			initData.pData = pData;
-			initData.DataSize = dataSize;
-			RefCntAutoPtr<IBuffer> pBuffer;
-			device->CreateBuffer(desc, &initData, &pBuffer);
-			return pBuffer;
-		};
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Size = dataSize;
+				desc.Usage = USAGE_IMMUTABLE;
+				desc.BindFlags = bindFlags;
+				BufferData initData = {};
+				initData.pData = pData;
+				initData.DataSize = dataSize;
+				RefCntAutoPtr<IBuffer> pBuffer;
+				device->CreateBuffer(desc, &initData, &pBuffer);
+				return pBuffer;
+			};
 
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1310,7 +1414,7 @@ namespace shz
 			d.BaseVertex = s.BaseVertex;
 			d.LocalBounds = s.LocalBounds;
 
-			d.pMaterial = &CreateMaterial(mesh.GetMaterialSlot(s.MaterialSlot));
+			d.pMaterial = &CreateMaterialRenderData(mesh.GetMaterialSlot(s.MaterialSlot));
 
 			out.Sections.push_back(d);
 		}
@@ -1319,7 +1423,7 @@ namespace shz
 		return *m_StaticMeshCache.Acquire(key);
 	}
 
-	const TextureRenderData& Renderer::CreateTextureFromHeightField(const TerrainHeightField& terrain)
+	const TextureRenderData& Renderer::CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain)
 	{
 		TextureRenderData out = {};
 
@@ -1374,7 +1478,6 @@ namespace shz
 		{
 			const std::string& name = passPair.first;
 			uint64 drawCallCount = passPair.second->GetDrawCallCount();
-
 			drawCallTable[name] = drawCallCount;
 		}
 		return drawCallTable;
@@ -1400,19 +1503,27 @@ namespace shz
 	void Renderer::uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex)
 	{
 		ASSERT(pCtx, "Context is null.");
-		ASSERT(m_pObjectIndexVB, "Object index VB is null.");
 
-		MapHelper<uint32> map(pCtx, m_pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
+		IBuffer* pVB = m_Registry.GetBuffer(kRes_ObjectIndexVB);
+		ASSERT(pVB, "Object index VB is null.");
+
+		MapHelper<uint32> map(pCtx, pVB, MAP_WRITE, MAP_FLAG_DISCARD);
 		*map = objectIndex;
 	}
 
 	void Renderer::wirePassOutputs()
 	{
+		// Keep PassContext fields for pass-to-pass usage,
+		// AND mirror them into registry (so external users can query registry)
+
 		if (auto it = m_Passes.find("Shadow"); it != m_Passes.end())
 		{
 			if (auto* shadow = static_cast<ShadowRenderPass*>(it->second.get()))
 			{
 				m_PassCtx.pShadowMapSrv = shadow->GetShadowMapSRV();
+
+				// Registry external bind
+				m_Registry.BindExternalTextureViews(kRes_ShadowMapSRV, nullptr, m_PassCtx.pShadowMapSrv, nullptr, nullptr, nullptr);
 			}
 		}
 
@@ -1426,6 +1537,14 @@ namespace shz
 				}
 				m_PassCtx.pDepthSrv = gb->GetDepthSRV();
 				m_PassCtx.pDepthDsv = gb->GetDepthDSV();
+
+				m_Registry.BindExternalTextureViews(kRes_GBufferSRV0, nullptr, m_PassCtx.pGBufferSrv[0], nullptr, nullptr, nullptr);
+				m_Registry.BindExternalTextureViews(kRes_GBufferSRV1, nullptr, m_PassCtx.pGBufferSrv[1], nullptr, nullptr, nullptr);
+				m_Registry.BindExternalTextureViews(kRes_GBufferSRV2, nullptr, m_PassCtx.pGBufferSrv[2], nullptr, nullptr, nullptr);
+				m_Registry.BindExternalTextureViews(kRes_GBufferSRV3, nullptr, m_PassCtx.pGBufferSrv[3], nullptr, nullptr, nullptr);
+
+				m_Registry.BindExternalTextureViews(kRes_DepthSRV, nullptr, m_PassCtx.pDepthSrv, nullptr, nullptr, nullptr);
+				m_Registry.BindExternalTextureViews(kRes_DepthDSV, nullptr, nullptr, nullptr, m_PassCtx.pDepthDsv, nullptr);
 			}
 		}
 
@@ -1435,10 +1554,12 @@ namespace shz
 			{
 				m_PassCtx.pLightingSrv = light->GetLightingSRV();
 				m_PassCtx.pLightingRtv = light->GetLightingRTV();
+
+				m_Registry.BindExternalTextureViews(kRes_LightingSRV, nullptr, m_PassCtx.pLightingSrv, nullptr, nullptr, nullptr);
+				m_Registry.BindExternalTextureViews(kRes_LightingRTV, nullptr, nullptr, m_PassCtx.pLightingRtv, nullptr, nullptr);
 			}
 		}
 	}
-
 
 	void Renderer::addPass(std::unique_ptr<RenderPassBase> pass)
 	{
@@ -1455,3 +1576,5 @@ namespace shz
 		m_RHIRenderPasses.emplace(name, m_Passes[name]->GetRHIRenderPass());
 	}
 } // namespace shz
+
+

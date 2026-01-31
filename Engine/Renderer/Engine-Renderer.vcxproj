@@ -160,6 +160,7 @@
     <ClInclude Include="Public\IMaterialStaticBinder.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />
     <ClInclude Include="Public\Renderer.h" />
+    <ClInclude Include="Public\RenderResourceRegistry.h" />
     <ClInclude Include="Public\RenderScene.h" />
     <ClInclude Include="Public\RenderTarget.h" />
     <ClInclude Include="Public\ViewFamily.h" />
@@ -174,6 +175,7 @@
     <ClCompile Include="Private\PipelineStateManager.cpp" />
     <ClCompile Include="Private\RendererMaterialStaticBinder.cpp" />
     <ClCompile Include="Private\Renderer.cpp" />
+    <ClCompile Include="Private\RenderResourceRegistry.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
   </ItemGroup>
   <ItemGroup>
