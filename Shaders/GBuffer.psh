@@ -71,6 +71,28 @@ float3 PackNormal01(float3 n)
     return n * 0.5 + 0.5;
 }
 
+// Returns pseudo-random in [0,1)
+float Hash2D(float2 p)
+{
+    float v = 1.0e4 * sin(17.0 * p.x + 0.1 * p.y) * 0.1 + abs(sin(13.0 * p.y + p.x));
+    return frac(v);
+}
+
+float DitherThreshold(float4 svPos)
+{
+    float2 ip = floor(svPos.xy);
+    return Hash2D(ip);
+}
+
+void AlphaDitherTest(float alpha, float4 svPos)
+{
+    float r = DitherThreshold(svPos);
+    if (alpha < r)
+    {
+        discard;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
@@ -86,10 +108,7 @@ void main(in PSInput IN, out PSOutput OUT)
     }
 
     // Alpha cutout (MASK)
-    if (g_AlphaCutoff > 0.0 && baseColor.a < g_AlphaCutoff)
-    {
-        discard;
-    }
+    AlphaDitherTest(baseColor.a * g_BaseColorFactor.a, IN.Pos);
 
     // Metallic / Roughness
     float metallic = g_MetallicFactor;
