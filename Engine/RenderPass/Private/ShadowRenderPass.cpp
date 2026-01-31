@@ -7,7 +7,8 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
+#include "Engine/Renderer/Public/CommonResourceId.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -15,61 +16,12 @@ namespace shz
 	{
 #include "Shaders/HLSL_Structures.hlsli"
 	}
-	namespace
-	{
-		static constexpr uint32 SHADOW_MAP_SIZE = 4096;
-	}
 
 	ShadowRenderPass::ShadowRenderPass(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 		ASSERT(ctx.pShaderSourceFactory, "Shader source factory is null.");
-		ASSERT(ctx.pShadowCB, "ShadowCB is null.");
-		ASSERT(ctx.pObjectTableSBShadow, "ObjectTableSB is null.");
-
-		m_Width = SHADOW_MAP_SIZE;
-		m_Height = SHADOW_MAP_SIZE;
-
-		// ------------------------------------------------------------
-		// Create shadow map texture + views
-		// ------------------------------------------------------------
-		{
-			TextureDesc td = {};
-			td.Name = "ShadowMap";
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = m_Width;
-			td.Height = m_Height;
-			td.MipLevels = 1;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.Format = TEX_FORMAT_R32_TYPELESS;
-			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-			m_pShadowMap.Release();
-			m_pShadowDSV = nullptr;
-			m_pShadowSRV = nullptr;
-
-			ctx.pDevice->CreateTexture(td, nullptr, &m_pShadowMap);
-			ASSERT(m_pShadowMap, "Failed to create shadow map texture.");
-
-			{
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				vd.Format = TEX_FORMAT_D32_FLOAT;
-				m_pShadowMap->CreateView(vd, &m_pShadowDSV);
-			}
-
-			{
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-				vd.Format = TEX_FORMAT_R32_FLOAT;
-				m_pShadowMap->CreateView(vd, &m_pShadowSRV);
-			}
-
-			ASSERT(m_pShadowDSV, "Shadow DSV is null.");
-			ASSERT(m_pShadowSRV, "Shadow SRV is null.");
-		}
 
 		// ------------------------------------------------------------
 		// Create RenderPass + Framebuffer (depth-only)
@@ -109,8 +61,7 @@ namespace shz
 
 			// Framebuffer
 			{
-				ITextureView* atch[1] = { m_pShadowDSV };
-
+				ITextureView* atch[1] = { ctx.pRegistry->GetTextureDSV(STRING_HASH("ShadowMap")) };
 				FramebufferDesc fb = {};
 				fb.Name = "FB_Shadow";
 				fb.pRenderPass = m_pRenderPass;
@@ -202,17 +153,17 @@ namespace shz
 			{
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
 				{
-					var->Set(ctx.pShadowCB);
+					var->Set(ctx.pRegistry->GetBuffer(kRes_ShadowCB));
 				}
 
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
 				{
-					var->Set(ctx.pDrawCB);
+					var->Set(ctx.pRegistry->GetBuffer(kRes_DrawCB));
 				}
 
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(ctx.pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+					var->Set(ctx.pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
 				}
 			}
 
@@ -315,17 +266,17 @@ namespace shz
 			{
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
 				{
-					var->Set(ctx.pShadowCB);
+					var->Set(ctx.pRegistry->GetBuffer(kRes_ShadowCB));
 				}
 
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
 				{
-					var->Set(ctx.pDrawCB);
+					var->Set(ctx.pRegistry->GetBuffer(kRes_DrawCB));
 				}
 
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(ctx.pObjectTableSBShadow->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+					var->Set(ctx.pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
 				}
 			}
 		}
@@ -340,13 +291,6 @@ namespace shz
 
 		m_pFramebuffer.Release();
 		m_pRenderPass.Release();
-
-		m_pShadowMap.Release();
-		m_pShadowDSV = nullptr;
-		m_pShadowSRV = nullptr;
-
-		m_Width = 0;
-		m_Height = 0;
 	}
 
 	void ShadowRenderPass::BeginFrame(RenderPassContext& ctx)
@@ -358,7 +302,6 @@ namespace shz
 	void ShadowRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -368,7 +311,7 @@ namespace shz
 		{
 			StateTransitionDesc tr =
 			{
-				m_pShadowMap,
+				ctx.pRegistry->GetTexture(STRING_HASH("ShadowMap")),
 				RESOURCE_STATE_UNKNOWN,
 				RESOURCE_STATE_DEPTH_WRITE,
 				STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -377,8 +320,8 @@ namespace shz
 		}
 
 		Viewport vp = {};
-		vp.Width = float(m_Width);
-		vp.Height = float(m_Height);
+		vp.Width = float(ctx.ShadowMapResolution);
+		vp.Height = float(ctx.ShadowMapResolution);
 		vp.MinDepth = 0.f;
 		vp.MaxDepth = 1.f;
 		pCtx->SetViewports(1, &vp, 0, 0);
@@ -448,7 +391,7 @@ namespace shz
 			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
 #endif
 			{
-				MapHelper<hlsl::DrawConstants> map(pCtx, ctx.pDrawCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				MapHelper<hlsl::DrawConstants> map(pCtx, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
 				hlsl::DrawConstants* dst = map;
 
 				dst->StartInstanceLocation = dia.FirstInstanceLocation;
@@ -466,7 +409,7 @@ namespace shz
 		{
 			StateTransitionDesc tr2 =
 			{
-				m_pShadowMap,
+				ctx.pRegistry->GetTexture(STRING_HASH("ShadowMap")),
 				RESOURCE_STATE_UNKNOWN,
 				RESOURCE_STATE_SHADER_RESOURCE,
 				STATE_TRANSITION_FLAG_UPDATE_STATE

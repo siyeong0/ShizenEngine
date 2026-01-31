@@ -14,7 +14,7 @@ namespace shz
 	// - This registry is a lightweight lookup table for shared render resources.
 	// - It does NOT create, resize, or own "scene asset" textures/buffers.
 	// - It only stores pointers (owned via RefCntAutoPtr or external raw pointers).
-	using RenderResID = uint64_t;
+	using RenderResourceId = uint64_t;
 
 	class RenderResourceRegistry final
 	{
@@ -33,93 +33,53 @@ namespace shz
 		// - If the same id already exists, it will be overwritten.
 		// - Passing null removes the owned entry (but external binding may remain).
 		// -----------------------------------------------------------------
-		void RegisterTexture(RenderResID id, RefCntAutoPtr<ITexture>&& pTexure);
-		void RegisterBuffer(RenderResID id, RefCntAutoPtr<IBuffer>&& pBuffer);
+		void RegisterTexture(RenderResourceId id, RefCntAutoPtr<ITexture>&& pTexure);
+		void RegisterBuffer(RenderResourceId id, RefCntAutoPtr<IBuffer>&& pBuffer);
 
-		// -----------------------------------------------------------------
-		// External binding (not owned)
-		// Typical use: swapchain backbuffer RTV/DSV, heightmap SRV from scene, etc.
-		// - You may bind any subset of views. Unspecified views keep previous values.
-		// - Passing all null clears external bindings.
-		// -----------------------------------------------------------------
-		void BindExternalTextureViews(
-			RenderResID id,
-			ITexture* pTexure,
-			ITextureView* pSRV,
-			ITextureView* pRTV,
-			ITextureView* pDSV,
-			ITextureView* pUAV);
-
-		void BindExternalBuffer(RenderResID id, IBuffer* pBuf);
+		void CreateTextureView(RenderResourceId id, const TextureViewDesc& desc);
+		void CreateBufferView(RenderResourceId id, const BufferViewDesc& desc);
 
 		// -----------------------------------------------------------------
 		// Query
 		// - Prefer owned resource if present; otherwise use external.
 		// - View getters: for owned textures, returns cached default views if possible.
 		// -----------------------------------------------------------------
-		ITexture* GetTexture(RenderResID id) const;
-		IBuffer* GetBuffer(RenderResID id) const;
+		ITexture* GetTexture(RenderResourceId id) const;
+		IBuffer* GetBuffer(RenderResourceId id) const;
 
-		ITextureView* GetSRV(RenderResID id) const;
-		ITextureView* GetRTV(RenderResID id) const;
-		ITextureView* GetDSV(RenderResID id) const;
-		ITextureView* GetUAV(RenderResID id) const;
+		ITextureView* GetTextureSRV(RenderResourceId id) const;
+		ITextureView* GetTextureRTV(RenderResourceId id) const;
+		ITextureView* GetTextureDSV(RenderResourceId id) const;
+		ITextureView* GetTextureUAV(RenderResourceId id) const;
+
+		IBufferView* GetBufferSRV(RenderResourceId id) const;
+		IBufferView* GetBufferUAV(RenderResourceId id) const;
 
 		// -----------------------------------------------------------------
 		// Utilities
 		// -----------------------------------------------------------------
-		void UnregisterTexture(RenderResID id);
-		void UnregisterBuffer(RenderResID id);
-		void UnbindExternal(RenderResID id); // clears external texture/buffer bindings (keeps owned)
+		void UnregisterTexture(RenderResourceId id);
+		void UnregisterBuffer(RenderResourceId id);
 
 	private:
 		struct TextureEntry final
 		{
-			RefCntAutoPtr<ITexture> OwnedTexture = {};
-			RefCntAutoPtr<ITextureView> OwnedSRV = {};
-			RefCntAutoPtr<ITextureView> OwnedRTV = {};
-			RefCntAutoPtr<ITextureView> OwnedDSV = {};
-			RefCntAutoPtr<ITextureView> OwnedUAV = {};
-
-			ITexture* pExternalTexture = nullptr;
-			ITextureView* pExternalSRV = nullptr;
-			ITextureView* pExternalRTV = nullptr;
-			ITextureView* pExternalDSV = nullptr;
-			ITextureView* pExternalUAV = nullptr;
-
-			void ClearOwned()
-			{
-				OwnedSRV.Release();
-				OwnedRTV.Release();
-				OwnedDSV.Release();
-				OwnedUAV.Release();
-				OwnedTexture.Release();
-			}
-
-			void ClearExternal()
-			{
-				pExternalTexture = nullptr;
-				pExternalSRV = nullptr;
-				pExternalRTV = nullptr;
-				pExternalDSV = nullptr;
-				pExternalUAV = nullptr;
-			}
+			RefCntAutoPtr<ITexture> Texture = {};
+			RefCntAutoPtr<ITextureView> SRV = {};
+			RefCntAutoPtr<ITextureView> RTV = {};
+			RefCntAutoPtr<ITextureView> DSV = {};
+			RefCntAutoPtr<ITextureView> UAV = {};
 		};
 
 		struct BufferEntry final
 		{
-			RefCntAutoPtr<IBuffer> OwnedBuffer = {};
-			IBuffer* pExternalBuffer = nullptr;
-
-			void ClearOwned() { OwnedBuffer.Release(); }
-			void ClearExternal() { pExternalBuffer = nullptr; }
+			RefCntAutoPtr<IBuffer> Buffer = {};
+			RefCntAutoPtr<IBufferView> SRV = {};
+			RefCntAutoPtr<IBufferView> UAV = {};
 		};
 
 	private:
-		void rebuildOwnedTextureDefaultViews(TextureEntry& e);
-
-	private:
-		std::unordered_map<RenderResID, TextureEntry> m_Textures;
-		std::unordered_map<RenderResID, BufferEntry>  m_Buffers;
+		std::unordered_map<RenderResourceId, TextureEntry> m_Textures;
+		std::unordered_map<RenderResourceId, BufferEntry>  m_Buffers;
 	};
 } // namespace shz

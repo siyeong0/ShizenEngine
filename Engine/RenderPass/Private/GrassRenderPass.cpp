@@ -1,7 +1,7 @@
-// GrassRenderPass.cpp
 #include "pch.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
-#include "Engine/Renderer/Public/IMaterialStaticBinder.h"
+#include "Engine/Renderer/Public/CommonResourceId.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -67,9 +67,7 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
-		ASSERT(ctx.pDepthDsv, "GrassRenderPass requires Depth DSV (ctx.pDepthDsv).");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
-		ASSERT(ctx.pGrassMaterialStaticBinder, "GrassMaterialStaticBinder is null.");
 
 		// ------------------------------------------------------------
 		// Create RenderPass (Color=LOAD, Depth=LOAD)
@@ -78,7 +76,7 @@ namespace shz
 			const SwapChainDesc& scDesc = ctx.pSwapChain->GetDesc();
 			const TEXTURE_FORMAT colorFmt = scDesc.ColorBufferFormat;
 
-			const TEXTURE_FORMAT depthFmt = ctx.pDepthDsv->GetDesc().Format;
+			const TEXTURE_FORMAT depthFmt = ctx.pRegistry->GetTextureDSV(STRING_HASH("GBufferDepth"))->GetDesc().Format;
 			ASSERT(depthFmt != TEX_FORMAT_UNKNOWN, "Depth DSV format is unknown.");
 
 			RenderPassAttachmentDesc atts[2] = {};
@@ -305,19 +303,28 @@ namespace shz
 			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pGenCSO);
 			ASSERT(m_pGenCSO, "CreateComputePipelineState(PSO_GrassGenerateInstances) failed.");
 
-			ctx.pGrassMaterialStaticBinder->BindStatics(m_pGenCSO);
+			if (auto* var = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "FRAME_CONSTANTS"))
+			{
+				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
+			}
 
 			m_pGenCSO->CreateShaderResourceBinding(&m_pGenCSRB, true);
 			ASSERT(m_pGenCSRB, "Create SRB for GrassGenerateInstances failed.");
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstances"))
+			{
 				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
+			{
 				var->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+			{
 				var->Set(m_pGrassGenConstantsCB);
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -358,8 +365,6 @@ namespace shz
 
 			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pArgsCSO);
 			ASSERT(m_pArgsCSO, "CreateComputePipelineState(PSO_GrassWriteIndirectArgs) failed.");
-
-			ctx.pGrassMaterialStaticBinder->BindStatics(m_pArgsCSO);
 
 			m_pArgsCSO->CreateShaderResourceBinding(&m_pArgsCSRB, true);
 			ASSERT(m_pArgsCSRB, "Create SRB for GrassWriteIndirectArgs failed.");
@@ -476,13 +481,22 @@ namespace shz
 			ctx.pDevice->CreatePipelineState(psoCI, &m_pGrassPSO);
 			ASSERT(m_pGrassPSO, "CreatePipelineState(PSO_Grass) failed.");
 
-			ctx.pGrassMaterialStaticBinder->BindStatics(m_pGrassPSO);
+			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
+			{
+				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
+			}
+			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
+			{
+				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
+			}
 
 			m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
 			ASSERT(m_pGrassSRB, "Create SRB for Grass failed.");
 
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
+			{
 				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+			}
 
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
 				var->Set(m_pGrassRenderConstantsCB);
@@ -490,22 +504,28 @@ namespace shz
 				var->Set(m_pGrassRenderConstantsCB);
 
 			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
-				var->Set(ctx.pShadowMapSrv);
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
 
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 			{
-				if (ctx.pEnvDiffuseTex)
-					var->Set(ctx.pEnvDiffuseTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				if (ctx.pRegistry->GetTexture(kRes_EnvDiffuseTex))
+				{
+					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvDiffuseTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			}
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
 			{
-				if (ctx.pEnvSpecularTex)
-					var->Set(ctx.pEnvSpecularTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				if (ctx.pRegistry->GetTexture(kRes_EnvSpecularTex))
+				{
+					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvSpecularTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			}
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
 			{
-				if (ctx.pEnvBrdfTex)
-					var->Set(ctx.pEnvBrdfTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				if (ctx.pRegistry->GetTexture(kRes_EnvBrdfTex))
+				{
+					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvBrdfTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			}
 		}
 
@@ -546,8 +566,6 @@ namespace shz
 
 			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pInteractionDecayCSO);
 			ASSERT(m_pInteractionDecayCSO, "CreateComputePipelineState(PSO_InteractionDecay) failed.");
-
-			ctx.pGrassMaterialStaticBinder->BindStatics(m_pInteractionDecayCSO);
 
 			m_pInteractionDecayCSO->CreateShaderResourceBinding(&m_pInteractionDecaySRB, true);
 			ASSERT(m_pInteractionDecaySRB, "Create SRB for InteractionDecay failed.");
@@ -608,8 +626,6 @@ namespace shz
 			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pInteractionApplyCSO);
 			ASSERT(m_pInteractionApplyCSO, "CreateComputePipelineState(PSO_InteractionApplyStamps) failed.");
 
-			ctx.pGrassMaterialStaticBinder->BindStatics(m_pInteractionApplyCSO);
-
 			m_pInteractionApplyCSO->CreateShaderResourceBinding(&m_pInteractionApplySRB, true);
 			ASSERT(m_pInteractionApplySRB, "Create SRB for InteractionApplyStamps failed.");
 
@@ -663,14 +679,12 @@ namespace shz
 
 	void GrassRenderPass::BeginFrame(RenderPassContext& ctx)
 	{
-		ASSERT(ctx.pDepthDsv, "GrassRenderPass requires Depth DSV (ctx.pDepthDsv).");
 		buildFramebufferForCurrentBackBuffer(ctx);
 	}
 
 	void GrassRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
-		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 		ASSERT(m_pRenderPass, "Grass RenderPass is null.");
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
 
@@ -1011,7 +1025,7 @@ namespace shz
 
 			// Per-draw: StartInstanceLocation = 0
 			{
-				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pDrawCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
 				map->StartInstanceLocation = 0;
 			}
 
@@ -1075,11 +1089,10 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
-		ASSERT(ctx.pDepthDsv, "GrassRenderPass requires Depth DSV (ctx.pDepthDsv).");
 		ASSERT(m_pRenderPass, "Grass render pass is null.");
 
-		ITextureView* pRTV = ctx.pLightingRtv;
-		ITextureView* pDSV = ctx.pDepthDsv;
+		ITextureView* pRTV = ctx.pRegistry->GetTextureRTV(STRING_HASH("Lighting"));
+		ITextureView* pDSV = ctx.pRegistry->GetTextureDSV(STRING_HASH("GBufferDepth"));
 		ASSERT(pRTV, "BackBuffer RTV is null.");
 		ASSERT(pDSV, "Depth DSV is null.");
 

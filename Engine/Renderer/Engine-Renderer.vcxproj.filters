@@ -33,12 +33,6 @@
     <ClInclude Include="Public\RenderResourceCache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RendererMaterialStaticBinder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\IMaterialStaticBinder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\PipelineStateManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -46,6 +40,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\RenderResourceRegistry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CommonResourceId.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -57,9 +54,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\RenderScene.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\RendererMaterialStaticBinder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\PipelineStateManager.cpp">

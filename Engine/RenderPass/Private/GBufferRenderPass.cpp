@@ -6,8 +6,9 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
+#include "Engine/Renderer/Public/CommonResourceId.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -20,15 +21,11 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pObjectIndexVB, "ObjectIndexVB is null.");
 
 		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
 		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
 
 		bool ok = false;
-
-		ok = createTargets(ctx, w, h);
-		ASSERT(ok, "Failed to create g-buffer render targets.");
 
 		ok = createPassObjects(ctx);
 		ASSERT(ok, "Failed to create g-buffer pass objects.");
@@ -39,20 +36,6 @@ namespace shz
 	{
 		m_pFramebuffer.Release();
 		m_pRenderPass.Release();
-
-		for (uint32 i = 0; i < RenderPassContext::NUM_GBUFFERS; ++i)
-		{
-			m_pGBufferTex[i].Release();
-			m_pGBufferRTV[i] = nullptr;
-			m_pGBufferSRV[i] = nullptr;
-		}
-
-		m_pDepthTex.Release();
-		m_pDepthDSV = nullptr;
-		m_pDepthSRV = nullptr;
-
-		m_Width = 0;
-		m_Height = 0;
 	}
 
 	void GBufferRenderPass::BeginFrame(RenderPassContext& ctx)
@@ -61,88 +44,9 @@ namespace shz
 		m_DrawCallCount = 0;
 	}
 
-	bool GBufferRenderPass::createTargets(RenderPassContext& ctx, uint32 width, uint32 height)
-	{
-		IRenderDevice* device = ctx.pDevice;
-		ASSERT(device, "Device is null.");
-
-		m_Width = width;
-		m_Height = height;
-
-		auto createRTTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name,
-			RefCntAutoPtr<ITexture>& outTex, ITextureView*& outRtv, ITextureView*& outSrv)
-		{
-			TextureDesc td = {};
-			td.Name = name;
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = w;
-			td.Height = h;
-			td.MipLevels = 1;
-			td.Format = fmt;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-			outTex.Release();
-			outRtv = nullptr;
-			outSrv = nullptr;
-
-			device->CreateTexture(td, nullptr, &outTex);
-			ASSERT(outTex, "Failed to create RT texture.");
-
-			outRtv = outTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-			outSrv = outTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			ASSERT(outRtv && outSrv, "RTV/SRV is null.");
-		};
-
-		// same formats as old
-		createRTTexture(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_AlbedoA", m_pGBufferTex[0], m_pGBufferRTV[0], m_pGBufferSRV[0]);
-		createRTTexture(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_NormalWS", m_pGBufferTex[1], m_pGBufferRTV[1], m_pGBufferSRV[1]);
-		createRTTexture(width, height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO", m_pGBufferTex[2], m_pGBufferRTV[2], m_pGBufferSRV[2]);
-		createRTTexture(width, height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive", m_pGBufferTex[3], m_pGBufferRTV[3], m_pGBufferSRV[3]);
-
-		// Depth
-		{
-			TextureDesc td = {};
-			td.Name = "GBufferDepth";
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = width;
-			td.Height = height;
-			td.MipLevels = 1;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.Format = TEX_FORMAT_R32_TYPELESS;
-			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-			m_pDepthTex.Release();
-			m_pDepthDSV = nullptr;
-			m_pDepthSRV = nullptr;
-
-			device->CreateTexture(td, nullptr, &m_pDepthTex);
-			ASSERT(m_pDepthTex, "Failed to create GBufferDepth texture.");
-
-			TextureViewDesc vd = {};
-			vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-			vd.Format = TEX_FORMAT_D32_FLOAT;
-			m_pDepthTex->CreateView(vd, &m_pDepthDSV);
-			ASSERT(m_pDepthDSV, "Failed to create GBufferDepth DSV.");
-
-			vd = {};
-			vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-			vd.Format = TEX_FORMAT_R32_FLOAT;
-			m_pDepthTex->CreateView(vd, &m_pDepthSRV);
-			ASSERT(m_pDepthSRV, "Failed to create GBufferDepth SRV.");
-		}
-
-		// FB will be recreated in createPassObjects
-		m_pFramebuffer.Release();
-		return true;
-	}
-
 	void GBufferRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
-		ASSERT(ctx.pDrawCB, "DrawCB is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
@@ -152,11 +56,11 @@ namespace shz
 		{
 			StateTransitionDesc tr[] =
 			{
-				{ m_pGBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[1], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[2], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer0_Albedo")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer1_Normal")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer2_MRAO")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer3_Emissive")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBufferDepth")),      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -233,7 +137,7 @@ namespace shz
 			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
 #endif
 			{
-				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pDrawCB, MAP_WRITE, MAP_FLAG_DISCARD);
+				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
 				hlsl::DrawConstants* dst = map;
 
 				dst->StartInstanceLocation = dia.FirstInstanceLocation;
@@ -251,11 +155,11 @@ namespace shz
 		{
 			StateTransitionDesc tr2[] =
 			{
-				{ m_pGBufferTex[0], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[1], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[2], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGBufferTex[3], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pDepthTex,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer0_Albedo")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer1_Normal")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer2_MRAO")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer3_Emissive")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GBufferDepth")),      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr2), tr2);
 		}
@@ -275,11 +179,6 @@ namespace shz
 	void GBufferRenderPass::OnResize(RenderPassContext& ctx, uint32 width, uint32 height)
 	{
 		ASSERT(width != 0 && height != 0, "Invalid size.");
-
-		if (!createTargets(ctx, width, height))
-		{
-			ASSERT(false, "Failed to recreate render targets.");
-		}
 
 		// FB rebind
 		(void)createPassObjects(ctx);
@@ -346,15 +245,14 @@ namespace shz
 		// Framebuffer (size-dependent)
 		{
 			ASSERT(m_pRenderPass, "RP_GBuffer is null.");
-			ASSERT(m_pGBufferRTV[0] && m_pGBufferRTV[1] && m_pGBufferRTV[2] && m_pGBufferRTV[3] && m_pDepthDSV, "GBuffer views are null.");
 
 			ITextureView* atch[5] =
 			{
-				m_pGBufferRTV[0],
-				m_pGBufferRTV[1],
-				m_pGBufferRTV[2],
-				m_pGBufferRTV[3],
-				m_pDepthDSV
+				ctx.pRegistry->GetTextureRTV(STRING_HASH("GBuffer0_Albedo")),
+				ctx.pRegistry->GetTextureRTV(STRING_HASH("GBuffer1_Normal")),
+				ctx.pRegistry->GetTextureRTV(STRING_HASH("GBuffer2_MRAO")),
+				ctx.pRegistry->GetTextureRTV(STRING_HASH("GBuffer3_Emissive")),
+				ctx.pRegistry->GetTextureDSV(STRING_HASH("GBufferDepth"))
 			};
 
 			FramebufferDesc fbDesc = {};

@@ -1,5 +1,3 @@
-// Engine/RenderPass/Public/RenderPassContext.h
-
 #pragma once
 #include <vector>
 
@@ -22,7 +20,7 @@
 
 namespace shz
 {
-	class RenderResourceRegistry; // <-- 추가: forward decl
+	class RenderResourceRegistry;
 
 	namespace hlsl
 	{
@@ -30,7 +28,6 @@ namespace shz
 	}// namespace hlsl
 
 	class AssetManager;
-	class IMaterialStaticBinder;
 
 	struct RenderPassContext final
 	{
@@ -43,11 +40,7 @@ namespace shz
 		AssetManager* pAssetManager = nullptr;
 		PipelineStateManager* pPipelineStateManager = nullptr;
 
-		IMaterialStaticBinder* pGBufferMaterialStaticBinder = nullptr;
-		IMaterialStaticBinder* pGrassMaterialStaticBinder = nullptr;
-		IMaterialStaticBinder* pShadowMaterialStaticBinder = nullptr;
-
-		RenderResourceRegistry* pRegistry = nullptr; // <-- 추가: Registry 접근 포인터
+		RenderResourceRegistry* pRegistry = nullptr;
 
 		float DeltaTime = 0.0f;
 
@@ -67,33 +60,9 @@ namespace shz
 		// ------------------------------------------------------------
 		// Common resources wired by Renderer
 		// ------------------------------------------------------------
-		IBuffer* pFrameCB = nullptr;
-		IBuffer* pDrawCB = nullptr;
-		IBuffer* pShadowCB = nullptr;
-
-		IBuffer* pObjectTableSBGBuffer = nullptr;
-		IBuffer* pObjectTableSBGrass = nullptr;
-		IBuffer* pObjectTableSBShadow = nullptr;
-		IBuffer* pObjectIndexVB = nullptr;
-
-		ITexture* pEnvTex = nullptr;
-		ITexture* pEnvDiffuseTex = nullptr;
-		ITexture* pEnvSpecularTex = nullptr;
-		ITexture* pEnvBrdfTex = nullptr;
-
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
-
-		// Pass outputs
-		ITextureView* pLightingRtv = nullptr;
-		ITextureView* pShadowMapSrv = nullptr;
-
-		static constexpr uint32 NUM_GBUFFERS = 4;
-		ITextureView* pGBufferSrv[NUM_GBUFFERS] = {};
-		ITextureView* pDepthSrv = nullptr;
-
-		ITextureView* pDepthDsv = nullptr;
-		ITextureView* pLightingSrv = nullptr;
+		uint32 ShadowMapResolution = 4096;
 
 		const TextureRenderData* pHeightMap = nullptr;
 		std::vector<hlsl::InteractionStamp> InteractionStamps = {};
@@ -127,13 +96,13 @@ namespace shz
 			PreBarriers.push_back(b);
 		}
 
-		void UploadObjectIndexInstance(uint32 objectIndex) const
-		{
-			ASSERT(pImmediateContext, "Context is null.");
-			ASSERT(pObjectIndexVB, "ObjectIndex VB is null.");
+		//void UploadObjectIndexInstance(uint32 objectIndex) const
+		//{
+		//	ASSERT(pImmediateContext, "Context is null.");
+		//	ASSERT(pObjectIndexVB, "ObjectIndex VB is null.");
 
-			MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
-			*map = objectIndex;
-		}
+		//	MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
+		//	*map = objectIndex;
+		//}
 	};
 } // namespace shz

@@ -24,9 +24,6 @@
     <ClInclude Include="Public\RenderPassBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderPassContext.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\GBufferRenderPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -40,6 +37,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\GrassRenderPass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\RenderPassContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

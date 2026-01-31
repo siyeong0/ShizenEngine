@@ -28,7 +28,6 @@
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.hpp"
-#include "Engine/Renderer/Public/RendererMaterialStaticBinder.h"
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 
 #include "Engine/RenderPass/Public/RenderPassContext.h"
@@ -124,10 +123,6 @@ namespace shz
 
 		const TextureRenderData& CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
-		// Registry access (Renderer getters for SRV/RTV are removed)
-		RenderResourceRegistry& GetRegistry() noexcept { return m_Registry; }
-		const RenderResourceRegistry& GetRegistry() const noexcept { return m_Registry; }
-
 		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
 
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
@@ -135,11 +130,7 @@ namespace shz
 
 	private:
 		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
-		void wirePassOutputs();
 		void addPass(std::unique_ptr<RenderPassBase> pass);
-
-		// Common shared resource ids
-		static uint64 MakeResID(const char* name);
 
 	private:
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
@@ -163,12 +154,7 @@ namespace shz
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
 		RenderResourceCache<MaterialRenderData> m_MaterialCache;
 
-		std::unique_ptr<RendererMaterialStaticBinder> m_pGBufferMaterialStaticBinder;
-		std::unique_ptr<RendererMaterialStaticBinder> m_pGrassMaterialStaticBinder;
-		std::unique_ptr<RendererMaterialStaticBinder> m_pShadowMaterialStaticBinder;
-
-		// NEW: Shared render resources live here
-		RenderResourceRegistry m_Registry;
+		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;

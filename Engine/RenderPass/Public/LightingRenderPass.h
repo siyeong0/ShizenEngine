@@ -31,24 +31,13 @@ namespace shz
 		void OnResize(RenderPassContext& ctx, uint32 width, uint32 height) override;
 
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
-	public:
-		ITextureView* GetLightingSRV() const noexcept { return m_pLightingSRV; }
-		ITextureView* GetLightingRTV() const noexcept { return m_pLightingRTV; }
 
 	private:
-		bool createTargets(RenderPassContext& ctx, uint32 width, uint32 height);
 		bool createPassObjects(RenderPassContext& ctx);
 		bool createPSO(RenderPassContext& ctx);
 		void bindInputs(RenderPassContext& ctx);
 
 	private:
-		uint32 m_Width = 0;
-		uint32 m_Height = 0;
-
-		RefCntAutoPtr<ITexture> m_pLightingTex;
-		ITextureView* m_pLightingRTV = nullptr;
-		ITextureView* m_pLightingSRV = nullptr;
-
 		RefCntAutoPtr<IRenderPass> m_pRenderPass;
 		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
 

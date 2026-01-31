@@ -6,6 +6,8 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Renderer/Public/CommonResourceId.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -15,14 +17,11 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
-		ASSERT(ctx.pFrameCB, "FrameCB is null.");
 
 		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
 		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
 
 		bool ok = false;
-		ok = createTargets(ctx, w, h);
-		ASSERT(ok, "Failed to create ligting pass render targets.");
 
 		ok = createPassObjects(ctx);
 		ASSERT(ok, "Failed to create ligting pass objects.");
@@ -40,54 +39,11 @@ namespace shz
 
 		m_pFramebuffer.Release();
 		m_pRenderPass.Release();
-
-		m_pLightingTex.Release();
-		m_pLightingRTV = nullptr;
-		m_pLightingSRV = nullptr;
-
-		m_Width = 0;
-		m_Height = 0;
 	}
 
 	void LightingRenderPass::BeginFrame(RenderPassContext& ctx)
 	{
 		(void)ctx;
-	}
-
-	bool LightingRenderPass::createTargets(RenderPassContext& ctx, uint32 width, uint32 height)
-	{
-		ASSERT(ctx.pDevice, "Device is null.");
-		ASSERT(ctx.pSwapChain, "SwapChain is null.");
-
-		m_Width = width;
-		m_Height = height;
-
-		const SwapChainDesc& sc = ctx.pSwapChain->GetDesc();
-
-		TextureDesc td = {};
-		td.Name = "LightingColor";
-		td.Type = RESOURCE_DIM_TEX_2D;
-		td.Width = width;
-		td.Height = height;
-		td.MipLevels = 1;
-		td.Format = sc.ColorBufferFormat;
-		td.SampleCount = 1;
-		td.Usage = USAGE_DEFAULT;
-		td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-		m_pLightingTex.Release();
-		m_pLightingRTV = nullptr;
-		m_pLightingSRV = nullptr;
-
-		ctx.pDevice->CreateTexture(td, nullptr, &m_pLightingTex);
-		ASSERT(m_pLightingTex, "Failed to create Lighting texture.");
-
-		m_pLightingRTV = m_pLightingTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-		m_pLightingSRV = m_pLightingTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-		ASSERT(m_pLightingRTV && m_pLightingSRV, "Lighting RTV/SRV is null.");
-
-		m_pFramebuffer.Release();
-		return true;
 	}
 
 	bool LightingRenderPass::createPassObjects(RenderPassContext& ctx)
@@ -129,9 +85,7 @@ namespace shz
 
 		// Framebuffer (size-dependent)
 		{
-			ASSERT(m_pLightingRTV, "Lighting RTV is null.");
-
-			ITextureView* atch[1] = { m_pLightingRTV };
+			ITextureView* atch[1] = { ctx.pRegistry->GetTextureRTV(STRING_HASH("Lighting")) };
 
 			FramebufferDesc fbDesc = {};
 			fbDesc.Name = "FB_Lighting";
@@ -249,7 +203,7 @@ namespace shz
 		// Bind FRAME_CONSTANTS static
 		if (auto* var = m_pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
 		{
-			var->Set(ctx.pFrameCB);
+			var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
 		}
 
 		m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
@@ -270,39 +224,39 @@ namespace shz
 			}
 		};
 
-		bindGBufferTexture("g_GBuffer0", ctx.pGBufferSrv[0]);
-		bindGBufferTexture("g_GBuffer1", ctx.pGBufferSrv[1]);
-		bindGBufferTexture("g_GBuffer2", ctx.pGBufferSrv[2]);
-		bindGBufferTexture("g_GBuffer3", ctx.pGBufferSrv[3]);
-		bindGBufferTexture("g_GBufferDepth", ctx.pDepthSrv);
-		bindGBufferTexture("g_ShadowMap", ctx.pShadowMapSrv);
+		bindGBufferTexture("g_GBuffer0", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer0_Albedo")));
+		bindGBufferTexture("g_GBuffer1", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
+		bindGBufferTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
+		bindGBufferTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
+		bindGBufferTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+		bindGBufferTexture("g_ShadowMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
 
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_EnvMapTex"))
 		{
-			if (ctx.pEnvTex)
+			if (ctx.pRegistry->GetTexture(kRes_EnvTex))
 			{
-				var->Set(ctx.pEnvTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 		{
-			if (ctx.pEnvDiffuseTex)
+			if (ctx.pRegistry->GetTexture(kRes_EnvDiffuseTex))
 			{
-				var->Set(ctx.pEnvDiffuseTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvDiffuseTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
 		{
-			if (ctx.pEnvSpecularTex)
+			if (ctx.pRegistry->GetTexture(kRes_EnvSpecularTex))
 			{
-				var->Set(ctx.pEnvSpecularTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvSpecularTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
 		{
-			if (ctx.pEnvBrdfTex)
+			if (ctx.pRegistry->GetTexture(kRes_EnvBrdfTex))
 			{
-				var->Set(ctx.pEnvBrdfTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvBrdfTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 	}
@@ -330,7 +284,7 @@ namespace shz
 		{
 			StateTransitionDesc tr =
 			{
-				m_pLightingTex,
+				ctx.pRegistry->GetTexture(STRING_HASH("Lighting")),
 				RESOURCE_STATE_UNKNOWN,
 				RESOURCE_STATE_RENDER_TARGET,
 				STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -357,7 +311,7 @@ namespace shz
 
 			StateTransitionDesc tr2 =
 			{
-				m_pLightingTex,
+				ctx.pRegistry->GetTexture(STRING_HASH("Lighting")),
 				RESOURCE_STATE_UNKNOWN,
 				RESOURCE_STATE_SHADER_RESOURCE,
 				STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -379,12 +333,6 @@ namespace shz
 	void LightingRenderPass::OnResize(RenderPassContext& ctx, uint32 width, uint32 height)
 	{
 		ASSERT(width != 0 && height != 0, "Invalid size.");
-
-		if (!createTargets(ctx, width, height))
-		{
-			ASSERT(false, "Failed to recreate lighting pass render targets.");
-		}
-
 		(void)createPassObjects(ctx);
 	}
 } // namespace shz

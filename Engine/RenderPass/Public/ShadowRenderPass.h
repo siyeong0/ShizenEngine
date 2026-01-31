@@ -32,20 +32,11 @@ namespace shz
 
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
 	public:
-		ITextureView* GetShadowMapSRV() const noexcept { return m_pShadowSRV; }
-
 		IPipelineState* GetShadowMaskedPSO() const noexcept { return m_pShadowMaskedPSO.RawPtr(); }
 		IPipelineState* GetShadowPSO() const noexcept { return m_pShadowPSO.RawPtr(); }
 		IShaderResourceBinding* GetOpaqueShadowSRB() const noexcept { return m_pSRB.RawPtr(); }
 
 	private:
-		uint32 m_Width = 0;
-		uint32 m_Height = 0;
-
-		RefCntAutoPtr<ITexture> m_pShadowMap;
-		ITextureView* m_pShadowDSV = nullptr;
-		ITextureView* m_pShadowSRV = nullptr;
-
 		RefCntAutoPtr<IRenderPass> m_pRenderPass;
 		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
 

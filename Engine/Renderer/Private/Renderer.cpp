@@ -16,8 +16,9 @@
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
-
 #include "Engine/RenderPass/Public/DrawPacket.h"
+
+#include "Engine/Renderer/Public/CommonResourceId.h"
 
 namespace shz
 {
@@ -29,43 +30,6 @@ namespace shz
 	static const uint64 kPassGBuffer = STRING_HASH("GBuffer");
 	static const uint64 kPassGrass = STRING_HASH("Grass");
 	static const uint64 kPassShadow = STRING_HASH("Shadow");
-
-	// ------------------------------------------------------------
-	// Common shared resource ids (registry keys)
-	// ------------------------------------------------------------
-	static const uint64 kRes_FrameCB = STRING_HASH("FrameCB");
-	static const uint64 kRes_DrawCB = STRING_HASH("DrawCB");
-	static const uint64 kRes_ShadowCB = STRING_HASH("ShadowCB");
-
-	static const uint64 kRes_ObjectTable_GB = STRING_HASH("ObjectTableSB.GBuffer");
-	static const uint64 kRes_ObjectTable_GR = STRING_HASH("ObjectTableSB.Grass");
-	static const uint64 kRes_ObjectTable_SH = STRING_HASH("ObjectTableSB.Shadow");
-	static const uint64 kRes_ObjectIndexVB = STRING_HASH("ObjectIndexInstanceVB");
-
-	static const uint64 kRes_EnvTex = STRING_HASH("EnvTex");
-	static const uint64 kRes_EnvDiffuseTex = STRING_HASH("EnvDiffuseTex");
-	static const uint64 kRes_EnvSpecularTex = STRING_HASH("EnvSpecularTex");
-	static const uint64 kRes_EnvBrdfTex = STRING_HASH("EnvBrdfTex");
-
-	const uint64 kRes_ErrorTex = STRING_HASH("ErrorTex");
-
-	// Pass outputs (external views)
-	static const uint64 kRes_ShadowMapSRV = STRING_HASH("Out.ShadowMapSRV");
-	static const uint64 kRes_DepthSRV = STRING_HASH("Out.DepthSRV");
-	static const uint64 kRes_DepthDSV = STRING_HASH("Out.DepthDSV");
-	static const uint64 kRes_LightingSRV = STRING_HASH("Out.LightingSRV");
-	static const uint64 kRes_LightingRTV = STRING_HASH("Out.LightingRTV");
-
-	static const uint64 kRes_GBufferSRV0 = STRING_HASH("Out.GBufferSRV0");
-	static const uint64 kRes_GBufferSRV1 = STRING_HASH("Out.GBufferSRV1");
-	static const uint64 kRes_GBufferSRV2 = STRING_HASH("Out.GBufferSRV2");
-	static const uint64 kRes_GBufferSRV3 = STRING_HASH("Out.GBufferSRV3");
-
-	uint64 Renderer::MakeResID(const char* name)
-	{
-		ASSERT(name && name[0] != '\0', "MakeResID: name is empty.");
-		return STRING_HASH(name);
-	}
 
 	// ---------------------------------------------------------------------
 	// Resource wrappers
@@ -147,7 +111,8 @@ namespace shz
 		m_pAssetManager = createInfo.pAssetManager;
 		m_pShaderSourceFactory = createInfo.pShaderSourceFactory;
 
-		m_Registry.Initialize();
+		m_pRegistry = std::make_unique<RenderResourceRegistry>();
+		m_pRegistry->Initialize();
 
 		// Build fixed templates + prepare cache map
 		{
@@ -244,12 +209,8 @@ namespace shz
 			RefCntAutoPtr<ITexture> errorTex = CreateTexture(desc, &initData);
 			ASSERT(errorTex, "CreateTexture failed.");
 
-			m_Registry.RegisterTexture(kRes_ErrorTex, std::move(errorTex));
+			m_pRegistry->RegisterTexture(kRes_ErrorTex, std::move(errorTex));
 		}
-
-		m_pGBufferMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
-		m_pGrassMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
-		m_pShadowMaterialStaticBinder = std::make_unique<RendererMaterialStaticBinder>();
 
 		// -----------------------------------------------------------------
 		// Create shared buffers -> register to registry
@@ -270,9 +231,9 @@ namespace shz
 			ASSERT(drawCB, "Draw CB create failed.");
 			ASSERT(shadowCB, "Shadow CB create failed.");
 
-			m_Registry.RegisterBuffer(kRes_FrameCB, std::move(frameCB));
-			m_Registry.RegisterBuffer(kRes_DrawCB, std::move(drawCB));
-			m_Registry.RegisterBuffer(kRes_ShadowCB, std::move(shadowCB));
+			m_pRegistry->RegisterBuffer(kRes_FrameCB, std::move(frameCB));
+			m_pRegistry->RegisterBuffer(kRes_DrawCB, std::move(drawCB));
+			m_pRegistry->RegisterBuffer(kRes_ShadowCB, std::move(shadowCB));
 
 			// ObjectIndexInstanceVB
 			{
@@ -286,7 +247,7 @@ namespace shz
 				RefCntAutoPtr<IBuffer> vb = CreateBuffer(desc, nullptr);
 				ASSERT(vb, "Object index VB create failed.");
 
-				m_Registry.RegisterBuffer(kRes_ObjectIndexVB, std::move(vb));
+				m_pRegistry->RegisterBuffer(kRes_ObjectIndexVB, std::move(vb));
 			}
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
@@ -305,9 +266,9 @@ namespace shz
 					return sb;
 				};
 
-			m_Registry.RegisterBuffer(kRes_ObjectTable_GB, std::move(createObjectTable("ObjectTableSB.GBuffer")));
-			m_Registry.RegisterBuffer(kRes_ObjectTable_GR, std::move(createObjectTable("ObjectTableSB.Grass")));
-			m_Registry.RegisterBuffer(kRes_ObjectTable_SH, std::move(createObjectTable("ObjectTableSB.Shadow")));
+			m_pRegistry->RegisterBuffer(kRes_ObjectTable_GB, std::move(createObjectTable("ObjectTableSB.GBuffer")));
+			m_pRegistry->RegisterBuffer(kRes_ObjectTable_GR, std::move(createObjectTable("ObjectTableSB.Grass")));
+			m_pRegistry->RegisterBuffer(kRes_ObjectTable_SH, std::move(createObjectTable("ObjectTableSB.Shadow")));
 		}
 
 		// -----------------------------------------------------------------
@@ -327,37 +288,24 @@ namespace shz
 			ASSERT(spec, "Env specular load failed.");
 			ASSERT(brdf, "Env brdf load failed.");
 
-			m_Registry.RegisterTexture(kRes_EnvTex, std::move(env));
-			m_Registry.RegisterTexture(kRes_EnvDiffuseTex, std::move(diff));
-			m_Registry.RegisterTexture(kRes_EnvSpecularTex, std::move(spec));
-			m_Registry.RegisterTexture(kRes_EnvBrdfTex, std::move(brdf));
+			m_pRegistry->RegisterTexture(kRes_EnvTex, std::move(env));
+			m_pRegistry->RegisterTexture(kRes_EnvDiffuseTex, std::move(diff));
+			m_pRegistry->RegisterTexture(kRes_EnvSpecularTex, std::move(spec));
+			m_pRegistry->RegisterTexture(kRes_EnvBrdfTex, std::move(brdf));
 		}
 
 		// -----------------------------------------------------------------
 		// Setup binders (now fetch buffers from registry)
 		// -----------------------------------------------------------------
 		{
-			IBuffer* pFrameCB = m_Registry.GetBuffer(kRes_FrameCB);
-			IBuffer* pDrawCB = m_Registry.GetBuffer(kRes_DrawCB);
+			IBuffer* pFrameCB = m_pRegistry->GetBuffer(kRes_FrameCB);
+			IBuffer* pDrawCB = m_pRegistry->GetBuffer(kRes_DrawCB);
 
-			IBuffer* pSB_GB = m_Registry.GetBuffer(kRes_ObjectTable_GB);
-			IBuffer* pSB_GR = m_Registry.GetBuffer(kRes_ObjectTable_GR);
-			IBuffer* pSB_SH = m_Registry.GetBuffer(kRes_ObjectTable_SH);
-
+			IBuffer* pSB_GB = m_pRegistry->GetBuffer(kRes_ObjectTable_GB);
+			IBuffer* pSB_GR = m_pRegistry->GetBuffer(kRes_ObjectTable_GR);
+			IBuffer* pSB_SH = m_pRegistry->GetBuffer(kRes_ObjectTable_SH);
 			ASSERT(pFrameCB && pDrawCB, "Common CB invalid.");
 			ASSERT(pSB_GB && pSB_GR && pSB_SH, "Object tables invalid.");
-
-			m_pGBufferMaterialStaticBinder->SetFrameConstants(pFrameCB);
-			m_pGBufferMaterialStaticBinder->SetDrawConstants(pDrawCB);
-			m_pGBufferMaterialStaticBinder->SetObjectTableSRV(pSB_GB->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
-
-			m_pGrassMaterialStaticBinder->SetFrameConstants(pFrameCB);
-			m_pGrassMaterialStaticBinder->SetDrawConstants(pDrawCB);
-			m_pGrassMaterialStaticBinder->SetObjectTableSRV(pSB_GR->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
-
-			m_pShadowMaterialStaticBinder->SetFrameConstants(pFrameCB);
-			m_pShadowMaterialStaticBinder->SetDrawConstants(pDrawCB);
-			m_pShadowMaterialStaticBinder->SetObjectTableSRV(pSB_SH->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 		}
 
 		// -----------------------------------------------------------------
@@ -370,29 +318,107 @@ namespace shz
 		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
 		m_PassCtx.pAssetManager = m_pAssetManager;
 		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
-		m_PassCtx.pRegistry = &m_Registry;
-
-		m_PassCtx.pGBufferMaterialStaticBinder = m_pGBufferMaterialStaticBinder.get();
-		m_PassCtx.pGrassMaterialStaticBinder = m_pGrassMaterialStaticBinder.get();
-		m_PassCtx.pShadowMaterialStaticBinder = m_pShadowMaterialStaticBinder.get();
-
-		m_PassCtx.pFrameCB = m_Registry.GetBuffer(kRes_FrameCB);
-		m_PassCtx.pDrawCB = m_Registry.GetBuffer(kRes_DrawCB);
-		m_PassCtx.pShadowCB = m_Registry.GetBuffer(kRes_ShadowCB);
-
-		m_PassCtx.pObjectTableSBGBuffer = m_Registry.GetBuffer(kRes_ObjectTable_GB);
-		m_PassCtx.pObjectTableSBGrass = m_Registry.GetBuffer(kRes_ObjectTable_GR);
-		m_PassCtx.pObjectTableSBShadow = m_Registry.GetBuffer(kRes_ObjectTable_SH);
-
-		m_PassCtx.pObjectIndexVB = m_Registry.GetBuffer(kRes_ObjectIndexVB);
-
-		m_PassCtx.pEnvTex = m_Registry.GetTexture(kRes_EnvTex);
-		m_PassCtx.pEnvDiffuseTex = m_Registry.GetTexture(kRes_EnvDiffuseTex);
-		m_PassCtx.pEnvSpecularTex = m_Registry.GetTexture(kRes_EnvSpecularTex);
-		m_PassCtx.pEnvBrdfTex = m_Registry.GetTexture(kRes_EnvBrdfTex);
+		m_PassCtx.pRegistry = m_pRegistry.get();
 
 		m_PassCtx.BackBufferWidth = m_Width;
 		m_PassCtx.BackBufferHeight = m_Height;
+
+		// -----------------------------------------------------------------
+		// Create common resources for passes
+		// -----------------------------------------------------------------
+		{
+			// Shadow map
+			static constexpr uint32 SHADOW_MAP_SIZE = 4096;
+			m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
+			{
+				TextureDesc td = {};
+				td.Name = "ShadowMap";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = SHADOW_MAP_SIZE;
+				td.Height = SHADOW_MAP_SIZE;
+				td.MipLevels = 1;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.Format = TEX_FORMAT_R32_TYPELESS;
+				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+				m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
+
+				TextureViewDesc dsvDesc = {};
+				dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+				dsvDesc.Format = TEX_FORMAT_D32_FLOAT;
+				m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), dsvDesc);
+
+				TextureViewDesc srvDesc = {};
+				srvDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+				srvDesc.Format = TEX_FORMAT_R32_FLOAT;
+				m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), srvDesc);
+
+			}
+
+			// GBuffer textures
+			static constexpr uint32 NUM_GBUFFERS = 4;
+			{
+				auto createGBufferTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> RefCntAutoPtr<ITexture>
+					{
+						TextureDesc td = {};
+						td.Name = name;
+						td.Type = RESOURCE_DIM_TEX_2D;
+						td.Width = w;
+						td.Height = h;
+						td.MipLevels = 1;
+						td.Format = fmt;
+						td.SampleCount = 1;
+						td.Usage = USAGE_DEFAULT;
+						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+						return CreateTexture(td);
+					};
+				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
+				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
+				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
+				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+
+				TextureDesc td = {};
+				td.Name = "GBufferDepth";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Width;
+				td.Height = m_Height;
+				td.MipLevels = 1;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.Format = TEX_FORMAT_R32_TYPELESS;
+				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+				m_pRegistry->RegisterTexture(STRING_HASH("GBufferDepth"), CreateTexture(td));
+
+				TextureViewDesc vd = {};
+				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+				vd.Format = TEX_FORMAT_D32_FLOAT;
+
+				m_pRegistry->CreateTextureView(STRING_HASH("GBufferDepth"), vd);
+
+				vd = {};
+				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+				vd.Format = TEX_FORMAT_R32_FLOAT;
+				m_pRegistry->CreateTextureView(STRING_HASH("GBufferDepth"), vd);
+			}
+
+			// Lighting
+			{
+				TextureDesc td = {};
+				td.Name = "Lighting";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Width;
+				td.Height = m_Height;
+				td.MipLevels = 1;
+				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+				m_pRegistry->RegisterTexture(STRING_HASH("Lighting"), CreateTexture(td));
+			}
+		}
 
 		// -----------------------------------------------------------------
 		// Create render passes
@@ -405,15 +431,12 @@ namespace shz
 			addPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
 			addPass(std::make_unique<LightingRenderPass>(m_PassCtx));
 
-			wirePassOutputs(); // Depth DSV
-			ASSERT(m_PassCtx.pDepthDsv, "GBuffer depth DSV must exist before Grass pass.");
-
 			addPass(std::make_unique<GrassRenderPass>(m_PassCtx));
 			addPass(std::make_unique<PostRenderPass>(m_PassCtx));
 
 			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
+			ASSERT(grassPtr&& grassPtr->IsValid(), "Failed to load grass mesh.");
 
 			grassPtr->RecomputeBounds();
 			const Box& b = grassPtr->GetBounds();
@@ -431,8 +454,6 @@ namespace shz
 			const TextureRenderData* grassDensityFieldTex = &CreateTextureRenderData(perlin);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassDensityField(m_PassCtx, *grassDensityFieldTex);
 		}
-
-		wirePassOutputs();
 		return true;
 	}
 
@@ -448,10 +469,6 @@ namespace shz
 		m_StaticMeshCache.Clear();
 		m_MaterialCache.Clear();
 
-		m_pGBufferMaterialStaticBinder.reset();
-		m_pGrassMaterialStaticBinder.reset();
-		m_pShadowMaterialStaticBinder.reset();
-
 		if (m_pPipelineStateManager)
 		{
 			m_pPipelineStateManager->Clear();
@@ -461,7 +478,7 @@ namespace shz
 		m_pShaderSourceFactory.Release();
 		m_pAssetManager = nullptr;
 
-		m_Registry.Shutdown();
+		m_pRegistry->Shutdown();
 
 		m_CreateInfo = {};
 		m_PassCtx = {};
@@ -497,7 +514,7 @@ namespace shz
 		// ---------------------------------------------------------------------
 		IBuffer* pFrameCB = m_PassCtx.pRegistry->GetBuffer(kRes_FrameCB);
 		IBuffer* pDrawCB = m_PassCtx.pRegistry->GetBuffer(kRes_DrawCB);
-		IBuffer* pShadowCB =m_PassCtx.pRegistry->GetBuffer(kRes_ShadowCB);
+		IBuffer* pShadowCB = m_PassCtx.pRegistry->GetBuffer(kRes_ShadowCB);
 
 		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GB);
 		IBuffer* pObjSB_Grass = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GR);
@@ -517,20 +534,6 @@ namespace shz
 		ASSERT(pObjIndexVB, "ObjectIndexVB missing (registry).");
 		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
 		ASSERT(pErrorTex, "Error texture missing (registry).");
-
-		// Wire pass ctx (this is what passes will use)
-		m_PassCtx.pFrameCB = pFrameCB;
-		m_PassCtx.pDrawCB = pDrawCB;
-		m_PassCtx.pShadowCB = pShadowCB;
-		m_PassCtx.pObjectTableSBGBuffer = pObjSB_GB;
-		m_PassCtx.pObjectTableSBGrass = pObjSB_Grass;
-		m_PassCtx.pObjectTableSBShadow = pObjSB_Shadow;
-		m_PassCtx.pObjectIndexVB = pObjIndexVB;
-
-		m_PassCtx.pEnvTex = pEnvTex;
-		m_PassCtx.pEnvDiffuseTex = pEnvDiffTex;
-		m_PassCtx.pEnvSpecularTex = pEnvSpecTex;
-		m_PassCtx.pEnvBrdfTex = pEnvBrdfTex;
 
 		m_PassCtx.pHeightMap = &scene.GetHeightMap();
 		scene.ConsumeInteractionStamps(&m_PassCtx.InteractionStamps);
@@ -966,8 +969,6 @@ namespace shz
 			ASSERT(pass, "Pass is null.");
 			pass->Execute(m_PassCtx);
 		}
-
-		wirePassOutputs();
 	}
 
 	void Renderer::EndFrame()
@@ -1006,8 +1007,6 @@ namespace shz
 			ASSERT(pass, "Pass is null.");
 			pass->OnResize(m_PassCtx, width, height);
 		}
-
-		wirePassOutputs();
 	}
 
 	// ----------------------------
@@ -1154,13 +1153,30 @@ namespace shz
 				ASSERT(false, "Unsupported pipeline type.");
 			}
 
-			RendererMaterialStaticBinder* binder = nullptr;
-			if (out.RenderPassId == kPassGBuffer) binder = m_pGBufferMaterialStaticBinder.get();
-			else if (out.RenderPassId == kPassShadow) binder = m_pGrassMaterialStaticBinder.get();
-			else ASSERT(false, "RenderPass not exist.");
+			SHADER_TYPE supportedShaderTypes[] =
+			{
+				SHADER_TYPE_VERTEX,
+				SHADER_TYPE_PIXEL,
+				SHADER_TYPE_COMPUTE,
+			};
 
-			bool ok = binder->BindStatics(out.PSO);
-			ASSERT(ok, "Failed to bind statics.");
+			for (SHADER_TYPE type : supportedShaderTypes)
+			{
+				if (auto* var = out.PSO->GetStaticVariableByName(type, "FRAME_CONSTANTS"))
+				{
+					var->Set(m_pRegistry->GetBuffer(kRes_FrameCB));
+				}
+
+				if (auto* var = out.PSO->GetStaticVariableByName(type, "DRAW_CONSTANTS"))
+				{
+					var->Set(m_pRegistry->GetBuffer(kRes_DrawCB));
+				}
+
+				if (auto* var = out.PSO->GetStaticVariableByName(type, "g_ObjectTable"))
+				{
+					var->Set(m_pRegistry->GetBufferSRV(kRes_ObjectTable_GB), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
+				}
+			}
 		}
 
 		// Create SRB and bind material CB
@@ -1275,7 +1291,7 @@ namespace shz
 					}
 					else
 					{
-						pView = m_Registry.GetTexture(kRes_ErrorTex)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+						pView = m_pRegistry->GetTexture(kRes_ErrorTex)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 					}
 
 					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
@@ -1504,61 +1520,11 @@ namespace shz
 	{
 		ASSERT(pCtx, "Context is null.");
 
-		IBuffer* pVB = m_Registry.GetBuffer(kRes_ObjectIndexVB);
+		IBuffer* pVB = m_pRegistry->GetBuffer(kRes_ObjectIndexVB);
 		ASSERT(pVB, "Object index VB is null.");
 
 		MapHelper<uint32> map(pCtx, pVB, MAP_WRITE, MAP_FLAG_DISCARD);
 		*map = objectIndex;
-	}
-
-	void Renderer::wirePassOutputs()
-	{
-		// Keep PassContext fields for pass-to-pass usage,
-		// AND mirror them into registry (so external users can query registry)
-
-		if (auto it = m_Passes.find("Shadow"); it != m_Passes.end())
-		{
-			if (auto* shadow = static_cast<ShadowRenderPass*>(it->second.get()))
-			{
-				m_PassCtx.pShadowMapSrv = shadow->GetShadowMapSRV();
-
-				// Registry external bind
-				m_Registry.BindExternalTextureViews(kRes_ShadowMapSRV, nullptr, m_PassCtx.pShadowMapSrv, nullptr, nullptr, nullptr);
-			}
-		}
-
-		if (auto it = m_Passes.find("GBuffer"); it != m_Passes.end())
-		{
-			if (auto* gb = static_cast<GBufferRenderPass*>(it->second.get()))
-			{
-				for (uint32 i = 0; i < RenderPassContext::NUM_GBUFFERS; ++i)
-				{
-					m_PassCtx.pGBufferSrv[i] = gb->GetGBufferSRV(i);
-				}
-				m_PassCtx.pDepthSrv = gb->GetDepthSRV();
-				m_PassCtx.pDepthDsv = gb->GetDepthDSV();
-
-				m_Registry.BindExternalTextureViews(kRes_GBufferSRV0, nullptr, m_PassCtx.pGBufferSrv[0], nullptr, nullptr, nullptr);
-				m_Registry.BindExternalTextureViews(kRes_GBufferSRV1, nullptr, m_PassCtx.pGBufferSrv[1], nullptr, nullptr, nullptr);
-				m_Registry.BindExternalTextureViews(kRes_GBufferSRV2, nullptr, m_PassCtx.pGBufferSrv[2], nullptr, nullptr, nullptr);
-				m_Registry.BindExternalTextureViews(kRes_GBufferSRV3, nullptr, m_PassCtx.pGBufferSrv[3], nullptr, nullptr, nullptr);
-
-				m_Registry.BindExternalTextureViews(kRes_DepthSRV, nullptr, m_PassCtx.pDepthSrv, nullptr, nullptr, nullptr);
-				m_Registry.BindExternalTextureViews(kRes_DepthDSV, nullptr, nullptr, nullptr, m_PassCtx.pDepthDsv, nullptr);
-			}
-		}
-
-		if (auto it = m_Passes.find("Lighting"); it != m_Passes.end())
-		{
-			if (auto* light = static_cast<LightingRenderPass*>(it->second.get()))
-			{
-				m_PassCtx.pLightingSrv = light->GetLightingSRV();
-				m_PassCtx.pLightingRtv = light->GetLightingRTV();
-
-				m_Registry.BindExternalTextureViews(kRes_LightingSRV, nullptr, m_PassCtx.pLightingSrv, nullptr, nullptr, nullptr);
-				m_Registry.BindExternalTextureViews(kRes_LightingRTV, nullptr, nullptr, m_PassCtx.pLightingRtv, nullptr, nullptr);
-			}
-		}
 	}
 
 	void Renderer::addPass(std::unique_ptr<RenderPassBase> pass)

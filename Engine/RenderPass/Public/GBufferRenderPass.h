@@ -31,27 +31,11 @@ namespace shz
 		void OnResize(RenderPassContext& ctx, uint32 width, uint32 height) override;
 
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
-	public:
-		ITextureView* GetGBufferSRV(uint32 index) const noexcept { return m_pGBufferSRV[index]; }
-		ITextureView* GetDepthSRV() const noexcept { return m_pDepthSRV; }
-		ITextureView* GetDepthDSV() const noexcept { return m_pDepthDSV; }
 
 	private:
-		bool createTargets(RenderPassContext& ctx, uint32 width, uint32 height);
 		bool createPassObjects(RenderPassContext& ctx);
 
 	private:
-		uint32 m_Width = 0;
-		uint32 m_Height = 0;
-
-		RefCntAutoPtr<ITexture> m_pGBufferTex[RenderPassContext::NUM_GBUFFERS];
-		ITextureView* m_pGBufferRTV[RenderPassContext::NUM_GBUFFERS] = {};
-		ITextureView* m_pGBufferSRV[RenderPassContext::NUM_GBUFFERS] = {};
-
-		RefCntAutoPtr<ITexture> m_pDepthTex;
-		ITextureView* m_pDepthDSV = nullptr;
-		ITextureView* m_pDepthSRV = nullptr;
-
 		RefCntAutoPtr<IRenderPass> m_pRenderPass;
 		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
 

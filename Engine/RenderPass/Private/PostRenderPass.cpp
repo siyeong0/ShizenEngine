@@ -6,6 +6,7 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -176,11 +177,10 @@ namespace shz
 
 		// Bind SRV
 		ASSERT(m_pSRB, "Post SRB is null.");
-		ASSERT(ctx.pLightingSrv, "Lighting SRV is null (post input).");
 
 		if (auto* v = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
 		{
-			v->Set(ctx.pLightingSrv, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			v->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("Lighting")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 		}
 
 		// Transition backbuffer texture to RT

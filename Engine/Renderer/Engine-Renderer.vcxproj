@@ -154,10 +154,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\CommonResourceId.h" />
     <ClInclude Include="Public\PipelineStateManager.h" />
     <ClInclude Include="Public\RenderData.h" />
-    <ClInclude Include="Public\RendererMaterialStaticBinder.h" />
-    <ClInclude Include="Public\IMaterialStaticBinder.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />
     <ClInclude Include="Public\Renderer.h" />
     <ClInclude Include="Public\RenderResourceRegistry.h" />
@@ -173,7 +172,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\PipelineStateManager.cpp" />
-    <ClCompile Include="Private\RendererMaterialStaticBinder.cpp" />
     <ClCompile Include="Private\Renderer.cpp" />
     <ClCompile Include="Private\RenderResourceRegistry.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
