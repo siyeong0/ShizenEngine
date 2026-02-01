@@ -29,6 +29,7 @@ namespace shz
 		IRenderDevice* pDevice = nullptr;
 		IDeviceContext* pImmediateContext = nullptr;
 		ISwapChain* pSwapChain = nullptr;
+		class Renderer* pRenderer = nullptr;
 		IShaderSourceInputStreamFactory* pShaderSourceFactory = nullptr;
 		AssetManager* pAssetManager = nullptr;
 		PipelineStateManager* pPipelineStateManager = nullptr;

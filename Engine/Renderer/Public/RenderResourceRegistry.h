@@ -36,6 +36,9 @@ namespace shz
 		void RegisterTexture(RenderResourceId id, RefCntAutoPtr<ITexture>&& pTexure);
 		void RegisterBuffer(RenderResourceId id, RefCntAutoPtr<IBuffer>&& pBuffer);
 
+		void UnregisterTexture(RenderResourceId id);
+		void UnregisterBuffer(RenderResourceId id);
+
 		void CreateTextureView(RenderResourceId id, const TextureViewDesc& desc);
 		void CreateBufferView(RenderResourceId id, const BufferViewDesc& desc);
 
@@ -44,22 +47,19 @@ namespace shz
 		// - Prefer owned resource if present; otherwise use external.
 		// - View getters: for owned textures, returns cached default views if possible.
 		// -----------------------------------------------------------------
-		ITexture* GetTexture(RenderResourceId id) const;
-		IBuffer* GetBuffer(RenderResourceId id) const;
+		bool HasTexture(RenderResourceId id) const;
+		bool HasBuffer(RenderResourceId id) const;
 
-		ITextureView* GetTextureSRV(RenderResourceId id) const;
-		ITextureView* GetTextureRTV(RenderResourceId id) const;
-		ITextureView* GetTextureDSV(RenderResourceId id) const;
-		ITextureView* GetTextureUAV(RenderResourceId id) const;
+		RefCntAutoPtr<ITexture> GetTexture(RenderResourceId id) const;
+		RefCntAutoPtr<IBuffer> GetBuffer(RenderResourceId id) const;
 
-		IBufferView* GetBufferSRV(RenderResourceId id) const;
-		IBufferView* GetBufferUAV(RenderResourceId id) const;
+		RefCntAutoPtr<ITextureView> GetTextureSRV(RenderResourceId id) const;
+		RefCntAutoPtr<ITextureView> GetTextureRTV(RenderResourceId id) const;
+		RefCntAutoPtr<ITextureView> GetTextureDSV(RenderResourceId id) const;
+		RefCntAutoPtr<ITextureView> GetTextureUAV(RenderResourceId id) const;
 
-		// -----------------------------------------------------------------
-		// Utilities
-		// -----------------------------------------------------------------
-		void UnregisterTexture(RenderResourceId id);
-		void UnregisterBuffer(RenderResourceId id);
+		RefCntAutoPtr<IBufferView> GetBufferSRV(RenderResourceId id) const;
+		RefCntAutoPtr<IBufferView> GetBufferUAV(RenderResourceId id) const;
 
 	private:
 		struct TextureEntry final

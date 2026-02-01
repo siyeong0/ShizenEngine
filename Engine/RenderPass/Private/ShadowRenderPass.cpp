@@ -16,7 +16,22 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	ShadowRenderPass::ShadowRenderPass(RenderPassContext& ctx)
+	ShadowRenderPass::ShadowRenderPass()
+	{
+
+	}
+
+	ShadowRenderPass::~ShadowRenderPass()
+	{
+		m_pFramebuffer.Release();
+		m_pRenderPass.Release();
+
+		m_pShadowSRB.Release();
+		m_pShadowPSO.Release();
+		m_pShadowMaskedPSO.Release();
+	}
+
+	void ShadowRenderPass::Initialize(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
@@ -72,12 +87,191 @@ namespace shz
 				ASSERT(m_pFramebuffer, "CreateFramebuffer(FB_Shadow) failed.");
 			}
 		}
-	}
 
-	ShadowRenderPass::~ShadowRenderPass()
-	{
-		m_pFramebuffer.Release();
-		m_pRenderPass.Release();
+		// ------------------------------------------------------------
+		// Create Opaque Shadow PSO + SRB
+		// ------------------------------------------------------------
+		{
+			GraphicsPipelineStateCreateInfo psoCi = {};
+			psoCi.PSODesc.Name = "Shadow PSO";
+			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
+			gp.pRenderPass = m_pRenderPass;
+			gp.SubpassIndex = 0;
+
+			gp.NumRenderTargets = 0;
+			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			// gp.RasterizerDesc.CullMode = CULL_MODE_BACK; // TODO: Only terrain?
+			gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+			gp.RasterizerDesc.FrontCounterClockwise = true;
+			gp.RasterizerDesc.SlopeScaledDepthBias = 0.0f;
+			gp.RasterizerDesc.DepthBias = 0;
+			gp.RasterizerDesc.DepthBiasClamp = 0.0f;
+
+			gp.DepthStencilDesc.DepthEnable = true;
+			gp.DepthStencilDesc.DepthWriteEnable = true;
+			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+			LayoutElement layoutElems[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
+			};
+			layoutElems[0].Stride = sizeof(float) * 11;
+
+			gp.InputLayout.LayoutElements = layoutElems;
+			gp.InputLayout.NumElements = _countof(layoutElems);
+
+			ShaderCreateInfo sci = {};
+			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
+			sci.EntryPoint = "main";
+			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+
+			RefCntAutoPtr<IShader> vs;
+			{
+				sci.Desc = {};
+				sci.Desc.Name = "Shadow VS";
+				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
+				sci.FilePath = m_ShadowVS.c_str();
+				sci.Desc.UseCombinedTextureSamplers = false;
+				ctx.pDevice->CreateShader(sci, &vs);
+				ASSERT(vs, "Failed to create Shadow VS.");
+			}
+
+			RefCntAutoPtr<IShader> ps;
+			{
+				sci.Desc = {};
+				sci.Desc.Name = "Shadow PS";
+				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
+				sci.FilePath = m_ShadowPS.c_str();
+				sci.Desc.UseCombinedTextureSamplers = false;
+				ctx.pDevice->CreateShader(sci, &ps);
+				ASSERT(ps, "Failed to create Shadow PS.");
+			}
+
+			psoCi.pVS = vs;
+			psoCi.pPS = ps;
+
+			psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+			psoCi.PSODesc.ResourceLayout.Variables = nullptr;
+			psoCi.PSODesc.ResourceLayout.NumVariables = 0;
+
+			m_pShadowPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
+			ASSERT(m_pShadowPSO, "Shadow PSO create failed.");
+
+			// Bind statics (same as old)
+			{
+				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				{
+					var->Set(ctx.pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
+				}
+			}
+
+			ASSERT(!m_pShadowSRB, "Shadow SRB already exists.");
+			m_pShadowPSO->CreateShaderResourceBinding(&m_pShadowSRB, true);
+			ASSERT(m_pShadowSRB, "Shadow SRB create failed.");
+		}
+
+		// ------------------------------------------------------------
+		// Create Masked Shadow PSO
+		// ------------------------------------------------------------
+		{
+			GraphicsPipelineStateCreateInfo psoCi = {};
+			psoCi.PSODesc.Name = "Shadow Masked PSO";
+			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
+			gp.pRenderPass = m_pRenderPass;
+			gp.SubpassIndex = 0;
+
+			gp.NumRenderTargets = 0;
+			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+			gp.RasterizerDesc.FrontCounterClockwise = true;
+
+			gp.DepthStencilDesc.DepthEnable = true;
+			gp.DepthStencilDesc.DepthWriteEnable = true;
+			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+			LayoutElement layoutElems[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+			};
+			layoutElems[0].Stride = sizeof(float) * 11;
+			layoutElems[1].Stride = sizeof(float) * 11;
+
+			gp.InputLayout.LayoutElements = layoutElems;
+			gp.InputLayout.NumElements = _countof(layoutElems);
+
+			ShaderCreateInfo sci = {};
+			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
+			sci.EntryPoint = "main";
+			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+
+			RefCntAutoPtr<IShader> vs;
+			{
+				sci.Desc = {};
+				sci.Desc.Name = "Shadow Masked VS";
+				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
+				sci.FilePath = m_ShadowMaskedVS.c_str();
+				sci.Desc.UseCombinedTextureSamplers = false;
+				ctx.pDevice->CreateShader(sci, &vs);
+				ASSERT(vs, "Failed to create ShadowMasked VS.");
+			}
+
+			RefCntAutoPtr<IShader> ps;
+			{
+				sci.Desc = {};
+				sci.Desc.Name = "Shadow Masked PS";
+				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
+				sci.FilePath = m_ShadowMaskedPS.c_str();
+				sci.Desc.UseCombinedTextureSamplers = false;
+				ctx.pDevice->CreateShader(sci, &ps);
+				ASSERT(ps, "Failed to create ShadowMasked PS.");
+			}
+
+			psoCi.pVS = vs;
+			psoCi.pPS = ps;
+
+			ShaderResourceVariableDesc vars[] =
+			{
+				{ SHADER_TYPE_PIXEL, "g_BaseColorTex",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			};
+			psoCi.PSODesc.ResourceLayout.Variables = vars;
+			psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+
+			SamplerDesc linearWrap =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			ImmutableSamplerDesc samplers[] =
+			{
+				{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap }
+			};
+			psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
+			m_pShadowMaskedPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
+			ASSERT(m_pShadowMaskedPSO, "Shadow Masked PSO create failed.");
+
+			// Bind statics (same as old)
+			{
+				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
+				{
+					var->Set(ctx.pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
+				}
+			}
+		}
 	}
 
 	void ShadowRenderPass::BeginFrame(RenderPassContext& ctx)

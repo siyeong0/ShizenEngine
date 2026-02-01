@@ -129,12 +129,12 @@ namespace shz
 		// ------------------------------------------------------------
 	   // Height field / Terrain
 	   // ------------------------------------------------------------
-		void SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world = Matrix4x4::Identity());
+		void SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world = Matrix4x4::Identity());
 		void ClearTerrain();
 
 		bool HasTerrain() const noexcept { return m_TerrainMesh.IsValid() && m_TerrainMesh.IsAlive(); }
 
-		const TextureRenderData& GetHeightMap() const noexcept { return *m_pTerrainHeightMap; }
+		const RefCntAutoPtr<ITexture> GetHeightMap() const noexcept { return m_pTerrainHeightMap; }
 		const Handle<SceneObject>& GetTerrainMeshHandle() const noexcept { return m_TerrainMesh; }
 		void AddInteractionStamp(const hlsl::InteractionStamp& stamp) { m_InteractionStamps.emplace_back(stamp); }
 		void ConsumeInteractionStamps(std::vector<hlsl::InteractionStamp>* out) { out->swap(m_InteractionStamps); m_InteractionStamps.clear(); }
@@ -309,7 +309,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Terrain / Height field
 		// ------------------------------------------------------------
-		const TextureRenderData* m_pTerrainHeightMap = {};
+		RefCntAutoPtr<ITexture> m_pTerrainHeightMap = {};
 		Handle<SceneObject> m_TerrainMesh = {};
 
 		std::vector<hlsl::InteractionStamp> m_InteractionStamps;

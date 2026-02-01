@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
+#include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/Renderer/Public/Renderer.h"
 
 namespace shz
 {
@@ -45,8 +47,34 @@ namespace shz
 	// -----------------------------------------------------------------------------
 	// GrassRenderPass
 	// -----------------------------------------------------------------------------
-	GrassRenderPass::GrassRenderPass(RenderPassContext& ctx)
+	GrassRenderPass::GrassRenderPass()
 	{
+	}
+
+	GrassRenderPass::~GrassRenderPass()
+	{
+		m_pFramebuffer.Release();
+		m_pRenderPass.Release();
+
+		m_pGenCSRB.Release();
+		m_pGenCSO.Release();
+
+		m_pArgsCSRB.Release();
+		m_pArgsCSO.Release();
+
+		m_pGrassSRB.Release();
+		m_pGrassPSO.Release();
+
+		m_pInteractionDecaySRB.Release();
+		m_pInteractionDecayCSO.Release();
+
+		m_pInteractionApplySRB.Release();
+		m_pInteractionApplyCSO.Release();
+	}
+
+	void GrassRenderPass::Initialize(RenderPassContext& ctx)
+	{
+
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
@@ -458,27 +486,24 @@ namespace shz
 		// Framebuffer for current back buffer
 		// ------------------------------------------------------------
 		buildFramebufferForCurrentBackBuffer(ctx);
-	}
 
-	GrassRenderPass::~GrassRenderPass()
-	{
-		m_pFramebuffer.Release();
-		m_pRenderPass.Release();
 
-		m_pGenCSRB.Release();
-		m_pGenCSO.Release();
+		// ------------------------------------------------------------
+		// Grass model
+		// ------------------------------------------------------------
+		{
+			AssetRef<StaticMesh> grassRef = ctx.pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
+			AssetPtr<StaticMesh> grassPtr = ctx.pAssetManager->LoadBlocking<StaticMesh>(grassRef);
+			ASSERT(grassPtr&& grassPtr->IsValid(), "Failed to load grass mesh.");
 
-		m_pArgsCSRB.Release();
-		m_pArgsCSO.Release();
+			grassPtr->RecomputeBounds();
+			const Box& b = grassPtr->GetBounds();
+			float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+			grassPtr->ApplyUniformScale(yScale01);
+			grassPtr->MoveBottomToOrigin(true);
 
-		m_pGrassSRB.Release();
-		m_pGrassPSO.Release();
-
-		m_pInteractionDecaySRB.Release();
-		m_pInteractionDecayCSO.Release();
-
-		m_pInteractionApplySRB.Release();
-		m_pInteractionApplyCSO.Release();
+			m_pGrassMesh = &ctx.pRenderer->CreateStaticMeshRenderData(*grassPtr);
+		}
 	}
 
 	void GrassRenderPass::BeginFrame(RenderPassContext& ctx)
@@ -491,7 +516,7 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 		ASSERT(m_pRenderPass, "Grass RenderPass is null.");
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
-		ASSERT(ctx.pScene->GetHeightMap().Texture, "HeightMap is null.");
+		ASSERT(ctx.pScene->GetHeightMap(), "HeightMap is null.");
 		ASSERT(m_pGrassMesh, "GrassMesh is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
@@ -715,7 +740,7 @@ namespace shz
 		{
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
 			{
-				var->Set(ctx.pScene->GetHeightMap().Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				var->Set(ctx.pScene->GetHeightMap()->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
@@ -732,7 +757,7 @@ namespace shz
 			{
 				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassInstanceBuffer")),	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassCounter")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pScene->GetHeightMap().Texture,	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pScene->GetHeightMap(), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pRegistry->GetTexture(STRING_HASH("GrassDensityField")),		RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pRegistry->GetTexture(STRING_HASH("InteractionField")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
@@ -877,13 +902,6 @@ namespace shz
 		(void)height;
 
 		m_pFramebuffer.Release();
-	}
-
-	void GrassRenderPass::SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh)
-	{
-		(void)ctx;
-		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
-		m_pGrassMesh = &mesh;
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)

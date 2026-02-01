@@ -19,8 +19,10 @@ namespace shz
 	class GrassRenderPass final : public RenderPassBase
 	{
 	public:
-		GrassRenderPass(RenderPassContext& ctx);
+		GrassRenderPass();
 		~GrassRenderPass() override;
+
+		void Initialize(RenderPassContext& ctx) override;
 
 		const char* GetName() const override { return "Grass"; }
 
@@ -32,8 +34,6 @@ namespace shz
 		void OnResize(RenderPassContext& ctx, uint32 width, uint32 height) override;
 
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
-
-		void SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh);
 	private:
 		bool buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx);
 

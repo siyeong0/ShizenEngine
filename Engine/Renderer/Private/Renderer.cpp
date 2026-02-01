@@ -8,13 +8,8 @@
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Image/Public/TextureUtilities.h"
 
-#include "Engine/RenderPass/Public/RenderPassBase.h"
-#include "Engine/RenderPass/Public/ShadowRenderPass.h"
-#include "Engine/RenderPass/Public/GBufferRenderPass.h"
-#include "Engine/RenderPass/Public/LightingRenderPass.h"
-#include "Engine/RenderPass/Public/PostRenderPass.h"
-#include "Engine/RenderPass/Public/GrassRenderPass.h"
 #include "Engine/RenderPass/Public/DrawPacket.h"
+#include "Engine/RenderPass/Public/ShadowRenderPass.h"
 
 namespace shz
 {
@@ -93,7 +88,20 @@ namespace shz
 		m_pPipelineStateManager->Initialize(m_pDevice, m_pRegistry.get());
 
 		// -----------------------------------------------------------------
-		// Create error texture -> register to registry
+		// Fill PassContext from registry (shared resources)
+		// -----------------------------------------------------------------
+		m_PassCtx = {};
+		m_PassCtx.pDevice = m_pDevice.RawPtr();
+		m_PassCtx.pImmediateContext = m_pImmediateContext.RawPtr();
+		m_PassCtx.pSwapChain = m_pSwapChain.RawPtr();
+		m_PassCtx.pRenderer = this;
+		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
+		m_PassCtx.pAssetManager = m_pAssetManager;
+		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
+		m_PassCtx.pRegistry = m_pRegistry.get();
+
+		// -----------------------------------------------------------------
+		// Create error texture
 		// -----------------------------------------------------------------
 		{
 			AssetRef<Texture> errorTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Error.jpg");
@@ -141,7 +149,7 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
-		// Create shared buffers -> register to registry
+		// Create shared buffers
 		// -----------------------------------------------------------------
 		{
 			IRenderDevice* dev = m_pDevice.RawPtr();
@@ -188,7 +196,7 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
-		// Create env textures -> register to registry
+		// Create env textures
 		// -----------------------------------------------------------------
 		{
 			TextureLoadInfo tli = {};
@@ -216,466 +224,35 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
-		// Fill PassContext from registry (shared resources)
+		// Create shadow map
 		// -----------------------------------------------------------------
-		m_PassCtx = {};
-		m_PassCtx.pDevice = m_pDevice.RawPtr();
-		m_PassCtx.pImmediateContext = m_pImmediateContext.RawPtr();
-		m_PassCtx.pSwapChain = m_pSwapChain.RawPtr();
-		m_PassCtx.pShaderSourceFactory = m_pShaderSourceFactory.RawPtr();
-		m_PassCtx.pAssetManager = m_pAssetManager;
-		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
-		m_PassCtx.pRegistry = m_pRegistry.get();
-
-		// -----------------------------------------------------------------
-		// Create common resources for passes
-		// -----------------------------------------------------------------
+		static constexpr uint32 SHADOW_MAP_SIZE = 4096;
+		m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
 		{
-			// Shadow map
-			static constexpr uint32 SHADOW_MAP_SIZE = 4096;
-			m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
-			{
-				TextureDesc td = {};
-				td.Name = "ShadowMap";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = SHADOW_MAP_SIZE;
-				td.Height = SHADOW_MAP_SIZE;
-				td.MipLevels = 1;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_R32_TYPELESS;
-				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-				m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
-
-				TextureViewDesc dsvDesc = {};
-				dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				dsvDesc.Format = TEX_FORMAT_D32_FLOAT;
-				m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), dsvDesc);
-
-				TextureViewDesc srvDesc = {};
-				srvDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-				srvDesc.Format = TEX_FORMAT_R32_FLOAT;
-				m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), srvDesc);
-
-				m_pPipelineStateManager->RegisterStaticTextureResource("g_ShadowMap", STRING_HASH("ShadowMap"));
-			}
-
-			// GBuffer textures
-			static constexpr uint32 NUM_GBUFFERS = 4;
-			{
-				auto createGBufferTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> RefCntAutoPtr<ITexture>
-					{
-						TextureDesc td = {};
-						td.Name = name;
-						td.Type = RESOURCE_DIM_TEX_2D;
-						td.Width = w;
-						td.Height = h;
-						td.MipLevels = 1;
-						td.Format = fmt;
-						td.SampleCount = 1;
-						td.Usage = USAGE_DEFAULT;
-						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-						return CreateTexture(td);
-					};
-				AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
-				AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
-				AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
-				AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
-
-				TextureDesc td = {};
-				td.Name = "GBufferDepth";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Width;
-				td.Height = m_Height;
-				td.MipLevels = 1;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_R32_TYPELESS;
-				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-				AddTexture(STRING_HASH("GBufferDepth"), CreateTexture(td));
-
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				vd.Format = TEX_FORMAT_D32_FLOAT;
-
-				AddTextureView(STRING_HASH("GBufferDepth"), vd);
-
-				vd = {};
-				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-				vd.Format = TEX_FORMAT_R32_FLOAT;
-				AddTextureView(STRING_HASH("GBufferDepth"), vd);
-			}
-
-			// Lighting
-			{
-				TextureDesc td = {};
-				td.Name = "Lighting";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Width;
-				td.Height = m_Height;
-				td.MipLevels = 1;
-				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-				AddTexture(STRING_HASH("Lighting"), CreateTexture(td));
-			}
-
-			// Grass
-			{
-				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
-				constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
-				constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
-				// GrassInstanceBuffer
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassInstanceBuffer";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-					bd.Mode = BUFFER_MODE_STRUCTURED;
-					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
-					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
-
-					AddBuffer(STRING_HASH("GrassInstanceBuffer"), CreateBuffer(bd));
-				}
-
-				// Indirect args (RAW 20 bytes)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassIndirectArgs";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
-					bd.Mode = BUFFER_MODE_RAW;
-					bd.Size = 20;
-
-					AddBuffer(STRING_HASH("GrassIndirectArgs"), CreateBuffer(bd));
-				}
-
-				// Counter (RAW 4 bytes)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassCounter";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_UNORDERED_ACCESS;
-					bd.Mode = BUFFER_MODE_RAW;
-					bd.Size = 4;
-
-					AddBuffer(STRING_HASH("GrassCounter"), CreateBuffer(bd));
-				}
-
-				// GrassGenConstantsCB (CS)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassGenConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = sizeof(hlsl::GrassGenConstants);
-
-					AddBuffer(STRING_HASH("GrassGenConstantsCB"), CreateBuffer(bd));
-				}
-
-				// GrassRenderConstantsCB (VS/PS)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassRenderConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-					AddBuffer(STRING_HASH("GrassRenderConstantsCB"), CreateBuffer(bd));
-				}
-
-				// Interaction field texture (R16_FLOAT SRV/UAV)
-				{
-					TextureDesc td = {};
-					td.Name = "InteractionField";
-					td.Type = RESOURCE_DIM_TEX_2D;
-					td.Width = INTERACTION_FIELD_SIZE;
-					td.Height = INTERACTION_FIELD_SIZE;
-					td.Format = TEX_FORMAT_R16_FLOAT;
-					td.MipLevels = 1;
-					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-					td.Usage = USAGE_DEFAULT;
-
-					AddTexture(STRING_HASH("InteractionField"), CreateTexture(td));
-				}
-
-				// Interaction stamps (Structured, dynamic CPU write)
-				{
-					BufferDesc bd = {};
-					bd.Name = "InteractionStampBuffer";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_SHADER_RESOURCE;
-					bd.Mode = BUFFER_MODE_STRUCTURED;
-					bd.ElementByteStride = sizeof(hlsl::InteractionStamp);
-					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-
-					AddBuffer(STRING_HASH("InteractionStampBuffer"), CreateBuffer(bd));
-				}
-
-				// Interaction constants
-				{
-					BufferDesc bd = {};
-					bd.Name = "InteractionConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
-
-					AddBuffer(STRING_HASH("InteractionConstantsCB"), CreateBuffer(bd));
-				}
-
-				// Density texture for grass placement
-				{
-					AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
-					AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
-					Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
-
-					RefCntAutoPtr<ITexture> perlinTex;
-
-					TextureDesc desc = {};
-					desc.Name = "GrassDensityField";
-					desc.Type = RESOURCE_DIM_TEX_2D;
-					desc.Width = perlin.GetWidth();
-					desc.Height = perlin.GetHeight();
-					desc.MipLevels = 1;
-					desc.ArraySize = 1;
-					desc.Format = TEX_FORMAT_R8_UNORM;
-					desc.Usage = USAGE_DEFAULT;
-					desc.BindFlags = BIND_SHADER_RESOURCE;
-
-					TextureSubResData subres = {};
-					subres.pData = perlin.GetData();
-					subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
-					subres.DepthStride = 0;
-					TextureData initData = {};
-					initData.pSubResources = &subres;
-					initData.NumSubresources = 1;
-					perlinTex = CreateTexture(desc, &initData);
-
-					m_pRegistry->RegisterTexture(STRING_HASH("GrassDensityField"), std::move(perlinTex));
-				}
-			}
-		}
-
-		// -----------------------------------------------------------------
-		// Create render passes
-		// -----------------------------------------------------------------
-		{
-			ASSERT(m_Passes.empty(), "m_Passes are already initilaized.");
-			ASSERT(m_PassOrder.empty(), "m_PassOrder are already initilaized.");
-
-			AddPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
-			AddPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
-			AddPass(std::make_unique<LightingRenderPass>(m_PassCtx));
-
-			AddPass(std::make_unique<GrassRenderPass>(m_PassCtx));
-			AddPass(std::make_unique<PostRenderPass>(m_PassCtx));
-			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
-			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
-
-			grassPtr->RecomputeBounds();
-			const Box& b = grassPtr->GetBounds();
-			float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-			grassPtr->ApplyUniformScale(yScale01);
-			grassPtr->MoveBottomToOrigin(true);
-
-			const StaticMeshRenderData* grassRenderData = &CreateStaticMeshRenderData(*grassPtr);
-			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, *grassRenderData);
-		}
-
-		// ------------------------------------------------------------
-		// Create Opaque Shadow PSO + SRB
-		// ------------------------------------------------------------
-		{
-			GraphicsPipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc.Name = "Shadow PSO";
-			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-			gp.pRenderPass = m_RHIRenderPasses["Shadow"];
-			gp.SubpassIndex = 0;
-
-			gp.NumRenderTargets = 0;
-			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
-
-			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			// gp.RasterizerDesc.CullMode = CULL_MODE_BACK; // TODO: Only terrain?
-			gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-			gp.RasterizerDesc.FrontCounterClockwise = true;
-			gp.RasterizerDesc.SlopeScaledDepthBias = 0.0f;
-			gp.RasterizerDesc.DepthBias = 0;
-			gp.RasterizerDesc.DepthBiasClamp = 0.0f;
-
-			gp.DepthStencilDesc.DepthEnable = true;
-			gp.DepthStencilDesc.DepthWriteEnable = true;
-			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-			LayoutElement layoutElems[] =
-			{
-				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
-			};
-			layoutElems[0].Stride = sizeof(float) * 11;
-
-			gp.InputLayout.LayoutElements = layoutElems;
-			gp.InputLayout.NumElements = _countof(layoutElems);
-
-			ShaderCreateInfo sci = {};
-			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-			sci.EntryPoint = "main";
-			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
-			RefCntAutoPtr<IShader> vs;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow VS";
-				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				sci.FilePath = m_ShadowVS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				m_pDevice->CreateShader(sci, &vs);
-				ASSERT(vs, "Failed to create Shadow VS.");
-			}
-
-			RefCntAutoPtr<IShader> ps;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow PS";
-				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				sci.FilePath = m_ShadowPS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				m_pDevice->CreateShader(sci, &ps);
-				ASSERT(ps, "Failed to create Shadow PS.");
-			}
-
-			psoCi.pVS = vs;
-			psoCi.pPS = ps;
-
-			psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-			psoCi.PSODesc.ResourceLayout.Variables = nullptr;
-			psoCi.PSODesc.ResourceLayout.NumVariables = 0;
-
-			m_pShadowPSO.Release();
-			m_pShadowPSO = m_pPipelineStateManager->AcquireGraphics(psoCi);
-			ASSERT(m_pShadowPSO, "Shadow PSO create failed.");
-
-			// Bind statics (same as old)
-			{
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-				{
-					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
-				}
-			}
-
-			ASSERT(!m_pShadowSRB, "Shadow SRB already exists.");
-			m_pShadowPSO->CreateShaderResourceBinding(&m_pShadowSRB, true);
-			ASSERT(m_pShadowSRB, "Shadow SRB create failed.");
-		}
-
-		// ------------------------------------------------------------
-		// Create Masked Shadow PSO
-		// ------------------------------------------------------------
-		{
-			GraphicsPipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc.Name = "Shadow Masked PSO";
-			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-			gp.pRenderPass = m_RHIRenderPasses["Shadow"];
-			gp.SubpassIndex = 0;
-
-			gp.NumRenderTargets = 0;
-			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
-
-			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
-			gp.RasterizerDesc.FrontCounterClockwise = true;
-
-			gp.DepthStencilDesc.DepthEnable = true;
-			gp.DepthStencilDesc.DepthWriteEnable = true;
-			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-			LayoutElement layoutElems[] =
-			{
-				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
-				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-			};
-			layoutElems[0].Stride = sizeof(float) * 11;
-			layoutElems[1].Stride = sizeof(float) * 11;
-
-			gp.InputLayout.LayoutElements = layoutElems;
-			gp.InputLayout.NumElements = _countof(layoutElems);
-
-			ShaderCreateInfo sci = {};
-			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
-			sci.EntryPoint = "main";
-			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
-			RefCntAutoPtr<IShader> vs;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow Masked VS";
-				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				sci.FilePath = m_ShadowMaskedVS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				m_pDevice->CreateShader(sci, &vs);
-				ASSERT(vs, "Failed to create ShadowMasked VS.");
-			}
-
-			RefCntAutoPtr<IShader> ps;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow Masked PS";
-				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				sci.FilePath = m_ShadowMaskedPS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				m_pDevice->CreateShader(sci, &ps);
-				ASSERT(ps, "Failed to create ShadowMasked PS.");
-			}
-
-			psoCi.pVS = vs;
-			psoCi.pPS = ps;
-
-			ShaderResourceVariableDesc vars[] =
-			{
-				{ SHADER_TYPE_PIXEL, "g_BaseColorTex",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			};
-			psoCi.PSODesc.ResourceLayout.Variables = vars;
-			psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
-
-			SamplerDesc linearWrap =
-			{
-				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-			};
-
-			ImmutableSamplerDesc samplers[] =
-			{
-				{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap }
-			};
-			psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
-
-			m_pShadowMaskedPSO.Release();
-			m_pShadowMaskedPSO = m_pPipelineStateManager->AcquireGraphics(psoCi);
-			ASSERT(m_pShadowMaskedPSO, "Shadow Masked PSO create failed.");
-
-			// Bind statics (same as old)
-			{
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-				{
-					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
-				}
-			}
+			TextureDesc td = {};
+			td.Name = "ShadowMap";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = SHADOW_MAP_SIZE;
+			td.Height = SHADOW_MAP_SIZE;
+			td.MipLevels = 1;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.Format = TEX_FORMAT_R32_TYPELESS;
+			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+			m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
+
+			TextureViewDesc dsvDesc = {};
+			dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+			dsvDesc.Format = TEX_FORMAT_D32_FLOAT;
+			m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), dsvDesc);
+
+			TextureViewDesc srvDesc = {};
+			srvDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+			srvDesc.Format = TEX_FORMAT_R32_FLOAT;
+			m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), srvDesc);
+
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_ShadowMap", STRING_HASH("ShadowMap"));
 		}
 
 		return true;
@@ -689,7 +266,6 @@ namespace shz
 		m_PassOrder.clear();
 		m_RHIRenderPasses.clear();
 
-		m_TextureCache.Clear();
 		m_StaticMeshCache.Clear();
 		m_MaterialCache.Clear();
 
@@ -708,10 +284,6 @@ namespace shz
 		m_PassCtx = {};
 		m_Width = 0;
 		m_Height = 0;
-
-		m_pShadowSRB.Release();
-		m_pShadowPSO.Release();
-		m_pShadowMaskedPSO.Release();
 
 		m_pSwapChain.Release();
 		m_pImmediateContext.Release();
@@ -1022,10 +594,10 @@ namespace shz
 					pushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 				}
 
-				for (const auto pTexRD : rd->BoundTextures)
+				for (const auto pTexture : rd->BoundTextures)
 				{
-					ASSERT(pTexRD && pTexRD->Texture, "Bound texture render data invalid.");
-					pushBarrier(pTexRD->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+					ASSERT(pTexture, "Bound texture render data invalid.");
+					pushBarrier(pTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 				}
 			};
 
@@ -1269,6 +841,28 @@ namespace shz
 		return id;
 	}
 
+	uint64 Renderer::AddUniformBuffer(const std::string& name, uint64 sizeBytes)
+	{
+		ASSERT(!name.empty(), "Name is empty.");
+		RefCntAutoPtr<IBuffer> buf;
+		CreateUniformBuffer(m_pDevice, sizeBytes, name.c_str(), &buf);
+		ASSERT(buf, "AddUniformBuffer: CreateUniformBuffer failed.");
+
+		uint64 id = STRING_HASH(name);
+		m_pRegistry->RegisterBuffer(id, std::move(buf));
+		return id;
+	}
+
+	uint64 Renderer::AddUniformBuffer(uint64 id, uint64 sizeBytes)
+	{
+		RefCntAutoPtr<IBuffer> buf;
+		CreateUniformBuffer(m_pDevice, sizeBytes, "UnnamedBuffer", &buf);
+		ASSERT(buf, "AddUniformBuffer: CreateUniformBuffer failed.");
+
+		m_pRegistry->RegisterBuffer(id, std::move(buf));
+		return id;
+	}
+
 	void Renderer::AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc)
 	{
 		ASSERT(!textureName.empty(), "Name is empty.");
@@ -1294,6 +888,8 @@ namespace shz
 
 		auto it = m_Passes.find(name);
 		ASSERT(it == m_Passes.end(), "Duplicate pass name.");
+
+		pass->Initialize(m_PassCtx);
 
 		m_PassOrder.push_back(name);
 		m_Passes.emplace(name, std::move(pass));
@@ -1378,37 +974,27 @@ namespace shz
 	// RenderData caches below are mostly unchanged from your code
 	// ----------------------------
 
-	const TextureRenderData& Renderer::CreateTextureRenderData(const AssetRef<Texture>& assetRef, const std::string& name)
+	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderData(const AssetRef<Texture>& assetRef)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
-		const TextureRenderData* cached = m_TextureCache.Acquire(key);
-		if (cached)
+		if (m_pRegistry->HasTexture(key))
 		{
-			return *cached;
+			return m_pRegistry->GetTexture(key);
 		}
 
 		AssetPtr<Texture> assetPtr = m_pAssetManager->Acquire(assetRef);
 		ASSERT(assetPtr, "Failed to acquire TextureAsset.");
 
-		if (name == "")
-		{
-			return CreateTextureRenderData(*assetPtr, key, assetPtr.GetSourcePath());
-		}
-		else
-		{
-			return CreateTextureRenderData(*assetPtr, key, name);
-		}
+		return CreateTextureRenderData(key, *assetPtr);
 	}
 
-	const TextureRenderData& Renderer::CreateTextureRenderData(const Texture& texture, uint64 key, const std::string& name)
+	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderData(const std::string& name, const Texture& texture)
 	{
-		if (key == 0)
-		{
-			key = std::rand();
-		}
+		return CreateTextureRenderData(STRING_HASH(name), texture);
+	}
 
-		TextureRenderData out;
-
+	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderData(uint64 id, const Texture& texture)
+	{
 		const auto& mips = texture.GetMips();
 		ASSERT(!mips.empty(), "TextureAsset has no mips.");
 
@@ -1416,7 +1002,6 @@ namespace shz
 		const uint32 height = mips[0].Height;
 
 		TextureDesc desc = {};
-		desc.Name = name.c_str();
 		desc.Type = RESOURCE_DIM_TEX_2D;
 		desc.Width = width;
 		desc.Height = height;
@@ -1443,12 +1028,8 @@ namespace shz
 		initData.pSubResources = subres.data();
 		initData.NumSubresources = static_cast<uint32>(subres.size());
 
-		out.Texture = CreateTexture(desc, &initData);
-		ASSERT(out.Texture, "CreateTexture failed.");
-		out.Sampler = nullptr;
-
-		m_TextureCache.Store(key, std::move(out));
-		return *m_TextureCache.Acquire(key);
+		m_pRegistry->RegisterTexture(id, CreateTexture(desc, &initData));
+		return m_pRegistry->GetTexture(id);
 	}
 
 	const MaterialRenderData& Renderer::CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name)
@@ -1579,11 +1160,11 @@ namespace shz
 		switch (material.GetBlendMode())
 		{
 		case MATERIAL_BLEND_MODE_OPAQUE:
-			out.ShadowPSO = m_pShadowPSO;
-			out.ShadowSRB = m_pShadowSRB;
+			out.ShadowPSO = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowPSO;
+			out.ShadowSRB = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowSRB;
 			break;
 		case MATERIAL_BLEND_MODE_MASKED:
-			out.ShadowPSO = m_pShadowMaskedPSO;
+			out.ShadowPSO = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowMaskedPSO;
 			out.ShadowPSO->CreateShaderResourceBinding(&out.ShadowSRB, true);
 			ASSERT(out.ShadowSRB, "Failed to create shadow SRB for masked material.");
 
@@ -1654,9 +1235,9 @@ namespace shz
 
 					if (b.TextureRef.has_value())
 					{
-						const TextureRenderData& texture = CreateTextureRenderData(*b.TextureRef);
-						pView = texture.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-						out.BoundTextures.push_back(&texture);
+						RefCntAutoPtr<ITexture> pTexture = CreateTextureRenderData(*b.TextureRef);
+						pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+						out.BoundTextures.push_back(pTexture);
 					}
 					else
 					{
@@ -1807,9 +1388,9 @@ namespace shz
 		return *m_StaticMeshCache.Acquire(key);
 	}
 
-	const TextureRenderData& Renderer::CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain)
+	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain)
 	{
-		TextureRenderData out = {};
+		RefCntAutoPtr<ITexture> out;
 
 		const uint32 width = terrain.GetWidth();
 		const uint32 height = terrain.GetHeight();
@@ -1844,15 +1425,10 @@ namespace shz
 		initData.pSubResources = &sr;
 		initData.NumSubresources = 1;
 
-		m_pDevice->CreateTexture(desc, &initData, &out.Texture);
-		ASSERT(out.Texture, "CreateTexture(HeightField) failed.");
+		m_pDevice->CreateTexture(desc, &initData, &out);
+		ASSERT(out, "CreateTexture(HeightField) failed.");
 
-		out.Sampler = nullptr;
-
-		uint64 key = std::rand(); // TODO: better hash or REMOVE CreateStaticMesh overload
-
-		m_TextureCache.Store(key, std::move(out));
-		return *m_TextureCache.Acquire(key);
+		return out;
 	}
 
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const

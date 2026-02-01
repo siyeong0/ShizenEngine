@@ -10,7 +10,20 @@
 
 namespace shz
 {
-	LightingRenderPass::LightingRenderPass(RenderPassContext& ctx)
+	LightingRenderPass::LightingRenderPass()
+	{
+	}
+
+	LightingRenderPass::~LightingRenderPass()
+	{
+		m_pSRB.Release();
+		m_pPSO.Release();
+
+		m_pFramebuffer.Release();
+		m_pRenderPass.Release();
+	}
+
+	void LightingRenderPass::Initialize(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
@@ -26,15 +39,6 @@ namespace shz
 		ASSERT(ok, "Failed to create ligting pass PSO.");
 
 		bindInputs(ctx);
-	}
-
-	LightingRenderPass::~LightingRenderPass()
-	{
-		m_pSRB.Release();
-		m_pPSO.Release();
-
-		m_pFramebuffer.Release();
-		m_pRenderPass.Release();
 	}
 
 	void LightingRenderPass::BeginFrame(RenderPassContext& ctx)

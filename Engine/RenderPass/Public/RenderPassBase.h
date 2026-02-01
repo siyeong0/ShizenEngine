@@ -15,6 +15,8 @@ namespace shz
 		RenderPassBase& operator=(const RenderPassBase&) = delete;
 		virtual ~RenderPassBase() {};
 
+		virtual void Initialize(RenderPassContext& ctx) = 0;
+
 		virtual const char* GetName() const = 0;
 
 		virtual void BeginFrame(RenderPassContext& ctx) = 0;

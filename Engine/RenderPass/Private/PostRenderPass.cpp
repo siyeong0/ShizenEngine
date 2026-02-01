@@ -10,7 +10,20 @@
 
 namespace shz
 {
-	PostRenderPass::PostRenderPass(RenderPassContext& ctx)
+	PostRenderPass::PostRenderPass()
+	{
+	}
+
+	PostRenderPass::~PostRenderPass()
+	{
+		m_pFramebufferCurrentBB.Release();
+		m_pRenderPass.Release();
+
+		m_pSRB.Release();
+		m_pPSO.Release();
+	}
+
+	void PostRenderPass::Initialize(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
@@ -133,15 +146,6 @@ namespace shz
 			m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 			ASSERT(m_pSRB, "Failed to create SRB_Post.");
 		}
-
-	}
-	PostRenderPass::~PostRenderPass()
-	{
-		m_pFramebufferCurrentBB.Release();
-		m_pRenderPass.Release();
-
-		m_pSRB.Release();
-		m_pPSO.Release();
 	}
 
 	void PostRenderPass::BeginFrame(RenderPassContext& ctx)

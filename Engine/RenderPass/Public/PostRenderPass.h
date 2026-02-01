@@ -16,8 +16,10 @@ namespace shz
 	class PostRenderPass final : public RenderPassBase
 	{
 	public:
-		PostRenderPass(RenderPassContext& ctx);
+		PostRenderPass();
 		~PostRenderPass() override;
+
+		void Initialize(RenderPassContext& ctx) override;
 
 		const char* GetName() const override { return "Post"; }
 

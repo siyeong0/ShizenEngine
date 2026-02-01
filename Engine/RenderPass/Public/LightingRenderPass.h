@@ -18,8 +18,10 @@ namespace shz
 	class LightingRenderPass final : public RenderPassBase
 	{
 	public:
-		LightingRenderPass(RenderPassContext& ctx);
+		LightingRenderPass();
 		~LightingRenderPass() override;
+
+		void Initialize(RenderPassContext& ctx) override;
 
 		const char* GetName() const override { return "Lighting"; }
 

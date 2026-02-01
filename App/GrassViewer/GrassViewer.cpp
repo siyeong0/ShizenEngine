@@ -12,8 +12,14 @@
 #include "Engine/RuntimeData/Public/TextureImporter.h"
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
 #include "Engine/RuntimeData/Public/TerrainHeightFieldImporter.h"
-
 #include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
+
+#include "Engine/RenderPass/Public/RenderPassBase.h"
+#include "Engine/RenderPass/Public/ShadowRenderPass.h"
+#include "Engine/RenderPass/Public/GBufferRenderPass.h"
+#include "Engine/RenderPass/Public/LightingRenderPass.h"
+#include "Engine/RenderPass/Public/PostRenderPass.h"
+#include "Engine/RenderPass/Public/GrassRenderPass.h"
 
 namespace shz
 {
@@ -132,8 +138,220 @@ namespace shz
 			m_pRenderer->Initialize(rendererCI);
 		}
 
+		// -----------------------------------------------------------------
+		// Create common resources for passes
+		// -----------------------------------------------------------------
 		{
+			// GBuffer textures
+			static constexpr uint32 NUM_GBUFFERS = 4;
+			{
+				auto createGBufferTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> RefCntAutoPtr<ITexture>
+					{
+						TextureDesc td = {};
+						td.Name = name;
+						td.Type = RESOURCE_DIM_TEX_2D;
+						td.Width = w;
+						td.Height = h;
+						td.MipLevels = 1;
+						td.Format = fmt;
+						td.SampleCount = 1;
+						td.Usage = USAGE_DEFAULT;
+						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+						return m_pRenderer->CreateTexture(td);
+					};
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+				TextureDesc td = {};
+				td.Name = "GBufferDepth";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.Format = TEX_FORMAT_R32_TYPELESS;
+				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
+				m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), m_pRenderer->CreateTexture(td));
+
+				TextureViewDesc vd = {};
+				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+				vd.Format = TEX_FORMAT_D32_FLOAT;
+
+				m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+
+				vd = {};
+				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+				vd.Format = TEX_FORMAT_R32_FLOAT;
+				m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+			}
+
+			// Lighting
+			{
+				TextureDesc td = {};
+				td.Name = "Lighting";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+				m_pRenderer->AddTexture(STRING_HASH("Lighting"), m_pRenderer->CreateTexture(td));
+			}
+
+			// Grass
+			{
+				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
+				constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
+				constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
+				// GrassInstanceBuffer
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassInstanceBuffer";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+					bd.Mode = BUFFER_MODE_STRUCTURED;
+					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
+					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
+
+					m_pRenderer->AddBuffer(STRING_HASH("GrassInstanceBuffer"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// Indirect args (RAW 20 bytes)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassIndirectArgs";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
+					bd.Mode = BUFFER_MODE_RAW;
+					bd.Size = 20;
+
+					m_pRenderer->AddBuffer(STRING_HASH("GrassIndirectArgs"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// Counter (RAW 4 bytes)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassCounter";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_UNORDERED_ACCESS;
+					bd.Mode = BUFFER_MODE_RAW;
+					bd.Size = 4;
+
+					m_pRenderer->AddBuffer(STRING_HASH("GrassCounter"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// GrassGenConstantsCB (CS)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassGenConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = sizeof(hlsl::GrassGenConstants);
+
+					m_pRenderer->AddBuffer(STRING_HASH("GrassGenConstantsCB"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// GrassRenderConstantsCB (VS/PS)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassRenderConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+					m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// Interaction field texture (R16_FLOAT SRV/UAV)
+				{
+					TextureDesc td = {};
+					td.Name = "InteractionField";
+					td.Type = RESOURCE_DIM_TEX_2D;
+					td.Width = INTERACTION_FIELD_SIZE;
+					td.Height = INTERACTION_FIELD_SIZE;
+					td.Format = TEX_FORMAT_R16_FLOAT;
+					td.MipLevels = 1;
+					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+					td.Usage = USAGE_DEFAULT;
+
+					m_pRenderer->AddTexture(STRING_HASH("InteractionField"), m_pRenderer->CreateTexture(td));
+				}
+
+				// Interaction stamps (Structured, dynamic CPU write)
+				{
+					BufferDesc bd = {};
+					bd.Name = "InteractionStampBuffer";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_SHADER_RESOURCE;
+					bd.Mode = BUFFER_MODE_STRUCTURED;
+					bd.ElementByteStride = sizeof(hlsl::InteractionStamp);
+					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+					m_pRenderer->AddBuffer(STRING_HASH("InteractionStampBuffer"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// Interaction constants
+				{
+					BufferDesc bd = {};
+					bd.Name = "InteractionConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
+
+					m_pRenderer->AddBuffer(STRING_HASH("InteractionConstantsCB"), m_pRenderer->CreateBuffer(bd));
+				}
+
+				// Density texture for grass placement
+				{
+					AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
+					AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
+					Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
+
+					RefCntAutoPtr<ITexture> perlinTex;
+
+					TextureDesc desc = {};
+					desc.Name = "GrassDensityField";
+					desc.Type = RESOURCE_DIM_TEX_2D;
+					desc.Width = perlin.GetWidth();
+					desc.Height = perlin.GetHeight();
+					desc.MipLevels = 1;
+					desc.ArraySize = 1;
+					desc.Format = TEX_FORMAT_R8_UNORM;
+					desc.Usage = USAGE_DEFAULT;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+
+					TextureSubResData subres = {};
+					subres.pData = perlin.GetData();
+					subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+					subres.DepthStride = 0;
+					TextureData initData = {};
+					initData.pSubResources = &subres;
+					initData.NumSubresources = 1;
+
+					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), m_pRenderer->CreateTexture(desc, &initData));
+				}
+			}
+		}
+
+		// -----------------------------------------------------------------
+		// Create render passes
+		// -----------------------------------------------------------------
+		{
+			m_pRenderer->AddPass(std::make_unique<ShadowRenderPass>());
+			m_pRenderer->AddPass(std::make_unique<GBufferRenderPass>());
+			m_pRenderer->AddPass(std::make_unique<LightingRenderPass>());
+			m_pRenderer->AddPass(std::make_unique<GrassRenderPass>());
+			m_pRenderer->AddPass(std::make_unique<PostRenderPass>());
 		}
 
 		// Render Scene

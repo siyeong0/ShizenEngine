@@ -18,8 +18,10 @@ namespace shz
 	class ShadowRenderPass final : public RenderPassBase
 	{
 	public:
-		ShadowRenderPass(RenderPassContext& ctx);
+		ShadowRenderPass();
 		~ShadowRenderPass() override;
+
+		void Initialize(RenderPassContext& ctx) override;
 
 		const char* GetName() const override { return "Shadow"; }
 
@@ -35,5 +37,15 @@ namespace shz
 	private:
 		RefCntAutoPtr<IRenderPass> m_pRenderPass;
 		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
+
+		std::string m_ShadowVS = "Shadow.vsh";
+		std::string m_ShadowPS = "Shadow.psh";
+		std::string m_ShadowMaskedVS = "ShadowMasked.vsh";
+		std::string m_ShadowMaskedPS = "ShadowMasked.psh";
+
+	public:
+		RefCntAutoPtr<IPipelineState> m_pShadowPSO;
+		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pShadowSRB;
 	};
 } // namespace shz

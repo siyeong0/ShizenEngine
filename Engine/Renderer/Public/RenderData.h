@@ -16,18 +16,6 @@
 
 namespace shz
 {
-	struct TextureRenderData final
-	{
-		RefCntAutoPtr<ITexture> Texture = {};
-		RefCntAutoPtr<ISampler> Sampler = {};
-
-		TextureRenderData() = default;
-		TextureRenderData(const TextureRenderData&) = delete;
-		TextureRenderData(TextureRenderData&&) = default;
-		TextureRenderData& operator=(const TextureRenderData&) = delete;
-		TextureRenderData& operator=(TextureRenderData&&) = default;
-	};
-
 	struct MaterialRenderData final
 	{
 		RefCntAutoPtr<IPipelineState> PSO = {};
@@ -35,7 +23,7 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> ConstantBuffer = {};
 		uint32 CBIndex = 0;
-		std::vector<const TextureRenderData*> BoundTextures = {};
+		std::vector<RefCntAutoPtr<ITexture>> BoundTextures = {};
 
 		RefCntAutoPtr<IPipelineState> ShadowPSO = {};
 		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
@@ -79,24 +67,6 @@ namespace shz
 		StaticMeshRenderData& operator=(StaticMeshRenderData&&) = default;
 	};
 
-
-	// ------------------------------------------------------------
-	// Hash combiners for RenderData types
-	// ------------------------------------------------------------
-
-	template <typename HasherType>
-	struct HashCombiner<HasherType, TextureRenderData> : HashCombinerBase<HasherType>
-	{
-		HashCombiner(HasherType& Hasher)
-			: HashCombinerBase<HasherType>{ Hasher }
-		{}
-
-		void operator()(const TextureRenderData& v) const
-		{
-			this->m_Hasher(v.Texture, v.Sampler);
-		}
-	};
-
 	template <typename HasherType>
 	struct HashCombiner<HasherType, MaterialRenderData> : HashCombinerBase<HasherType>
 	{
@@ -117,7 +87,7 @@ namespace shz
 			this->m_Hasher(v.BoundTextures.size());
 			for (const auto pTex : v.BoundTextures)
 			{
-				this->m_Hasher(*pTex);
+				this->m_Hasher(pTex);
 			}
 		}
 	};
@@ -183,7 +153,6 @@ namespace std
     }
 
 
-	DEFINE_HASH(shz::TextureRenderData);
 	DEFINE_HASH(shz::MaterialRenderData);
 	DEFINE_HASH(shz::StaticMeshRenderData::Section);
 	DEFINE_HASH(shz::StaticMeshRenderData);

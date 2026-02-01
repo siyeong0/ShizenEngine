@@ -32,6 +32,8 @@ namespace shz
 	void RenderResourceRegistry::RegisterTexture(RenderResourceId id, RefCntAutoPtr<ITexture>&& pTexture)
 	{
 		ASSERT(id != 0, "Id must be non-zero.");
+		ASSERT(pTexture, "Cannot register null texture.");
+		ASSERT(!HasTexture(id), "Texture id already registered.");
 
 		TextureEntry& e = m_Textures[id];
 
@@ -48,6 +50,8 @@ namespace shz
 	void RenderResourceRegistry::RegisterBuffer(RenderResourceId id, RefCntAutoPtr<IBuffer>&& pBuffer)
 	{
 		ASSERT(id != 0, "Id must be non-zero.");
+		ASSERT(pBuffer, "Cannot register null buffer.");
+		ASSERT(!HasBuffer(id), "Buffer id already registered.");
 
 		BufferEntry& e = m_Buffers[id];
 		e.Buffer = std::move(pBuffer);
@@ -55,9 +59,22 @@ namespace shz
 		e.UAV = e.Buffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
 	}
 
+	void RenderResourceRegistry::UnregisterTexture(RenderResourceId id)
+	{
+		ASSERT(HasTexture(id), "Texture id not found.");
+		m_Textures.erase(id);
+	}
+
+	void RenderResourceRegistry::UnregisterBuffer(RenderResourceId id)
+	{
+		ASSERT(HasBuffer(id), "Buffer id not found.");
+		m_Buffers.erase(id);
+	}
+
 	void RenderResourceRegistry::CreateTextureView(RenderResourceId id, const TextureViewDesc& desc)
 	{
 		ASSERT(id != 0, "Id must be non-zero.");
+		ASSERT(HasTexture(id), "Texture id not found.");
 
 		TextureEntry& e = m_Textures[id];
 		switch (desc.ViewType)
@@ -87,6 +104,7 @@ namespace shz
 	void RenderResourceRegistry::CreateBufferView(RenderResourceId id, const BufferViewDesc& desc)
 	{
 		ASSERT(id != 0, "Id must be non-zero.");
+		ASSERT(HasBuffer(id), "Buffer id not found.");
 
 		BufferEntry& e = m_Buffers[id];
 		switch (desc.ViewType)
@@ -105,92 +123,71 @@ namespace shz
 		}
 	}
 
-	ITexture* RenderResourceRegistry::GetTexture(RenderResourceId id) const
+	bool RenderResourceRegistry::HasTexture(RenderResourceId id) const
 	{
 		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
+		return it != m_Textures.end();
+	}
 
-		const TextureEntry& e = it->second;
+	bool RenderResourceRegistry::HasBuffer(RenderResourceId id) const
+	{
+		auto it = m_Buffers.find(id);
+		return it != m_Buffers.end();
+	}
+
+	RefCntAutoPtr<ITexture> RenderResourceRegistry::GetTexture(RenderResourceId id) const
+	{
+		ASSERT(HasTexture(id), "Texture id not found.");
+		const TextureEntry& e = m_Textures.at(id);
 		return e.Texture;
 	}
 
-	IBuffer* RenderResourceRegistry::GetBuffer(RenderResourceId id) const
+	RefCntAutoPtr<IBuffer> RenderResourceRegistry::GetBuffer(RenderResourceId id) const
 	{
-		auto it = m_Buffers.find(id);
-		ASSERT(it != m_Buffers.end(), "Buffer id not found.");
-
-		const BufferEntry& e = it->second;
+		ASSERT(HasBuffer(id), "Buffer id not found.");
+		const BufferEntry& e = m_Buffers.at(id);
 		return e.Buffer;
 	}
 
-	ITextureView* RenderResourceRegistry::GetTextureSRV(RenderResourceId id) const
+	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureSRV(RenderResourceId id) const
 	{
-		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
-
-		const TextureEntry& e = it->second;
+		ASSERT(HasTexture(id), "Texture id not found.");
+		const TextureEntry& e = m_Textures.at(id);
 		return e.SRV;
 	}
 
-	ITextureView* RenderResourceRegistry::GetTextureRTV(RenderResourceId id) const
+	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureRTV(RenderResourceId id) const
 	{
-		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
-
-		const TextureEntry& e = it->second;
+		ASSERT(HasTexture(id), "Texture id not found.");
+		const TextureEntry& e = m_Textures.at(id);
 		return e.RTV;
 	}
 
-	ITextureView* RenderResourceRegistry::GetTextureDSV(RenderResourceId id) const
+	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureDSV(RenderResourceId id) const
 	{
-		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
-
-		const TextureEntry& e = it->second;
+		ASSERT(HasTexture(id), "Texture id not found.");
+		const TextureEntry& e = m_Textures.at(id);
 		return e.DSV;
 	}
 
-	ITextureView* RenderResourceRegistry::GetTextureUAV(RenderResourceId id) const
+	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureUAV(RenderResourceId id) const
 	{
-		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
-
-		const TextureEntry& e = it->second;
+		ASSERT(HasTexture(id), "Texture id not found.");
+		const TextureEntry& e = m_Textures.at(id);
 		return e.UAV;
 	}
 
-	IBufferView* RenderResourceRegistry::GetBufferSRV(RenderResourceId id) const
+	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferSRV(RenderResourceId id) const
 	{
-		auto it = m_Buffers.find(id);
-		ASSERT(it != m_Buffers.end(), "Buffer id not found.");
-
-		const BufferEntry& e = it->second;
+		ASSERT(HasBuffer(id), "Buffer id not found.");
+		const BufferEntry& e = m_Buffers.at(id);
 		return e.SRV;
 	}
 
-	IBufferView* RenderResourceRegistry::GetBufferUAV(RenderResourceId id) const
+	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferUAV(RenderResourceId id) const
 	{
-		auto it = m_Buffers.find(id);
-		ASSERT(it != m_Buffers.end(), "Buffer id not found.");
-
-		const BufferEntry& e = it->second;
+		ASSERT(HasBuffer(id), "Buffer id not found.");
+		const BufferEntry& e = m_Buffers.at(id);
 		return e.UAV;
-	}
-
-	void RenderResourceRegistry::UnregisterTexture(RenderResourceId id)
-	{
-		auto it = m_Textures.find(id);
-		ASSERT(it != m_Textures.end(), "Texture id not found.");
-
-		// Remove the entire entry (owned+external)
-		m_Textures.erase(it);
-	}
-
-	void RenderResourceRegistry::UnregisterBuffer(RenderResourceId id)
-	{
-		auto it = m_Buffers.find(id);
-		ASSERT(it != m_Buffers.end(), "Buffer id not found.");
-
-		m_Buffers.erase(it);
 	}
 } // namespace shz

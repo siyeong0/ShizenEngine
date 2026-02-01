@@ -92,8 +92,11 @@ namespace shz
 		uint64 AddBuffer(const std::string& name, RefCntAutoPtr<IBuffer>&& buf);
 		uint64 AddBuffer(uint64 id, RefCntAutoPtr<IBuffer>&& buf);
 
-		void AddTextureView(const std::string& textureName,const TextureViewDesc& viewDesc);
-		void AddTextureView(uint64 textureId,const TextureViewDesc& viewDesc);
+		uint64 AddUniformBuffer(const std::string& name, uint64 sizeBytes);
+		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
+
+		void AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc);
+		void AddTextureView(uint64 textureId, const TextureViewDesc& viewDesc);
 
 		// ---------------------------------------------------------------------
 		// Render pass management
@@ -103,13 +106,8 @@ namespace shz
 		// ---------------------------------------------------------------------
 		// Resource factory wrappers (Renderer-owned shared resources)
 		// ---------------------------------------------------------------------
-		RefCntAutoPtr<ITexture> CreateTexture(
-			const TextureDesc& desc,
-			const TextureData* pInitData = nullptr);
-
-		RefCntAutoPtr<IBuffer> CreateBuffer(
-			const BufferDesc& desc,
-			const BufferData* pInitData = nullptr);
+		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
+		RefCntAutoPtr<IBuffer> CreateBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
 
 		// ---------------------------------------------------------------------
 		// Resource update wrappers
@@ -132,13 +130,14 @@ namespace shz
 		// ---------------------------------------------------------------------
 		// RenderData caches (unchanged)
 		// ---------------------------------------------------------------------
-		const TextureRenderData& CreateTextureRenderData(const AssetRef<Texture>& assetRef, const std::string& name = "");
-		const TextureRenderData& CreateTextureRenderData(const Texture& texture, uint64 key = 0, const std::string& name = "");
+		RefCntAutoPtr<ITexture> CreateTextureRenderData(const AssetRef<Texture>& assetRef);
+		RefCntAutoPtr<ITexture> CreateTextureRenderData(const std::string& name, const Texture& texture);
+		RefCntAutoPtr<ITexture> CreateTextureRenderData(uint64 id, const Texture& texture);
 		const MaterialRenderData& CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name = "");
 		const MaterialRenderData& CreateMaterialRenderData(const Material& material, uint64 key = 0, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
-		const TextureRenderData& CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
+		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
@@ -161,19 +160,10 @@ namespace shz
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
-		RenderResourceCache<TextureRenderData> m_TextureCache;
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
 		RenderResourceCache<MaterialRenderData> m_MaterialCache;
 
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
-
-		std::string m_ShadowVS = "Shadow.vsh";
-		std::string m_ShadowPS = "Shadow.psh";
-		std::string m_ShadowMaskedVS = "ShadowMasked.vsh";
-		std::string m_ShadowMaskedPS = "ShadowMasked.psh";
-		RefCntAutoPtr<IPipelineState> m_pShadowPSO;
-		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pShadowSRB;
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;

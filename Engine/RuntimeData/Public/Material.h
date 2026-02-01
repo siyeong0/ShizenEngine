@@ -45,13 +45,6 @@ namespace shz
 		ISampler* pSamplerOverride = nullptr;
 	};
 
-	struct MaterialKey final
-	{
-		size_t Hash = 0;
-		bool operator==(const MaterialKey& rhs) const noexcept { return Hash == rhs.Hash; }
-		bool operator!=(const MaterialKey& rhs) const noexcept { return !(*this == rhs); }
-	};
-
 	struct MaterialSerializedValue final
 	{
 		std::string Name = {};

@@ -38,7 +38,7 @@ namespace shz
 		m_OcDirty.clear();
 		m_DirtyOcIndices.clear();
 
-		m_pTerrainHeightMap = nullptr;
+		m_pTerrainHeightMap = {};
 		m_TerrainMesh = {};
 	}
 
@@ -419,12 +419,12 @@ namespace shz
 		return true;
 	}
 
-	void RenderScene::SetTerrain(const TextureRenderData& heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world)
+	void RenderScene::SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world)
 	{
 		// Remove the existing terrain if present
 		ClearTerrain();
 
-		m_pTerrainHeightMap = &heightMap;
+		m_pTerrainHeightMap = heightMap;
 		m_TerrainMesh = AddObject(terrainMesh, world, /*bCastShadow=*/true);
 	}
 
