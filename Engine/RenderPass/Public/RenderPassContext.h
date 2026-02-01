@@ -45,12 +45,6 @@ namespace shz
 		float DeltaTime = 0.0f;
 
 		// ------------------------------------------------------------
-		// Visibility
-		// ------------------------------------------------------------
-		std::vector<uint32> VisibleObjectIndexMain = {};
-		std::vector<uint32> VisibleObjectIndexShadow = {};
-
-		// ------------------------------------------------------------
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------
 		std::vector<DrawPacket> GBufferDrawPackets = {};
@@ -74,9 +68,6 @@ namespace shz
 
 		void ResetFrame()
 		{
-			VisibleObjectIndexMain.clear();
-			VisibleObjectIndexShadow.clear();
-
 			GBufferDrawPackets.clear();
 			GrassDrawPackets.clear();
 			ShadowDrawPackets.clear();

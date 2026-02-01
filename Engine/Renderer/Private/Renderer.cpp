@@ -717,14 +717,16 @@ namespace shz
 		// ------------------------------------------------------------
 		// Visibility (dense object indices)
 		// ------------------------------------------------------------
+		std::vector<uint32> visibleObjectIndexMain = {};
+		std::vector<uint32> visibleObjectIndexShadow = {};
 		{
 			const uint32 count = scene.GetObjectDenseCount();
 
-			m_PassCtx.VisibleObjectIndexMain.clear();
-			m_PassCtx.VisibleObjectIndexShadow.clear();
+			visibleObjectIndexMain.clear();
+			visibleObjectIndexShadow.clear();
 
-			m_PassCtx.VisibleObjectIndexMain.reserve(count);
-			m_PassCtx.VisibleObjectIndexShadow.reserve(count);
+			visibleObjectIndexMain.reserve(count);
+			visibleObjectIndexShadow.reserve(count);
 
 			for (uint32 i = 0; i < count; ++i)
 			{
@@ -735,14 +737,14 @@ namespace shz
 
 				if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 				{
-					m_PassCtx.VisibleObjectIndexMain.push_back(i);
+					visibleObjectIndexMain.push_back(i);
 				}
 
 				if (obj.bCastShadow)
 				{
 					if (IntersectsFrustum(frustumShadow, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 					{
-						m_PassCtx.VisibleObjectIndexShadow.push_back(i);
+						visibleObjectIndexShadow.push_back(i);
 					}
 				}
 			}
@@ -793,7 +795,7 @@ namespace shz
 				}
 			};
 
-		for (uint32 objDense : m_PassCtx.VisibleObjectIndexMain)
+		for (uint32 objDense : visibleObjectIndexMain)
 		{
 			const auto& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
@@ -807,7 +809,7 @@ namespace shz
 			}
 		}
 
-		for (uint32 objDense : m_PassCtx.VisibleObjectIndexShadow)
+		for (uint32 objDense : visibleObjectIndexShadow)
 		{
 			const auto& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
@@ -942,17 +944,17 @@ namespace shz
 		std::vector<uint32> instanceRemap;
 
 		// GBuffer
-		scene.BuildDrawList(kPassGBuffer, m_PassCtx.VisibleObjectIndexMain, drawItems, instanceRemap);
+		scene.BuildDrawList(kPassGBuffer, visibleObjectIndexMain, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
 		m_PassCtx.GBufferDrawPackets = buildPacketsFromDrawItems(kPassGBuffer, drawItems);
 
 		// Grass
-		scene.BuildDrawList(kPassGrass, m_PassCtx.VisibleObjectIndexMain, drawItems, instanceRemap);
+		scene.BuildDrawList(kPassGrass, visibleObjectIndexMain, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_Grass, instanceRemap);
 		m_PassCtx.GrassDrawPackets = buildPacketsFromDrawItems(kPassGrass, drawItems);
 
 		// Shadow
-		scene.BuildDrawList(kPassShadow, m_PassCtx.VisibleObjectIndexShadow, drawItems, instanceRemap);
+		scene.BuildDrawList(kPassShadow, visibleObjectIndexShadow, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
 		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(kPassShadow, drawItems);
 

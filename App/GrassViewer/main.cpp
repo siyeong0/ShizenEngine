@@ -33,7 +33,7 @@ static void OpenConsole()
 	SetConsoleOutputCP(CP_UTF8);
 	SetConsoleCP(CP_UTF8);
 
-	SetConsoleTitleW(L"MaterialEditor Console");
+	SetConsoleTitleW(L"GrassViewer Console");
 }
 
 static void WaitConsoleOnExit()
@@ -73,7 +73,7 @@ int WINAPI WinMain(
 	if (CmdLineStatus == AppBase::CommandLineStatus::Error) return -1;
 
 	const char* AppTitle = g_pEngine->GetAppTitle();
-	LPCWSTR WindowClassName = L"MaterialEditor";
+	LPCWSTR WindowClassName = L"GrassViewer";
 
 	WNDCLASSEX wcex = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, MessageProc, 0L, 0L, hInstance, NULL, NULL, NULL, NULL, WindowClassName, NULL };
 	RegisterClassEx(&wcex);
@@ -82,13 +82,24 @@ int WINAPI WinMain(
 	int desiredHeight = 0;
 	g_pEngine->GetDesiredInitialWindowSize(desiredWidth, desiredHeight);
 
-	LONG windowWidth = desiredWidth > 0 ? desiredWidth : 1280;
-	LONG windowHeight = desiredHeight > 0 ? desiredHeight : 1024;
+	LONG windowWidth = desiredWidth > 0 ? desiredWidth : 1920;
+	LONG windowHeight = desiredHeight > 0 ? desiredHeight : 1080;
 	RECT rc = { 0, 0, windowWidth, windowHeight };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
-	HWND wnd = CreateWindowA("MaterialEditor", AppTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-		rc.right - rc.left, rc.bottom - rc.top, NULL, NULL, hInstance, NULL);
+	const int screenW = GetSystemMetrics(SM_CXSCREEN);
+	const int screenH = GetSystemMetrics(SM_CYSCREEN);
+	const int winW = rc.right - rc.left;
+	const int winH = rc.bottom - rc.top;
+	int x = (screenW - winW) / 2 - 80;
+	int y = (screenH - winH) / 2 - 80;
+	if (x < 0) x = 0;
+	if (y < 0) y = 0;
+
+	HWND wnd = CreateWindowA(
+		"GrassViewer", AppTitle, WS_OVERLAPPEDWINDOW,
+		x, y, winW, winH,
+		NULL, NULL, hInstance, NULL);
 
 	if (!wnd)
 	{
