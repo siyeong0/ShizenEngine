@@ -9,23 +9,6 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	// -----------------------------------------------------------------------------
-	// Helpers
-	// -----------------------------------------------------------------------------
-	static inline uint32 DivUp(uint32 x, uint32 d)
-	{
-		return (x + d - 1) / d;
-	}
-
-	static inline float2 NormalizeSafe(const float2& v, float2 fallback = float2{ 1.0f, 0.0f })
-	{
-		const float len2 = v.x * v.x + v.y * v.y;
-		if (len2 <= 1e-12f)
-			return fallback;
-		const float invLen = 1.0f / std::sqrt(len2);
-		return float2{ v.x * invLen, v.y * invLen };
-	}
-
 	// World XZ -> Terrain UV (0..1), matches GrassBuildInstances.hlsl mapping assumption:
 	// - heightfield size = (HFWidth-1)*SpacingX, (HFHeight-1)*SpacingZ
 	// - if CenterXZ==1, terrain origin is centered: origin = -0.5*size
@@ -510,7 +493,6 @@ namespace shz
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
 		ASSERT(ctx.pScene->GetHeightMap().Texture, "HeightMap is null.");
 		ASSERT(m_pGrassMesh, "GrassMesh is null.");
-		ASSERT(m_pGrassDensityFieldTex && m_pGrassDensityFieldTex->Texture, "GrassDensityField is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 		// ---------------------------------------------------------------------
@@ -610,7 +592,7 @@ namespace shz
 			map->ShadowStregth = 0.18f;
 			map->DirectLightStrength = 0.22f;
 
-			map->WindDirXZ = NormalizeSafe(float2{ 0.80f, 0.60f });
+			map->WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
 			map->WindStrength = 1.15f;
 			map->WindSpeed = 1.75f;
 
@@ -697,9 +679,11 @@ namespace shz
 			pContext->SetPipelineState(m_pInteractionDecayCSO);
 			pContext->CommitShaderResources(m_pInteractionDecaySRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
+			auto divUp = [](uint32 x, uint32 d) -> uint32 {return (x + d - 1) / d; };
+
 			DispatchComputeAttribs disp = {};
-			disp.ThreadGroupCountX = DivUp(INTERACTION_FIELD_SIZE, 8);
-			disp.ThreadGroupCountY = DivUp(INTERACTION_FIELD_SIZE, 8);
+			disp.ThreadGroupCountX = divUp(INTERACTION_FIELD_SIZE, 8);
+			disp.ThreadGroupCountY = divUp(INTERACTION_FIELD_SIZE, 8);
 			disp.ThreadGroupCountZ = 1;
 			pContext->DispatchCompute(disp);
 
@@ -736,7 +720,7 @@ namespace shz
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 			{
-				var->Set(m_pGrassDensityFieldTex->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("GrassDensityField")));
 			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
@@ -749,7 +733,7 @@ namespace shz
 				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassInstanceBuffer")),	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassCounter")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pScene->GetHeightMap().Texture,	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGrassDensityFieldTex->Texture,		RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("GrassDensityField")),		RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pRegistry->GetTexture(STRING_HASH("InteractionField")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
@@ -900,13 +884,6 @@ namespace shz
 		(void)ctx;
 		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
 		m_pGrassMesh = &mesh;
-	}
-
-	void GrassRenderPass::SetGrassDensityField(RenderPassContext& ctx, const TextureRenderData& tex)
-	{
-		(void)ctx;
-		ASSERT(m_pGrassPSO, "Grass render pass is not initialied yet.");
-		m_pGrassDensityFieldTex = &tex;
 	}
 
 	bool GrassRenderPass::buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx)

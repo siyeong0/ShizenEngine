@@ -34,7 +34,6 @@ namespace shz
 		IRenderPass* GetRHIRenderPass() override { return m_pRenderPass; };
 
 		void SetGrassModel(RenderPassContext& ctx, const StaticMeshRenderData& mesh);
-		void SetGrassDensityField(RenderPassContext& ctx, const TextureRenderData& tex);
 	private:
 		bool buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx);
 
@@ -58,7 +57,6 @@ namespace shz
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
 
 		const StaticMeshRenderData* m_pGrassMesh;
-		const TextureRenderData* m_pGrassDensityFieldTex;
 
 		// Compute PSOs for interaction update
 		RefCntAutoPtr<IPipelineState> m_pInteractionDecayCSO;

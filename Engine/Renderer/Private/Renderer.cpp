@@ -462,12 +462,36 @@ namespace shz
 			const StaticMeshRenderData* grassRenderData = &CreateStaticMeshRenderData(*grassPtr);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, *grassRenderData);
 
-			AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
-			AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
+			// Density texture for grass placement
+			{
+				AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
+				AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
+				Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
 
-			Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
-			const TextureRenderData* grassDensityFieldTex = &CreateTextureRenderData(perlin);
-			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassDensityField(m_PassCtx, *grassDensityFieldTex);
+				RefCntAutoPtr<ITexture> perlinTex;
+
+				TextureDesc desc = {};
+				desc.Name = "GrassDensityField";
+				desc.Type = RESOURCE_DIM_TEX_2D;
+				desc.Width = perlin.GetWidth();
+				desc.Height = perlin.GetHeight();
+				desc.MipLevels = 1;
+				desc.ArraySize = 1;
+				desc.Format = TEX_FORMAT_R8_UNORM;
+				desc.Usage = USAGE_DEFAULT;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+
+				TextureSubResData subres = {};
+				subres.pData = perlin.GetData();
+				subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+				subres.DepthStride = 0;
+				TextureData initData = {};
+				initData.pSubResources = &subres;
+				initData.NumSubresources = 1;
+				perlinTex = CreateTexture(desc, &initData);
+
+				m_pRegistry->RegisterTexture(STRING_HASH("GrassDensityField"), std::move(perlinTex));
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -1233,25 +1257,35 @@ namespace shz
 	void Renderer::UpdateTexture2D(
 		IDeviceContext* pCtx,
 		ITexture* pTexture,
-		uint32 mipLevel,
 		uint32 arraySlice,
-		const TextureSubResData& subRes,
+		const Texture& sourceImage,
 		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
 	{
 		ASSERT(pCtx, "Context is null.");
 		ASSERT(pTexture, "Texture is null.");
 
-		// Update entire subresource (no box)
-		IBox box = {}; // empty -> full resource
-		pCtx->UpdateTexture(
-			pTexture,
-			mipLevel,
-			arraySlice,
-			box,
-			subRes,
-			transitionMode,
-			RESOURCE_STATE_TRANSITION_MODE_NONE
-		);
+		const auto& mips = sourceImage.GetMips();
+		ASSERT(!mips.empty(), "TextureAsset has no mips.");
+
+		for (uint32 mipLevel = 0; mipLevel < static_cast<uint32>(mips.size()); ++mipLevel)
+		{
+			TextureSubResData subResData = {};
+			subResData.pData = mips[mipLevel].Data.data();
+			subResData.Stride = static_cast<uint64>(mips[mipLevel].Width) * GetTextureFormatAttribs(sourceImage.GetFormat()).GetElementSize();
+			subResData.DepthStride = 0;
+
+			// Update entire subresource (no box)
+			IBox box = {}; // empty -> full resource
+			pCtx->UpdateTexture(
+				pTexture,
+				mipLevel,
+				arraySlice,
+				box,
+				subResData,
+				transitionMode,
+				RESOURCE_STATE_TRANSITION_MODE_NONE
+			);
+		}
 	}
 
 	// ----------------------------

@@ -101,14 +101,11 @@ namespace shz
 			const void* pData,
 			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
 
-		// Simplified texture update helper (2D)
-		// NOTE: For full generality, add box/mip/slice parameters as needed.
 		void UpdateTexture2D(
 			IDeviceContext* pCtx,
 			ITexture* pTexture,
-			uint32 mipLevel,
 			uint32 arraySlice,
-			const TextureSubResData& subRes,
+			const Texture& sourceImage,
 			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
 
 		// ---------------------------------------------------------------------
