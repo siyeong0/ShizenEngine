@@ -84,18 +84,6 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Helpers
-	// ------------------------------------------------------------
-
-	Matrix4x4 GrassViewer::ToMatrixTRS(const CTransform& t)
-	{
-		return Matrix4x4::TRS(
-			t.Position,
-			t.Rotation,
-			t.Scale);
-	}
-
-	// ------------------------------------------------------------
 	// Lifecycle
 	// ------------------------------------------------------------
 
@@ -142,6 +130,10 @@ namespace shz
 			rendererCI.pAssetManager = m_pAssetManager.get();
 
 			m_pRenderer->Initialize(rendererCI);
+		}
+
+		{
+
 		}
 
 		// Render Scene
@@ -205,7 +197,7 @@ namespace shz
 
 							m_pRenderScene->UpdateObjectTransform(
 								mr.RenderObjectHandle,
-								GrassViewer::ToMatrixTRS(tr));
+								Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale));
 						});
 				m_pEcs->RegisterUpdateSystem(sys);
 			}
@@ -388,26 +380,6 @@ namespace shz
 			}
 		}
 		ImGui::End();
-
-		ImGui::SetNextWindowPos(ImVec2(10, 220), ImGuiCond_FirstUseEver);
-
-		if (ImGui::Begin("Profiling", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-		{
-			ASSERT(m_pRenderer, "Renderer is null.");
-
-			const auto passTable = m_pRenderer->GetPassDrawCallCountTable();
-
-			uint64 total = 0;
-			for (const auto& kv : passTable)
-				total += kv.second;
-
-			ImGui::Text("Total Draw Calls: %llu", (unsigned long long)total);
-			ImGui::Separator();
-
-			for (const auto& kv : passTable)
-				ImGui::Text("%s: %llu", kv.first.c_str(), (unsigned long long)kv.second);
-		}
-		ImGui::End();
 	}
 
 	// ------------------------------------------------------------
@@ -570,7 +542,10 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(*pTreeMeshes[meshIdx], GrassViewer::ToMatrixTRS(tr), mr.bCastShadow);
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+					*pTreeMeshes[meshIdx],
+					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+					mr.bCastShadow);
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -624,7 +599,10 @@ namespace shz
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(helmetMeshRD, GrassViewer::ToMatrixTRS(tr), true);
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+					helmetMeshRD,
+					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+					true);
 				e.set<CMeshRenderer>(mr);
 
 				CBoxCollider box = {};

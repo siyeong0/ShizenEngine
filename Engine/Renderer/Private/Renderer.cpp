@@ -1,8 +1,6 @@
 ﻿#include "pch.h"
 #include "Engine/Renderer/Public/Renderer.h"
 
-#include <unordered_set>
-
 #include "Engine/Core/Math/Math.h"
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
@@ -139,7 +137,7 @@ namespace shz
 			RefCntAutoPtr<ITexture> errorTex = CreateTexture(desc, &initData);
 			ASSERT(errorTex, "CreateTexture failed.");
 
-			m_pRegistry->RegisterTexture(STRING_HASH("ErrorTex"), std::move(errorTex));
+			AddTexture(STRING_HASH("ErrorTex"), std::move(errorTex));
 		}
 
 		// -----------------------------------------------------------------
@@ -185,8 +183,8 @@ namespace shz
 					return sb;
 				};
 
-			m_pRegistry->RegisterBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
-			m_pRegistry->RegisterBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
+			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
+			AddBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
 		}
 
 		// -----------------------------------------------------------------
@@ -206,10 +204,10 @@ namespace shz
 			ASSERT(spec, "Env specular load failed.");
 			ASSERT(brdf, "Env brdf load failed.");
 
-			m_pRegistry->RegisterTexture(STRING_HASH("EnvTex"), std::move(env));
-			m_pRegistry->RegisterTexture(STRING_HASH("EnvDiffuseTex"), std::move(diff));
-			m_pRegistry->RegisterTexture(STRING_HASH("EnvSpecularTex"), std::move(spec));
-			m_pRegistry->RegisterTexture(STRING_HASH("EnvBrdfTex"), std::move(brdf));
+			AddTexture(STRING_HASH("EnvTex"), std::move(env));
+			AddTexture(STRING_HASH("EnvDiffuseTex"), std::move(diff));
+			AddTexture(STRING_HASH("EnvSpecularTex"), std::move(spec));
+			AddTexture(STRING_HASH("EnvBrdfTex"), std::move(brdf));
 
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_EnvMapTex", STRING_HASH("EnvTex"));
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_IrradianceIBLTex", STRING_HASH("EnvDiffuseTex"));
@@ -280,10 +278,10 @@ namespace shz
 						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 						return CreateTexture(td);
 					};
-				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
-				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
-				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
-				m_pRegistry->RegisterTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+				AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
+				AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
+				AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
+				AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Width, m_Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
 
 				TextureDesc td = {};
 				td.Name = "GBufferDepth";
@@ -296,18 +294,18 @@ namespace shz
 				td.Format = TEX_FORMAT_R32_TYPELESS;
 				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
-				m_pRegistry->RegisterTexture(STRING_HASH("GBufferDepth"), CreateTexture(td));
+				AddTexture(STRING_HASH("GBufferDepth"), CreateTexture(td));
 
 				TextureViewDesc vd = {};
 				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
 				vd.Format = TEX_FORMAT_D32_FLOAT;
 
-				m_pRegistry->CreateTextureView(STRING_HASH("GBufferDepth"), vd);
+				AddTextureView(STRING_HASH("GBufferDepth"), vd);
 
 				vd = {};
 				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
 				vd.Format = TEX_FORMAT_R32_FLOAT;
-				m_pRegistry->CreateTextureView(STRING_HASH("GBufferDepth"), vd);
+				AddTextureView(STRING_HASH("GBufferDepth"), vd);
 			}
 
 			// Lighting
@@ -323,7 +321,7 @@ namespace shz
 				td.Usage = USAGE_DEFAULT;
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-				m_pRegistry->RegisterTexture(STRING_HASH("Lighting"), CreateTexture(td));
+				AddTexture(STRING_HASH("Lighting"), CreateTexture(td));
 			}
 
 			// Grass
@@ -341,7 +339,7 @@ namespace shz
 					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
 					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("GrassInstanceBuffer"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("GrassInstanceBuffer"), CreateBuffer(bd));
 				}
 
 				// Indirect args (RAW 20 bytes)
@@ -353,7 +351,7 @@ namespace shz
 					bd.Mode = BUFFER_MODE_RAW;
 					bd.Size = 20;
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("GrassIndirectArgs"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("GrassIndirectArgs"), CreateBuffer(bd));
 				}
 
 				// Counter (RAW 4 bytes)
@@ -365,7 +363,7 @@ namespace shz
 					bd.Mode = BUFFER_MODE_RAW;
 					bd.Size = 4;
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("GrassCounter"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("GrassCounter"), CreateBuffer(bd));
 				}
 
 				// GrassGenConstantsCB (CS)
@@ -377,7 +375,7 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = sizeof(hlsl::GrassGenConstants);
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("GrassGenConstantsCB"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("GrassGenConstantsCB"), CreateBuffer(bd));
 				}
 
 				// GrassRenderConstantsCB (VS/PS)
@@ -389,7 +387,7 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = sizeof(hlsl::GrassRenderConstants);
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("GrassRenderConstantsCB"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("GrassRenderConstantsCB"), CreateBuffer(bd));
 				}
 
 				// Interaction field texture (R16_FLOAT SRV/UAV)
@@ -404,7 +402,7 @@ namespace shz
 					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
 					td.Usage = USAGE_DEFAULT;
 
-					m_pRegistry->RegisterTexture(STRING_HASH("InteractionField"), CreateTexture(td));
+					AddTexture(STRING_HASH("InteractionField"), CreateTexture(td));
 				}
 
 				// Interaction stamps (Structured, dynamic CPU write)
@@ -418,7 +416,7 @@ namespace shz
 					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("InteractionStampBuffer"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("InteractionStampBuffer"), CreateBuffer(bd));
 				}
 
 				// Interaction constants
@@ -430,7 +428,38 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
 
-					m_pRegistry->RegisterBuffer(STRING_HASH("InteractionConstantsCB"), CreateBuffer(bd));
+					AddBuffer(STRING_HASH("InteractionConstantsCB"), CreateBuffer(bd));
+				}
+
+				// Density texture for grass placement
+				{
+					AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
+					AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
+					Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
+
+					RefCntAutoPtr<ITexture> perlinTex;
+
+					TextureDesc desc = {};
+					desc.Name = "GrassDensityField";
+					desc.Type = RESOURCE_DIM_TEX_2D;
+					desc.Width = perlin.GetWidth();
+					desc.Height = perlin.GetHeight();
+					desc.MipLevels = 1;
+					desc.ArraySize = 1;
+					desc.Format = TEX_FORMAT_R8_UNORM;
+					desc.Usage = USAGE_DEFAULT;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+
+					TextureSubResData subres = {};
+					subres.pData = perlin.GetData();
+					subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+					subres.DepthStride = 0;
+					TextureData initData = {};
+					initData.pSubResources = &subres;
+					initData.NumSubresources = 1;
+					perlinTex = CreateTexture(desc, &initData);
+
+					m_pRegistry->RegisterTexture(STRING_HASH("GrassDensityField"), std::move(perlinTex));
 				}
 			}
 		}
@@ -442,13 +471,12 @@ namespace shz
 			ASSERT(m_Passes.empty(), "m_Passes are already initilaized.");
 			ASSERT(m_PassOrder.empty(), "m_PassOrder are already initilaized.");
 
-			addPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
-			addPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
-			addPass(std::make_unique<LightingRenderPass>(m_PassCtx));
+			AddPass(std::make_unique<ShadowRenderPass>(m_PassCtx));
+			AddPass(std::make_unique<GBufferRenderPass>(m_PassCtx));
+			AddPass(std::make_unique<LightingRenderPass>(m_PassCtx));
 
-			addPass(std::make_unique<GrassRenderPass>(m_PassCtx));
-			addPass(std::make_unique<PostRenderPass>(m_PassCtx));
-
+			AddPass(std::make_unique<GrassRenderPass>(m_PassCtx));
+			AddPass(std::make_unique<PostRenderPass>(m_PassCtx));
 			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
 			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
@@ -461,37 +489,6 @@ namespace shz
 
 			const StaticMeshRenderData* grassRenderData = &CreateStaticMeshRenderData(*grassPtr);
 			static_cast<GrassRenderPass*>(m_Passes["Grass"].get())->SetGrassModel(m_PassCtx, *grassRenderData);
-
-			// Density texture for grass placement
-			{
-				AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
-				AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
-				Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
-
-				RefCntAutoPtr<ITexture> perlinTex;
-
-				TextureDesc desc = {};
-				desc.Name = "GrassDensityField";
-				desc.Type = RESOURCE_DIM_TEX_2D;
-				desc.Width = perlin.GetWidth();
-				desc.Height = perlin.GetHeight();
-				desc.MipLevels = 1;
-				desc.ArraySize = 1;
-				desc.Format = TEX_FORMAT_R8_UNORM;
-				desc.Usage = USAGE_DEFAULT;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-
-				TextureSubResData subres = {};
-				subres.pData = perlin.GetData();
-				subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
-				subres.DepthStride = 0;
-				TextureData initData = {};
-				initData.pSubResources = &subres;
-				initData.NumSubresources = 1;
-				perlinTex = CreateTexture(desc, &initData);
-
-				m_pRegistry->RegisterTexture(STRING_HASH("GrassDensityField"), std::move(perlinTex));
-			}
 		}
 
 		// ------------------------------------------------------------
@@ -1214,6 +1211,95 @@ namespace shz
 		}
 	}
 
+	uint64 Renderer::AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData)
+	{
+		ASSERT(!name.empty(), "Name is empty.");
+		return AddTexture(STRING_HASH(name), desc, pInitData);
+	}
+
+	uint64 Renderer::AddTexture(uint64 id, const TextureDesc& desc, const TextureData* pInitData)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		RefCntAutoPtr<ITexture> tex = CreateTexture(desc, pInitData);
+		ASSERT(tex, "AddTexture: CreateTexture failed.");
+		m_pRegistry->RegisterTexture(id, std::move(tex));
+		return id;
+	}
+
+	uint64 Renderer::AddTexture(const std::string& name, RefCntAutoPtr<ITexture>&& tex)
+	{
+		ASSERT(!name.empty(), "Name is empty.");
+		return AddTexture(STRING_HASH(name), std::move(tex));
+	}
+
+	uint64 Renderer::AddTexture(uint64 id, RefCntAutoPtr<ITexture>&& tex)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		ASSERT(tex, "AddTexture: tex is null.");
+		m_pRegistry->RegisterTexture(id, std::move(tex));
+		return id;
+	}
+
+	uint64 Renderer::AddBuffer(const std::string& name, const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(!name.empty(), "Name is empty.");
+		return AddBuffer(STRING_HASH(name), desc, pInitData);
+	}
+
+	uint64 Renderer::AddBuffer(uint64 id, const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		RefCntAutoPtr<IBuffer> buf = CreateBuffer(desc, pInitData);
+		ASSERT(buf, "AddBuffer: CreateBuffer failed.");
+		m_pRegistry->RegisterBuffer(id, std::move(buf));
+		return id;
+	}
+
+	uint64 Renderer::AddBuffer(const std::string& name, RefCntAutoPtr<IBuffer>&& buf)
+	{
+		ASSERT(!name.empty(), "Name is empty.");
+		return AddBuffer(STRING_HASH(name), std::move(buf));
+	}
+
+	uint64 Renderer::AddBuffer(uint64 id, RefCntAutoPtr<IBuffer>&& buf)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		ASSERT(buf, "AddBuffer: buf is null.");
+		m_pRegistry->RegisterBuffer(id, std::move(buf));
+		return id;
+	}
+
+	void Renderer::AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc)
+	{
+		ASSERT(!textureName.empty(), "Name is empty.");
+		AddTextureView(STRING_HASH(textureName), viewDesc);
+	}
+
+	void Renderer::AddTextureView(uint64 textureId, const TextureViewDesc& viewDesc)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		m_pRegistry->CreateTextureView(textureId, viewDesc);
+	}
+
+	// ---------------------------------------------------------------------
+	// Render passes
+	// ---------------------------------------------------------------------
+
+	void Renderer::AddPass(std::unique_ptr<RenderPassBase> pass)
+	{
+		ASSERT(pass, "Pass is null.");
+
+		const char* name = pass->GetName();
+		ASSERT(name && name[0] != '\0', "Pass name is empty.");
+
+		auto it = m_Passes.find(name);
+		ASSERT(it == m_Passes.end(), "Duplicate pass name.");
+
+		m_PassOrder.push_back(name);
+		m_Passes.emplace(name, std::move(pass));
+		m_RHIRenderPasses.emplace(name, m_Passes[name]->GetRHIRenderPass());
+	}
+
 	// ---------------------------------------------------------------------
 	// Resource wrappers
 	// ---------------------------------------------------------------------
@@ -1769,18 +1855,6 @@ namespace shz
 		return *m_TextureCache.Acquire(key);
 	}
 
-	const std::unordered_map<std::string, uint64> Renderer::GetPassDrawCallCountTable() const
-	{
-		std::unordered_map<std::string, uint64> drawCallTable;
-		for (auto& passPair : m_Passes)
-		{
-			const std::string& name = passPair.first;
-			uint64 drawCallCount = passPair.second->GetDrawCallCount();
-			drawCallTable[name] = drawCallCount;
-		}
-		return drawCallTable;
-	}
-
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const
 	{
 		auto it = m_TemplateLibrary.find(name);
@@ -1796,21 +1870,6 @@ namespace shz
 			names.push_back(pair.first);
 		}
 		return names;
-	}
-
-	void Renderer::addPass(std::unique_ptr<RenderPassBase> pass)
-	{
-		ASSERT(pass, "Pass is null.");
-
-		const char* name = pass->GetName();
-		ASSERT(name && name[0] != '\0', "Pass name is empty.");
-
-		auto it = m_Passes.find(name);
-		ASSERT(it == m_Passes.end(), "Duplicate pass name.");
-
-		m_PassOrder.push_back(name);
-		m_Passes.emplace(name, std::move(pass));
-		m_RHIRenderPasses.emplace(name, m_Passes[name]->GetRHIRenderPass());
 	}
 } // namespace shz
 

@@ -48,7 +48,6 @@ namespace shz
 
 	private:
 		void BuildSceneOnce();
-		static Matrix4x4 ToMatrixTRS(const CTransform& t);
 
 	private:
 		std::unique_ptr<Renderer>     m_pRenderer = nullptr;

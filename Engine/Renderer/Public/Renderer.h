@@ -80,6 +80,27 @@ namespace shz
 		void OnResize(uint32 width, uint32 height);
 
 		// ---------------------------------------------------------------------
+		// Resource registry wrappers
+		// ---------------------------------------------------------------------
+		uint64 AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData = nullptr);
+		uint64 AddTexture(uint64 id, const TextureDesc& desc, const TextureData* pInitData = nullptr);
+		uint64 AddTexture(const std::string& name, RefCntAutoPtr<ITexture>&& tex);
+		uint64 AddTexture(uint64 id, RefCntAutoPtr<ITexture>&& tex);
+
+		uint64 AddBuffer(const std::string& name, const BufferDesc& desc, const BufferData* pInitData = nullptr);
+		uint64 AddBuffer(uint64 id, const BufferDesc& desc, const BufferData* pInitData = nullptr);
+		uint64 AddBuffer(const std::string& name, RefCntAutoPtr<IBuffer>&& buf);
+		uint64 AddBuffer(uint64 id, RefCntAutoPtr<IBuffer>&& buf);
+
+		void AddTextureView(const std::string& textureName,const TextureViewDesc& viewDesc);
+		void AddTextureView(uint64 textureId,const TextureViewDesc& viewDesc);
+
+		// ---------------------------------------------------------------------
+		// Render pass management
+		// ---------------------------------------------------------------------
+		void AddPass(std::unique_ptr<RenderPassBase> pass);
+
+		// ---------------------------------------------------------------------
 		// Resource factory wrappers (Renderer-owned shared resources)
 		// ---------------------------------------------------------------------
 		RefCntAutoPtr<ITexture> CreateTexture(
@@ -119,13 +140,8 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 		const TextureRenderData& CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
-		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;
-
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
-
-	private:
-		void addPass(std::unique_ptr<RenderPassBase> pass);
 
 	private:
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
