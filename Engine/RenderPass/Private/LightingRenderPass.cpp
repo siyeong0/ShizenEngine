@@ -6,7 +6,6 @@
 
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/Renderer/Public/CommonResourceId.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
@@ -162,11 +161,6 @@ namespace shz
 			{ SHADER_TYPE_PIXEL, "g_GBuffer2",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			{ SHADER_TYPE_PIXEL, "g_ShadowMap",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			{ SHADER_TYPE_PIXEL, "g_EnvMapTex",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		psoCi.PSODesc.ResourceLayout.Variables = vars;
 		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
@@ -220,36 +214,6 @@ namespace shz
 		bindGBufferTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
 		bindGBufferTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
 		bindGBufferTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
-		bindGBufferTexture("g_ShadowMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
-
-		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_EnvMapTex"))
-		{
-			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvTex")))
-			{
-				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-			}
-		}
-		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
-		{
-			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex")))
-			{
-				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvDiffuseTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-			}
-		}
-		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
-		{
-			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvSpecularTex")))
-			{
-				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvSpecularTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-			}
-		}
-		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
-		{
-			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvBrdfTex")))
-			{
-				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvBrdfTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-			}
-		}
 	}
 
 	void LightingRenderPass::Execute(RenderPassContext& ctx)

@@ -7,7 +7,6 @@
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
-#include "Engine/Renderer/Public/CommonResourceId.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz

@@ -10,7 +10,22 @@ namespace shz
 
 	void RenderResourceRegistry::Shutdown()
 	{
+		for (auto& [id, entry] : m_Textures)
+		{
+			entry.SRV.Release();
+			entry.RTV.Release();
+			entry.DSV.Release();
+			entry.UAV.Release();
+			entry.Texture.Release();
+		}
 		m_Textures.clear();
+
+		for (auto& [id, entry] : m_Buffers)
+		{
+			entry.SRV.Release();
+			entry.UAV.Release();
+			entry.Buffer.Release();
+		}
 		m_Buffers.clear();
 	}
 

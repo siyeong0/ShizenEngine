@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
-#include "Engine/Renderer/Public/CommonResourceId.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
@@ -124,130 +123,6 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Buffers: Instance(UAV/SRV), IndirectArgs, Counter, CBs
-		// ------------------------------------------------------------
-		{
-			// GrassInstanceBuffer
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassInstanceBuffer";
-				bd.Usage = USAGE_DEFAULT;
-				bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-				bd.Mode = BUFFER_MODE_STRUCTURED;
-				bd.ElementByteStride = sizeof(hlsl::GrassInstance);
-				bd.Size = uint64{ m_MaxInstances } *uint64{ sizeof(hlsl::GrassInstance) };
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassInstanceBuffer);
-				ASSERT(m_pGrassInstanceBuffer, "CreateBuffer(GrassInstanceBuffer) failed.");
-			}
-
-			// Indirect args (RAW 20 bytes)
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassIndirectArgs";
-				bd.Usage = USAGE_DEFAULT;
-				bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
-				bd.Mode = BUFFER_MODE_RAW;
-				bd.Size = 20;
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pIndirectArgsBuffer);
-				ASSERT(m_pIndirectArgsBuffer, "CreateBuffer(GrassIndirectArgs) failed.");
-			}
-
-			// Counter (RAW 4 bytes)
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassCounter";
-				bd.Usage = USAGE_DEFAULT;
-				bd.BindFlags = BIND_UNORDERED_ACCESS;
-				bd.Mode = BUFFER_MODE_RAW;
-				bd.Size = 4;
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pCounterBuffer);
-				ASSERT(m_pCounterBuffer, "CreateBuffer(GrassCounter) failed.");
-			}
-
-			// GrassGenConstantsCB (CS)
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassGenConstantsCB";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_UNIFORM_BUFFER;
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = sizeof(hlsl::GrassGenConstants);
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassGenConstantsCB);
-				ASSERT(m_pGrassGenConstantsCB, "CreateBuffer(GrassGenConstantsCB) failed.");
-			}
-
-			// GrassRenderConstantsCB (VS/PS)
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassRenderConstantsCB";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_UNIFORM_BUFFER;
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pGrassRenderConstantsCB);
-				ASSERT(m_pGrassRenderConstantsCB, "CreateBuffer(GrassRenderConstantsCB) failed.");
-			}
-
-			// Interaction field texture (R16_FLOAT SRV/UAV)
-			{
-				m_pInteractionFieldTex.Release();
-				m_pInteractionFieldSRV = nullptr;
-				m_pInteractionFieldUAV = nullptr;
-
-				TextureDesc td = {};
-				td.Name = "InteractionField";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_InteractionW;
-				td.Height = m_InteractionH;
-				td.Format = TEX_FORMAT_R16_FLOAT;
-				td.MipLevels = 1;
-				td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-				td.Usage = USAGE_DEFAULT;
-
-				ctx.pDevice->CreateTexture(td, nullptr, &m_pInteractionFieldTex);
-				ASSERT(m_pInteractionFieldTex, "CreateTexture(InteractionField) failed.");
-
-				m_pInteractionFieldSRV = m_pInteractionFieldTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-				m_pInteractionFieldUAV = m_pInteractionFieldTex->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS);
-
-				ASSERT(m_pInteractionFieldSRV && m_pInteractionFieldUAV, "InteractionField SRV/UAV is null.");
-			}
-
-			// Interaction stamps (Structured, dynamic CPU write)
-			{
-				BufferDesc bd = {};
-				bd.Name = "InteractionStampBuffer";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_SHADER_RESOURCE;
-				bd.Mode = BUFFER_MODE_STRUCTURED;
-				bd.ElementByteStride = sizeof(hlsl::InteractionStamp);
-				bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pInteractionStampBuffer);
-				ASSERT(m_pInteractionStampBuffer, "CreateBuffer(InteractionStampBuffer) failed.");
-			}
-
-			// Interaction constants
-			{
-				BufferDesc bd = {};
-				bd.Name = "InteractionConstantsCB";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_UNIFORM_BUFFER;
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = uint64(sizeof(hlsl::InteractionConstants));
-
-				ctx.pDevice->CreateBuffer(bd, nullptr, &m_pInteractionConstantsCB);
-				ASSERT(m_pInteractionConstantsCB, "CreateBuffer(InteractionConstantsCB) failed.");
-			}
-		}
-
-		// ------------------------------------------------------------
 		// Compute PSO #1: GenerateGrassInstances
 		// ------------------------------------------------------------
 		{
@@ -307,17 +182,17 @@ namespace shz
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstances"))
 			{
-				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+				var->Set(ctx.pRegistry->GetBufferUAV(STRING_HASH("GrassInstanceBuffer")));
 			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
 			{
-				var->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+				var->Set(ctx.pRegistry->GetBufferUAV(STRING_HASH("GrassCounter")));
 			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
 			{
-				var->Set(m_pGrassGenConstantsCB);
+				var->Set(ctx.pRegistry->GetBuffer(STRING_HASH("GrassGenConstantsCB")));
 			}
 		}
 
@@ -362,11 +237,14 @@ namespace shz
 			m_pArgsCSO->CreateShaderResourceBinding(&m_pArgsCSRB, true);
 			ASSERT(m_pArgsCSRB, "Create SRB for GrassWriteIndirectArgs failed.");
 
-			if (auto* varArgs = m_pArgsCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_IndirectArgs"))
-				varArgs->Set(m_pIndirectArgsBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
-
-			if (auto* varCounter = m_pArgsCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
-				varCounter->Set(m_pCounterBuffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS));
+			if (auto* var = m_pArgsCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_IndirectArgs"))
+			{
+				var->Set(ctx.pRegistry->GetBufferUAV(STRING_HASH("GrassIndirectArgs")));
+			}
+			if (auto* var = m_pArgsCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
+			{
+				var->Set(ctx.pRegistry->GetBufferUAV(STRING_HASH("GrassCounter")));
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -405,15 +283,7 @@ namespace shz
 
 			ShaderResourceVariableDesc vars[] =
 			{
-				{ SHADER_TYPE_VERTEX, "g_GrassInstances",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL,  "GRASS_RENDER_CONSTANTS",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-
-				{ SHADER_TYPE_PIXEL, "g_BaseColorTex",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_ShadowMap",              SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_IrradianceIBLTex",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_SpecularIBLTex",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "g_BrdfIBLTex",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			};
 			rl.Variables = vars;
 			rl.NumVariables = _countof(vars);
@@ -473,43 +343,22 @@ namespace shz
 
 			m_pGrassPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCI);
 
+			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
+			{
+				var->Set(ctx.pRegistry->GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
+			}
+
+			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
+			{
+				var->Set(ctx.pRegistry->GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+			}
+			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS"))
+			{
+				var->Set(ctx.pRegistry->GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+			}
+
 			m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
 			ASSERT(m_pGrassSRB, "Create SRB for Grass failed.");
-
-			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
-			{
-				var->Set(m_pGrassInstanceBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
-			}
-
-			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
-				var->Set(m_pGrassRenderConstantsCB);
-			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS"))
-				var->Set(m_pGrassRenderConstantsCB);
-
-			if (auto* var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_ShadowMap"))
-				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
-
-			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
-			{
-				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex")))
-				{
-					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvDiffuseTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-			}
-			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
-			{
-				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvSpecularTex")))
-				{
-					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvSpecularTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-			}
-			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
-			{
-				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvBrdfTex")))
-				{
-					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvBrdfTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-			}
 		}
 
 		// ------------------------------------------------------------
@@ -553,7 +402,9 @@ namespace shz
 			ASSERT(m_pInteractionDecaySRB, "Create SRB for InteractionDecay failed.");
 
 			if (auto* var = m_pInteractionDecaySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS"))
-				var->Set(m_pInteractionConstantsCB);
+			{
+				var->Set(ctx.pRegistry->GetBuffer(STRING_HASH("InteractionConstantsCB")));
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -611,10 +462,13 @@ namespace shz
 			ASSERT(m_pInteractionApplySRB, "Create SRB for InteractionApplyStamps failed.");
 
 			if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS"))
-				var->Set(m_pInteractionConstantsCB);
-
+			{
+				var->Set(ctx.pRegistry->GetBuffer(STRING_HASH("InteractionConstantsCB")));
+			}
 			if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Stamps"))
-				var->Set(m_pInteractionStampBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+			{
+				var->Set(ctx.pRegistry->GetBufferSRV(STRING_HASH("InteractionStampBuffer")));
+			}
 		}
 
 		// ------------------------------------------------------------
@@ -642,20 +496,6 @@ namespace shz
 
 		m_pInteractionApplySRB.Release();
 		m_pInteractionApplyCSO.Release();
-
-		m_pInteractionConstantsCB.Release();
-		m_pInteractionStampBuffer.Release();
-
-		m_pInteractionFieldTex.Release();
-		m_pInteractionFieldSRV = nullptr;
-		m_pInteractionFieldUAV = nullptr;
-
-		m_pGrassInstanceBuffer.Release();
-		m_pIndirectArgsBuffer.Release();
-		m_pCounterBuffer.Release();
-
-		m_pGrassGenConstantsCB.Release();
-		m_pGrassRenderConstantsCB.Release();
 	}
 
 	void GrassRenderPass::BeginFrame(RenderPassContext& ctx)
@@ -679,7 +519,7 @@ namespace shz
 		{
 			const uint32 zero = 0;
 			pContext->UpdateBuffer(
-				m_pCounterBuffer,
+				ctx.pRegistry->GetBuffer(STRING_HASH("GrassCounter")),
 				0,
 				sizeof(uint32),
 				&zero,
@@ -687,7 +527,7 @@ namespace shz
 
 			const uint32 args[5] = { 6u, 0u, 0u, 0u, 0u };
 			pContext->UpdateBuffer(
-				m_pIndirectArgsBuffer,
+				ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs")),
 				0,
 				sizeof(args),
 				args,
@@ -701,7 +541,7 @@ namespace shz
 		{
 			MapHelper<hlsl::GrassGenConstants> map(
 				pContext,
-				m_pGrassGenConstantsCB,
+				ctx.pRegistry->GetBuffer(STRING_HASH("GrassGenConstantsCB")),
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
@@ -757,7 +597,7 @@ namespace shz
 		{
 			MapHelper<hlsl::GrassRenderConstants> map(
 				pContext,
-				m_pGrassRenderConstantsCB,
+				ctx.pRegistry->GetBuffer(STRING_HASH("GrassRenderConstantsCB")),
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
@@ -794,7 +634,7 @@ namespace shz
 			// Upload stamps (convert world->uv)
 			MapHelper<hlsl::InteractionStamp> stampMap(
 				pContext,
-				m_pInteractionStampBuffer,
+				ctx.pRegistry->GetBuffer(STRING_HASH("InteractionStampBuffer")),
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
@@ -822,12 +662,12 @@ namespace shz
 		{
 			MapHelper<hlsl::InteractionConstants> map(
 				pContext,
-				m_pInteractionConstantsCB,
+				ctx.pRegistry->GetBuffer(STRING_HASH("InteractionConstantsCB")),
 				MAP_WRITE,
 				MAP_FLAG_DISCARD);
 
-			map->FieldWidth = m_InteractionW;
-			map->FieldHeight = m_InteractionH;
+			map->FieldWidth = INTERACTION_FIELD_SIZE;
+			map->FieldHeight = INTERACTION_FIELD_SIZE;
 			map->NumStamps = stampCount;
 			map->DeltaTime = ctx.DeltaTime;
 
@@ -844,20 +684,22 @@ namespace shz
 			// Transition interaction field to UAV
 			StateTransitionDesc tr[] =
 			{
-				{ m_pInteractionFieldTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("InteractionField")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
 			// Decay
 			if (auto* var = m_pInteractionDecaySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_RWInteractionField"))
-				var->Set(m_pInteractionFieldUAV);
+			{
+				var->Set(ctx.pRegistry->GetTextureUAV(STRING_HASH("InteractionField")));
+			}
 
 			pContext->SetPipelineState(m_pInteractionDecayCSO);
 			pContext->CommitShaderResources(m_pInteractionDecaySRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 			DispatchComputeAttribs disp = {};
-			disp.ThreadGroupCountX = DivUp(m_InteractionW, 8);
-			disp.ThreadGroupCountY = DivUp(m_InteractionH, 8);
+			disp.ThreadGroupCountX = DivUp(INTERACTION_FIELD_SIZE, 8);
+			disp.ThreadGroupCountY = DivUp(INTERACTION_FIELD_SIZE, 8);
 			disp.ThreadGroupCountZ = 1;
 			pContext->DispatchCompute(disp);
 
@@ -865,7 +707,9 @@ namespace shz
 			if (stampCount > 0)
 			{
 				if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_RWInteractionField"))
-					var->Set(m_pInteractionFieldUAV);
+				{
+					var->Set(ctx.pRegistry->GetTextureUAV(STRING_HASH("InteractionField")));
+				}
 
 				pContext->SetPipelineState(m_pInteractionApplyCSO);
 				pContext->CommitShaderResources(m_pInteractionApplySRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
@@ -876,7 +720,7 @@ namespace shz
 			// Transition to SRV for sampling in GenCS
 			StateTransitionDesc trSrv[] =
 			{
-				{ m_pInteractionFieldTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("InteractionStampBuffer")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(trSrv), trSrv);
 		}
@@ -886,21 +730,27 @@ namespace shz
 		// ---------------------------------------------------------------------
 		{
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
+			{
 				var->Set(ctx.pScene->GetHeightMap().Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
+			{
 				var->Set(m_pGrassDensityFieldTex->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+			}
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
-				var->Set(m_pInteractionFieldSRV);
+			{
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("InteractionField")));
+			}
 
 			StateTransitionDesc tr[] =
 			{
-				{ m_pGrassInstanceBuffer,				RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pCounterBuffer,						RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassInstanceBuffer")),	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassCounter")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ ctx.pScene->GetHeightMap().Texture,	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pGrassDensityFieldTex->Texture,		RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pInteractionFieldTex,				RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetTexture(STRING_HASH("InteractionField")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -921,8 +771,8 @@ namespace shz
 		{
 			StateTransitionDesc tr[] =
 			{
-				{ m_pIndirectArgsBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pCounterBuffer,      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassCounter")),      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 
@@ -943,8 +793,8 @@ namespace shz
 		{
 			StateTransitionDesc tr2[] =
 			{
-				{ m_pGrassInstanceBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pIndirectArgsBuffer,  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassInstanceBuffer")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs")),  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr2), tr2);
 		}
@@ -955,8 +805,8 @@ namespace shz
 		{
 			StateTransitionDesc trGfx[] =
 			{
-				{ m_pGrassInstanceBuffer,        RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pIndirectArgsBuffer,         RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassInstanceBuffer")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs")),  RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDIRECT_ARGUMENT, STATE_TRANSITION_FLAG_UPDATE_STATE },
 
 				{ m_pGrassMesh->VertexBuffer,    RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER,     STATE_TRANSITION_FLAG_UPDATE_STATE },
 				{ m_pGrassMesh->IndexBuffer,     RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER,      STATE_TRANSITION_FLAG_UPDATE_STATE },
@@ -1005,7 +855,7 @@ namespace shz
 
 			DrawIndexedIndirectAttribs ia = {};
 			ia.IndexType = m_pGrassMesh->IndexType;
-			ia.pAttribsBuffer = m_pIndirectArgsBuffer;
+			ia.pAttribsBuffer = ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs"));
 			ia.DrawArgsOffset = 0;
 			ia.DrawCount = 1;
 			ia.DrawArgsStride = 20;

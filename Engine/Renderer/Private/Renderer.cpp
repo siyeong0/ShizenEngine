@@ -214,7 +214,7 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_EnvMapTex", STRING_HASH("EnvTex"));
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_IrradianceIBLTex", STRING_HASH("EnvDiffuseTex"));
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_SpecularIBLTex", STRING_HASH("EnvSpecularTex"));
-			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfLUTTex", STRING_HASH("EnvBrdfTex"));
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfIBLTex", STRING_HASH("EnvBrdfTex"));
 		}
 
 		// -----------------------------------------------------------------
@@ -260,6 +260,7 @@ namespace shz
 				srvDesc.Format = TEX_FORMAT_R32_FLOAT;
 				m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), srvDesc);
 
+				m_pPipelineStateManager->RegisterStaticTextureResource("g_ShadowMap", STRING_HASH("ShadowMap"));
 			}
 
 			// GBuffer textures
@@ -323,6 +324,114 @@ namespace shz
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
 				m_pRegistry->RegisterTexture(STRING_HASH("Lighting"), CreateTexture(td));
+			}
+
+			// Grass
+			{
+				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
+				constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
+				constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
+				// GrassInstanceBuffer
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassInstanceBuffer";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+					bd.Mode = BUFFER_MODE_STRUCTURED;
+					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
+					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("GrassInstanceBuffer"), CreateBuffer(bd));
+				}
+
+				// Indirect args (RAW 20 bytes)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassIndirectArgs";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
+					bd.Mode = BUFFER_MODE_RAW;
+					bd.Size = 20;
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("GrassIndirectArgs"), CreateBuffer(bd));
+				}
+
+				// Counter (RAW 4 bytes)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassCounter";
+					bd.Usage = USAGE_DEFAULT;
+					bd.BindFlags = BIND_UNORDERED_ACCESS;
+					bd.Mode = BUFFER_MODE_RAW;
+					bd.Size = 4;
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("GrassCounter"), CreateBuffer(bd));
+				}
+
+				// GrassGenConstantsCB (CS)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassGenConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = sizeof(hlsl::GrassGenConstants);
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("GrassGenConstantsCB"), CreateBuffer(bd));
+				}
+
+				// GrassRenderConstantsCB (VS/PS)
+				{
+					BufferDesc bd = {};
+					bd.Name = "GrassRenderConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("GrassRenderConstantsCB"), CreateBuffer(bd));
+				}
+
+				// Interaction field texture (R16_FLOAT SRV/UAV)
+				{
+					TextureDesc td = {};
+					td.Name = "InteractionField";
+					td.Type = RESOURCE_DIM_TEX_2D;
+					td.Width = INTERACTION_FIELD_SIZE;
+					td.Height = INTERACTION_FIELD_SIZE;
+					td.Format = TEX_FORMAT_R16_FLOAT;
+					td.MipLevels = 1;
+					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+					td.Usage = USAGE_DEFAULT;
+
+					m_pRegistry->RegisterTexture(STRING_HASH("InteractionField"), CreateTexture(td));
+				}
+
+				// Interaction stamps (Structured, dynamic CPU write)
+				{
+					BufferDesc bd = {};
+					bd.Name = "InteractionStampBuffer";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_SHADER_RESOURCE;
+					bd.Mode = BUFFER_MODE_STRUCTURED;
+					bd.ElementByteStride = sizeof(hlsl::InteractionStamp);
+					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("InteractionStampBuffer"), CreateBuffer(bd));
+				}
+
+				// Interaction constants
+				{
+					BufferDesc bd = {};
+					bd.Name = "InteractionConstantsCB";
+					bd.Usage = USAGE_DYNAMIC;
+					bd.BindFlags = BIND_UNIFORM_BUFFER;
+					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
+
+					m_pRegistry->RegisterBuffer(STRING_HASH("InteractionConstantsCB"), CreateBuffer(bd));
+				}
 			}
 		}
 
@@ -1455,7 +1564,6 @@ namespace shz
 						}
 					}
 				}
-
 			}
 		}
 

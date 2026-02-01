@@ -120,7 +120,6 @@ namespace shz
 		const MaterialRenderData& CreateMaterialRenderData(const Material& material, uint64 key = 0, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
-
 		const TextureRenderData& CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
 		const std::unordered_map<std::string, uint64> GetPassDrawCallCountTable() const;

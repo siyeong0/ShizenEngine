@@ -39,8 +39,12 @@ namespace shz
 		bool buildFramebufferForCurrentBackBuffer(RenderPassContext& ctx);
 
 	private:
-		RefCntAutoPtr<IRenderPass>   m_pRenderPass;
-		RefCntAutoPtr<IFramebuffer>  m_pFramebuffer;
+		static constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
+		static constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
+		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
+
+		RefCntAutoPtr<IRenderPass> m_pRenderPass;
+		RefCntAutoPtr<IFramebuffer> m_pFramebuffer;
 
 		// Compute (2-pass: Generate + WriteArgs)
 		RefCntAutoPtr<IPipelineState> m_pGenCSO;
@@ -53,30 +57,8 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> m_pGrassPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
 
-		// Buffers
-		RefCntAutoPtr<IBuffer> m_pGrassInstanceBuffer;    // SRV/UAV
-		RefCntAutoPtr<IBuffer> m_pIndirectArgsBuffer;     // INDIRECT DRAW ARGS
-		RefCntAutoPtr<IBuffer> m_pCounterBuffer;          // UAV (uint)
-
-		// NEW: CBs (match updated HLSL)
-		RefCntAutoPtr<IBuffer> m_pGrassGenConstantsCB;    // GRASS_GEN_CONSTANTS (CS)
-		RefCntAutoPtr<IBuffer> m_pGrassRenderConstantsCB; // GRASS_RENDER_CONSTANTS (VS/PS)
-
-		uint32 m_MaxInstances = 1u << 24;
-
 		const StaticMeshRenderData* m_pGrassMesh;
 		const TextureRenderData* m_pGrassDensityFieldTex;
-
-		RefCntAutoPtr<ITexture> m_pInteractionFieldTex;
-		ITextureView* m_pInteractionFieldSRV = nullptr;
-		ITextureView* m_pInteractionFieldUAV = nullptr;
-
-		uint32 m_InteractionW = 1025;
-		uint32 m_InteractionH = 1025;
-
-		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
-		RefCntAutoPtr<IBuffer> m_pInteractionStampBuffer;
-		RefCntAutoPtr<IBuffer> m_pInteractionConstantsCB;
 
 		// Compute PSOs for interaction update
 		RefCntAutoPtr<IPipelineState> m_pInteractionDecayCSO;
