@@ -128,7 +128,7 @@ namespace shz
 			{
 			case MATERIAL_BLEND_MODE_OPAQUE:        return "OPAQUE";
 			case MATERIAL_BLEND_MODE_MASKED:        return "MASKED";
-			case MATERIAL_BLEND_MODE_TRANSLUCENT:   return "TRANSLUCENT";
+			case MATERIAL_BLEND_MODE_TRANSPARENT:   return "TRANSLUCENT";
 			case MATERIAL_BLEND_MODE_ADDITIVE:      return "ADDITIVE";
 			case MATERIAL_BLEND_MODE_PREMULTIPLIED: return "PREMULTIPLIED";
 			default:                                return "UNKNOWN";
@@ -1197,7 +1197,7 @@ namespace shz
 				{
 				case MATERIAL_BLEND_MODE_OPAQUE:        sel = 0; break;
 				case MATERIAL_BLEND_MODE_MASKED:        sel = 1; break;
-				case MATERIAL_BLEND_MODE_TRANSLUCENT:   sel = 2; break;
+				case MATERIAL_BLEND_MODE_TRANSPARENT:   sel = 2; break;
 				case MATERIAL_BLEND_MODE_ADDITIVE:      sel = 3; break;
 				case MATERIAL_BLEND_MODE_PREMULTIPLIED: sel = 4; break;
 				default:                                sel = 0; break;
@@ -1209,7 +1209,7 @@ namespace shz
 					{
 						MATERIAL_BLEND_MODE_OPAQUE,
 						MATERIAL_BLEND_MODE_MASKED,
-						MATERIAL_BLEND_MODE_TRANSLUCENT,
+						MATERIAL_BLEND_MODE_TRANSPARENT,
 						MATERIAL_BLEND_MODE_ADDITIVE,
 						MATERIAL_BLEND_MODE_PREMULTIPLIED
 					};

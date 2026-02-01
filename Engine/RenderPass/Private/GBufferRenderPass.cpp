@@ -128,19 +128,27 @@ namespace shz
 				pLastIB = pkt.IndexBuffer;
 			}
 
-			// Per-draw: StartInstanceLocation -> DrawCB
-			DrawIndexedAttribs dia = pkt.DrawAttribs;
-#ifdef SHZ_DEBUG
-			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
-#endif
+			if (pkt.DrawCallType == EDrawCallType::Direct)
 			{
-				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::DrawConstants* dst = map;
+				DrawIndexedAttribs dia = pkt.DrawAttribs;
+				{
+					MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
+					hlsl::DrawConstants* dst = map;
 
-				dst->StartInstanceLocation = dia.FirstInstanceLocation;
+					dst->StartInstanceLocation = dia.FirstInstanceLocation;
+				}
+
+				pContext->DrawIndexed(dia);
 			}
-
-			pContext->DrawIndexed(dia);
+			else if (pkt.DrawCallType == EDrawCallType::Indirect)
+			{
+				DrawIndexedIndirectAttribs dia = pkt.DrawIndirectAttribs;
+				pContext->DrawIndexedIndirect(dia);
+			}
+			else
+			{
+				ASSERT(false, "Unsupported draw call type.");
+			}
 #ifdef PROFILING
 			++m_DrawCallCount;
 #endif

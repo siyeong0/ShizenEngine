@@ -73,222 +73,10 @@ namespace shz
 				ASSERT(m_pFramebuffer, "CreateFramebuffer(FB_Shadow) failed.");
 			}
 		}
-
-		// ------------------------------------------------------------
-		// Create Opaque Shadow PSO + SRB (same as old createShadowPso)
-		// ------------------------------------------------------------
-		{
-			GraphicsPipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc.Name = "Shadow PSO";
-			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-			gp.pRenderPass = m_pRenderPass;
-			gp.SubpassIndex = 0;
-
-			gp.NumRenderTargets = 0;
-			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
-
-			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			// gp.RasterizerDesc.CullMode = CULL_MODE_BACK; // TODO: Only terrain?
-			gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-			gp.RasterizerDesc.FrontCounterClockwise = true;
-			gp.RasterizerDesc.SlopeScaledDepthBias = 0.0f;
-			gp.RasterizerDesc.DepthBias = 0;
-			gp.RasterizerDesc.DepthBiasClamp = 0.0f;
-
-			gp.DepthStencilDesc.DepthEnable = true;
-			gp.DepthStencilDesc.DepthWriteEnable = true;
-			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-			LayoutElement layoutElems[] =
-			{
-				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // ATTRIB0 Position (vertex stream)
-			};
-			layoutElems[0].Stride = sizeof(float) * 11;
-
-			gp.InputLayout.LayoutElements = layoutElems;
-			gp.InputLayout.NumElements = _countof(layoutElems);
-
-			ShaderCreateInfo sci = {};
-			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
-			sci.EntryPoint = "main";
-			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
-			RefCntAutoPtr<IShader> vs;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow VS";
-				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				sci.FilePath = m_VS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				ctx.pDevice->CreateShader(sci, &vs);
-				ASSERT(vs, "Failed to create Shadow VS.");
-			}
-
-			RefCntAutoPtr<IShader> ps;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow PS";
-				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				sci.FilePath = m_PS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				ctx.pDevice->CreateShader(sci, &ps);
-				ASSERT(ps, "Failed to create Shadow PS.");
-			}
-
-			psoCi.pVS = vs;
-			psoCi.pPS = ps;
-
-			psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-			psoCi.PSODesc.ResourceLayout.Variables = nullptr;
-			psoCi.PSODesc.ResourceLayout.NumVariables = 0;
-
-			m_pShadowPSO.Release();
-			m_pShadowPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
-			ASSERT(m_pShadowPSO, "Shadow PSO create failed.");
-
-			// Bind statics (same as old)
-			{
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
-				{
-					var->Set(ctx.pRegistry->GetBuffer(kRes_ShadowCB));
-				}
-
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
-				{
-					var->Set(ctx.pRegistry->GetBuffer(kRes_DrawCB));
-				}
-
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-				{
-					var->Set(ctx.pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
-				}
-			}
-
-			m_pSRB.Release();
-			m_pShadowPSO->CreateShaderResourceBinding(&m_pSRB, true);
-			ASSERT(m_pSRB, "Shadow SRB create failed.");
-		}
-
-		// ------------------------------------------------------------
-		// Create Masked Shadow PSO (same as old createShadowMaskedPso)
-		// ------------------------------------------------------------
-		{
-			GraphicsPipelineStateCreateInfo psoCi = {};
-			psoCi.PSODesc.Name = "Shadow Masked PSO";
-			psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-			GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-			gp.pRenderPass = m_pRenderPass;
-			gp.SubpassIndex = 0;
-
-			gp.NumRenderTargets = 0;
-			gp.DSVFormat = TEX_FORMAT_UNKNOWN;
-
-			gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
-			gp.RasterizerDesc.FrontCounterClockwise = true;
-
-			gp.DepthStencilDesc.DepthEnable = true;
-			gp.DepthStencilDesc.DepthWriteEnable = true;
-			gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-			LayoutElement layoutElems[] =
-			{
-				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
-				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-			};
-			layoutElems[0].Stride = sizeof(float) * 11;
-			layoutElems[1].Stride = sizeof(float) * 11;
-
-			gp.InputLayout.LayoutElements = layoutElems;
-			gp.InputLayout.NumElements = _countof(layoutElems);
-
-			ShaderCreateInfo sci = {};
-			sci.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-			sci.pShaderSourceStreamFactory = ctx.pShaderSourceFactory;
-			sci.EntryPoint = "main";
-			sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-
-			RefCntAutoPtr<IShader> vs;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow Masked VS";
-				sci.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				sci.FilePath = m_MaskedVS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				ctx.pDevice->CreateShader(sci, &vs);
-				ASSERT(vs, "Failed to create ShadowMasked VS.");
-			}
-
-			RefCntAutoPtr<IShader> ps;
-			{
-				sci.Desc = {};
-				sci.Desc.Name = "Shadow Masked PS";
-				sci.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				sci.FilePath = m_MaskedPS.c_str();
-				sci.Desc.UseCombinedTextureSamplers = false;
-				ctx.pDevice->CreateShader(sci, &ps);
-				ASSERT(ps, "Failed to create ShadowMasked PS.");
-			}
-
-			psoCi.pVS = vs;
-			psoCi.pPS = ps;
-
-			ShaderResourceVariableDesc vars[] =
-			{
-				{ SHADER_TYPE_PIXEL, "g_BaseColorTex",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-			};
-			psoCi.PSODesc.ResourceLayout.Variables = vars;
-			psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
-
-			SamplerDesc linearWrap =
-			{
-				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-			};
-
-			ImmutableSamplerDesc samplers[] =
-			{
-				{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap }
-			};
-			psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-			psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
-
-			m_pShadowMaskedPSO.Release();
-			m_pShadowMaskedPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
-			ASSERT(m_pShadowMaskedPSO, "Shadow Masked PSO create failed.");
-
-			// Bind statics (same as old)
-			{
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
-				{
-					var->Set(ctx.pRegistry->GetBuffer(kRes_ShadowCB));
-				}
-
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
-				{
-					var->Set(ctx.pRegistry->GetBuffer(kRes_DrawCB));
-				}
-
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
-				{
-					var->Set(ctx.pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
-				}
-			}
-		}
 	}
 
 	ShadowRenderPass::~ShadowRenderPass()
 	{
-		m_pSRB.Release();
-
-		m_pShadowPSO.Release();
-		m_pShadowMaskedPSO.Release();
-
 		m_pFramebuffer.Release();
 		m_pRenderPass.Release();
 	}
@@ -303,7 +91,7 @@ namespace shz
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 
-		IDeviceContext* pCtx = ctx.pImmediateContext;
+		IDeviceContext* pContext = ctx.pImmediateContext;
 
 		const std::vector<DrawPacket>& packets = ctx.ShadowDrawPackets;
 
@@ -316,7 +104,7 @@ namespace shz
 				RESOURCE_STATE_DEPTH_WRITE,
 				STATE_TRANSITION_FLAG_UPDATE_STATE
 			};
-			pCtx->TransitionResourceStates(1, &tr);
+			pContext->TransitionResourceStates(1, &tr);
 		}
 
 		Viewport vp = {};
@@ -324,7 +112,7 @@ namespace shz
 		vp.Height = float(ctx.ShadowMapResolution);
 		vp.MinDepth = 0.f;
 		vp.MaxDepth = 1.f;
-		pCtx->SetViewports(1, &vp, 0, 0);
+		pContext->SetViewports(1, &vp, 0, 0);
 
 		OptimizedClearValue clearVals[1] = {};
 		clearVals[0].DepthStencil.Depth = 1.f;
@@ -336,7 +124,7 @@ namespace shz
 		rp.ClearValueCount = 1;
 		rp.pClearValues = clearVals;
 
-		pCtx->BeginRenderPass(rp);
+		pContext->BeginRenderPass(rp);
 
 		IPipelineState* pLastPSO = nullptr;
 		IShaderResourceBinding* pLastSRB = nullptr;
@@ -352,14 +140,14 @@ namespace shz
 			{
 				pLastPSO = pkt.PSO;
 				pLastSRB = nullptr;
-				pCtx->SetPipelineState(pLastPSO);
+				pContext->SetPipelineState(pLastPSO);
 			}
 
 			// Bind SRB
 			if (pLastSRB != pkt.SRB)
 			{
 				pLastSRB = pkt.SRB;
-				pCtx->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			}
 
 			// VB/IB binding (ONLY mesh VB)
@@ -368,7 +156,7 @@ namespace shz
 				IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
 				uint64 pOffsets[] = { 0 };
 
-				pCtx->SetVertexBuffers(
+				pContext->SetVertexBuffers(
 					0,
 					1,
 					ppVertexBuffers,
@@ -381,29 +169,37 @@ namespace shz
 
 			if (pLastIB != pkt.IndexBuffer)
 			{
-				pCtx->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 				pLastIB = pkt.IndexBuffer;
 			}
 
-			// Per-draw: StartInstanceLocation -> DrawCB
-			DrawIndexedAttribs dia = pkt.DrawAttribs;
-#ifdef SHZ_DEBUG
-			if (dia.Flags == DRAW_FLAG_NONE) dia.Flags = DRAW_FLAG_VERIFY_ALL;
-#endif
+			if (pkt.DrawCallType == EDrawCallType::Direct)
 			{
-				MapHelper<hlsl::DrawConstants> map(pCtx, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::DrawConstants* dst = map;
+				DrawIndexedAttribs dia = pkt.DrawAttribs;
+				{
+					MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
+					hlsl::DrawConstants* dst = map;
 
-				dst->StartInstanceLocation = dia.FirstInstanceLocation;
+					dst->StartInstanceLocation = dia.FirstInstanceLocation;
+				}
+
+				pContext->DrawIndexed(dia);
 			}
-
-			pCtx->DrawIndexed(dia);
+			else if (pkt.DrawCallType == EDrawCallType::Indirect)
+			{
+				DrawIndexedIndirectAttribs dia = pkt.DrawIndirectAttribs;
+				pContext->DrawIndexedIndirect(dia);
+			}
+			else
+			{
+				ASSERT(false, "Unsupported draw call type.");
+			}
 #ifdef PROFILING
 			++m_DrawCallCount;
 #endif
 		}
 
-		pCtx->EndRenderPass();
+		pContext->EndRenderPass();
 
 		// Shadow -> SRV
 		{
@@ -414,7 +210,7 @@ namespace shz
 				RESOURCE_STATE_SHADER_RESOURCE,
 				STATE_TRANSITION_FLAG_UPDATE_STATE
 			};
-			pCtx->TransitionResourceStates(1, &tr2);
+			pContext->TransitionResourceStates(1, &tr2);
 		}
 	}
 

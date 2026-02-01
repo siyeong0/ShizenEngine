@@ -37,6 +37,7 @@ namespace shz
 		uint32 CBIndex = 0;
 		std::vector<const TextureRenderData*> BoundTextures = {};
 
+		RefCntAutoPtr<IPipelineState> ShadowPSO = {};
 		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
 
 		uint64 RenderPassId;

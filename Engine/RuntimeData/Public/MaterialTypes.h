@@ -74,9 +74,7 @@ namespace shz
 	{
 		MATERIAL_BLEND_MODE_OPAQUE = 0,        // default
 		MATERIAL_BLEND_MODE_MASKED,            // alpha test / cutout
-		MATERIAL_BLEND_MODE_TRANSLUCENT,       // standard alpha blend (SrcAlpha, InvSrcAlpha)
-		MATERIAL_BLEND_MODE_ADDITIVE,          // additive (One, One)
-		MATERIAL_BLEND_MODE_PREMULTIPLIED,     // premultiplied alpha (One, InvSrcAlpha)
+		MATERIAL_BLEND_MODE_TRANSPARENT,       // standard alpha blend (SrcAlpha, InvSrcAlpha)
 	};
 
 	// ------------------------------------------------------------

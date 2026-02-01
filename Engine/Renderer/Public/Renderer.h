@@ -156,6 +156,14 @@ namespace shz
 
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
+		std::string m_ShadowVS = "Shadow.vsh";
+		std::string m_ShadowPS = "Shadow.psh";
+		std::string m_ShadowMaskedVS = "ShadowMasked.vsh";
+		std::string m_ShadowMaskedPS = "ShadowMasked.psh";
+		RefCntAutoPtr<IPipelineState> m_pShadowPSO;
+		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pShadowSRB;
+
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
 		std::unordered_map<std::string, IRenderPass*> m_RHIRenderPasses;
