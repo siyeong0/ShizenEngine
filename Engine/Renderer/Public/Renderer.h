@@ -129,7 +129,6 @@ namespace shz
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
 	private:
-		void uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex);
 		void addPass(std::unique_ptr<RenderPassBase> pass);
 
 	private:
