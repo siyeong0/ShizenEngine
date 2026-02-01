@@ -17,16 +17,11 @@
 
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/Renderer/Public/RenderData.h"
+#include "Engine/Renderer/Public/RenderScene.h"
 
 namespace shz
 {
 	class RenderResourceRegistry;
-
-	namespace hlsl
-	{
-#include "Shaders/HLSL_Structures.hlsli"
-	}// namespace hlsl
-
 	class AssetManager;
 
 	struct RenderPassContext final
@@ -34,66 +29,28 @@ namespace shz
 		IRenderDevice* pDevice = nullptr;
 		IDeviceContext* pImmediateContext = nullptr;
 		ISwapChain* pSwapChain = nullptr;
-
 		IShaderSourceInputStreamFactory* pShaderSourceFactory = nullptr;
-
 		AssetManager* pAssetManager = nullptr;
 		PipelineStateManager* pPipelineStateManager = nullptr;
-
 		RenderResourceRegistry* pRegistry = nullptr;
-
+		RenderScene* pScene = nullptr;
 		float DeltaTime = 0.0f;
 
 		// ------------------------------------------------------------
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------
-		std::vector<DrawPacket> GBufferDrawPackets = {};
-		std::vector<DrawPacket> GrassDrawPackets = {};
+		std::vector<DrawPacket> MainDrawPackets = {};
 		std::vector<DrawPacket> ShadowDrawPackets = {};
 
 		// ------------------------------------------------------------
 		// Common resources wired by Renderer
 		// ------------------------------------------------------------
-		uint32 BackBufferWidth = 0;
-		uint32 BackBufferHeight = 0;
 		uint32 ShadowMapResolution = 4096;
-
-		const TextureRenderData* pHeightMap = nullptr;
-		std::vector<hlsl::InteractionStamp> InteractionStamps = {};
-
-		// ------------------------------------------------------------
-		// Per-frame barrier list
-		// ------------------------------------------------------------
-		std::vector<StateTransitionDesc> PreBarriers = {};
 
 		void ResetFrame()
 		{
-			GBufferDrawPackets.clear();
-			GrassDrawPackets.clear();
+			MainDrawPackets.clear();
 			ShadowDrawPackets.clear();
-
-			PreBarriers.clear();
 		}
-
-		void PushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
-		{
-			ASSERT(pObj, "Device object is null.");
-
-			StateTransitionDesc b = {};
-			b.pResource = pObj;
-			b.OldState = from;
-			b.NewState = to;
-			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-			PreBarriers.push_back(b);
-		}
-
-		//void UploadObjectIndexInstance(uint32 objectIndex) const
-		//{
-		//	ASSERT(pImmediateContext, "Context is null.");
-		//	ASSERT(pObjectIndexVB, "ObjectIndex VB is null.");
-
-		//	MapHelper<uint32> map(pImmediateContext, pObjectIndexVB, MAP_WRITE, MAP_FLAG_DISCARD);
-		//	*map = objectIndex;
-		//}
 	};
 } // namespace shz

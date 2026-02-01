@@ -18,9 +18,6 @@ namespace shz
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
 
-		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
-		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
-
 		bool ok = false;
 
 		ok = createPassObjects(ctx);

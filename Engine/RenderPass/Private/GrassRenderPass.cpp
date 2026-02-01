@@ -687,18 +687,11 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 		ASSERT(m_pRenderPass, "Grass RenderPass is null.");
 		ASSERT(m_pFramebuffer, "Grass Framebuffer is null.");
-
-		if (!ctx.pHeightMap || !ctx.pHeightMap->Texture)
-			return;
-
-		if (!m_pGrassMesh)
-			return;
-
-		if (!m_pGrassDensityFieldTex || !m_pGrassDensityFieldTex->Texture)
-			return;
+		ASSERT(ctx.pScene->GetHeightMap().Texture, "HeightMap is null.");
+		ASSERT(m_pGrassMesh, "GrassMesh is null.");
+		ASSERT(m_pGrassDensityFieldTex && m_pGrassDensityFieldTex->Texture, "GrassDensityField is null.");
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
-
 		// ---------------------------------------------------------------------
 		// (0) Reset counter + init indirect args
 		// ---------------------------------------------------------------------
@@ -826,15 +819,15 @@ namespace shz
 
 			stampCount = 0;
 
-			const auto& stamps = ctx.InteractionStamps; // user said: can obtain via ctx.InteractionStamps
-			if (!stamps.empty())
+			std::vector<hlsl::InteractionStamp> interactionStamps;
+			ctx.pScene->ConsumeInteractionStamps(&interactionStamps);
+			if (!interactionStamps.empty())
 			{
-				stampCount = (uint32)std::min<size_t>(stamps.size(), MAX_NUM_INTERACTION_STAMPS);
+				stampCount = (uint32)std::min<size_t>(interactionStamps.size(), MAX_NUM_INTERACTION_STAMPS);
 
 				for (uint32 i = 0; i < stampCount; ++i)
 				{
-					hlsl::InteractionStamp s = stamps[i];
-
+					hlsl::InteractionStamp s = interactionStamps[i];
 					// Convert world XZ -> terrain uv.
 					// If your stamps are already uv, remove this conversion.
 					s.CenterXZ = WorldXZToTerrainUV(gen, s.CenterXZ);
@@ -912,7 +905,7 @@ namespace shz
 		// ---------------------------------------------------------------------
 		{
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
-				var->Set(ctx.pHeightMap->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+				var->Set(ctx.pScene->GetHeightMap().Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
 
 			if (auto* var = m_pGenCSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				var->Set(m_pGrassDensityFieldTex->Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
@@ -922,11 +915,11 @@ namespace shz
 
 			StateTransitionDesc tr[] =
 			{
-				{ m_pGrassInstanceBuffer,           RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pCounterBuffer,                 RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pHeightMap->Texture,          RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pGrassDensityFieldTex->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ m_pInteractionFieldTex,           RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassInstanceBuffer,				RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pCounterBuffer,						RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_UNORDERED_ACCESS, STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ ctx.pScene->GetHeightMap().Texture,	RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pGrassDensityFieldTex->Texture,		RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
+				{ m_pInteractionFieldTex,				RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE,  STATE_TRANSITION_FLAG_UPDATE_STATE },
 			};
 			pContext->TransitionResourceStates(_countof(tr), tr);
 

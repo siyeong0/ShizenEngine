@@ -22,9 +22,6 @@ namespace shz
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 
-		const uint32 w = (ctx.BackBufferWidth != 0) ? ctx.BackBufferWidth : 1;
-		const uint32 h = (ctx.BackBufferHeight != 0) ? ctx.BackBufferHeight : 1;
-
 		bool ok = false;
 
 		ok = createPassObjects(ctx);
@@ -50,7 +47,7 @@ namespace shz
 
 		IDeviceContext* pContext = ctx.pImmediateContext;
 
-		const std::vector<DrawPacket>& packets = ctx.GBufferDrawPackets;
+		const std::vector<DrawPacket>& packets = ctx.MainDrawPackets;
 
 		// RT/DS transitions
 		{

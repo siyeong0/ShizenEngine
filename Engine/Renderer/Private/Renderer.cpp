@@ -320,9 +320,6 @@ namespace shz
 		m_PassCtx.pPipelineStateManager = m_pPipelineStateManager.get();
 		m_PassCtx.pRegistry = m_pRegistry.get();
 
-		m_PassCtx.BackBufferWidth = m_Width;
-		m_PassCtx.BackBufferHeight = m_Height;
-
 		// -----------------------------------------------------------------
 		// Create common resources for passes
 		// -----------------------------------------------------------------
@@ -436,7 +433,7 @@ namespace shz
 
 			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
 			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-			ASSERT(grassPtr&& grassPtr->IsValid(), "Failed to load grass mesh.");
+			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
 
 			grassPtr->RecomputeBounds();
 			const Box& b = grassPtr->GetBounds();
@@ -535,9 +532,7 @@ namespace shz
 		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
 		ASSERT(pErrorTex, "Error texture missing (registry).");
 
-		m_PassCtx.pHeightMap = &scene.GetHeightMap();
-		scene.ConsumeInteractionStamps(&m_PassCtx.InteractionStamps);
-
+		m_PassCtx.pScene = &scene;
 		m_PassCtx.DeltaTime = viewFamily.DeltaTime;
 
 		const View& view = viewFamily.Views[0];
@@ -753,20 +748,32 @@ namespace shz
 		// ------------------------------------------------------------
 		// Common barriers
 		// ------------------------------------------------------------
-		m_PassCtx.PushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		m_PassCtx.PushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		m_PassCtx.PushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		std::vector<StateTransitionDesc> preBarriers = {};
+		auto pushBarrier = [&preBarriers](IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
+			{
+				ASSERT(pObj, "Device object is null.");
 
-		m_PassCtx.PushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(pObjSB_Grass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+				StateTransitionDesc b = {};
+				b.pResource = pObj;
+				b.OldState = from;
+				b.NewState = to;
+				b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+				preBarriers.push_back(b);
+			};
 
-		m_PassCtx.PushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(pEnvSpecTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		m_PassCtx.PushBarrier(pEnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		pushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		pushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		m_PassCtx.PushBarrier(pErrorTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pObjSB_Grass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pEnvSpecTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pEnvBrdfTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+
+		pushBarrier(pErrorTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
 		// ------------------------------------------------------------
 		// Visible objects: VB/IB + Material textures/CB barriers (dedup)
@@ -785,13 +792,13 @@ namespace shz
 
 				if (rd->ConstantBuffer)
 				{
-					m_PassCtx.PushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+					pushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 				}
 
 				for (const auto pTexRD : rd->BoundTextures)
 				{
 					ASSERT(pTexRD && pTexRD->Texture, "Bound texture render data invalid.");
-					m_PassCtx.PushBarrier(pTexRD->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+					pushBarrier(pTexRD->Texture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 				}
 			};
 
@@ -800,8 +807,8 @@ namespace shz
 			const auto& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
-			m_PassCtx.PushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			m_PassCtx.PushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
@@ -817,8 +824,8 @@ namespace shz
 			if (!obj.bCastShadow)
 				continue;
 
-			m_PassCtx.PushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			m_PassCtx.PushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
@@ -829,9 +836,9 @@ namespace shz
 			}
 		}
 
-		if (!m_PassCtx.PreBarriers.empty())
+		if (!preBarriers.empty())
 		{
-			ctx->TransitionResourceStates(static_cast<uint32>(m_PassCtx.PreBarriers.size()), m_PassCtx.PreBarriers.data());
+			ctx->TransitionResourceStates(static_cast<uint32>(preBarriers.size()), preBarriers.data());
 		}
 
 		// ------------------------------------------------------------
@@ -906,7 +913,7 @@ namespace shz
 					pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
 					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
-					if (passKey == kPassGBuffer || passKey == kPassGrass)
+					if (passKey == kPassGBuffer)
 					{
 						ASSERT(mat && mat->PSO && mat->SRB, "Material PSO/SRB invalid.");
 						pkt.PSO = mat->PSO;
@@ -946,12 +953,7 @@ namespace shz
 		// GBuffer
 		scene.BuildDrawList(kPassGBuffer, visibleObjectIndexMain, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
-		m_PassCtx.GBufferDrawPackets = buildPacketsFromDrawItems(kPassGBuffer, drawItems);
-
-		// Grass
-		scene.BuildDrawList(kPassGrass, visibleObjectIndexMain, drawItems, instanceRemap);
-		packObjectTableFromRemap(pObjSB_Grass, instanceRemap);
-		m_PassCtx.GrassDrawPackets = buildPacketsFromDrawItems(kPassGrass, drawItems);
+		m_PassCtx.MainDrawPackets = buildPacketsFromDrawItems(kPassGBuffer, drawItems);
 
 		// Shadow
 		scene.BuildDrawList(kPassShadow, visibleObjectIndexShadow, drawItems, instanceRemap);
@@ -999,9 +1001,6 @@ namespace shz
 
 		m_Width = width;
 		m_Height = height;
-
-		m_PassCtx.BackBufferWidth = width;
-		m_PassCtx.BackBufferHeight = height;
 
 		for (const std::string& name : m_PassOrder)
 		{
