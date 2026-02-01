@@ -35,17 +35,13 @@ namespace shz
 		RenderResourceRegistry* pRegistry = nullptr;
 		RenderScene* pScene = nullptr;
 		float DeltaTime = 0.0f;
+		uint32 ShadowMapResolution = 4096;
 
 		// ------------------------------------------------------------
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------
 		std::vector<DrawPacket> MainDrawPackets = {};
 		std::vector<DrawPacket> ShadowDrawPackets = {};
-
-		// ------------------------------------------------------------
-		// Common resources wired by Renderer
-		// ------------------------------------------------------------
-		uint32 ShadowMapResolution = 4096;
 
 		void ResetFrame()
 		{
