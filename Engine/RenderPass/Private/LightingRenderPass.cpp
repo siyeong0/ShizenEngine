@@ -197,12 +197,6 @@ namespace shz
 		m_pPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCi);
 		ASSERT(m_pPSO, "Lighting PSO create failed.");
 
-		// Bind FRAME_CONSTANTS static
-		if (auto* var = m_pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
-		{
-			var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
-		}
-
 		m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 		ASSERT(m_pSRB, "Lighting SRB create failed.");
 
@@ -230,30 +224,30 @@ namespace shz
 
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_EnvMapTex"))
 		{
-			if (ctx.pRegistry->GetTexture(kRes_EnvTex))
+			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvTex")))
 			{
-				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 		{
-			if (ctx.pRegistry->GetTexture(kRes_EnvDiffuseTex))
+			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex")))
 			{
-				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvDiffuseTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvDiffuseTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
 		{
-			if (ctx.pRegistry->GetTexture(kRes_EnvSpecularTex))
+			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvSpecularTex")))
 			{
-				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvSpecularTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvSpecularTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 		if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
 		{
-			if (ctx.pRegistry->GetTexture(kRes_EnvBrdfTex))
+			if (ctx.pRegistry->GetTexture(STRING_HASH("EnvBrdfTex")))
 			{
-				var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvBrdfTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvBrdfTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 			}
 		}
 	}

@@ -132,7 +132,7 @@ namespace shz
 			{
 				DrawIndexedAttribs dia = pkt.DrawAttribs;
 				{
-					MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
+					MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")), MAP_WRITE, MAP_FLAG_DISCARD);
 					hlsl::DrawConstants* dst = map;
 
 					dst->StartInstanceLocation = dia.FirstInstanceLocation;

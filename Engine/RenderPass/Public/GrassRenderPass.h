@@ -43,14 +43,14 @@ namespace shz
 		RefCntAutoPtr<IFramebuffer>  m_pFramebuffer;
 
 		// Compute (2-pass: Generate + WriteArgs)
-		RefCntAutoPtr<IPipelineState>         m_pGenCSO;
+		RefCntAutoPtr<IPipelineState> m_pGenCSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGenCSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_pArgsCSO;
+		RefCntAutoPtr<IPipelineState> m_pArgsCSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pArgsCSRB;
 
 		// Graphics
-		RefCntAutoPtr<IPipelineState>         m_pGrassPSO;
+		RefCntAutoPtr<IPipelineState> m_pGrassPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
 
 		// Buffers

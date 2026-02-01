@@ -18,81 +18,11 @@
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
-#include "Engine/Renderer/Public/CommonResourceId.h"
-
 namespace shz
 {
 	namespace hlsl
 	{
 #include "Shaders/HLSL_Structures.hlsli"
-	}
-
-	static const uint64 kPassGBuffer = STRING_HASH("GBuffer");
-	static const uint64 kPassGrass = STRING_HASH("Grass");
-	static const uint64 kPassShadow = STRING_HASH("Shadow");
-
-	// ---------------------------------------------------------------------
-	// Resource wrappers
-	// ---------------------------------------------------------------------
-	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const TextureDesc& desc, const TextureData* pInitData)
-	{
-		ASSERT(m_pDevice, "Device is null.");
-		RefCntAutoPtr<ITexture> tex;
-		m_pDevice->CreateTexture(desc, pInitData, &tex);
-		return tex;
-	}
-
-	RefCntAutoPtr<IBuffer> Renderer::CreateBuffer(const BufferDesc& desc, const BufferData* pInitData)
-	{
-		ASSERT(m_pDevice, "Device is null.");
-		RefCntAutoPtr<IBuffer> buf;
-		m_pDevice->CreateBuffer(desc, pInitData, &buf);
-		return buf;
-	}
-
-	void Renderer::UpdateBuffer(
-		IDeviceContext* pCtx,
-		IBuffer* pBuffer,
-		uint32 offsetBytes,
-		uint32 sizeBytes,
-		const void* pData,
-		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
-	{
-		ASSERT(pCtx, "Context is null.");
-		ASSERT(pBuffer, "Buffer is null.");
-		ASSERT(pData || sizeBytes == 0, "UpdateBuffer: data is null.");
-
-		pCtx->UpdateBuffer(
-			pBuffer,
-			offsetBytes,
-			sizeBytes,
-			pData,
-			transitionMode
-		);
-	}
-
-	void Renderer::UpdateTexture2D(
-		IDeviceContext* pCtx,
-		ITexture* pTexture,
-		uint32 mipLevel,
-		uint32 arraySlice,
-		const TextureSubResData& subRes,
-		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
-	{
-		ASSERT(pCtx, "Context is null.");
-		ASSERT(pTexture, "Texture is null.");
-
-		// Update entire subresource (no box)
-		IBox box = {}; // empty -> full resource
-		pCtx->UpdateTexture(
-			pTexture,
-			mipLevel,
-			arraySlice,
-			box,
-			subRes,
-			transitionMode,
-			RESOURCE_STATE_TRANSITION_MODE_NONE
-		);
 	}
 
 	bool Renderer::Initialize(const RendererCreateInfo& createInfo)
@@ -162,7 +92,7 @@ namespace shz
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : scDesc.Height;
 
 		m_pPipelineStateManager = std::make_unique<PipelineStateManager>();
-		m_pPipelineStateManager->Initialize(m_pDevice);
+		m_pPipelineStateManager->Initialize(m_pDevice, m_pRegistry.get());
 
 		// -----------------------------------------------------------------
 		// Create error texture -> register to registry
@@ -209,7 +139,7 @@ namespace shz
 			RefCntAutoPtr<ITexture> errorTex = CreateTexture(desc, &initData);
 			ASSERT(errorTex, "CreateTexture failed.");
 
-			m_pRegistry->RegisterTexture(kRes_ErrorTex, std::move(errorTex));
+			m_pRegistry->RegisterTexture(STRING_HASH("ErrorTex"), std::move(errorTex));
 		}
 
 		// -----------------------------------------------------------------
@@ -231,24 +161,13 @@ namespace shz
 			ASSERT(drawCB, "Draw CB create failed.");
 			ASSERT(shadowCB, "Shadow CB create failed.");
 
-			m_pRegistry->RegisterBuffer(kRes_FrameCB, std::move(frameCB));
-			m_pRegistry->RegisterBuffer(kRes_DrawCB, std::move(drawCB));
-			m_pRegistry->RegisterBuffer(kRes_ShadowCB, std::move(shadowCB));
+			m_pRegistry->RegisterBuffer(STRING_HASH("FRAME_CONSTANTS"), std::move(frameCB));
+			m_pRegistry->RegisterBuffer(STRING_HASH("DRAW_CONSTANTS"), std::move(drawCB));
+			m_pRegistry->RegisterBuffer(STRING_HASH("SHADOW_CONSTANTS"), std::move(shadowCB));
 
-			// ObjectIndexInstanceVB
-			{
-				BufferDesc desc = {};
-				desc.Name = "ObjectIndexInstanceVB";
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_VERTEX_BUFFER;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Size = sizeof(uint32);
-
-				RefCntAutoPtr<IBuffer> vb = CreateBuffer(desc, nullptr);
-				ASSERT(vb, "Object index VB create failed.");
-
-				m_pRegistry->RegisterBuffer(kRes_ObjectIndexVB, std::move(vb));
-			}
+			m_pPipelineStateManager->RegisterStaticBufferResource("FRAME_CONSTANTS", STRING_HASH("FRAME_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferResource("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferResource("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
 				{
@@ -266,9 +185,8 @@ namespace shz
 					return sb;
 				};
 
-			m_pRegistry->RegisterBuffer(kRes_ObjectTable_GB, std::move(createObjectTable("ObjectTableSB.GBuffer")));
-			m_pRegistry->RegisterBuffer(kRes_ObjectTable_GR, std::move(createObjectTable("ObjectTableSB.Grass")));
-			m_pRegistry->RegisterBuffer(kRes_ObjectTable_SH, std::move(createObjectTable("ObjectTableSB.Shadow")));
+			m_pRegistry->RegisterBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
+			m_pRegistry->RegisterBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
 		}
 
 		// -----------------------------------------------------------------
@@ -288,24 +206,15 @@ namespace shz
 			ASSERT(spec, "Env specular load failed.");
 			ASSERT(brdf, "Env brdf load failed.");
 
-			m_pRegistry->RegisterTexture(kRes_EnvTex, std::move(env));
-			m_pRegistry->RegisterTexture(kRes_EnvDiffuseTex, std::move(diff));
-			m_pRegistry->RegisterTexture(kRes_EnvSpecularTex, std::move(spec));
-			m_pRegistry->RegisterTexture(kRes_EnvBrdfTex, std::move(brdf));
-		}
+			m_pRegistry->RegisterTexture(STRING_HASH("EnvTex"), std::move(env));
+			m_pRegistry->RegisterTexture(STRING_HASH("EnvDiffuseTex"), std::move(diff));
+			m_pRegistry->RegisterTexture(STRING_HASH("EnvSpecularTex"), std::move(spec));
+			m_pRegistry->RegisterTexture(STRING_HASH("EnvBrdfTex"), std::move(brdf));
 
-		// -----------------------------------------------------------------
-		// Setup binders (now fetch buffers from registry)
-		// -----------------------------------------------------------------
-		{
-			IBuffer* pFrameCB = m_pRegistry->GetBuffer(kRes_FrameCB);
-			IBuffer* pDrawCB = m_pRegistry->GetBuffer(kRes_DrawCB);
-
-			IBuffer* pSB_GB = m_pRegistry->GetBuffer(kRes_ObjectTable_GB);
-			IBuffer* pSB_GR = m_pRegistry->GetBuffer(kRes_ObjectTable_GR);
-			IBuffer* pSB_SH = m_pRegistry->GetBuffer(kRes_ObjectTable_SH);
-			ASSERT(pFrameCB && pDrawCB, "Common CB invalid.");
-			ASSERT(pSB_GB && pSB_GR && pSB_SH, "Object tables invalid.");
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_EnvMapTex", STRING_HASH("EnvTex"));
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_IrradianceIBLTex", STRING_HASH("EnvDiffuseTex"));
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_SpecularIBLTex", STRING_HASH("EnvSpecularTex"));
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfLUTTex", STRING_HASH("EnvBrdfTex"));
 		}
 
 		// -----------------------------------------------------------------
@@ -529,19 +438,9 @@ namespace shz
 
 			// Bind statics (same as old)
 			{
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_ShadowCB));
-				}
-
-				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_DrawCB));
-				}
-
 				if (auto* var = m_pShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(m_pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
+					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
 				}
 			}
 
@@ -642,19 +541,9 @@ namespace shz
 
 			// Bind statics (same as old)
 			{
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_ShadowCB));
-				}
-
-				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "DRAW_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_DrawCB));
-				}
-
 				if (auto* var = m_pShadowMaskedPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_ObjectTable"))
 				{
-					var->Set(m_pRegistry->GetBufferSRV(kRes_ObjectTable_SH));
+					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.Shadow")));
 				}
 			}
 		}
@@ -721,26 +610,23 @@ namespace shz
 		// ---------------------------------------------------------------------
 		// Pull shared renderer resources from registry
 		// ---------------------------------------------------------------------
-		IBuffer* pFrameCB = m_PassCtx.pRegistry->GetBuffer(kRes_FrameCB);
-		IBuffer* pDrawCB = m_PassCtx.pRegistry->GetBuffer(kRes_DrawCB);
-		IBuffer* pShadowCB = m_PassCtx.pRegistry->GetBuffer(kRes_ShadowCB);
+		IBuffer* pFrameCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("FRAME_CONSTANTS"));
+		IBuffer* pDrawCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS"));
+		IBuffer* pShadowCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("SHADOW_CONSTANTS"));
 
-		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GB);
-		IBuffer* pObjSB_Grass = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_GR);
-		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectTable_SH);
-		IBuffer* pObjIndexVB = m_PassCtx.pRegistry->GetBuffer(kRes_ObjectIndexVB);
+		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.GBuffer"));
+		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Shadow"));;
 
-		ITexture* pEnvTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvTex);
-		ITexture* pEnvDiffTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvDiffuseTex);
-		ITexture* pEnvSpecTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvSpecularTex);
-		ITexture* pEnvBrdfTex = m_PassCtx.pRegistry->GetTexture(kRes_EnvBrdfTex);
-		ITexture* pErrorTex = m_PassCtx.pRegistry->GetTexture(kRes_ErrorTex);
+		ITexture* pEnvTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvTex"));
+		ITexture* pEnvDiffTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex"));
+		ITexture* pEnvSpecTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvSpecularTex"));
+		ITexture* pEnvBrdfTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvBrdfTex"));
+		ITexture* pErrorTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("ErrorTex"));
 
 		ASSERT(pFrameCB, "FrameCB missing (registry).");
 		ASSERT(pDrawCB, "DrawCB missing (registry).");
 		ASSERT(pShadowCB, "ShadowCB missing (registry).");
-		ASSERT(pObjSB_GB && pObjSB_Grass && pObjSB_Shadow, "ObjectTable SB missing (registry).");
-		ASSERT(pObjIndexVB, "ObjectIndexVB missing (registry).");
+		ASSERT(pObjSB_GB && pObjSB_Shadow, "ObjectTable SB missing (registry).");
 		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
 		ASSERT(pErrorTex, "Error texture missing (registry).");
 
@@ -978,7 +864,6 @@ namespace shz
 		pushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
 		pushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		pushBarrier(pObjSB_Grass, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
@@ -1108,13 +993,13 @@ namespace shz
 					pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
 					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
-					if (passKey == kPassGBuffer)
+					if (passKey == STRING_HASH("GBuffer"))
 					{
 						ASSERT(mat && mat->PSO && mat->SRB, "Material PSO/SRB invalid.");
 						pkt.PSO = mat->PSO;
 						pkt.SRB = mat->SRB;
 					}
-					else if (passKey == kPassShadow)
+					else if (passKey == STRING_HASH("Shadow"))
 					{
 						pkt.PSO = mat->ShadowPSO;
 						pkt.SRB = mat->ShadowSRB;
@@ -1137,14 +1022,14 @@ namespace shz
 		std::vector<uint32> instanceRemap;
 
 		// GBuffer
-		scene.BuildDrawList(kPassGBuffer, visibleObjectIndexMain, drawItems, instanceRemap);
+		scene.BuildDrawList(STRING_HASH("GBuffer"), visibleObjectIndexMain, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
-		m_PassCtx.MainDrawPackets = buildPacketsFromDrawItems(kPassGBuffer, drawItems);
+		m_PassCtx.MainDrawPackets = buildPacketsFromDrawItems(STRING_HASH("GBuffer"), drawItems);
 
 		// Shadow
-		scene.BuildDrawList(kPassShadow, visibleObjectIndexShadow, drawItems, instanceRemap);
+		scene.BuildDrawList(STRING_HASH("Shadow"), visibleObjectIndexShadow, drawItems, instanceRemap);
 		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
-		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(kPassShadow, drawItems);
+		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(STRING_HASH("Shadow"), drawItems);
 
 		// Sanity: if this is 0, you will see nothing (this is the #1 failure)
 		// (leave as ASSERT while migrating; you can relax later)
@@ -1194,6 +1079,70 @@ namespace shz
 			ASSERT(pass, "Pass is null.");
 			pass->OnResize(m_PassCtx, width, height);
 		}
+	}
+
+	// ---------------------------------------------------------------------
+	// Resource wrappers
+	// ---------------------------------------------------------------------
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const TextureDesc& desc, const TextureData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<ITexture> tex;
+		m_pDevice->CreateTexture(desc, pInitData, &tex);
+		return tex;
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::CreateBuffer(const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<IBuffer> buf;
+		m_pDevice->CreateBuffer(desc, pInitData, &buf);
+		return buf;
+	}
+
+	void Renderer::UpdateBuffer(
+		IDeviceContext* pCtx,
+		IBuffer* pBuffer,
+		uint32 offsetBytes,
+		uint32 sizeBytes,
+		const void* pData,
+		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
+	{
+		ASSERT(pCtx, "Context is null.");
+		ASSERT(pBuffer, "Buffer is null.");
+		ASSERT(pData || sizeBytes == 0, "UpdateBuffer: data is null.");
+
+		pCtx->UpdateBuffer(
+			pBuffer,
+			offsetBytes,
+			sizeBytes,
+			pData,
+			transitionMode
+		);
+	}
+
+	void Renderer::UpdateTexture2D(
+		IDeviceContext* pCtx,
+		ITexture* pTexture,
+		uint32 mipLevel,
+		uint32 arraySlice,
+		const TextureSubResData& subRes,
+		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
+	{
+		ASSERT(pCtx, "Context is null.");
+		ASSERT(pTexture, "Texture is null.");
+
+		// Update entire subresource (no box)
+		IBox box = {}; // empty -> full resource
+		pCtx->UpdateTexture(
+			pTexture,
+			mipLevel,
+			arraySlice,
+			box,
+			subRes,
+			transitionMode,
+			RESOURCE_STATE_TRANSITION_MODE_NONE
+		);
 	}
 
 	// ----------------------------
@@ -1349,19 +1298,9 @@ namespace shz
 
 			for (SHADER_TYPE type : supportedShaderTypes)
 			{
-				if (auto* var = out.PSO->GetStaticVariableByName(type, "FRAME_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_FrameCB));
-				}
-
-				if (auto* var = out.PSO->GetStaticVariableByName(type, "DRAW_CONSTANTS"))
-				{
-					var->Set(m_pRegistry->GetBuffer(kRes_DrawCB));
-				}
-
 				if (auto* var = out.PSO->GetStaticVariableByName(type, "g_ObjectTable"))
 				{
-					var->Set(m_pRegistry->GetBufferSRV(kRes_ObjectTable_GB), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
+					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.GBuffer")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
 				}
 			}
 		}
@@ -1492,7 +1431,7 @@ namespace shz
 					}
 					else
 					{
-						pView = m_pRegistry->GetTexture(kRes_ErrorTex)->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+						pView = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"))->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 					}
 
 					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
@@ -1715,17 +1654,6 @@ namespace shz
 			names.push_back(pair.first);
 		}
 		return names;
-	}
-
-	void Renderer::uploadObjectIndexInstance(IDeviceContext* pCtx, uint32 objectIndex)
-	{
-		ASSERT(pCtx, "Context is null.");
-
-		IBuffer* pVB = m_pRegistry->GetBuffer(kRes_ObjectIndexVB);
-		ASSERT(pVB, "Object index VB is null.");
-
-		MapHelper<uint32> map(pCtx, pVB, MAP_WRITE, MAP_FLAG_DISCARD);
-		*map = objectIndex;
 	}
 
 	void Renderer::addPass(std::unique_ptr<RenderPassBase> pass)

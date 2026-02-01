@@ -154,7 +154,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\CommonResourceId.h" />
     <ClInclude Include="Public\PipelineStateManager.h" />
     <ClInclude Include="Public\RenderData.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />

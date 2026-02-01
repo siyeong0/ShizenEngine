@@ -300,13 +300,7 @@ namespace shz
 
 			psoCI.pCS = pCS;
 
-			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pGenCSO);
-			ASSERT(m_pGenCSO, "CreateComputePipelineState(PSO_GrassGenerateInstances) failed.");
-
-			if (auto* var = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "FRAME_CONSTANTS"))
-			{
-				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
-			}
+			m_pGenCSO = ctx.pPipelineStateManager->AcquireCompute(psoCI);
 
 			m_pGenCSO->CreateShaderResourceBinding(&m_pGenCSRB, true);
 			ASSERT(m_pGenCSRB, "Create SRB for GrassGenerateInstances failed.");
@@ -363,8 +357,7 @@ namespace shz
 
 			psoCI.pCS = pCS;
 
-			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pArgsCSO);
-			ASSERT(m_pArgsCSO, "CreateComputePipelineState(PSO_GrassWriteIndirectArgs) failed.");
+			m_pArgsCSO = ctx.pPipelineStateManager->AcquireCompute(psoCI);
 
 			m_pArgsCSO->CreateShaderResourceBinding(&m_pArgsCSRB, true);
 			ASSERT(m_pArgsCSRB, "Create SRB for GrassWriteIndirectArgs failed.");
@@ -478,17 +471,7 @@ namespace shz
 			gp.InputLayout.LayoutElements = layoutElems;
 			gp.InputLayout.NumElements = _countof(layoutElems);
 
-			ctx.pDevice->CreatePipelineState(psoCI, &m_pGrassPSO);
-			ASSERT(m_pGrassPSO, "CreatePipelineState(PSO_Grass) failed.");
-
-			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "FRAME_CONSTANTS"))
-			{
-				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
-			}
-			if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "FRAME_CONSTANTS"))
-			{
-				var->Set(ctx.pRegistry->GetBuffer(kRes_FrameCB));
-			}
+			m_pGrassPSO = ctx.pPipelineStateManager->AcquireGraphics(psoCI);
 
 			m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
 			ASSERT(m_pGrassSRB, "Create SRB for Grass failed.");
@@ -508,23 +491,23 @@ namespace shz
 
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_IrradianceIBLTex"))
 			{
-				if (ctx.pRegistry->GetTexture(kRes_EnvDiffuseTex))
+				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex")))
 				{
-					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvDiffuseTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvDiffuseTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			}
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SpecularIBLTex"))
 			{
-				if (ctx.pRegistry->GetTexture(kRes_EnvSpecularTex))
+				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvSpecularTex")))
 				{
-					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvSpecularTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvSpecularTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			}
 			if (auto var = m_pGrassSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_BrdfIBLTex"))
 			{
-				if (ctx.pRegistry->GetTexture(kRes_EnvBrdfTex))
+				if (ctx.pRegistry->GetTexture(STRING_HASH("EnvBrdfTex")))
 				{
-					var->Set(ctx.pRegistry->GetTextureSRV(kRes_EnvBrdfTex), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("EnvBrdfTex")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			}
 		}
@@ -564,8 +547,7 @@ namespace shz
 
 			psoCI.pCS = pCS;
 
-			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pInteractionDecayCSO);
-			ASSERT(m_pInteractionDecayCSO, "CreateComputePipelineState(PSO_InteractionDecay) failed.");
+			m_pInteractionDecayCSO = ctx.pPipelineStateManager->AcquireCompute(psoCI);
 
 			m_pInteractionDecayCSO->CreateShaderResourceBinding(&m_pInteractionDecaySRB, true);
 			ASSERT(m_pInteractionDecaySRB, "Create SRB for InteractionDecay failed.");
@@ -623,8 +605,7 @@ namespace shz
 
 			psoCI.pCS = pCS;
 
-			ctx.pDevice->CreateComputePipelineState(psoCI, &m_pInteractionApplyCSO);
-			ASSERT(m_pInteractionApplyCSO, "CreateComputePipelineState(PSO_InteractionApplyStamps) failed.");
+			m_pInteractionApplyCSO = ctx.pPipelineStateManager->AcquireCompute(psoCI);
 
 			m_pInteractionApplyCSO->CreateShaderResourceBinding(&m_pInteractionApplySRB, true);
 			ASSERT(m_pInteractionApplySRB, "Create SRB for InteractionApplyStamps failed.");
@@ -1018,7 +999,7 @@ namespace shz
 
 			// Per-draw: StartInstanceLocation = 0
 			{
-				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(kRes_DrawCB), MAP_WRITE, MAP_FLAG_DISCARD);
+				MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")), MAP_WRITE, MAP_FLAG_DISCARD);
 				map->StartInstanceLocation = 0;
 			}
 
