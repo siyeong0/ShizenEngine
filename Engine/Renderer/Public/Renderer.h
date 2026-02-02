@@ -80,13 +80,17 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
-		// ---------------------------------------------------------------------
+		// Render pass management
+		void AddPass(std::unique_ptr<RenderPassBase> pass);
+
 		// Resource registry wrappers
-		// ---------------------------------------------------------------------
 		uint64 AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		uint64 AddTexture(uint64 id, const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		uint64 AddTexture(const std::string& name, RefCntAutoPtr<ITexture>&& tex);
 		uint64 AddTexture(uint64 id, RefCntAutoPtr<ITexture>&& tex);
+
+		void AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc);
+		void AddTextureView(uint64 textureId, const TextureViewDesc& viewDesc);
 
 		uint64 AddBuffer(const std::string& name, const BufferDesc& desc, const BufferData* pInitData = nullptr);
 		uint64 AddBuffer(uint64 id, const BufferDesc& desc, const BufferData* pInitData = nullptr);
@@ -96,24 +100,25 @@ namespace shz
 		uint64 AddUniformBuffer(const std::string& name, uint64 sizeBytes);
 		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
 
-		void AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc);
-		void AddTextureView(uint64 textureId, const TextureViewDesc& viewDesc);
+		// RenderData 
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
+		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
-		// ---------------------------------------------------------------------
-		// Render pass management
-		// ---------------------------------------------------------------------
-		void AddPass(std::unique_ptr<RenderPassBase> pass);
+		// Material templates
+		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
+		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
-		// ---------------------------------------------------------------------
-		// Resource factory wrappers (Renderer-owned shared resources)
-		// ---------------------------------------------------------------------
-		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
-		RefCntAutoPtr<IBuffer> CreateBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
+	private:
+		RefCntAutoPtr<ITexture> createTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
+		RefCntAutoPtr<ITexture> createTexture(const AssetRef<Texture>& assetRef);
+		RefCntAutoPtr<ITexture> createTexture(const std::string& name, const Texture& texture);
+		RefCntAutoPtr<ITexture> createTexture(uint64 id, const Texture& texture);
 
-		// ---------------------------------------------------------------------
+		RefCntAutoPtr<IBuffer> createBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
+
 		// Resource update wrappers
-		// ---------------------------------------------------------------------
-		void UpdateBuffer(
+		void updateBuffer(
 			IDeviceContext* pCtx,
 			IBuffer* pBuffer,
 			uint32 offsetBytes,
@@ -121,27 +126,13 @@ namespace shz
 			const void* pData,
 			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
 
-		void UpdateTexture2D(
+		void updateTexture2D(
 			IDeviceContext* pCtx,
 			ITexture* pTexture,
 			uint32 arraySlice,
 			const Texture& sourceImage,
 			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
 
-		// ---------------------------------------------------------------------
-		// RenderData caches (unchanged)
-		// ---------------------------------------------------------------------
-		RefCntAutoPtr<ITexture> CreateTextureRenderData(const AssetRef<Texture>& assetRef);
-		RefCntAutoPtr<ITexture> CreateTextureRenderData(const std::string& name, const Texture& texture);
-		RefCntAutoPtr<ITexture> CreateTextureRenderData(uint64 id, const Texture& texture);
-		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
-		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
-		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
-
-		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
-		std::vector<std::string> GetAllMaterialTemplateNames() const;
-
-	private:
 		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
 		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 

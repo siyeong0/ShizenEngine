@@ -146,7 +146,7 @@ namespace shz
 			// GBuffer textures
 			static constexpr uint32 NUM_GBUFFERS = 4;
 			{
-				auto createGBufferTexture = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> RefCntAutoPtr<ITexture>
+				auto createGBufferTextureDesc = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> TextureDesc
 					{
 						TextureDesc td = {};
 						td.Name = name;
@@ -158,12 +158,13 @@ namespace shz
 						td.SampleCount = 1;
 						td.Usage = USAGE_DEFAULT;
 						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-						return m_pRenderer->CreateTexture(td);
+						return td;
 					};
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTexture(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+
 				TextureDesc td = {};
 				td.Name = "GBufferDepth";
 				td.Type = RESOURCE_DIM_TEX_2D;
@@ -175,7 +176,7 @@ namespace shz
 				td.Format = TEX_FORMAT_R32_TYPELESS;
 				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
-				m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), m_pRenderer->CreateTexture(td));
+				m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), td);
 
 				TextureViewDesc vd = {};
 				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
@@ -202,7 +203,7 @@ namespace shz
 				td.Usage = USAGE_DEFAULT;
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-				m_pRenderer->AddTexture(STRING_HASH("Lighting"), m_pRenderer->CreateTexture(td));
+				m_pRenderer->AddTexture(STRING_HASH("Lighting"), td);
 			}
 
 			// Grass
@@ -220,7 +221,7 @@ namespace shz
 					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
 					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
 
-					m_pRenderer->AddBuffer(STRING_HASH("GrassInstanceBuffer"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("GrassInstanceBuffer"), bd);
 				}
 
 				// Indirect args (RAW 20 bytes)
@@ -232,7 +233,7 @@ namespace shz
 					bd.Mode = BUFFER_MODE_RAW;
 					bd.Size = 20;
 
-					m_pRenderer->AddBuffer(STRING_HASH("GrassIndirectArgs"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("GrassIndirectArgs"), bd);
 				}
 
 				// Counter (RAW 4 bytes)
@@ -244,7 +245,7 @@ namespace shz
 					bd.Mode = BUFFER_MODE_RAW;
 					bd.Size = 4;
 
-					m_pRenderer->AddBuffer(STRING_HASH("GrassCounter"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("GrassCounter"), bd);
 				}
 
 				// GrassGenConstantsCB (CS)
@@ -256,7 +257,7 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = sizeof(hlsl::GrassGenConstants);
 
-					m_pRenderer->AddBuffer(STRING_HASH("GrassGenConstantsCB"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("GrassGenConstantsCB"), bd);
 				}
 
 				// GrassRenderConstantsCB (VS/PS)
@@ -268,7 +269,7 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = sizeof(hlsl::GrassRenderConstants);
 
-					m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
 				}
 
 				// Interaction field texture (R16_FLOAT SRV/UAV)
@@ -283,7 +284,7 @@ namespace shz
 					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
 					td.Usage = USAGE_DEFAULT;
 
-					m_pRenderer->AddTexture(STRING_HASH("InteractionField"), m_pRenderer->CreateTexture(td));
+					m_pRenderer->AddTexture(STRING_HASH("InteractionField"), td);
 				}
 
 				// Interaction stamps (Structured, dynamic CPU write)
@@ -297,7 +298,7 @@ namespace shz
 					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 
-					m_pRenderer->AddBuffer(STRING_HASH("InteractionStampBuffer"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("InteractionStampBuffer"), bd);
 				}
 
 				// Interaction constants
@@ -309,7 +310,7 @@ namespace shz
 					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
 					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
 
-					m_pRenderer->AddBuffer(STRING_HASH("InteractionConstantsCB"), m_pRenderer->CreateBuffer(bd));
+					m_pRenderer->AddBuffer(STRING_HASH("InteractionConstantsCB"), bd);
 				}
 
 				// Density texture for grass placement
@@ -339,7 +340,7 @@ namespace shz
 					initData.pSubResources = &subres;
 					initData.NumSubresources = 1;
 
-					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), m_pRenderer->CreateTexture(desc, &initData));
+					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), desc, &initData);
 				}
 			}
 		}
