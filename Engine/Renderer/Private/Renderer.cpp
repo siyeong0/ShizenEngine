@@ -591,10 +591,6 @@ namespace shz
 			const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
-			ASSERT(obj.pMesh->VertexBuffer&& obj.pMesh->IndexBuffer, "Buffer is null.");
-			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
-
 			for (const auto& section : obj.pMesh->Sections)
 			{
 				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("GBuffer"));
@@ -618,10 +614,6 @@ namespace shz
 			{
 				continue;
 			}
-
-			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
-			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
@@ -1041,10 +1033,10 @@ namespace shz
 	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
-		const StaticMeshRenderData* cached = m_StaticMeshCache.Acquire(key);
-		if (cached)
+
+		if (m_StaticMeshCache.Contains(key))
 		{
-			return *cached;
+			return m_StaticMeshCache.Acquire(key);
 		}
 
 		AssetPtr<StaticMesh> assetPtr = m_pAssetManager->Acquire(assetRef);
@@ -1119,6 +1111,7 @@ namespace shz
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
 		ASSERT(pVB, "Failed to create vertex buffer for StaticMesh.");
+		m_NewBuffersThisFrame.emplace(pVB);
 
 		const void* pIndexData = mesh.GetIndexData();
 		const uint32 ibBytes = mesh.GetIndexDataSizeBytes();
@@ -1126,6 +1119,7 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> pIB = createImmutableBuffer(m_pDevice, "StaticMesh_IB", BIND_INDEX_BUFFER, pIndexData, ibBytes);
 		ASSERT(pIB, "Failed to create index buffer for StaticMesh.");
+		m_NewBuffersThisFrame.emplace(pIB);
 
 		StaticMeshRenderData out = {};
 		out.VertexBuffer = pVB;
@@ -1149,7 +1143,7 @@ namespace shz
 		}
 
 		m_StaticMeshCache.Store(key, std::move(out));
-		return *m_StaticMeshCache.Acquire(key);
+		return m_StaticMeshCache.Acquire(key);
 	}
 
 	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain)

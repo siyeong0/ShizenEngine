@@ -26,32 +26,28 @@ namespace shz
 		// ------------------------------------------------------------
 		// Acquire
 		// ------------------------------------------------------------
-		const TRenderData* Acquire(KeyType key) const noexcept
+		const TRenderData& Acquire(KeyType key) const noexcept
 		{
-			if (key == 0)
-				return nullptr;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 
 			auto it = m_Table.find(key);
-			if (it == m_Table.end())
-				return nullptr;
+			ASSERT(it != m_Table.end(), "Render data not found.");
 
-			return &it->second;
+			return it->second;
 		}
 
-		TRenderData* Acquire(KeyType key) noexcept
+		TRenderData& Acquire(KeyType key) noexcept
 		{
-			if (key == 0)
-				return nullptr;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 
 			auto it = m_Table.find(key);
-			if (it == m_Table.end())
-				return nullptr;
+			ASSERT(it != m_Table.end(), "Render data not found.");
 
-			return &it->second;
+			return it->second;
 		}
 
 		// ------------------------------------------------------------
@@ -60,8 +56,7 @@ namespace shz
 		// Returns true if inserted new, false if replaced existing.
 		bool Store(KeyType key, const TRenderData&& rd)
 		{
-			if (key == 0)
-				return false;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 
@@ -78,8 +73,7 @@ namespace shz
 
 		bool Store(KeyType key, TRenderData&& rd)
 		{
-			if (key == 0)
-				return false;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 
@@ -99,8 +93,7 @@ namespace shz
 		// ------------------------------------------------------------
 		bool Erase(KeyType key)
 		{
-			if (key == 0)
-				return false;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			return (m_Table.erase(key) > 0);
@@ -108,8 +101,7 @@ namespace shz
 
 		bool Contains(KeyType key) const
 		{
-			if (key == 0)
-				return false;
+			ASSERT(key != 0, "Invalid key value.");
 
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			return (m_Table.find(key) != m_Table.end());

@@ -16,7 +16,7 @@
 #include "Engine/RenderPass/Public/DrawPacket.h"
 
 #include "Engine/Renderer/Public/PipelineStateManager.h"
-#include "Engine/Renderer/Public/RenderData.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 
 namespace shz

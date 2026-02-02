@@ -7,7 +7,7 @@
 #include "Primitives/UniqueHandle.hpp"
 
 #include "Engine/Core/Math/Math.h"
-#include "Engine/Renderer/Public/RenderData.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
 #include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"

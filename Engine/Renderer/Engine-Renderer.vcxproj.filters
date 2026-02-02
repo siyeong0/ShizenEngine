@@ -36,7 +36,7 @@
     <ClInclude Include="Public\PipelineStateManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderData.h">
+    <ClInclude Include="Public\StaticMeshRenderData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\RenderResourceRegistry.h">

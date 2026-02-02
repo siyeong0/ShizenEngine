@@ -34,7 +34,7 @@
 #include "Engine/RenderPass/Public/RenderPassContext.h"
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 
-#include "Engine/Renderer/Public/RenderData.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"

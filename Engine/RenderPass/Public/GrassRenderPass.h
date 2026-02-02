@@ -9,7 +9,7 @@
 #include "Engine/RHI/Interface/IShaderResourceBinding.h"
 #include "Engine/RHI/Interface/IBuffer.h"
 
-#include "Engine/Renderer/Public/RenderData.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 #include "Engine/RenderPass/Public/RenderPassContext.h"
