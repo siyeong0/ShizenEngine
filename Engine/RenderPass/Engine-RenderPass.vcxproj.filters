@@ -48,6 +48,12 @@
     <ClInclude Include="Public\GrassBuildInstancesPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\GrassGenerateInstancesPass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\WriteIndirectArgsPass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -72,6 +78,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\GrassBuildInstancesPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GrassGenerateInstancesPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\WriteIndirectArgsPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

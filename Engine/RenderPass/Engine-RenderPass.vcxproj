@@ -156,7 +156,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\DrawPacket.h" />
     <ClInclude Include="Public\GBufferRenderPass.h" />
-    <ClInclude Include="Public\GrassBuildInstancesPass.h" />
+    <ClInclude Include="Public\GrassGenerateInstancesPass.h" />
     <ClInclude Include="Public\GrassInteractionPass.h" />
     <ClInclude Include="Public\GrassRenderPass.h" />
     <ClInclude Include="Public\LightingRenderPass.h" />
@@ -164,6 +164,7 @@
     <ClInclude Include="Public\RenderPassBase.h" />
     <ClInclude Include="Public\RenderPassContext.h" />
     <ClInclude Include="Public\ShadowRenderPass.h" />
+    <ClInclude Include="Public\WriteIndirectArgsPass.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -173,12 +174,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\GBufferRenderPass.cpp" />
-    <ClCompile Include="Private\GrassBuildInstancesPass.cpp" />
+    <ClCompile Include="Private\GrassGenerateInstancesPass.cpp" />
     <ClCompile Include="Private\GrassInteractionPass.cpp" />
     <ClCompile Include="Private\GrassRenderPass.cpp" />
     <ClCompile Include="Private\LightingRenderPass.cpp" />
     <ClCompile Include="Private\PostRenderPass.cpp" />
     <ClCompile Include="Private\ShadowRenderPass.cpp" />
+    <ClCompile Include="Private\WriteIndirectArgsPass.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -22,7 +22,8 @@
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
 #include "Engine/RenderPass/Public/GrassInteractionPass.h"
-#include "Engine/RenderPass/Public/GrassBuildInstancesPass.h"
+#include "Engine/RenderPass/Public/GrassGenerateInstancesPass.h"
+#include "Engine/RenderPass/Public/WriteIndirectArgsPass.h"
 
 namespace shz
 {
@@ -355,7 +356,8 @@ namespace shz
 			m_pRenderer->AddPass(std::make_unique<GBufferRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<LightingRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<GrassInteractionPass>());
-			m_pRenderer->AddPass(std::make_unique<GrassBuildInstancesPass>());
+			m_pRenderer->AddPass(std::make_unique<GrassGenerateInstancesPass>());
+			m_pRenderer->AddPass(std::make_unique<WriteIndirectArgsPass>(STRING_HASH("GrassCounter"), STRING_HASH("GrassIndirectArgs")));
 			m_pRenderer->AddPass(std::make_unique<GrassRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<PostRenderPass>());
 		}

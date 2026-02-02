@@ -53,9 +53,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\FullScreen.vsh = Shaders\FullScreen.vsh
 		Shaders\GBuffer.psh = Shaders\GBuffer.psh
 		Shaders\GBuffer.vsh = Shaders\GBuffer.vsh
-		Shaders\GrassBuildInstances.hlsl = Shaders\GrassBuildInstances.hlsl
 		Shaders\GrassForward.psh = Shaders\GrassForward.psh
 		Shaders\GrassForward.vsh = Shaders\GrassForward.vsh
+		Shaders\GrassGenerateInstances.hlsl = Shaders\GrassGenerateInstances.hlsl
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\InteractionFieldUpdate.hlsl = Shaders\InteractionFieldUpdate.hlsl
 		Shaders\Lighting.psh = Shaders\Lighting.psh
@@ -66,6 +66,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\Shadow.vsh = Shaders\Shadow.vsh
 		Shaders\ShadowMasked.psh = Shaders\ShadowMasked.psh
 		Shaders\ShadowMasked.vsh = Shaders\ShadowMasked.vsh
+		Shaders\WriteIndirectArgs.hlsl = Shaders\WriteIndirectArgs.hlsl
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "imgui", "ThirdParty\imgui\imgui.vcxproj", "{2AE4AF76-99C4-4FE0-9759-7D19832FBFF1}"

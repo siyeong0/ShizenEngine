@@ -11,15 +11,15 @@
 
 namespace shz
 {
-	class GrassBuildInstancesPass final : public RenderPassBase
+	class WriteIndirectArgsPass final : public RenderPassBase
 	{
 	public:
-		GrassBuildInstancesPass();
-		~GrassBuildInstancesPass() override;
+		WriteIndirectArgsPass(uint64 counterID, uint64 indirectArgsID);
+		~WriteIndirectArgsPass() override;
 
 		void Initialize(RenderPassContext& ctx) override;
 
-		const char* GetName() const override { return "GrassBuild"; }
+		const char* GetName() const override { return "WriteIndirectArgs"; }
 
 		void BeginFrame(RenderPassContext& ctx) override;
 		void Execute(RenderPassContext& ctx) override;
@@ -31,10 +31,10 @@ namespace shz
 		IRenderPass* GetRHIRenderPass() override { return nullptr; }
 
 	private:
-		RefCntAutoPtr<IPipelineState> m_pGenCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pGenCSRB;
+		uint64 m_CounterID = 0;
+		uint64 m_IndirectArgsID = 0;
 
-		RefCntAutoPtr<IPipelineState> m_pArgsCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pArgsCSRB;
+		RefCntAutoPtr<IPipelineState>         m_pCSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pCSRB;
 	};
 } // namespace shz
