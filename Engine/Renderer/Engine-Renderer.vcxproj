@@ -155,6 +155,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\PipelineStateManager.h" />
+    <ClInclude Include="Public\RenderGraphTypes.h" />
     <ClInclude Include="Public\StaticMeshRenderData.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />
     <ClInclude Include="Public\Renderer.h" />

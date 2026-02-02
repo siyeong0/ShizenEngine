@@ -36,6 +36,16 @@ namespace shz
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 		ASSERT(ctx.pShaderSourceFactory, "Shader source factory is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
+		ASSERT(ctx.pPipelineStateManager, "PipelineStateManager is null.");
+
+		// ------------------------------------------------------------
+		// RenderGraph declarations
+		// ------------------------------------------------------------
+		{
+			// Shadow depth target
+			DeclareTextureDSVWrite(STRING_HASH("ShadowMap"));
+		}
 
 		// ------------------------------------------------------------
 		// Create RenderPass + Framebuffer (depth-only)
@@ -288,18 +298,6 @@ namespace shz
 
 		const std::vector<DrawPacket>& packets = ctx.ShadowDrawPackets;
 
-		// To DEPTH_WRITE
-		{
-			StateTransitionDesc tr =
-			{
-				ctx.pRegistry->GetTexture(STRING_HASH("ShadowMap")),
-				RESOURCE_STATE_UNKNOWN,
-				RESOURCE_STATE_DEPTH_WRITE,
-				STATE_TRANSITION_FLAG_UPDATE_STATE
-			};
-			pContext->TransitionResourceStates(1, &tr);
-		}
-
 		Viewport vp = {};
 		vp.Width = float(ctx.ShadowMapResolution);
 		vp.Height = float(ctx.ShadowMapResolution);
@@ -393,18 +391,6 @@ namespace shz
 		}
 
 		pContext->EndRenderPass();
-
-		// Shadow -> SRV
-		{
-			StateTransitionDesc tr2 =
-			{
-				ctx.pRegistry->GetTexture(STRING_HASH("ShadowMap")),
-				RESOURCE_STATE_UNKNOWN,
-				RESOURCE_STATE_SHADER_RESOURCE,
-				STATE_TRANSITION_FLAG_UPDATE_STATE
-			};
-			pContext->TransitionResourceStates(1, &tr2);
-		}
 	}
 
 	void ShadowRenderPass::EndFrame(RenderPassContext& ctx)

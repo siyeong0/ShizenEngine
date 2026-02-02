@@ -31,6 +31,18 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pImmediateContext, "Context is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
+
+		// ------------------------------------------------------------
+		// RenderGraph declarations (Renderer auto-orders + auto-transitions)
+		// ------------------------------------------------------------
+		{
+			DeclareTextureRTVWrite(STRING_HASH("GBuffer0_Albedo"));
+			DeclareTextureRTVWrite(STRING_HASH("GBuffer1_Normal"));
+			DeclareTextureRTVWrite(STRING_HASH("GBuffer2_MRAO"));
+			DeclareTextureRTVWrite(STRING_HASH("GBuffer3_Emissive"));
+			DeclareTextureDSVWrite(STRING_HASH("GBufferDepth"));
+		}
 
 		bool ok = false;
 
@@ -52,18 +64,11 @@ namespace shz
 
 		const std::vector<DrawPacket>& packets = ctx.MainDrawPackets;
 
-		// RT/DS transitions
+		// NOTE:
+		// - RT/DS transitions are handled by Renderer(RenderGraph):
+		//   - Before this pass: GBuffers -> RENDER_TARGET, Depth -> DEPTH_WRITE
+		//   - After this pass:  if later passes read them, Renderer will transition to SHADER_RESOURCE as needed.
 		{
-			StateTransitionDesc tr[] =
-			{
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer0_Albedo")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer1_Normal")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer2_MRAO")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer3_Emissive")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_RENDER_TARGET, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBufferDepth")),      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_DEPTH_WRITE,   STATE_TRANSITION_FLAG_UPDATE_STATE },
-			};
-			pContext->TransitionResourceStates(_countof(tr), tr);
-
 			OptimizedClearValue clearVals[5] = {};
 			for (int i = 0; i < 4; ++i)
 			{
@@ -135,9 +140,13 @@ namespace shz
 			{
 				DrawIndexedAttribs dia = pkt.DrawAttribs;
 				{
-					MapHelper<hlsl::DrawConstants> map(pContext, ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")), MAP_WRITE, MAP_FLAG_DISCARD);
-					hlsl::DrawConstants* dst = map;
+					MapHelper<hlsl::DrawConstants> map(
+						pContext,
+						ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
+						MAP_WRITE,
+						MAP_FLAG_DISCARD);
 
+					hlsl::DrawConstants* dst = map;
 					dst->StartInstanceLocation = dia.FirstInstanceLocation;
 				}
 
@@ -159,18 +168,9 @@ namespace shz
 
 		pContext->EndRenderPass();
 
-		// Outputs -> SRV
-		{
-			StateTransitionDesc tr2[] =
-			{
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer0_Albedo")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer1_Normal")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer2_MRAO")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBuffer3_Emissive")), RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-				{ ctx.pRegistry->GetTexture(STRING_HASH("GBufferDepth")),      RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, STATE_TRANSITION_FLAG_UPDATE_STATE },
-			};
-			pContext->TransitionResourceStates(_countof(tr2), tr2);
-		}
+		// NOTE:
+		// - Outputs -> SRV transitions are handled by Renderer(RenderGraph).
+		// - Do NOT transition here to avoid fighting the graph.
 	}
 
 	void GBufferRenderPass::EndFrame(RenderPassContext& ctx)
@@ -196,6 +196,7 @@ namespace shz
 	{
 		IRenderDevice* device = ctx.pDevice;
 		ASSERT(device, "Device is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
 
 		// RenderPass (once)
 		if (!m_pRenderPass)

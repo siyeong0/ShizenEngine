@@ -29,6 +29,26 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
+		ASSERT(ctx.pPipelineStateManager, "PipelineStateManager is null.");
+
+		// ------------------------------------------------------------
+		// RenderGraph declarations (Renderer auto-orders + auto-transitions)
+		// ------------------------------------------------------------
+		{
+			// Read GBuffer inputs
+			DeclareTextureSRVRead(STRING_HASH("GBuffer0_Albedo"));
+			DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
+			DeclareTextureSRVRead(STRING_HASH("GBuffer2_MRAO"));
+			DeclareTextureSRVRead(STRING_HASH("GBuffer3_Emissive"));
+			DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
+
+			// Read Shadow
+			DeclareTextureSRVRead(STRING_HASH("ShadowMap"));
+
+			// Write Lighting output
+			DeclareTextureRTVWrite(STRING_HASH("Lighting"));
+		}
 
 		bool ok = false;
 
@@ -50,6 +70,7 @@ namespace shz
 	{
 		ASSERT(ctx.pDevice, "Device is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
 
 		const SwapChainDesc& scDesc = ctx.pSwapChain->GetDesc();
 
@@ -158,6 +179,10 @@ namespace shz
 
 		psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
+		// NOTE:
+		// - GBuffer/Depth/ShadowMap are mutable and rebound safely.
+		// - IBL textures are already registered as STATIC in PipelineStateManager:
+		//   g_EnvMapTex / g_IrradianceIBLTex / g_SpecularIBLTex / g_BrdfIBLTex
 		ShaderResourceVariableDesc vars[] =
 		{
 			{ SHADER_TYPE_PIXEL, "g_GBuffer0",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -165,6 +190,7 @@ namespace shz
 			{ SHADER_TYPE_PIXEL, "g_GBuffer2",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 			{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+			{ SHADER_TYPE_PIXEL, "g_ShadowMap",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 		};
 		psoCi.PSODesc.ResourceLayout.Variables = vars;
 		psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
@@ -203,9 +229,10 @@ namespace shz
 
 	void LightingRenderPass::bindInputs(RenderPassContext& ctx)
 	{
+		ASSERT(ctx.pRegistry, "Registry is null.");
 		ASSERT(m_pSRB, "SRB is null");
 
-		auto bindGBufferTexture = [&](const char* name, ITextureView* srv)
+		auto bindTexture = [&](const char* name, ITextureView* srv)
 		{
 			if (auto var = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, name))
 			{
@@ -213,24 +240,27 @@ namespace shz
 			}
 		};
 
-		bindGBufferTexture("g_GBuffer0", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer0_Albedo")));
-		bindGBufferTexture("g_GBuffer1", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
-		bindGBufferTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
-		bindGBufferTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
-		bindGBufferTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+		bindTexture("g_GBuffer0", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer0_Albedo")));
+		bindTexture("g_GBuffer1", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
+		bindTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
+		bindTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
+		bindTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+
+		bindTexture("g_ShadowMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
 	}
 
 	void LightingRenderPass::Execute(RenderPassContext& ctx)
 	{
 		ASSERT(ctx.pImmediateContext, "Context is null.");
+		ASSERT(m_pRenderPass, "Lighting RenderPass is null.");
+		ASSERT(m_pFramebuffer, "Lighting Framebuffer is null.");
+		ASSERT(m_pPSO, "Lighting PSO is null.");
+		ASSERT(m_pSRB, "Lighting SRB is null.");
 
+		// Ensure inputs are current.
 		bindInputs(ctx);
 
 		IDeviceContext* pCtx = ctx.pImmediateContext;
-
-		// Ensure inputs are current. 
-		// TODO: ???
-		bindInputs(ctx);
 
 		auto drawFullScreenTriangle = [&]()
 		{
@@ -241,15 +271,6 @@ namespace shz
 		};
 
 		{
-			StateTransitionDesc tr =
-			{
-				ctx.pRegistry->GetTexture(STRING_HASH("Lighting")),
-				RESOURCE_STATE_UNKNOWN,
-				RESOURCE_STATE_RENDER_TARGET,
-				STATE_TRANSITION_FLAG_UPDATE_STATE
-			};
-			pCtx->TransitionResourceStates(1, &tr);
-
 			OptimizedClearValue cv[1] = {};
 			cv[0].Color[0] = 0.f;
 			cv[0].Color[1] = 0.f;
@@ -267,15 +288,6 @@ namespace shz
 			pCtx->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 			drawFullScreenTriangle();
 			pCtx->EndRenderPass();
-
-			StateTransitionDesc tr2 =
-			{
-				ctx.pRegistry->GetTexture(STRING_HASH("Lighting")),
-				RESOURCE_STATE_UNKNOWN,
-				RESOURCE_STATE_SHADER_RESOURCE,
-				STATE_TRANSITION_FLAG_UPDATE_STATE
-			};
-			pCtx->TransitionResourceStates(1, &tr2);
 		}
 	}
 

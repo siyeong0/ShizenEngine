@@ -24,7 +24,7 @@ namespace shz
 	public:
 		struct SceneObject final
 		{
-			const StaticMeshRenderData* pMesh = {};
+			const StaticMeshRenderData* pMesh = nullptr;
 
 			Matrix4x4 World = {};
 			Matrix4x4 WorldInvTranspose = {};

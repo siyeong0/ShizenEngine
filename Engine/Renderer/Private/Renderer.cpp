@@ -264,7 +264,6 @@ namespace shz
 		ReleaseSwapChainBuffers();
 
 		m_Passes.clear();
-		m_PassOrder.clear();
 		m_RHIRenderPasses.clear();
 
 		m_StaticMeshCache.Clear();
@@ -298,9 +297,21 @@ namespace shz
 
 	void Renderer::BeginFrame()
 	{
-		for (const std::string& name : m_PassOrder)
+		if (m_bRenderGraphDirty)
 		{
-			RenderPassBase* pass = m_Passes[name].get();
+			compileRenderGraphOrder();
+			m_bRenderGraphDirty = false;
+
+			std::cout << "Compiled pass order : " << std::endl;
+			for (RenderPassBase* pass : m_CompiledPassOrder)
+			{
+				std::cout << pass->GetName() << std::endl;
+			}
+			std::cout << std::endl << std::endl;
+		}
+
+		for (RenderPassBase* pass : m_CompiledPassOrder)
+		{
 			ASSERT(pass, "Pass is null.");
 			pass->BeginFrame(m_PassCtx);
 		}
@@ -591,6 +602,10 @@ namespace shz
 			const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
+			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
+			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
 			for (const auto& section : obj.pMesh->Sections)
 			{
 				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("GBuffer"));
@@ -614,6 +629,10 @@ namespace shz
 			{
 				continue;
 			}
+
+			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
+			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
@@ -648,6 +667,50 @@ namespace shz
 
 		m_NewBuffersThisFrame.clear();
 		m_NewTexturesThisFrame.clear();
+
+		// Apply pending buffer updates
+		for (const BufferUpdateDesc& bud : m_PendingBufferUpdates)
+		{
+			IBuffer* pBuf = m_pRegistry->GetBuffer(bud.ResourceId);
+			ASSERT(pBuf, "Buffer not found for ResourceId=%llu", (unsigned long long)bud.ResourceId);
+
+			const auto& desc = pBuf->GetDesc();
+			ASSERT(desc.Size >= bud.Data.size(), "Update size exceeds buffer size.");
+
+			// Diligent UpdateBuffer expects Uint32 size
+			ASSERT(bud.Data.size() <= std::numeric_limits<uint32>::max(), "Update too large.");
+			const uint32 updateSize = static_cast<uint32>(bud.Data.size());
+
+			const bool bCpuWritableDynamic = (desc.Usage == USAGE_DYNAMIC) && ((desc.CPUAccessFlags & CPU_ACCESS_WRITE) != 0);
+
+			if (bCpuWritableDynamic)
+			{
+				// Dynamic buffers must be updated via Map/Unmap, not UpdateBuffer()
+				void* pData = nullptr;
+				ctx->MapBuffer(pBuf, MAP_WRITE, MAP_FLAG_DISCARD, pData);
+				ASSERT(pData, "MapBuffer returned null.");
+				std::memcpy(pData, bud.Data.data(), bud.Data.size());
+				ctx->UnmapBuffer(pBuf, MAP_WRITE);
+			}
+			else
+			{
+				// Default/Sparse buffers can be updated via UpdateBuffer()
+				ASSERT(desc.Usage == USAGE_DEFAULT || desc.Usage == USAGE_SPARSE,
+					"Unable to update buffer '%s': only USAGE_DEFAULT/USAGE_SPARSE can use UpdateBuffer(). "
+					"For USAGE_DYNAMIC use MapBuffer().",
+					desc.Name ? desc.Name : "(null)");
+
+				ctx->UpdateBuffer(
+					pBuf,
+					0,
+					updateSize,
+					bud.Data.data(),
+					RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+			}
+		}
+
+		m_PendingBufferUpdates.clear();
+
 
 		// ------------------------------------------------------------
 		// Helper: pack object table using instanceRemap
@@ -731,26 +794,29 @@ namespace shz
 		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
 		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(STRING_HASH("Shadow"), drawItems);
 
-		// Sanity: if this is 0, you will see nothing (this is the #1 failure)
-		// (leave as ASSERT while migrating; you can relax later)
-		// ASSERT(!m_PassCtx.GBufferDrawPackets.empty(), "No GBuffer draw packets.");
-
 		// ------------------------------------------------------------
 		// Execute passes
 		// ------------------------------------------------------------
-		for (const std::string& name : m_PassOrder)
+		std::vector<StateTransitionDesc> barriers;
+
+		for (RenderPassBase* pass : m_CompiledPassOrder)
 		{
-			RenderPassBase* pass = m_Passes[name].get();
 			ASSERT(pass, "Pass is null.");
+
+			buildTransitionsForPass(pass, barriers);
+			if (!barriers.empty())
+			{
+				ctx->TransitionResourceStates(static_cast<uint32>(barriers.size()), barriers.data());
+			}
+
 			pass->Execute(m_PassCtx);
 		}
 	}
 
 	void Renderer::EndFrame()
 	{
-		for (const std::string& name : m_PassOrder)
+		for (RenderPassBase* pass : m_CompiledPassOrder)
 		{
-			RenderPassBase* pass = m_Passes[name].get();
 			ASSERT(pass, "Pass is null.");
 			pass->EndFrame(m_PassCtx);
 		}
@@ -758,9 +824,8 @@ namespace shz
 
 	void Renderer::ReleaseSwapChainBuffers()
 	{
-		for (const std::string& name : m_PassOrder)
+		for (RenderPassBase* pass : m_CompiledPassOrder)
 		{
-			RenderPassBase* pass = m_Passes[name].get();
 			ASSERT(pass, "Pass is null.");
 			pass->ReleaseSwapChainBuffers(m_PassCtx);
 		}
@@ -769,16 +834,16 @@ namespace shz
 	void Renderer::OnResize(uint32 width, uint32 height)
 	{
 		ASSERT(width != 0 && height != 0, "Invalid size.");
-
 		m_Width = width;
 		m_Height = height;
 
-		for (const std::string& name : m_PassOrder)
+		for (RenderPassBase* pass : m_CompiledPassOrder)
 		{
-			RenderPassBase* pass = m_Passes[name].get();
 			ASSERT(pass, "Pass is null.");
 			pass->OnResize(m_PassCtx, width, height);
 		}
+
+		m_bRenderGraphDirty = true;
 	}
 
 	// ---------------------------------------------------------------------
@@ -797,9 +862,10 @@ namespace shz
 
 		pass->Initialize(m_PassCtx);
 
-		m_PassOrder.push_back(name);
 		m_Passes.emplace(name, std::move(pass));
 		m_RHIRenderPasses.emplace(STRING_HASH(name), m_Passes[name]->GetRHIRenderPass());
+
+		m_bRenderGraphDirty = true;
 	}
 
 	// ---------------------------------------------------------------------
@@ -983,7 +1049,6 @@ namespace shz
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
 		ASSERT(pVB, "Failed to create vertex buffer for StaticMesh.");
-		m_NewBuffersThisFrame.emplace(pVB);
 
 		const void* pIndexData = mesh.GetIndexData();
 		const uint32 ibBytes = mesh.GetIndexDataSizeBytes();
@@ -991,7 +1056,6 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> pIB = createImmutableBuffer(m_pDevice, "StaticMesh_IB", BIND_INDEX_BUFFER, pIndexData, ibBytes);
 		ASSERT(pIB, "Failed to create index buffer for StaticMesh.");
-		m_NewBuffersThisFrame.emplace(pIB);
 
 		StaticMeshRenderData out = {};
 		out.VertexBuffer = pVB;
@@ -1158,27 +1222,6 @@ namespace shz
 		RefCntAutoPtr<IBuffer> buf;
 		m_pDevice->CreateBuffer(desc, pInitData, &buf);
 		return buf;
-	}
-
-	void Renderer::updateBuffer(
-		IDeviceContext* pCtx,
-		IBuffer* pBuffer,
-		uint32 offsetBytes,
-		uint32 sizeBytes,
-		const void* pData,
-		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
-	{
-		ASSERT(pCtx, "Context is null.");
-		ASSERT(pBuffer, "Buffer is null.");
-		ASSERT(pData || sizeBytes == 0, "UpdateBuffer: data is null.");
-
-		pCtx->UpdateBuffer(
-			pBuffer,
-			offsetBytes,
-			sizeBytes,
-			pData,
-			transitionMode
-		);
 	}
 
 	void Renderer::updateTexture2D(
@@ -1397,6 +1440,628 @@ namespace shz
 
 		return pOutSRB;
 	}
+
+	RESOURCE_STATE Renderer::mapUsageToState(const RenderPassResourceAccess& a) const
+	{
+		switch (a.Usage)
+		{
+		case RENDER_USAGE_CBV:          return RESOURCE_STATE_CONSTANT_BUFFER;
+		case RENDER_USAGE_SRV:          return RESOURCE_STATE_SHADER_RESOURCE;
+		case RENDER_USAGE_UAV:          return RESOURCE_STATE_UNORDERED_ACCESS;
+		case RENDER_USAGE_RTV:          return RESOURCE_STATE_RENDER_TARGET;
+		case RENDER_USAGE_DSV_WRITE:    return RESOURCE_STATE_DEPTH_WRITE;
+		case RENDER_USAGE_DSV_READ:     return RESOURCE_STATE_DEPTH_READ;
+		case RENDER_USAGE_VERTEX_BUFFER:return RESOURCE_STATE_VERTEX_BUFFER;
+		case RENDER_USAGE_INDEX_BUFFER: return RESOURCE_STATE_INDEX_BUFFER;
+		case RENDER_USAGE_INDIRECT_ARGUMENT: return RESOURCE_STATE_INDIRECT_ARGUMENT;
+		case RENDER_USAGE_PRESENT:      return RESOURCE_STATE_PRESENT;
+		default:                        return RESOURCE_STATE_UNKNOWN;
+		}
+	}
+
+	IDeviceObject* Renderer::resolveDeviceObject(const RenderPassResourceAccess& a) const
+	{
+		if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE)
+		{
+			ASSERT(m_pRegistry, "Registry is null.");
+			return m_pRegistry->GetTexture(a.ResourceId);
+		}
+		else if (a.Kind == RENDER_RESOURCE_KIND_BUFFER)
+		{
+			ASSERT(m_pRegistry, "Registry is null.");
+			return m_pRegistry->GetBuffer(a.ResourceId);
+		}
+		else if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL)
+		{
+			// SwapChain backbuffer RTV (special-cased)
+			if (a.ResourceId == STRING_HASH("SwapChain.BackBuffer") &&
+				(a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_SRV))
+			{
+				ASSERT(m_pSwapChain, "SwapChain is null.");
+				ITextureView* bbRtv = m_pSwapChain->GetCurrentBackBufferRTV();
+				ASSERT(bbRtv, "BackBuffer RTV is null.");
+				return bbRtv->GetTexture();
+			}
+
+			ASSERT(false, "Unknown external resource id.");
+			return nullptr;
+		}
+
+		ASSERT(false, "Unknown resource kind.");
+		return nullptr;
+	}
+
+	//void Renderer::compileRenderGraphOrder()
+	//{
+	//	m_CompiledPassOrder.clear();
+
+	//	std::vector<RenderPassBase*> passes;
+	//	passes.reserve(m_Passes.size());
+	//	for (const auto& pair : m_Passes)
+	//	{
+	//		RenderPassBase* p = pair.second.get();
+	//		ASSERT(p, "Pass is null.");
+	//		passes.push_back(p);
+	//	}
+
+	//	if (passes.empty())
+	//	{
+	//		return;
+	//	}
+
+	//	// Deterministic: sort by pass name
+	//	std::sort(
+	//		passes.begin(),
+	//		passes.end(),
+	//		[](const RenderPassBase* a, const RenderPassBase* b)
+	//		{
+	//			return std::strcmp(a->GetName(), b->GetName()) < 0;
+	//		});
+
+	//	const uint32 n = static_cast<uint32>(passes.size());
+
+	//	// Build edges
+	//	std::vector<std::vector<uint32>> adj;
+	//	adj.resize(n);
+
+	//	std::vector<uint32> indeg;
+	//	indeg.resize(n, 0);
+
+	//	auto addEdge = [&](uint32 u, uint32 v)
+	//	{
+	//		if (u == v) return;
+
+	//		// de-dup edge (u->v)
+	//		for (uint32 x : adj[u])
+	//		{
+	//			if (x == v)
+	//			{
+	//				return;
+	//			}
+	//		}
+
+	//		adj[u].push_back(v);
+	//		indeg[v] += 1;
+	//	};
+
+	//	auto isWrite = [](const RenderPassResourceAccess& a)
+	//	{
+	//		if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+	//		if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+	//		return false;
+	//	};
+
+	//	auto isRead = [](const RenderPassResourceAccess& a)
+	//	{
+	//		if (a.Access == RENDER_ACCESS_READ || a.Access == RENDER_ACCESS_READWRITE) return true;
+	//		if (a.Usage == RENDER_USAGE_SRV || a.Usage == RENDER_USAGE_CBV || a.Usage == RENDER_USAGE_DSV_READ) return true;
+	//		if (a.Usage == RENDER_USAGE_INDIRECT_ARGUMENT) return true;
+	//		return false;
+	//	};
+
+	//	// Collect per-resource writers/readers
+	//	struct UseList final
+	//	{
+	//		std::vector<uint32> Writers;
+	//		std::vector<uint32> Readers;
+	//	};
+
+	//	std::unordered_map<uint64, UseList> uses;
+
+	//	for (uint32 i = 0; i < n; ++i)
+	//	{
+	//		const auto accesses = passes[i]->GetDeclaredResourceAccesses();
+
+	//		// per-pass per-resource dedup (avoid pushing same i many times)
+	//		std::unordered_map<uint64, uint8> localFlags;
+	//		localFlags.reserve(accesses.size());
+
+	//		for (const auto& a : accesses)
+	//		{
+	//			uint8& f = localFlags[a.ResourceId];
+
+	//			// bit0: read, bit1: write
+	//			if (isRead(a))  f |= 1;
+	//			if (isWrite(a)) f |= 2;
+	//		}
+
+	//		for (const auto& kv : localFlags)
+	//		{
+	//			const uint64 rid = kv.first;
+	//			const uint8  f = kv.second;
+
+	//			UseList& ul = uses[rid];
+
+	//			if (f & 1) ul.Readers.push_back(i);
+	//			if (f & 2) ul.Writers.push_back(i);
+	//		}
+	//	}
+
+	//	// Build dependency edges:
+	//	// - Writer -> Reader
+	//	// - Writer -> Writer (serialize writers, stable by pass index)
+	//	for (auto& kv : uses)
+	//	{
+	//		UseList& ul = kv.second;
+
+	//		// serialize writers
+	//		if (ul.Writers.size() >= 2)
+	//		{
+	//			std::sort(ul.Writers.begin(), ul.Writers.end());
+	//			ul.Writers.erase(std::unique(ul.Writers.begin(), ul.Writers.end()), ul.Writers.end());
+
+	//			for (uint32 wi = 1; wi < static_cast<uint32>(ul.Writers.size()); ++wi)
+	//			{
+	//				addEdge(ul.Writers[wi - 1], ul.Writers[wi]);
+	//			}
+	//		}
+	//		else if (ul.Writers.size() == 1)
+	//		{
+	//			// unique
+	//			// (no-op)
+	//		}
+
+	//		// writer -> reader
+	//		if (!ul.Writers.empty() && !ul.Readers.empty())
+	//		{
+	//			std::sort(ul.Readers.begin(), ul.Readers.end());
+	//			ul.Readers.erase(std::unique(ul.Readers.begin(), ul.Readers.end()), ul.Readers.end());
+
+	//			for (uint32 w : ul.Writers)
+	//			{
+	//				for (uint32 r : ul.Readers)
+	//				{
+	//					// if same pass both writes & reads same resource, no edge needed.
+	//					if (w == r) continue;
+	//					addEdge(w, r);
+	//				}
+	//			}
+	//		}
+	//	}
+
+	//	// Kahn topo sort
+	//	std::vector<uint32> q;
+	//	q.reserve(n);
+
+	//	for (uint32 i = 0; i < n; ++i)
+	//	{
+	//		if (indeg[i] == 0)
+	//		{
+	//			q.push_back(i);
+	//		}
+	//	}
+
+	//	std::vector<uint32> order;
+	//	order.reserve(n);
+
+	//	for (uint32 qi = 0; qi < static_cast<uint32>(q.size()); ++qi)
+	//	{
+	//		const uint32 u = q[qi];
+	//		order.push_back(u);
+
+	//		for (uint32 v : adj[u])
+	//		{
+	//			ASSERT(indeg[v] > 0, "Invalid indegree.");
+	//			indeg[v] -= 1;
+	//			if (indeg[v] == 0)
+	//			{
+	//				q.push_back(v);
+	//			}
+	//		}
+	//	}
+
+	//	if (order.size() != n)
+	//	{
+	//		// cycle detected -> fallback
+	//		m_CompiledPassOrder = passes;
+	//		return;
+	//	}
+
+	//	for (uint32 idx : order)
+	//	{
+	//		m_CompiledPassOrder.push_back(passes[idx]);
+	//	}
+	//}
+
+	void Renderer::compileRenderGraphOrder()
+	{
+		m_CompiledPassOrder.clear();
+
+		// ------------------------------------------------------------
+		// Collect passes
+		// ------------------------------------------------------------
+		std::vector<RenderPassBase*> passes;
+		passes.reserve(m_Passes.size());
+
+		for (const auto& pair : m_Passes)
+		{
+			RenderPassBase* p = pair.second.get();
+			ASSERT(p, "Pass is null.");
+			passes.push_back(p);
+		}
+
+		if (passes.empty())
+		{
+			return;
+		}
+
+		// ------------------------------------------------------------
+		// Baseline deterministic ordering (even when graph has no edges)
+		//
+		// NOTE:
+		// - RenderGraph dependency should be driven by resource read/write.
+		// - But when there is no shared resource between passes, there is no edge,
+		//   so we still need a deterministic fallback order.
+		// - We use a simple stage hint derived from pass name keywords.
+		//   (You can replace this with a real per-pass "Phase/OrderHint" later.)
+		// ------------------------------------------------------------
+		auto getStageHint = [](const char* name) -> int32
+		{
+			// Lower comes earlier.
+			// Tune these buckets as your renderer grows.
+			if (!name) return 1000;
+
+			// Shadow / depth-pre
+			if (std::strstr(name, "Shadow"))   return 100;
+			if (std::strstr(name, "Depth"))    return 150;
+
+			// GBuffer / prepass
+			if (std::strstr(name, "GBuffer"))  return 200;
+
+			// Deferred lighting
+			if (std::strstr(name, "Deferred")) return 300;
+			if (std::strstr(name, "Light"))    return 320; // "Lighting", etc.
+
+			// Forward/transparent
+			if (std::strstr(name, "Forward"))  return 400;
+			if (std::strstr(name, "Trans"))    return 420;
+
+			// Post
+			if (std::strstr(name, "Post"))     return 500;
+			if (std::strstr(name, "Tonemap"))  return 520;
+
+			return 1000;
+		};
+
+		std::sort(
+			passes.begin(),
+			passes.end(),
+			[&](const RenderPassBase* a, const RenderPassBase* b)
+			{
+				const int32 sa = getStageHint(a ? a->GetName() : "");
+				const int32 sb = getStageHint(b ? b->GetName() : "");
+
+				if (sa != sb) return sa < sb;
+
+				// Stable within stage: lexicographic name
+				const char* na = a ? a->GetName() : "";
+				const char* nb = b ? b->GetName() : "";
+				return std::strcmp(na, nb) < 0;
+			});
+
+		const uint32 n = static_cast<uint32>(passes.size());
+
+		// ------------------------------------------------------------
+		// Helpers: access classification
+		// ------------------------------------------------------------
+		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
+
+		auto isRead = [](const RenderPassResourceAccess& a) -> bool
+		{
+			if (a.Access == RENDER_ACCESS_READ || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_SRV || a.Usage == RENDER_USAGE_CBV || a.Usage == RENDER_USAGE_DSV_READ) return true;
+			if (a.Usage == RENDER_USAGE_INDIRECT_ARGUMENT) return true;
+			return false;
+		};
+
+		// ------------------------------------------------------------
+		// Build per-resource use lists (deterministic key order via std::map)
+		// ------------------------------------------------------------
+		struct UseList final
+		{
+			std::vector<uint32> Readers;
+			std::vector<uint32> Writers;
+		};
+
+		std::map<uint64, UseList> uses; // deterministic iteration by ResourceId
+
+		for (uint32 i = 0; i < n; ++i)
+		{
+			const auto accesses = passes[i]->GetDeclaredResourceAccesses();
+
+			// Per-pass per-resource flags:
+			// bit0 = read, bit1 = write
+			std::unordered_map<uint64, uint8> localFlags;
+			localFlags.reserve(accesses.size());
+
+			for (const auto& a : accesses)
+			{
+				uint8& f = localFlags[a.ResourceId];
+				if (isRead(a))  f |= 1;
+				if (isWrite(a)) f |= 2;
+			}
+
+			for (const auto& kv : localFlags)
+			{
+				const uint64 rid = kv.first;
+				const uint8  f = kv.second;
+
+				UseList& ul = uses[rid];
+				if (f & 1) ul.Readers.push_back(i);
+				if (f & 2) ul.Writers.push_back(i);
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Build adjacency (edges) WITHOUT per-insert de-dup.
+		// We'll sort+unique adjacency later for determinism & correct indeg.
+		// ------------------------------------------------------------
+		std::vector<std::vector<uint32>> adj;
+		adj.resize(n);
+
+		auto pushEdge = [&](uint32 u, uint32 v)
+		{
+			if (u == v) return;
+			adj[u].push_back(v);
+		};
+
+		// ------------------------------------------------------------
+		// Dependency rules (simple RenderGraph-lite):
+		//
+		// 1) Serialize writers for each resource (WAW):
+		//    writers[0] -> writers[1] -> ... (by pass index; index is deterministic)
+		//
+		// 2) Readers that do NOT write (pure readers) depend on the LAST writer:
+		//    lastWriter -> reader
+		//
+		// Why "last writer"?
+		// - Without resource versioning, we assume "reads want the final produced value".
+		// - If you need intermediate versions, treat them as different ResourceId's.
+		//
+		// NOTE:
+		// - ReadWrite counts as both reader and writer, but it participates in writer
+		//   serialization (so it will be ordered with other writers).
+		// - Pure readers are kept out of writer chain to avoid over-serializing RW passes.
+		// ------------------------------------------------------------
+		for (auto& kv : uses)
+		{
+			UseList& ul = kv.second;
+
+			// Sort+unique indices
+			std::sort(ul.Readers.begin(), ul.Readers.end());
+			ul.Readers.erase(std::unique(ul.Readers.begin(), ul.Readers.end()), ul.Readers.end());
+
+			std::sort(ul.Writers.begin(), ul.Writers.end());
+			ul.Writers.erase(std::unique(ul.Writers.begin(), ul.Writers.end()), ul.Writers.end());
+
+			// (1) Serialize writers: WAW
+			if (ul.Writers.size() >= 2)
+			{
+				for (uint32 wi = 1; wi < static_cast<uint32>(ul.Writers.size()); ++wi)
+				{
+					pushEdge(ul.Writers[wi - 1], ul.Writers[wi]);
+				}
+			}
+
+			// (2) lastWriter -> pure readers (RAW to final version)
+			if (!ul.Writers.empty() && !ul.Readers.empty())
+			{
+				const uint32 lastWriter = ul.Writers.back();
+
+				for (uint32 r : ul.Readers)
+				{
+					// "pure reader" only (exclude RW passes that are in writer list)
+					if (std::binary_search(ul.Writers.begin(), ul.Writers.end(), r))
+					{
+						continue;
+					}
+
+					pushEdge(lastWriter, r);
+				}
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Finalize adjacency: sort+unique each list, then compute indegree
+		// ------------------------------------------------------------
+		std::vector<uint32> indeg;
+		indeg.resize(n, 0);
+
+		for (uint32 u = 0; u < n; ++u)
+		{
+			auto& list = adj[u];
+			if (list.empty())
+			{
+				continue;
+			}
+
+			std::sort(list.begin(), list.end());
+			list.erase(std::unique(list.begin(), list.end()), list.end());
+
+			for (uint32 v : list)
+			{
+				ASSERT(v < n, "Adjacency index out of bounds.");
+				indeg[v] += 1;
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Kahn topo sort (deterministic):
+		// - Use min-heap so the next selected node is always the smallest index.
+		// ------------------------------------------------------------
+		std::priority_queue<uint32, std::vector<uint32>, std::greater<uint32>> ready;
+
+		for (uint32 i = 0; i < n; ++i)
+		{
+			if (indeg[i] == 0)
+			{
+				ready.push(i);
+			}
+		}
+
+		std::vector<uint32> order;
+		order.reserve(n);
+
+		while (!ready.empty())
+		{
+			const uint32 u = ready.top();
+			ready.pop();
+
+			order.push_back(u);
+
+			for (uint32 v : adj[u])
+			{
+				ASSERT(indeg[v] > 0, "Invalid indegree.");
+				indeg[v] -= 1;
+
+				if (indeg[v] == 0)
+				{
+					ready.push(v);
+				}
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Cycle fallback
+		// ------------------------------------------------------------
+		ASSERT(order.size() == n, "Compile failed.");
+
+		for (uint32 idx : order)
+		{
+			ASSERT(idx < n, "Topo order index out of bounds.");
+			m_CompiledPassOrder.push_back(passes[idx]);
+		}
+	}
+
+
+
+	void Renderer::buildTransitionsForPass(RenderPassBase* pass, std::vector<StateTransitionDesc>& outBarriers)
+	{
+		ASSERT(pass, "Pass is null.");
+		outBarriers.clear();
+
+		const auto accesses = pass->GetDeclaredResourceAccesses();
+
+		// 같은 resource를 같은 pass에서 여러 번 선언했을 수 있으니 dedup
+		// (가장 보수적으로: WRITE가 있으면 WRITE 우선)
+		struct Agg final
+		{
+			RenderPassResourceAccess A;
+			bool bHas = false;
+		};
+
+		std::unordered_map<uint64, Agg> agg;
+		agg.reserve(accesses.size());
+
+		auto isWrite = [](const RenderPassResourceAccess& a)
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
+
+		for (const auto& a : accesses)
+		{
+			auto& slot = agg[a.ResourceId];
+			if (!slot.bHas)
+			{
+				slot.A = a;
+				slot.bHas = true;
+			}
+			else
+			{
+				// write가 더 강함
+				if (isWrite(a) && !isWrite(slot.A))
+				{
+					slot.A = a;
+				}
+			}
+		}
+
+		for (auto& kv : agg)
+		{
+			const RenderPassResourceAccess& a = kv.second.A;
+
+			IDeviceObject* pObj = resolveDeviceObject(a);
+			ASSERT(pObj, "Resolve device object failed for ResourceId=%llu", (unsigned long long)a.ResourceId);
+
+			const RESOURCE_STATE desired = mapUsageToState(a);
+
+			RESOURCE_STATE prev = RESOURCE_STATE_UNKNOWN;
+
+			// -----------------------------------------------------------------
+			// IMPORTANT:
+			// - External(특히 SwapChain backbuffer)은 ResourceId로 상태 추적하면 안 됨.
+			// - 실제 pObj(=현재 backbuffer texture) 기준으로 추적해야 함.
+			// -----------------------------------------------------------------
+			if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL)
+			{
+				auto it = m_ExternalStates.find(pObj);
+				if (it != m_ExternalStates.end())
+				{
+					prev = it->second;
+				}
+
+				if (prev != desired)
+				{
+					StateTransitionDesc b = {};
+					b.pResource = pObj;
+					b.OldState = prev;
+					b.NewState = desired;
+					b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+					outBarriers.push_back(b);
+
+					m_ExternalStates[pObj] = desired;
+				}
+			}
+			else
+			{
+				auto it = m_ResourceStates.find(a.ResourceId);
+				if (it != m_ResourceStates.end())
+				{
+					prev = it->second;
+				}
+
+				if (prev != desired)
+				{
+					StateTransitionDesc b = {};
+					b.pResource = pObj;
+					b.OldState = prev;
+					b.NewState = desired;
+					b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+					outBarriers.push_back(b);
+
+					m_ResourceStates[a.ResourceId] = desired;
+				}
+			}
+		}
+	}
+
 } // namespace shz
 
 

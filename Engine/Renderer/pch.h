@@ -8,5 +8,7 @@
 #define PCH_H
 
 #include <unordered_set>
+#include <map>
+#include <queue>
 
 #endif //PCH_H

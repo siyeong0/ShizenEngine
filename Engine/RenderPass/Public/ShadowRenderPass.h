@@ -1,6 +1,4 @@
 #pragma once
-#include <string>
-
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/ITexture.h"

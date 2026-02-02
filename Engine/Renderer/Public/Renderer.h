@@ -100,6 +100,18 @@ namespace shz
 		uint64 AddUniformBuffer(const std::string& name, uint64 sizeBytes);
 		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
 
+		template<typename T>
+		void UpdateBuffer(uint64 id, const T& data)
+		{
+			ASSERT(m_pRegistry->HasBuffer(id), "Buffer not found.");
+			ASSERT(m_pRegistry->GetBuffer(id)->GetDesc().Size >= sizeof(T), "Data size mistmatch.");
+			BufferUpdateDesc bud = {};
+			bud.ResourceId = id;
+			bud.Data.resize(sizeof(T));
+			std::memcpy(bud.Data.data(), &data, sizeof(T));
+			m_PendingBufferUpdates.emplace_back(bud);
+		}
+
 		// RenderData 
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
@@ -117,24 +129,15 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> createBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
 
-		// Resource update wrappers
-		void updateBuffer(
-			IDeviceContext* pCtx,
-			IBuffer* pBuffer,
-			uint32 offsetBytes,
-			uint32 sizeBytes,
-			const void* pData,
-			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
-
-		void updateTexture2D(
-			IDeviceContext* pCtx,
-			ITexture* pTexture,
-			uint32 arraySlice,
-			const Texture& sourceImage,
-			RESOURCE_STATE_TRANSITION_MODE transitionMode = RESOURCE_STATE_TRANSITION_MODE_TRANSITION) const;
+		void updateTexture2D(IDeviceContext* pCtx, ITexture* pTexture, uint32 arraySlice, const Texture& sourceImage, RESOURCE_STATE_TRANSITION_MODE transitionMode) const;
 
 		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
 		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
+
+		void compileRenderGraphOrder();
+		void buildTransitionsForPass(RenderPassBase* pass, std::vector<StateTransitionDesc>& outBarriers);
+		RESOURCE_STATE mapUsageToState(const RenderPassResourceAccess& a) const;
+		IDeviceObject* resolveDeviceObject(const RenderPassResourceAccess& a) const;
 
 	private:
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
@@ -155,7 +158,7 @@ namespace shz
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
-		
+
 		struct PipelineBinding
 		{
 			RefCntAutoPtr<IPipelineState> pPSO;
@@ -166,11 +169,22 @@ namespace shz
 		std::unordered_set<RefCntAutoPtr<IBuffer>> m_NewBuffersThisFrame;
 		std::unordered_set<RefCntAutoPtr<ITexture>> m_NewTexturesThisFrame;
 
+		struct BufferUpdateDesc
+		{
+			uint64 ResourceId;
+			std::vector<uint8> Data;
+		};
+		std::vector<BufferUpdateDesc> m_PendingBufferUpdates;
+
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
 		std::unordered_map<uint64, IRenderPass*> m_RHIRenderPasses;
-		std::vector<std::string> m_PassOrder;
+
+		bool m_bRenderGraphDirty = true;
+		std::vector<RenderPassBase*> m_CompiledPassOrder = {};
+		std::unordered_map<uint64, RESOURCE_STATE> m_ResourceStates = {};
+		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
 	};
 } // namespace shz

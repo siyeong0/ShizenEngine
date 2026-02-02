@@ -29,6 +29,19 @@ namespace shz
 		ASSERT(ctx.pImmediateContext, "Context is null.");
 		ASSERT(ctx.pSwapChain, "SwapChain is null.");
 		ASSERT(ctx.pShaderSourceFactory, "ShaderSourceFactory is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
+		ASSERT(ctx.pPipelineStateManager, "PipelineStateManager is null.");
+
+		// ------------------------------------------------------------
+		// RenderGraph declarations (Renderer auto-orders + auto-transitions)
+		// ------------------------------------------------------------
+		{
+			// Read final lighting result
+			DeclareTextureSRVRead(STRING_HASH("Lighting"));
+
+			// Write to swapchain backbuffer RTV (special-cased by Renderer)
+			DeclareSwapChainRTVWrite();
+		}
 
 		// Create render pass
 		{
@@ -161,6 +174,7 @@ namespace shz
 		ASSERT(m_pFramebufferCurrentBB, "Post Framebuffer(CurrentBB) is null.");
 		ASSERT(m_pPSO, "Post PSO is null.");
 		ASSERT(m_pSRB, "Post SRB is null.");
+		ASSERT(ctx.pRegistry, "Registry is null.");
 
 		IDeviceContext* devCtx = ctx.pImmediateContext;
 		ISwapChain* sc = ctx.pSwapChain;
@@ -179,27 +193,12 @@ namespace shz
 			devCtx->SetViewports(1, &bbVp, 0, 0);
 		}
 
-		// Bind SRV
-		ASSERT(m_pSRB, "Post SRB is null.");
-
-		if (auto* v = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
+		// Bind SRV (Lighting -> PostCopy)
 		{
-			v->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("Lighting")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-		}
-
-		// Transition backbuffer texture to RT
-		{
-			ITextureView* bbRtv = sc->GetCurrentBackBufferRTV();
-			ASSERT(bbRtv, "Backbuffer RTV is null.");
-
-			StateTransitionDesc tr =
+			if (auto* v = m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
 			{
-				bbRtv->GetTexture(),
-				RESOURCE_STATE_UNKNOWN,
-				RESOURCE_STATE_RENDER_TARGET,
-				STATE_TRANSITION_FLAG_UPDATE_STATE
-			};
-			devCtx->TransitionResourceStates(1, &tr);
+				v->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("Lighting")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+			}
 		}
 
 		OptimizedClearValue cv[1] = {};

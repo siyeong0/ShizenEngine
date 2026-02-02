@@ -42,6 +42,7 @@ namespace shz
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------
 		std::vector<DrawPacket> MainDrawPackets = {};
+		std::vector<DrawPacket> ForwardDrawPackets = {};
 		std::vector<DrawPacket> ShadowDrawPackets = {};
 
 		void ResetFrame()

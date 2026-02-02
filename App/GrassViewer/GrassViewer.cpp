@@ -21,6 +21,8 @@
 #include "Engine/RenderPass/Public/LightingRenderPass.h"
 #include "Engine/RenderPass/Public/PostRenderPass.h"
 #include "Engine/RenderPass/Public/GrassRenderPass.h"
+#include "Engine/RenderPass/Public/GrassInteractionPass.h"
+#include "Engine/RenderPass/Public/GrassBuildInstancesPass.h"
 
 namespace shz
 {
@@ -352,9 +354,12 @@ namespace shz
 			m_pRenderer->AddPass(std::make_unique<ShadowRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<GBufferRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<LightingRenderPass>());
+			m_pRenderer->AddPass(std::make_unique<GrassInteractionPass>());
+			m_pRenderer->AddPass(std::make_unique<GrassBuildInstancesPass>());
 			m_pRenderer->AddPass(std::make_unique<GrassRenderPass>());
 			m_pRenderer->AddPass(std::make_unique<PostRenderPass>());
 		}
+
 
 		// Render Scene
 		{
@@ -545,6 +550,81 @@ namespace shz
 		if (m_pEcs->IsValid())
 		{
 			m_pEcs->Tick(dt);
+		}
+
+
+		{
+			hlsl::GrassGenConstants gen = {};
+			gen.HeightScale = 100.0f;
+			gen.HeightOffset = 0.0f;
+			gen.YOffset = 0.0f;
+			gen._padT0 = 0.0f;
+
+			gen.HFWidth = 1025;
+			gen.HFHeight = 1025;
+			gen.CenterXZ = 1;
+			gen._padT1 = 0;
+
+			gen.SpacingX = 1.0f;
+			gen.SpacingZ = 1.0f;
+			gen._padT2 = 0.0f;
+			gen._padT3 = 0.0f;
+
+			// --- Chunk placement ---
+			gen.ChunkSize = 4.0f;
+			gen.ChunkHalfExtent = 32;
+			gen.SamplesPerChunk = 2048;
+			gen.Jitter = 0.95f;
+
+			gen.MinScale = 5.7f;
+			gen.MaxScale = 11.1f;
+			gen.SpawnProb = 0.75f;
+			gen.SpawnRadius = 1000.0f;
+
+			gen.BendStrengthMin = 0.95f;
+			gen.BendStrengthMax = 1.55f;
+			gen.SeedSalt = 0xA53A9E37u;
+			gen._padT4 = 0;
+
+			gen.DensityTiling = 0.02f;
+			gen.DensityContrast = 0.28f;
+			gen.DensityPow = 0.70f;
+			gen._padD0 = 0.0f;
+
+			gen.SlopeToDensity = 0.15f;
+
+			gen.HeightMinN = 0.00f;
+			gen.HeightMaxN = 1.00f;
+			gen.HeightFadeN = 0.03f;
+
+			m_pRenderer->UpdateBuffer<hlsl::GrassGenConstants>(STRING_HASH("GrassGenConstantsCB"), gen);
+		}
+
+		{
+			hlsl::GrassRenderConstants ren = {};
+			ren.BaseColorFactor = float4(150.f, 200.f, 100.f, 255.f) / 255.f;
+			ren.Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
+
+			ren.AlphaCut = 0.5f;
+
+			ren.Ambient = 0.30f;
+			ren.ShadowStregth = 0.18f;
+			ren.DirectLightStrength = 0.22f;
+
+			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
+			ren.WindStrength = 1.15f;
+			ren.WindSpeed = 1.75f;
+
+			ren.WindFreq = 0.155f;
+			ren.WindGust = 0.42f;
+			ren.MaxBendAngle = 1.50f;
+			ren._pad1 = 0.0f;
+
+			ren.InteractionBendAngle = 1.0f;
+			ren.InteractionSink = 0.05f;
+			ren.InteractionWindFade = 0.95f;
+
+			m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), ren);
 		}
 	}
 
