@@ -591,6 +591,7 @@ namespace shz
 			const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
+			ASSERT(obj.pMesh->VertexBuffer&& obj.pMesh->IndexBuffer, "Buffer is null.");
 			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
@@ -601,7 +602,7 @@ namespace shz
 				if (it == m_PipelineBindingCache.end())
 				{
 					PipelineBinding pb;
-					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, m_RHIRenderPasses["GBuffer"]);
+					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, STRING_HASH("GBuffer"));
 					pb.pSRB = acquireShaderResourceBindingFromMaterial(section.MaterialId, pb.pPSO);
 					m_PipelineBindingCache[hash] = pb;
 				}
@@ -618,6 +619,7 @@ namespace shz
 				continue;
 			}
 
+			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
 			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
@@ -628,7 +630,7 @@ namespace shz
 				if (it == m_PipelineBindingCache.end())
 				{
 					PipelineBinding pb;
-					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, m_RHIRenderPasses["Shadow"]);
+					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, STRING_HASH("Shadow"));
 					pb.pSRB = acquireShaderResourceBindingFromMaterial(section.MaterialId, pb.pPSO);
 					m_PipelineBindingCache[hash] = pb;
 				}
@@ -637,20 +639,23 @@ namespace shz
 
 		for (RefCntAutoPtr<IBuffer> newBuffer : m_NewBuffersThisFrame)
 		{
+			ASSERT(newBuffer, "Buffer is null.");
 			pushBarrier(newBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		}
-		m_NewBuffersThisFrame.clear();
 		for (RefCntAutoPtr<ITexture> newTexure : m_NewTexturesThisFrame)
 		{
+			ASSERT(newTexure, "Texture is null.");
 			pushBarrier(newTexure, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		}
-		m_NewTexturesThisFrame.clear();
 
 
 		if (!preBarriers.empty())
 		{
 			ctx->TransitionResourceStates(static_cast<uint32>(preBarriers.size()), preBarriers.data());
 		}
+
+		m_NewBuffersThisFrame.clear();
+		m_NewTexturesThisFrame.clear();
 
 		// ------------------------------------------------------------
 		// Helper: pack object table using instanceRemap
@@ -894,7 +899,7 @@ namespace shz
 
 		m_PassOrder.push_back(name);
 		m_Passes.emplace(name, std::move(pass));
-		m_RHIRenderPasses.emplace(name, m_Passes[name]->GetRHIRenderPass());
+		m_RHIRenderPasses.emplace(STRING_HASH(name), m_Passes[name]->GetRHIRenderPass());
 	}
 
 	// ---------------------------------------------------------------------
@@ -1207,26 +1212,43 @@ namespace shz
 		return names;
 	}
 
-	RefCntAutoPtr<IPipelineState> Renderer::acquirePipelineStateFromMaterial(MaterialId id, IRenderPass* pRenderPass) const
+	RefCntAutoPtr<IPipelineState> Renderer::acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey) const
 	{
 		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
 		ASSERT(pMaterialManager->HasMaterial(id), "Material is not found.");
 
 		const Material& material = pMaterialManager->GetMaterial(id);
 
+		// TODO: Replace
+		if (renderPassKey == STRING_HASH("Shadow"))
+		{
+			if (material.GetBlendMode() == MATERIAL_BLEND_MODE_OPAQUE)
+			{
+				return static_cast<ShadowRenderPass*>(m_Passes.at("Shadow").get())->m_pShadowPSO;
+			}
+			else if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
+			{
+				return static_cast<ShadowRenderPass*>(m_Passes.at("Shadow").get())->m_pShadowMaskedPSO;
+			}
+			else
+			{
+				ASSERT(false, "Not supported");
+			}
+		}
+
 		RefCntAutoPtr<IPipelineState> pOutPipelineState;
 
 		const MATERIAL_PIPELINE_TYPE pipelineType = material.GetPipelineType();
 		if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
-			ASSERT(pRenderPass != nullptr, "Render pass must be set in graphics pipeline.");
-
-			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(pRenderPass);
+			ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
+			ASSERT(m_RHIRenderPasses.contains(renderPassKey), "Render pass not found.");
+			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_RHIRenderPasses.at(renderPassKey));
 			pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
 		}
 		else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
 		{
-			ASSERT(pRenderPass == nullptr, "Render pass must be null in compute pipeline.");
+			ASSERT(renderPassKey == 0, "Render pass must be null in compute pipeline.");
 			ComputePipelineStateCreateInfo psoCI = material.BuildComputePipelineStateCreateInfo();
 			pOutPipelineState = m_pPipelineStateManager->AcquireCompute(psoCI);
 		}
@@ -1319,7 +1341,7 @@ namespace shz
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION
 			);
 
-			m_NewBuffersThisFrame.push_back(pConstantBuffer);
+			m_NewBuffersThisFrame.emplace(pConstantBuffer);
 		}
 
 		// Textures
@@ -1351,18 +1373,22 @@ namespace shz
 				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 			}
 
+			bool bSet = false;
 			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
 			{
 				var->Set(pView);
+				bSet = true;
 			}
 			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_PIXEL, resDesc.Name.c_str()))
 			{
 				var->Set(pView);
+				bSet = true;
 			}
 
-			if (pTexture)
+			if (bSet)
 			{
-				m_NewTexturesThisFrame.push_back(pTexture);
+				ASSERT(pTexture, "");
+				m_NewTexturesThisFrame.emplace(pTexture);
 			}
 		}
 

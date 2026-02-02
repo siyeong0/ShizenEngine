@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <unordered_set>
 #include <unordered_map>
 #include <string>
 
@@ -141,7 +142,7 @@ namespace shz
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
 	private:
-		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, IRenderPass* pRenderPass = nullptr) const;
+		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
 		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 	private:
@@ -171,14 +172,14 @@ namespace shz
 		};
 		std::unordered_map<uint64, PipelineBinding> m_PipelineBindingCache;
 
-		std::vector<RefCntAutoPtr<IBuffer>> m_NewBuffersThisFrame;
-		std::vector<RefCntAutoPtr<ITexture>> m_NewTexturesThisFrame;
+		std::unordered_set<RefCntAutoPtr<IBuffer>> m_NewBuffersThisFrame;
+		std::unordered_set<RefCntAutoPtr<ITexture>> m_NewTexturesThisFrame;
 
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
 		RenderPassContext m_PassCtx = {};
 		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
-		std::unordered_map<std::string, IRenderPass*> m_RHIRenderPasses;
+		std::unordered_map<uint64, IRenderPass*> m_RHIRenderPasses;
 		std::vector<std::string> m_PassOrder;
 	};
 } // namespace shz
