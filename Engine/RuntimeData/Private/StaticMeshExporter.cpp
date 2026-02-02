@@ -10,6 +10,7 @@
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/AssetManager/Public/AssetTypeTraits.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {
@@ -134,12 +135,13 @@ namespace shz
 
 		// Material slots (inline: 현재 포맷 유지)
 		j["MaterialSlots"] = json::array();
-		for (const Material& m : mesh->GetMaterialSlots())
+		for (const MaterialId& id : mesh->GetMaterialSlots())
 		{
+			const Material& m = MaterialManager::GetInstance()->GetMaterial(id);
+
 			json mj;
 			mj["Name"] = m.GetName();
 			mj["TemplateName"] = m.GetTemplateName();
-			mj["RenderPassName"] = m.GetRenderPassName();
 
 			// Options (MaterialCommonOptions + extra)
 			mj["Options"] = json{

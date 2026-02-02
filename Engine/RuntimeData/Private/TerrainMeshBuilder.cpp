@@ -56,7 +56,7 @@ namespace shz
 	bool TerrainMeshBuilder::BuildStaticMesh(
 		StaticMesh* pOutMesh,
 		const TerrainHeightField& hf,
-		Material&& terrainMaterial,
+		MaterialId terrainMaterial,
 		const TerrainMeshBuildSettings& settings)
 	{
 		ASSERT(pOutMesh != nullptr, "pOutMesh is null.");
@@ -263,8 +263,8 @@ namespace shz
 		sections.emplace_back(static_cast<StaticMesh::Section&&>(section));
 		pOutMesh->SetSections(std::move(sections));
 
-		std::vector<Material> materials;
-		materials.emplace_back(std::move(terrainMaterial));
+		std::vector<MaterialId> materials;
+		materials.emplace_back(terrainMaterial);
 		pOutMesh->SetMaterialSlots(std::move(materials));
 
 		// ------------------------------------------------------------

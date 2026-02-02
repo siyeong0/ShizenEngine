@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "RenderScene.h"
 
+#include "Engine/RuntimeData/Public/Material.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
+
 namespace shz
 {
 	// ------------------------------------------------------------
@@ -40,6 +43,8 @@ namespace shz
 
 		m_pTerrainHeightMap = {};
 		m_TerrainMesh = {};
+
+		m_InteractionStamps.clear();
 	}
 
 	void RenderScene::ClearDirtyOcIndices()
@@ -50,6 +55,39 @@ namespace shz
 			m_OcDirty[oc] = 0;
 		}
 		m_DirtyOcIndices.clear();
+	}
+
+	// ------------------------------------------------------------
+	// Material -> Pass classification
+	// ------------------------------------------------------------
+	uint64 RenderScene::classifyMainPassKey(MaterialId matId) const noexcept
+	{
+		const Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+
+		// Simple policy:
+		// - Opaque/Masked => GBuffer
+		// - Transparent  => Forward
+		switch (mat.GetBlendMode())
+		{
+		case MATERIAL_BLEND_MODE_OPAQUE:
+		case MATERIAL_BLEND_MODE_MASKED:
+			return STRING_HASH("GBuffer");
+		case MATERIAL_BLEND_MODE_TRANSPARENT:
+			return STRING_HASH("Forward");
+		default:
+			ASSERT(false, "Invalid blend mode.");
+		}
+		ASSERT(false, "Failed to classify pass key.");
+		return 0;
+	}
+
+	bool RenderScene::shouldRenderInShadow(MaterialId matId) const noexcept
+	{
+		const Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+
+		// Common policy: transparent materials typically do not cast shadow.
+		// Masked can cast shadow.
+		return (mat.GetBlendMode() != MATERIAL_BLEND_MODE_TRANSPARENT);
 	}
 
 	// ------------------------------------------------------------
@@ -115,13 +153,11 @@ namespace shz
 		const uint32 lastIndex = static_cast<uint32>(m_ObjectDense.size() - 1);
 		if (denseIndex != lastIndex)
 		{
-			// move last -> removed spot
 			m_ObjectDense[denseIndex] = std::move(m_ObjectDense[lastIndex]);
 
 			const Handle<SceneObject> movedHandle = m_ObjectHandles[lastIndex];
 			m_ObjectHandles[denseIndex] = movedHandle;
 
-			// fix moved handle slot + sparse
 			const uint32 movedHandleIndex = movedHandle.GetIndex();
 			ASSERT(movedHandleIndex < static_cast<uint32>(m_ObjectSlots.size()), "Moved handle slot missing.");
 			Slot<SceneObject>& movedSlot = m_ObjectSlots[movedHandleIndex];
@@ -131,43 +167,28 @@ namespace shz
 			ASSERT(movedHandleIndex < static_cast<uint32>(m_ObjectSparse.size()), "Moved sparse missing.");
 			m_ObjectSparse[movedHandleIndex] = denseIndex;
 
-			// IMPORTANT:
-			// moved object가 이미 batches에 들어있던 인스턴스들은 OwnerObjectDenseIndex가 "lastIndex"로 되어있음.
-			// denseIndex로 바뀌었으니 그 역참조를 모두 갱신해야 한다.
-			// (remove가 자주 일어나지 않는다는 전제에서, 각 섹션 핸들로 O(sections) 갱신)
+			// Fix reverse references for moved object's instances (main + shadow handles)
 			ObjectRecord& movedRec = m_ObjectDense[denseIndex];
 			for (uint32 si = 0; si < static_cast<uint32>(movedRec.Sections.size()); ++si)
 			{
-				const SectionHandle& sh = movedRec.Sections[si];
-				if (sh.BatchId == INVALID_INDEX || sh.InstanceIndex == INVALID_INDEX)
+				const SectionHandles& shs = movedRec.Sections[si];
+
+				// Main
+				if (shs.Main.BatchId != INVALID_INDEX && shs.Main.InstanceIndex != INVALID_INDEX)
 				{
-					continue;
+					ASSERT(shs.Main.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: main batchId OOB.");
+					Batch& b = m_Batches[shs.Main.BatchId];
+					ASSERT(shs.Main.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: main instanceIndex OOB.");
+					b.Instances[shs.Main.InstanceIndex].OwnerObjectDenseIndex = denseIndex;
 				}
 
-				ASSERT(sh.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: batchId OOB.");
-				Batch& b = m_Batches[sh.BatchId];
-				ASSERT(sh.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: instanceIndex OOB.");
-
-				BatchInstance& inst = b.Instances[sh.InstanceIndex];
-				inst.OwnerObjectDenseIndex = denseIndex;
-			}
-
-			// Shadow pass 인스턴스도 OwnerObjectDenseIndex를 갱신해야 하는데,
-			// 여기서는 remove가 드물다는 가정으로 "shadow 배치 전체를 선형 스캔"해서 갱신한다.
-			// (최적화: shadow도 pass별 SectionHandle로 저장해 O(sections) 갱신)
-			for (Batch& b : m_Batches)
-			{
-				if (b.Key.PassKey != STRING_HASH("Shadow"))
+				// Shadow
+				if (shs.Shadow.BatchId != INVALID_INDEX && shs.Shadow.InstanceIndex != INVALID_INDEX)
 				{
-					continue;
-				}
-
-				for (BatchInstance& inst : b.Instances)
-				{
-					if (inst.OwnerObjectDenseIndex == lastIndex)
-					{
-						inst.OwnerObjectDenseIndex = denseIndex;
-					}
+					ASSERT(shs.Shadow.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: shadow batchId OOB.");
+					Batch& b = m_Batches[shs.Shadow.BatchId];
+					ASSERT(shs.Shadow.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: shadow instanceIndex OOB.");
+					b.Instances[shs.Shadow.InstanceIndex].OwnerObjectDenseIndex = denseIndex;
 				}
 			}
 		}
@@ -196,7 +217,7 @@ namespace shz
 
 		ObjectRecord& rec = m_ObjectDense[denseIndex];
 
-		// Safest approach: remove from the existing batch -> replace the mesh -> reinsert into the batch
+		// Safest: remove -> replace mesh -> reinsert
 		removeObjectFromBatches(denseIndex);
 		rec.Obj.pMesh = &mesh;
 		addObjectToBatches(denseIndex);
@@ -220,25 +241,19 @@ namespace shz
 	RenderScene::SceneObject* RenderScene::GetObjectOrNull(Handle<SceneObject> h) noexcept
 	{
 		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
-		if (dense == INVALID_INDEX)
-		{
-			return nullptr;
-		}
+		if (dense == INVALID_INDEX) return nullptr;
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
 	const RenderScene::SceneObject* RenderScene::GetObjectOrNull(Handle<SceneObject> h) const noexcept
 	{
 		const uint32 dense = findDenseIndex(h, m_ObjectSlots);
-		if (dense == INVALID_INDEX)
-		{
-			return nullptr;
-		}
+		if (dense == INVALID_INDEX) return nullptr;
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
 	// ------------------------------------------------------------
-	// Lights 
+	// Lights
 	// ------------------------------------------------------------
 	Handle<RenderScene::LightObject> RenderScene::AddLight(const LightObject& light)
 	{
@@ -370,15 +385,10 @@ namespace shz
 				continue;
 			}
 
-			if (b.Key.PassKey != passKey)
+			if (b.PassKey != passKey)
 			{
 				continue;
 			}
-
-			// Shadow pass: skip objects that do not cast shadows
-			// (Note: if batches are already partitioned by bCastShadow,
-			//  this check remains valid.)
-			// if (passKey == kPassShadow && !b.bCastShadow) continue;
 
 			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
 			uint32 count = 0;
@@ -407,7 +417,6 @@ namespace shz
 		}
 	}
 
-
 	bool RenderScene::TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept
 	{
 		ASSERT(batchId < static_cast<uint32>(m_Batches.size()), "Batch ID out of bounds.");
@@ -415,13 +424,17 @@ namespace shz
 		const Batch& b = m_Batches[batchId];
 		outView.pMesh = b.pMesh;
 		outView.SectionIndex = b.SectionIndex;
+		outView.MaterialId = b.MaterialId;
 		outView.bCastShadow = b.bCastShadow;
+		outView.PassKey = b.PassKey;
 		return true;
 	}
 
+	// ------------------------------------------------------------
+	// Terrain
+	// ------------------------------------------------------------
 	void RenderScene::SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world)
 	{
-		// Remove the existing terrain if present
 		ClearTerrain();
 
 		m_pTerrainHeightMap = heightMap;
@@ -472,7 +485,6 @@ namespace shz
 		ASSERT(ocIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "freeOcIndex out of range.");
 		m_FreeOcIndices.push_back(ocIndex);
 
-		// dirty flag는 남겨도 되지만, 안전을 위해 0으로.
 		if (ocIndex < static_cast<uint32>(m_OcDirty.size()))
 		{
 			m_OcDirty[ocIndex] = 0;
@@ -494,18 +506,18 @@ namespace shz
 	// ------------------------------------------------------------
 	// Batch key
 	// ------------------------------------------------------------
-	RenderScene::DrawBatchKey RenderScene::makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
+	RenderScene::DrawBatchKey RenderScene::makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, bool bCastShadow)
 	{
 		DrawBatchKey k = {};
 		k.MeshPtr = &mesh;
 		k.SectionIndex = sectionIndex;
 		k.PassKey = passKey;
-
+		k.MatId = matId;
 		k.bCastShadow = bCastShadow;
 		return k;
 	}
 
-	uint32 RenderScene::getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow)
+	uint32 RenderScene::getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, uint64 passKey, bool bCastShadow)
 	{
 		auto it = m_BatchLookup.find(key);
 		if (it != m_BatchLookup.end())
@@ -519,6 +531,8 @@ namespace shz
 		b.Key = key;
 		b.pMesh = &mesh;
 		b.SectionIndex = sectionIndex;
+		b.MaterialId = matId;
+		b.PassKey = passKey;
 		b.bCastShadow = bCastShadow;
 
 		m_Batches.emplace_back(std::move(b));
@@ -535,19 +549,19 @@ namespace shz
 		const uint32 lastIndex = static_cast<uint32>(batch.Instances.size() - 1);
 		if (instanceIndex != lastIndex)
 		{
-			// swap-remove
 			BatchInstance moved = batch.Instances[lastIndex];
 			batch.Instances[instanceIndex] = moved;
 
-			// moved instance의 owner section handle 갱신
 			ASSERT(moved.OwnerObjectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "batchRemoveInstance: moved owner out of range.");
 			ObjectRecord& movedOwner = m_ObjectDense[moved.OwnerObjectDenseIndex];
 			ASSERT(moved.OwnerSectionSlot < movedOwner.Sections.size(), "batchRemoveInstance: moved owner section slot out of range.");
 
-			SectionHandle& movedHandle = movedOwner.Sections[moved.OwnerSectionSlot];
-			ASSERT(movedHandle.BatchId == batchId, "batchRemoveInstance: moved handle batch mismatch.");
-			ASSERT(movedHandle.InstanceIndex == lastIndex, "batchRemoveInstance: moved handle instance mismatch.");
-			movedHandle.InstanceIndex = instanceIndex;
+			SectionHandles& shs = movedOwner.Sections[moved.OwnerSectionSlot];
+			SectionHandle* pHandle = (moved.OwnerPassSlot == 0) ? &shs.Main : &shs.Shadow;
+
+			ASSERT(pHandle->BatchId == batchId, "batchRemoveInstance: moved handle batch mismatch.");
+			ASSERT(pHandle->InstanceIndex == lastIndex, "batchRemoveInstance: moved handle instance mismatch.");
+			pHandle->InstanceIndex = instanceIndex;
 		}
 
 		batch.Instances.pop_back();
@@ -563,10 +577,11 @@ namespace shz
 		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
 		SceneObject& obj = rec.Obj;
 
-		// ObjectConstants CPU mirror update (최초 1회)
+		ASSERT(obj.pMesh, "addObjectToBatches: mesh is null.");
 		ASSERT(rec.OcIndex != INVALID_INDEX, "Object has no OcIndex.");
 		ASSERT(rec.OcIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
 
+		// ObjectConstants CPU mirror update (최초 1회)
 		m_ObjectTableCPU[rec.OcIndex].World = obj.World;
 		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = obj.WorldInvTranspose;
 		markOcDirty(rec.OcIndex);
@@ -578,48 +593,56 @@ namespace shz
 
 		for (uint32 si = 0; si < sectionCount; ++si)
 		{
-			// Pass별로 배치가 분리될 수 있다.
-			// 여기서는 Main/Shadow 둘 다 만든다. (Shadow는 bCastShadow가 false면 건너뜀)
+			const auto& sec = obj.pMesh->Sections[si];
+
+			// NOTE:
+			// StaticMeshRenderData::Section은 MaterialId를 가진다고 가정한다.
+			// (이 필드명은 네 실제 구조에 맞게 바꿔 끼워라.)
+			const MaterialId matId = sec.MaterialId;
+
+			// -----------------------------
+			// Main pass batch
+			// -----------------------------
 			{
+				const uint64 mainPassKey = classifyMainPassKey(matId);
 
 				BatchInstance inst = {};
 				inst.OcIndex = rec.OcIndex;
 				inst.OwnerObjectDenseIndex = objectDenseIndex;
 				inst.OwnerSectionSlot = static_cast<uint16>(si);
+				inst.OwnerPassSlot = 0;
 
-				const DrawBatchKey key = makeBatchKey(obj.pMesh->Sections[si].pMaterial->RenderPassId, *obj.pMesh, si, obj.bCastShadow);
-				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
+				const DrawBatchKey key = makeBatchKey(mainPassKey, *obj.pMesh, si, matId, obj.bCastShadow);
+				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, mainPassKey, obj.bCastShadow);
 
 				Batch& batch = m_Batches[batchId];
 				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
-
 				batch.Instances.emplace_back(inst);
 
-				// 이 섹션 슬롯은 "Main pass 배치"를 기본으로 기록한다.
-				// Shadow pass까지 별도 핸들이 필요하면 SectionHandle을 pass별로 나누는 구조로 확장하면 된다.
-				rec.Sections[si].BatchId = batchId;
-				rec.Sections[si].InstanceIndex = instIndex;
+				rec.Sections[si].Main.BatchId = batchId;
+				rec.Sections[si].Main.InstanceIndex = instIndex;
 			}
 
-			if (obj.bCastShadow)
+			// -----------------------------
+			// Shadow pass batch (optional)
+			// -----------------------------
+			if (obj.bCastShadow && shouldRenderInShadow(matId))
 			{
-				const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), * obj.pMesh, si, obj.bCastShadow);
-				(void)getOrCreateBatch(key, *obj.pMesh, si, obj.bCastShadow);
-
-				// Shadow pass는 DrawList 빌드 시 따로 인스턴스를 순회해도 되고,
-				// 배치를 pass별로 분리해서 여기서도 Instances를 추가해도 된다.
-				//
-				// "완전 단순"을 위해: Shadow 배치에도 동일 인스턴스를 넣는다.
-				const uint32 shadowBatchId = m_BatchLookup[key];
-				Batch& sb = m_Batches[shadowBatchId];
-				const uint32 instIndex = static_cast<uint32>(sb.Instances.size());
-
 				BatchInstance inst = {};
 				inst.OcIndex = rec.OcIndex;
 				inst.OwnerObjectDenseIndex = objectDenseIndex;
 				inst.OwnerSectionSlot = static_cast<uint16>(si);
+				inst.OwnerPassSlot = 1;
 
-				sb.Instances.emplace_back(inst);
+				const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), *obj.pMesh, si, matId, obj.bCastShadow);
+				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, STRING_HASH("Shadow"), obj.bCastShadow);
+
+				Batch& batch = m_Batches[batchId];
+				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+				batch.Instances.emplace_back(inst);
+
+				rec.Sections[si].Shadow.BatchId = batchId;
+				rec.Sections[si].Shadow.InstanceIndex = instIndex;
 			}
 		}
 	}
@@ -630,39 +653,20 @@ namespace shz
 
 		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
 
-		// Main-pass SectionHandle 기반으로 제거 (Shadow 배치는 여기서 직접 탐색/제거)
-		// 더 깔끔하게 하려면 pass별 SectionHandle을 별도로 저장하는 구조로 확장 추천.
 		for (uint32 si = 0; si < static_cast<uint32>(rec.Sections.size()); ++si)
 		{
-			const SectionHandle sh = rec.Sections[si];
-			if (sh.BatchId != INVALID_INDEX && sh.InstanceIndex != INVALID_INDEX)
+			SectionHandles& shs = rec.Sections[si];
+
+			if (shs.Main.BatchId != INVALID_INDEX && shs.Main.InstanceIndex != INVALID_INDEX)
 			{
-				batchRemoveInstance(sh.BatchId, sh.InstanceIndex);
+				batchRemoveInstance(shs.Main.BatchId, shs.Main.InstanceIndex);
+				shs.Main = {};
 			}
 
-			// Shadow 배치 제거: 동일 key로 찾아 제거
-			// (섹션 핸들을 pass별로 저장하면 이 부분이 O(1)로 깔끔해짐)
+			if (shs.Shadow.BatchId != INVALID_INDEX && shs.Shadow.InstanceIndex != INVALID_INDEX)
 			{
-				const DrawBatchKey skey = makeBatchKey(STRING_HASH("Shadow"), * rec.Obj.pMesh, si, rec.Obj.bCastShadow);
-				auto it = m_BatchLookup.find(skey);
-				if (it != m_BatchLookup.end())
-				{
-					const uint32 sbId = it->second;
-					Batch& sb = m_Batches[sbId];
-
-					// sb.Instances에서 (OwnerObjectDenseIndex, OwnerSectionSlot==si) 찾기
-					// NOTE: 이 선형 탐색은 "object remove가 드물다" 전제에서 OK.
-					// 제거가 빈번하면 shadow도 pass별 SectionHandle로 저장해라.
-					for (uint32 ii = 0; ii < static_cast<uint32>(sb.Instances.size()); ++ii)
-					{
-						const BatchInstance& inst = sb.Instances[ii];
-						if (inst.OwnerObjectDenseIndex == objectDenseIndex && inst.OwnerSectionSlot == static_cast<uint16>(si))
-						{
-							batchRemoveInstance(sbId, ii);
-							break;
-						}
-					}
-				}
+				batchRemoveInstance(shs.Shadow.BatchId, shs.Shadow.InstanceIndex);
+				shs.Shadow = {};
 			}
 		}
 
@@ -696,5 +700,4 @@ namespace shz
 
 		return slot.DenseIndex;
 	}
-
 } // namespace shz

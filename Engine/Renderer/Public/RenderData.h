@@ -6,6 +6,8 @@
 #include "Engine/Core/Common/Public/HashUtils.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
+#include "Engine/RuntimeData/Public/Material.h"
+
 #include "Engine/RHI/Interface/ITexture.h"
 #include "Engine/RHI/Interface/ITextureView.h"
 #include "Engine/RHI/Interface/ISampler.h"
@@ -16,27 +18,6 @@
 
 namespace shz
 {
-	struct MaterialRenderData final
-	{
-		RefCntAutoPtr<IPipelineState> PSO = {};
-		RefCntAutoPtr<IShaderResourceBinding>  SRB = {};
-
-		RefCntAutoPtr<IBuffer> ConstantBuffer = {};
-		uint32 CBIndex = 0;
-		std::vector<RefCntAutoPtr<ITexture>> BoundTextures = {};
-
-		RefCntAutoPtr<IPipelineState> ShadowPSO = {};
-		RefCntAutoPtr<IShaderResourceBinding> ShadowSRB = {};
-
-		uint64 RenderPassId;
-
-		MaterialRenderData() = default;
-		MaterialRenderData(const MaterialRenderData&) = delete;
-		MaterialRenderData(MaterialRenderData&&) = default;
-		MaterialRenderData& operator=(const MaterialRenderData&) = delete;
-		MaterialRenderData& operator=(MaterialRenderData&&) = default;
-	};
-
 	struct StaticMeshRenderData final
 	{
 		RefCntAutoPtr<IBuffer> VertexBuffer = {};
@@ -54,7 +35,7 @@ namespace shz
 			uint32 FirstIndex = 0;
 			uint32 IndexCount = 0;
 			uint32 BaseVertex = 0;
-			const MaterialRenderData* pMaterial = {};
+			MaterialId MaterialId;
 
 			Box LocalBounds = {};
 		};
@@ -65,31 +46,6 @@ namespace shz
 		StaticMeshRenderData(StaticMeshRenderData&&) = default;
 		StaticMeshRenderData& operator=(const StaticMeshRenderData&) = delete;
 		StaticMeshRenderData& operator=(StaticMeshRenderData&&) = default;
-	};
-
-	template <typename HasherType>
-	struct HashCombiner<HasherType, MaterialRenderData> : HashCombinerBase<HasherType>
-	{
-		HashCombiner(HasherType& Hasher)
-			: HashCombinerBase<HasherType>{ Hasher }
-		{}
-
-		void operator()(const MaterialRenderData& v) const
-		{
-			this->m_Hasher(
-				v.PSO,
-				v.SRB,
-				v.ConstantBuffer,
-				v.CBIndex,
-				v.ShadowSRB);
-
-			// BoundTextures (order-sensitive)
-			this->m_Hasher(v.BoundTextures.size());
-			for (const auto pTex : v.BoundTextures)
-			{
-				this->m_Hasher(pTex);
-			}
-		}
 	};
 
 	template <typename HasherType>
@@ -105,7 +61,7 @@ namespace shz
 				s.FirstIndex,
 				s.IndexCount,
 				s.BaseVertex,
-				s.pMaterial,
+				s.MaterialId,
 				s.LocalBounds);
 		}
 	};
@@ -153,7 +109,6 @@ namespace std
     }
 
 
-	DEFINE_HASH(shz::MaterialRenderData);
 	DEFINE_HASH(shz::StaticMeshRenderData::Section);
 	DEFINE_HASH(shz::StaticMeshRenderData);
 

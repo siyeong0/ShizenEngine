@@ -74,7 +74,6 @@ namespace shz
 
 		j["Name"] = mat->GetName();
 		j["TemplateName"] = mat->GetTemplateName();
-		j["RenderPassName"] = mat->GetRenderPassName();
 
 		j["Options"] = json{
 			{"BlendMode", (int)mat->GetBlendMode()},

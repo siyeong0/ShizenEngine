@@ -13,6 +13,7 @@
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
 #include "Engine/RuntimeData/Public/TerrainHeightFieldImporter.h"
 #include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
@@ -621,7 +622,8 @@ namespace shz
 		{
 			StaticMesh terrainMesh;
 
-			Material tm("TerrainMaterial", "DefaultLit");
+			MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
+			Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
 			tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
 			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 			tm.SetFloat("g_EmissiveIntensity", 0.0f);
@@ -634,7 +636,7 @@ namespace shz
 
 			TerrainMeshBuilder meshBuilder;
 			TerrainMeshBuildSettings buildSettings = {};
-			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, std::move(tm), buildSettings);
+			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, tmId, buildSettings);
 
 			m_pRenderScene->SetTerrain(
 				m_pRenderer->CreateTextureRenderDataFromHeightField(*terrainPtr),

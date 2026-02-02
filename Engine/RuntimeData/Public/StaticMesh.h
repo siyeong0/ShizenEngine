@@ -57,15 +57,15 @@ namespace shz
 		// Materials (slots)
 		// ------------------------------------------------------------
 		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
-		void SetMaterialSlots(std::vector<Material>&& materials) { m_MaterialSlots = std::move(materials); }
+		void SetMaterialSlots(std::vector<MaterialId>&& materials) { m_MaterialSlots = std::move(materials); }
 
-		std::vector<Material>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
-		const std::vector<Material>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
+		std::vector<MaterialId>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
+		const std::vector<MaterialId>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
 
 		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		Material& GetMaterialSlot(uint32 slot) noexcept;
-		const Material& GetMaterialSlot(uint32 slot) const noexcept;
+		MaterialId& GetMaterialSlot(uint32 slot) noexcept;
+		const MaterialId& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
@@ -118,7 +118,7 @@ namespace shz
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-		std::vector<Material> m_MaterialSlots;
+		std::vector<MaterialId> m_MaterialSlots;
 
 		Box m_Bounds = {};
 	};

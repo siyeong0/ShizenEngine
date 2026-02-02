@@ -380,7 +380,7 @@ namespace shz
 		return !outPath.empty();
 	}
 
-	static Material importOneMaterial(
+	static MaterialId importOneMaterial(
 		const aiScene* scene,
 		const aiMaterial* mat,
 		uint32 materialIndex,
@@ -402,7 +402,10 @@ namespace shz
 		}
 		std::string templateName = "DefaultLit"; // TODO: from settings?
 
-		Material outMat(name, templateName);
+		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
+
+		MaterialId outId = pMaterialManager->CreateMaterial(name, templateName);
+		Material& material = pMaterialManager->GetMaterial(outId);
 
 		// BaseColor
 		float baseColor[4] = { 1, 1, 1, 1 };
@@ -420,7 +423,7 @@ namespace shz
 					baseColor[0] = c.r; baseColor[1] = c.g; baseColor[2] = c.b; baseColor[3] = c.a;
 				}
 		}
-		outMat.SetFloat4("g_BaseColorFactor", baseColor);
+		material.SetFloat4("g_BaseColorFactor", baseColor);
 
 		// Emissive
 		{
@@ -432,8 +435,8 @@ namespace shz
 				emissive[0] = e.r; emissive[1] = e.g; emissive[2] = e.b;
 			}
 
-			outMat.SetFloat3("g_EmissiveFactor", emissive);
-			outMat.SetFloat("g_EmissiveIntensity", 1.0f);
+			material.SetFloat3("g_EmissiveFactor", emissive);
+			material.SetFloat("g_EmissiveIntensity", 1.0f);
 		}
 
 		// Metallic / Roughness
@@ -453,11 +456,11 @@ namespace shz
 				roughness = 1.0f;
 			}
 #endif
-			outMat.SetFloat("g_MetallicFactor", metallic);
-			outMat.SetFloat("g_RoughnessFactor", roughness);
+			material.SetFloat("g_MetallicFactor", metallic);
+			material.SetFloat("g_RoughnessFactor", roughness);
 		}
 
-		outMat.SetFloat("g_OcclusionStrength", 1.0f);
+		material.SetFloat("g_OcclusionStrength", 1.0f);
 
 		// Opacity / cutoff
 		{
@@ -465,7 +468,7 @@ namespace shz
 			if (mat != nullptr && mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
 			{
 				baseColor[3] = opacity;
-				outMat.SetFloat4("g_BaseColorFactor", baseColor);
+				material.SetFloat4("g_BaseColorFactor", baseColor);
 			}
 
 			float alphaCutoff = 0.5f;
@@ -475,10 +478,10 @@ namespace shz
 				alphaCutoff = 0.5f;
 			}
 #endif
-			outMat.SetFloat("g_AlphaCutoff", alphaCutoff);
+			material.SetFloat("g_AlphaCutoff", alphaCutoff);
 		}
 
-		outMat.SetFloat("g_NormalScale", 1.0f);
+		material.SetFloat("g_NormalScale", 1.0f);
 
 		auto bindTexture = [&](const char* shaderVar, const std::string& texPath)
 			{
@@ -491,7 +494,7 @@ namespace shz
 				const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
 				ASSERT(texRef, "RegisterAsset<TextureAsset> returned null AssetRef.");
 
-				outMat.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
+				material.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
 			};
 
 		{
@@ -550,10 +553,10 @@ namespace shz
 				materialFlag |= hlsl::MAT_HAS_HEIGHT;
 			}
 
-			outMat.SetUint("g_MaterialFlags", materialFlag);
+			material.SetUint("g_MaterialFlags", materialFlag);
 		}
 
-		return outMat;
+		return outId;
 	}
 
 	// ------------------------------------------------------------
@@ -638,7 +641,7 @@ namespace shz
 		// ------------------------------------------------------------
 		if (setting.bImportMaterials)
 		{
-			std::vector<Material> materials;
+			std::vector<MaterialId> materials;
 			materials.reserve(scene->mNumMaterials);
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
@@ -647,7 +650,7 @@ namespace shz
 				materials.emplace_back(importOneMaterial(scene, mat, i, filePath, pAssetManager, setting, outError));
 			}
 
-			pOutMesh->SetMaterialSlots(static_cast<std::vector<Material>&&>(materials));
+			pOutMesh->SetMaterialSlots(std::move(materials));
 		}
 
 		// ------------------------------------------------------------

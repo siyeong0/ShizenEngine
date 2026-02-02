@@ -11,6 +11,7 @@
 #include "Engine/RuntimeData/Public/Texture.h"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/RuntimeData/Public/Material.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {
@@ -178,11 +179,11 @@ namespace shz
 		// Material slots (inline)
 		if (j.contains("MaterialSlots"))
 		{
-			std::vector<Material> mats;
+			std::vector<MaterialId> mats;
 			for (const auto& mj : j["MaterialSlots"])
 			{
-				Material m(mj.value("Name", ""), mj.value("TemplateName", ""));
-				m.SetRenderPassName(mj.value("RenderPassName", ""));
+				MaterialId matId = MaterialManager::GetInstance()->CreateMaterial(mj.value("Name", ""), mj.value("TemplateName", ""));
+				Material& m = MaterialManager::GetInstance()->GetMaterial(matId);
 
 				// Options
 				if (mj.contains("Options"))
@@ -260,7 +261,7 @@ namespace shz
 					}
 				}
 
-				mats.push_back(std::move(m));
+				mats.push_back(matId);
 			}
 			mesh.SetMaterialSlots(std::move(mats));
 		}

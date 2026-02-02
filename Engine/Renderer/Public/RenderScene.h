@@ -1,4 +1,7 @@
 #pragma once
+#include <vector>
+#include <unordered_map>
+
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
 #include "Primitives/UniqueHandle.hpp"
@@ -61,8 +64,8 @@ namespace shz
 
 		// Scene Objects
 		Handle<SceneObject> AddObject(
-			const StaticMeshRenderData& rd, 
-			const Matrix4x4& transform = Matrix4x4::Identity(), 
+			const StaticMeshRenderData& rd,
+			const Matrix4x4& transform = Matrix4x4::Identity(),
 			bool bCastShadow = true);
 		void RemoveObject(Handle<SceneObject> h);
 		void UpdateObjectMesh(Handle<SceneObject> h, const StaticMeshRenderData& mesh);
@@ -113,7 +116,6 @@ namespace shz
 			std::vector<DrawItem>& outDrawItems,
 			std::vector<uint32>& outInstanceRemap) const;
 
-
 		// Renderer가 BatchId로 상태를 조회할 수 있게
 		uint32 GetBatchCount() const noexcept { return static_cast<uint32>(m_Batches.size()); }
 
@@ -121,14 +123,18 @@ namespace shz
 		{
 			const StaticMeshRenderData* pMesh = {};
 			uint32 SectionIndex = 0;
+			MaterialId MaterialId = 0;
+
+			// convenience for renderer-side filtering
 			bool bCastShadow = true;
+			uint64 PassKey = 0;
 		};
 
 		bool TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept;
 
 		// ------------------------------------------------------------
-	   // Height field / Terrain
-	   // ------------------------------------------------------------
+		// Height field / Terrain
+		// ------------------------------------------------------------
 		void SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world = Matrix4x4::Identity());
 		void ClearTerrain();
 
@@ -174,25 +180,23 @@ namespace shz
 		// ------------------------------------------------------------
 		// Batch Key
 		//
-		// 핵심: "드로우콜을 나누는 기준"을 모두 포함해야 한다.
-		// - 실제로는 PSO/SRB/Geom/IndexRange/Pass 등을 ID로 축약해 넣는 게 좋다.
-		//
-		// 여기서는 엔진 내부 구조를 모르므로:
-		// - 섹션을 대표하는 (Mesh, SectionIndex, bCastShadow, Pass)로 키를 구성한다.
-		// - 추후 Material/PSO/SRB 캐시 ID가 있다면 그걸로 축약하도록 교체하면 됨.
+		// "드로우콜을 나누는 기준"을 모두 포함해야 한다.
+		// - Mesh/Section/Pass/Material/ShadowFlag
 		// ------------------------------------------------------------
 		struct DrawBatchKey final
 		{
-			const void* MeshPtr = nullptr; // StaticMeshRenderData의 주소(동일 renderdata면 동일 포인터 기대)
+			const void* MeshPtr = nullptr; // StaticMeshRenderData address
 			uint32 SectionIndex = 0;
-			uint64 PassKey = 0;          // ERenderPass
-			bool   bCastShadow = true;
+			uint64 PassKey = 0;
+			MaterialId MatId = 0;
+			bool bCastShadow = true;
 
 			bool operator==(const DrawBatchKey& rhs) const noexcept
 			{
 				return MeshPtr == rhs.MeshPtr
 					&& SectionIndex == rhs.SectionIndex
 					&& PassKey == rhs.PassKey
+					&& MatId == rhs.MatId
 					&& bCastShadow == rhs.bCastShadow;
 			}
 		};
@@ -201,10 +205,10 @@ namespace shz
 		{
 			size_t operator()(const DrawBatchKey& k) const noexcept
 			{
-				// simple mix
 				size_t h = reinterpret_cast<size_t>(k.MeshPtr);
 				h ^= (static_cast<size_t>(k.SectionIndex) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				h ^= (static_cast<size_t>(k.PassKey) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
+				h ^= (static_cast<size_t>(k.MatId) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				h ^= (static_cast<size_t>(k.bCastShadow) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				return h;
 			}
@@ -219,6 +223,12 @@ namespace shz
 			uint32 InstanceIndex = INVALID_INDEX;
 		};
 
+		struct SectionHandles final
+		{
+			SectionHandle Main = {};
+			SectionHandle Shadow = {};
+		};
+
 		struct BatchInstance final
 		{
 			// Remap을 통해 결국 ObjectTable[OcIndex]를 참조한다.
@@ -227,15 +237,18 @@ namespace shz
 			// swap-remove 시 owner의 SectionHandle을 갱신하기 위한 역참조
 			uint32 OwnerObjectDenseIndex = 0;
 			uint16 OwnerSectionSlot = 0;
+			uint8  OwnerPassSlot = 0; // 0:Main, 1:Shadow
 		};
 
 		struct Batch final
 		{
 			DrawBatchKey Key = {};
 
-			// Renderer가 해석할 참조(최소 구현)
+			// Renderer가 해석할 참조
 			const StaticMeshRenderData* pMesh = nullptr;
 			uint32 SectionIndex = 0;
+			MaterialId MaterialId = 0;
+			uint64 PassKey = 0;
 			bool bCastShadow = true;
 
 			std::vector<BatchInstance> Instances;
@@ -253,8 +266,8 @@ namespace shz
 			// 고정 OcIndex 슬롯
 			uint32 OcIndex = INVALID_INDEX;
 
-			// 이 오브젝트가 삽입된 섹션 핸들들(섹션 수와 동일)
-			std::vector<SectionHandle> Sections;
+			// 섹션 핸들들(섹션 수와 동일) : main + shadow
+			std::vector<SectionHandles> Sections;
 		};
 
 	private:
@@ -264,14 +277,19 @@ namespace shz
 
 		void markOcDirty(uint32 ocIndex);
 
+		// Material -> pass classification
+		uint64 classifyMainPassKey(MaterialId matId) const noexcept;
+		bool   shouldRenderInShadow(MaterialId matId) const noexcept;
+
 		// Batch ops
-		uint32 getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow);
+		uint32 getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, uint64 passKey, bool bCastShadow);
+
 		void addObjectToBatches(uint32 objectDenseIndex);
 		void removeObjectFromBatches(uint32 objectDenseIndex);
 
 		void batchRemoveInstance(uint32 batchId, uint32 instanceIndex);
 
-		static DrawBatchKey makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, bool bCastShadow);
+		static DrawBatchKey makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, bool bCastShadow);
 
 	private:
 		// ------------------------------------------------------------

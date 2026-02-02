@@ -9,6 +9,7 @@
 
 #include "Engine/AssetManager/Public/AssimpAsset.h"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {

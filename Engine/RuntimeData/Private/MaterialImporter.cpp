@@ -73,8 +73,6 @@ namespace shz
 		std::string templateName = j.value("TemplateName", "");
 		Material m(name, templateName);
 
-		m.SetRenderPassName(j.value("RenderPassName", ""));
-
 		// Options
 		// Options
 		if (j.contains("Options"))

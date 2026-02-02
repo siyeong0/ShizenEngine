@@ -133,14 +133,16 @@ namespace shz
 		RefCntAutoPtr<ITexture> CreateTextureRenderData(const AssetRef<Texture>& assetRef);
 		RefCntAutoPtr<ITexture> CreateTextureRenderData(const std::string& name, const Texture& texture);
 		RefCntAutoPtr<ITexture> CreateTextureRenderData(uint64 id, const Texture& texture);
-		const MaterialRenderData& CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name = "");
-		const MaterialRenderData& CreateMaterialRenderData(const Material& material, uint64 key = 0, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
+
+	private:
+		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, IRenderPass* pRenderPass = nullptr) const;
+		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 	private:
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
@@ -161,7 +163,16 @@ namespace shz
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
-		RenderResourceCache<MaterialRenderData> m_MaterialCache;
+		
+		struct PipelineBinding
+		{
+			RefCntAutoPtr<IPipelineState> pPSO;
+			RefCntAutoPtr<IShaderResourceBinding> pSRB;
+		};
+		std::unordered_map<uint64, PipelineBinding> m_PipelineBindingCache;
+
+		std::vector<RefCntAutoPtr<IBuffer>> m_NewBuffersThisFrame;
+		std::vector<RefCntAutoPtr<ITexture>> m_NewTexturesThisFrame;
 
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 

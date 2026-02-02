@@ -27,6 +27,8 @@
 
 namespace shz
 {
+	using MaterialId = uint64;
+
 	struct MaterialTextureBinding final
 	{
 		std::string Name = {};
@@ -80,9 +82,7 @@ namespace shz
 		static void RegisterTemplateLibrary(const std::unordered_map<std::string, MaterialTemplate>* pLibrary) { m_sTemplateLibrary = pLibrary; }
 
 		const std::string& GetName() const noexcept { return m_Name; }
-		void SetRenderPassName(const std::string& name);
 		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
-		const std::string& GetRenderPassName() const noexcept { return m_RenderPassName; }
 
 		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
 		MATERIAL_PIPELINE_TYPE GetPipelineType() const noexcept { return m_Template.GetPipelineType(); }
@@ -152,7 +152,7 @@ namespace shz
 		bool SetSamplerOverrideDesc(const char* resourceName, const SamplerDesc& desc);
 		bool ClearSamplerOverride(const char* resourceName);
 
-		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(const std::unordered_map<std::string, IRenderPass*>& renderPassLut) const;
+		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
 		ComputePipelineStateCreateInfo BuildComputePipelineStateCreateInfo() const;
 
 		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const noexcept { return m_Template.GetShaders(); }
@@ -174,7 +174,6 @@ namespace shz
 		// Metadata
 		std::string m_Name = {};
 		std::string m_TemplateName = {};
-		std::string m_RenderPassName = "GBuffer";
 
 		MaterialOptions m_Options = {};
 

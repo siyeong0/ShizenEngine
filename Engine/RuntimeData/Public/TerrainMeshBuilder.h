@@ -28,7 +28,7 @@ namespace shz
 		static bool BuildStaticMesh(
 			StaticMesh* pOutMesh,
 			const TerrainHeightField& hf,
-			Material&& terrainMaterial,
+			MaterialId terrainMaterial,
 			const TerrainMeshBuildSettings& settings = {});
 	};
 } // namespace shz

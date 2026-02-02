@@ -10,6 +10,7 @@
 
 #include "Engine/RenderPass/Public/DrawPacket.h"
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {
@@ -40,37 +41,37 @@ namespace shz
 		// Build fixed templates + prepare cache map
 		{
 			auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
-				{
-					MaterialTemplateCreateInfo tci = {};
-					tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-					tci.TemplateName = name;
+			{
+				MaterialTemplateCreateInfo tci = {};
+				tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
+				tci.TemplateName = name;
 
-					tci.ShaderStages.clear();
-					tci.ShaderStages.reserve(2);
+				tci.ShaderStages.clear();
+				tci.ShaderStages.reserve(2);
 
-					MaterialShaderStageDesc sVS = {};
-					sVS.ShaderType = SHADER_TYPE_VERTEX;
-					sVS.DebugName = "VS";
-					sVS.FilePath = vs;
-					sVS.EntryPoint = "main";
-					sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-					sVS.UseCombinedTextureSamplers = false;
+				MaterialShaderStageDesc sVS = {};
+				sVS.ShaderType = SHADER_TYPE_VERTEX;
+				sVS.DebugName = "VS";
+				sVS.FilePath = vs;
+				sVS.EntryPoint = "main";
+				sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sVS.UseCombinedTextureSamplers = false;
 
-					MaterialShaderStageDesc sPS = {};
-					sPS.ShaderType = SHADER_TYPE_PIXEL;
-					sPS.DebugName = "PS";
-					sPS.FilePath = ps;
-					sPS.EntryPoint = "main";
-					sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-					sPS.UseCombinedTextureSamplers = false;
+				MaterialShaderStageDesc sPS = {};
+				sPS.ShaderType = SHADER_TYPE_PIXEL;
+				sPS.DebugName = "PS";
+				sPS.FilePath = ps;
+				sPS.EntryPoint = "main";
+				sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sPS.UseCombinedTextureSamplers = false;
 
-					tci.ShaderStages.push_back(sVS);
-					tci.ShaderStages.push_back(sPS);
+				tci.ShaderStages.push_back(sVS);
+				tci.ShaderStages.push_back(sPS);
 
-					return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
-				};
+				return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
+			};
 
 			MaterialTemplate gbufferTemplate;
 			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
@@ -176,20 +177,20 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticBufferResource("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
-				{
-					BufferDesc desc = {};
-					desc.Name = name;
-					desc.Usage = USAGE_DYNAMIC;
-					desc.BindFlags = BIND_SHADER_RESOURCE;
-					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-					desc.Mode = BUFFER_MODE_STRUCTURED;
-					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Usage = USAGE_DYNAMIC;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+				desc.Mode = BUFFER_MODE_STRUCTURED;
+				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
-					ASSERT(sb, "Object table create failed.");
-					return sb;
-				};
+				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+				ASSERT(sb, "Object table create failed.");
+				return sb;
+			};
 
 			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
 			AddBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
@@ -267,7 +268,6 @@ namespace shz
 		m_RHIRenderPasses.clear();
 
 		m_StaticMeshCache.Clear();
-		m_MaterialCache.Clear();
 
 		if (m_pPipelineStateManager)
 		{
@@ -279,6 +279,11 @@ namespace shz
 		m_pAssetManager = nullptr;
 
 		m_pRegistry->Shutdown();
+
+		m_PipelineBindingCache.clear();
+
+		m_NewBuffersThisFrame.clear();
+		m_NewTexturesThisFrame.clear();
 
 		m_CreateInfo = {};
 		m_PassCtx = {};
@@ -408,9 +413,9 @@ namespace shz
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
 			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-				{
-					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-				};
+			{
+				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+			};
 
 			float3 shadowCornersWS[8] = {};
 			{
@@ -550,16 +555,16 @@ namespace shz
 		// ------------------------------------------------------------
 		std::vector<StateTransitionDesc> preBarriers = {};
 		auto pushBarrier = [&preBarriers](IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
-			{
-				ASSERT(pObj, "Device object is null.");
+		{
+			ASSERT(pObj, "Device object is null.");
 
-				StateTransitionDesc b = {};
-				b.pResource = pObj;
-				b.OldState = from;
-				b.NewState = to;
-				b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-				preBarriers.push_back(b);
-			};
+			StateTransitionDesc b = {};
+			b.pResource = pObj;
+			b.OldState = from;
+			b.NewState = to;
+			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+			preBarriers.push_back(b);
+		};
 
 		pushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -577,33 +582,13 @@ namespace shz
 		// ------------------------------------------------------------
 		// Visible objects: VB/IB + Material textures/CB barriers (dedup)
 		// ------------------------------------------------------------
-		std::unordered_set<const MaterialRenderData*> appliedRD;
-		appliedRD.reserve(1024);
+		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
 
-		auto applyMaterialIfNeeded = [&](const MaterialRenderData* rd)
-			{
-				ASSERT(rd, "Material render data is null.");
-
-				if (appliedRD.find(rd) != appliedRD.end())
-					return;
-
-				appliedRD.insert(rd);
-
-				if (rd->ConstantBuffer)
-				{
-					pushBarrier(rd->ConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-				}
-
-				for (const auto pTexture : rd->BoundTextures)
-				{
-					ASSERT(pTexture, "Bound texture render data invalid.");
-					pushBarrier(pTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-				}
-			};
+		auto hashCombine64 = [](uint64 h, uint64 v) {return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); };
 
 		for (uint32 objDense : visibleObjectIndexMain)
 		{
-			const auto& obj = scene.GetObjectByDenseIndex(objDense);
+			const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
 			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
@@ -611,7 +596,15 @@ namespace shz
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
-				applyMaterialIfNeeded(section.pMaterial);
+				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("GBuffer"));
+				auto it = m_PipelineBindingCache.find(hash);
+				if (it == m_PipelineBindingCache.end())
+				{
+					PipelineBinding pb;
+					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, m_RHIRenderPasses["GBuffer"]);
+					pb.pSRB = acquireShaderResourceBindingFromMaterial(section.MaterialId, pb.pPSO);
+					m_PipelineBindingCache[hash] = pb;
+				}
 			}
 		}
 
@@ -621,19 +614,38 @@ namespace shz
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
 			if (!obj.bCastShadow)
+			{
 				continue;
+			}
 
 			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
 			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
 
 			for (const auto& section : obj.pMesh->Sections)
 			{
-				if (section.pMaterial && section.pMaterial->ShadowSRB)
+				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("Shadow"));
+				auto it = m_PipelineBindingCache.find(hash);
+				if (it == m_PipelineBindingCache.end())
 				{
-					applyMaterialIfNeeded(section.pMaterial);
+					PipelineBinding pb;
+					pb.pPSO = acquirePipelineStateFromMaterial(section.MaterialId, m_RHIRenderPasses["Shadow"]);
+					pb.pSRB = acquireShaderResourceBindingFromMaterial(section.MaterialId, pb.pPSO);
+					m_PipelineBindingCache[hash] = pb;
 				}
 			}
 		}
+
+		for (RefCntAutoPtr<IBuffer> newBuffer : m_NewBuffersThisFrame)
+		{
+			pushBarrier(newBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		}
+		m_NewBuffersThisFrame.clear();
+		for (RefCntAutoPtr<ITexture> newTexure : m_NewTexturesThisFrame)
+		{
+			pushBarrier(newTexure, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		}
+		m_NewTexturesThisFrame.clear();
+
 
 		if (!preBarriers.empty())
 		{
@@ -644,78 +656,67 @@ namespace shz
 		// Helper: pack object table using instanceRemap
 		// ------------------------------------------------------------
 		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
+		{
+			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+			hlsl::ObjectConstants* dst = map;
+
+			for (size_t i = 0; i < remap.size(); ++i)
 			{
-				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::ObjectConstants* dst = map;
-
-				for (size_t i = 0; i < remap.size(); ++i)
-				{
-					const uint32 oc = remap[i];
-					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-					dst[i] = tableCPU[oc];
-				}
-			};
+				const uint32 oc = remap[i];
+				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+				dst[i] = tableCPU[oc];
+			}
+		};
 
 		// ------------------------------------------------------------
 		// Helper: build packets from draw items
 		// ------------------------------------------------------------
 		auto buildPacketsFromDrawItems = [&](uint64 passKey, const std::vector<RenderScene::DrawItem>& items) -> std::vector<DrawPacket>
+		{
+			std::vector<DrawPacket> out;
+			out.reserve(items.size());
+
+			for (const RenderScene::DrawItem& di : items)
 			{
-				std::vector<DrawPacket> out;
-				out.reserve(items.size());
+				RenderScene::BatchView bv = {};
+				bool ok = scene.TryGetBatchView(di.BatchId, bv);
+				ASSERT(ok, "Invalid batch id.");
 
-				for (const RenderScene::DrawItem& di : items)
-				{
-					RenderScene::BatchView bv = {};
-					bool ok = scene.TryGetBatchView(di.BatchId, bv);
-					ASSERT(ok, "Invalid batch id.");
+				const StaticMeshRenderData* mesh = bv.pMesh;
+				ASSERT(mesh, "Batch mesh is null.");
+				ASSERT(bv.SectionIndex < static_cast<uint32>(mesh->Sections.size()), "SectionIndex OOB.");
 
-					const StaticMeshRenderData* mesh = bv.pMesh;
-					ASSERT(mesh, "Batch mesh is null.");
-					ASSERT(bv.SectionIndex < static_cast<uint32>(mesh->Sections.size()), "SectionIndex OOB.");
+				const auto& sec = mesh->Sections[bv.SectionIndex];
 
-					const auto& sec = mesh->Sections[bv.SectionIndex];
-					const MaterialRenderData* mat = sec.pMaterial;
+				DrawPacket pkt = {};
+				pkt.VertexBuffer = mesh->VertexBuffer;
+				pkt.IndexBuffer = mesh->IndexBuffer;
 
-					DrawPacket pkt = {};
-					pkt.VertexBuffer = mesh->VertexBuffer;
-					pkt.IndexBuffer = mesh->IndexBuffer;
+				pkt.DrawCallType = EDrawCallType::Direct;
 
-					pkt.DrawCallType = EDrawCallType::Direct;
+				pkt.DrawAttribs = {};
+				pkt.DrawAttribs.IndexType = mesh->IndexType;
+				pkt.DrawAttribs.NumIndices = sec.IndexCount;
+				pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+				pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+				pkt.DrawAttribs.NumInstances = di.InstanceCount;
+				pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
+				pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
-					pkt.DrawAttribs = {};
-					pkt.DrawAttribs.IndexType = mesh->IndexType;
-					pkt.DrawAttribs.NumIndices = sec.IndexCount;
-					pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
-					pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
-					pkt.DrawAttribs.NumInstances = di.InstanceCount;
-					pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
-					pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+				uint64 pbHash = hashCombine64(sec.MaterialId, passKey);
+				ASSERT(m_PipelineBindingCache.contains(pbHash), "Cache not found.");
+				const PipelineBinding& pb = m_PipelineBindingCache[pbHash];
+				pkt.PSO = pb.pPSO;
+				pkt.SRB = pb.pSRB;
 
-					if (passKey == STRING_HASH("GBuffer"))
-					{
-						ASSERT(mat && mat->PSO && mat->SRB, "Material PSO/SRB invalid.");
-						pkt.PSO = mat->PSO;
-						pkt.SRB = mat->SRB;
-					}
-					else if (passKey == STRING_HASH("Shadow"))
-					{
-						pkt.PSO = mat->ShadowPSO;
-						pkt.SRB = mat->ShadowSRB;
-					}
-					else
-					{
-						ASSERT(false, "Unknown passKey.");
-					}
+				out.push_back(pkt);
+			}
 
-					out.push_back(pkt);
-				}
-
-				return out;
-			};
+			return out;
+		};
 
 		// ------------------------------------------------------------
 		// Build draw lists + pack object tables + build packets
@@ -1032,246 +1033,6 @@ namespace shz
 		return m_pRegistry->GetTexture(id);
 	}
 
-	const MaterialRenderData& Renderer::CreateMaterialRenderData(const AssetRef<Material>& assetRef, const std::string& name)
-	{
-		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
-		const MaterialRenderData* cached = m_MaterialCache.Acquire(key);
-		if (cached)
-		{
-			return *cached;
-		}
-
-		AssetPtr<Material> assetPtr = m_pAssetManager->Acquire(assetRef);
-		ASSERT(assetPtr, "Failed to acquire MaterialAsset.");
-
-		if (name == "")
-		{
-			return CreateMaterialRenderData(*assetPtr, key, assetPtr.GetSourcePath());
-		}
-		else
-		{
-			return CreateMaterialRenderData(*assetPtr, key, name);
-		}
-	}
-
-	const MaterialRenderData& Renderer::CreateMaterialRenderData(const Material& material, uint64 key, const std::string& name)
-	{
-		ASSERT(m_pDevice, "Device is null.");
-		if (key == 0)
-		{
-			key = std::rand(); // TODO: better hash or REMOVE CreateMaterial overload
-		}
-
-		MaterialRenderData out = {};
-		out.RenderPassId = STRING_HASH(material.GetRenderPassName());
-
-		out.CBIndex = 0;
-		for (; out.CBIndex < material.GetTemplate().GetCBufferCount(); ++out.CBIndex)
-		{
-			const auto& cb = material.GetTemplate().GetCBuffer(out.CBIndex);
-			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
-			{
-				break;
-			}
-		}
-
-		// Create PSO
-		{
-			const MATERIAL_PIPELINE_TYPE pipelineType = material.GetPipelineType();
-
-			if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
-			{
-				GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_RHIRenderPasses);
-				ASSERT(psoCI.GraphicsPipeline.pRenderPass != nullptr, "Render pass is null.");
-
-				out.PSO = m_pPipelineStateManager->AcquireGraphics(psoCI);
-				ASSERT(out.PSO, "Failed to create PSO.");
-			}
-			else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
-			{
-				ComputePipelineStateCreateInfo psoCI = material.BuildComputePipelineStateCreateInfo();
-
-				out.PSO = m_pPipelineStateManager->AcquireCompute(psoCI);
-				ASSERT(out.PSO, "Failed to create PSO.");
-			}
-			else
-			{
-				ASSERT(false, "Unsupported pipeline type.");
-			}
-
-			SHADER_TYPE supportedShaderTypes[] =
-			{
-				SHADER_TYPE_VERTEX,
-				SHADER_TYPE_PIXEL,
-				SHADER_TYPE_COMPUTE,
-			};
-
-			for (SHADER_TYPE type : supportedShaderTypes)
-			{
-				if (auto* var = out.PSO->GetStaticVariableByName(type, "g_ObjectTable"))
-				{
-					var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.GBuffer")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
-				}
-			}
-		}
-
-		// Create SRB and bind material CB
-		{
-			out.PSO->CreateShaderResourceBinding(&out.SRB, true);
-			ASSERT(out.SRB, "Failed to create SRB.");
-
-			// Create dynamic material constants buffer if template has cbuffers.
-			const uint32 cbCount = material.GetTemplate().GetCBufferCount();
-			if (cbCount > 0)
-			{
-				const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(out.CBIndex);
-
-				BufferDesc desc = {};
-				desc.Name = "MaterialConstants";
-				desc.Usage = USAGE_DEFAULT;
-				desc.BindFlags = BIND_UNIFORM_BUFFER;
-				desc.CPUAccessFlags = CPU_ACCESS_NONE;
-				desc.Size = cb.ByteSize;
-
-				RefCntAutoPtr<IBuffer> pBuf;
-				m_pDevice->CreateBuffer(desc, nullptr, &pBuf);
-
-				out.ConstantBuffer = pBuf;
-
-				if (out.ConstantBuffer)
-				{
-					// Bind by name for first stage that exposes it.
-					for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
-					{
-						ASSERT(shader, "Shader in source instance is null.");
-
-						const SHADER_TYPE st = shader->GetDesc().ShaderType;
-
-						IShaderResourceVariable* var = out.SRB->GetVariableByName(st, MaterialTemplate::MATERIAL_CBUFFER_NAME);
-						if (var)
-						{
-							var->Set(out.ConstantBuffer);
-						}
-					}
-				}
-			}
-		}
-
-		switch (material.GetBlendMode())
-		{
-		case MATERIAL_BLEND_MODE_OPAQUE:
-			out.ShadowPSO = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowPSO;
-			out.ShadowSRB = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowSRB;
-			break;
-		case MATERIAL_BLEND_MODE_MASKED:
-			out.ShadowPSO = static_cast<ShadowRenderPass*>(m_Passes["Shadow"].get())->m_pShadowMaskedPSO;
-			out.ShadowPSO->CreateShaderResourceBinding(&out.ShadowSRB, true);
-			ASSERT(out.ShadowSRB, "Failed to create shadow SRB for masked material.");
-
-			// Bind material cbuffer by name for common stages used in shadow pass.
-			if (out.ConstantBuffer)
-			{
-				IShaderResourceVariable* v = nullptr;
-
-				if (IShaderResourceVariable* var = out.ShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, MaterialTemplate::MATERIAL_CBUFFER_NAME))
-				{
-					var->Set(out.ConstantBuffer);
-				}
-
-				if (IShaderResourceVariable* var = out.ShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, MaterialTemplate::MATERIAL_CBUFFER_NAME))
-				{
-					var->Set(out.ConstantBuffer);
-				}
-			}
-
-			break;
-		case MATERIAL_BLEND_MODE_TRANSPARENT:
-			ASSERT(false, "Transparent materials not supported in shadow pass.");
-			// TODO: handle transparent shadows if needed
-			break;
-		default:
-			ASSERT(false, "Unsupported blend mode.");
-			break;
-		}
-
-		// Immediate initial binding
-		{
-			if (out.ConstantBuffer)
-			{
-				const uint32 cbCount = material.GetCBufferBlobCount();
-				ASSERT(out.CBIndex < cbCount, "CB index out of bounds.");
-
-				const uint8* pBlob = material.GetCBufferBlobData(out.CBIndex);
-				const uint32 blobSize = material.GetCBufferBlobSize(out.CBIndex);
-				ASSERT(pBlob && blobSize > 0, "Invalid blob data.");
-				ASSERT(blobSize <= out.ConstantBuffer->GetDesc().Size, "Blob size exceeds CB size.");
-
-				m_pImmediateContext->UpdateBuffer(
-					out.ConstantBuffer,
-					0,
-					blobSize,
-					pBlob,
-					RESOURCE_STATE_TRANSITION_MODE_TRANSITION
-				);
-			}
-
-			// Bind all textures
-			{
-				const uint32 resCount = material.GetTemplate().GetResourceCount();
-				for (uint32 i = 0; i < resCount; ++i)
-				{
-					const MaterialResourceDesc& resDesc = material.GetTemplate().GetResource(i);
-
-					if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
-						resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
-						resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
-					{
-						continue;
-					}
-
-					const MaterialTextureBinding& b = material.GetTextureBinding(i);
-
-					ITextureView* pView = nullptr;
-
-					if (b.TextureRef.has_value())
-					{
-						RefCntAutoPtr<ITexture> pTexture = CreateTextureRenderData(*b.TextureRef);
-						pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-						out.BoundTextures.push_back(pTexture);
-					}
-					else
-					{
-						pView = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"))->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-					}
-
-					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
-					{
-						var->Set(pView);
-					}
-					if (IShaderResourceVariable* var = out.SRB->GetVariableByName(SHADER_TYPE_PIXEL, resDesc.Name.c_str()))
-					{
-						var->Set(pView);
-					}
-
-					if (out.ShadowSRB)
-					{
-						if (IShaderResourceVariable* var = out.ShadowSRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
-						{
-							var->Set(pView);
-						}
-						if (IShaderResourceVariable* var = out.ShadowSRB->GetVariableByName(SHADER_TYPE_PIXEL, resDesc.Name.c_str()))
-						{
-							var->Set(pView);
-						}
-					}
-				}
-			}
-		}
-
-		m_MaterialCache.Store(key, std::move(out));
-		return *m_MaterialCache.Acquire(key);
-	}
-
 	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name)
 	{
 		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
@@ -1336,19 +1097,19 @@ namespace shz
 		}
 
 		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-			{
-				BufferDesc desc = {};
-				desc.Name = name;
-				desc.Size = dataSize;
-				desc.Usage = USAGE_IMMUTABLE;
-				desc.BindFlags = bindFlags;
-				BufferData initData = {};
-				initData.pData = pData;
-				initData.DataSize = dataSize;
-				RefCntAutoPtr<IBuffer> pBuffer;
-				device->CreateBuffer(desc, &initData, &pBuffer);
-				return pBuffer;
-			};
+		{
+			BufferDesc desc = {};
+			desc.Name = name;
+			desc.Size = dataSize;
+			desc.Usage = USAGE_IMMUTABLE;
+			desc.BindFlags = bindFlags;
+			BufferData initData = {};
+			initData.pData = pData;
+			initData.DataSize = dataSize;
+			RefCntAutoPtr<IBuffer> pBuffer;
+			device->CreateBuffer(desc, &initData, &pBuffer);
+			return pBuffer;
+		};
 
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1378,9 +1139,7 @@ namespace shz
 			d.IndexCount = s.IndexCount;
 			d.BaseVertex = s.BaseVertex;
 			d.LocalBounds = s.LocalBounds;
-
-			d.pMaterial = &CreateMaterialRenderData(mesh.GetMaterialSlot(s.MaterialSlot));
-
+			d.MaterialId = mesh.GetMaterialSlot(s.MaterialSlot);
 			out.Sections.push_back(d);
 		}
 
@@ -1446,6 +1205,168 @@ namespace shz
 			names.push_back(pair.first);
 		}
 		return names;
+	}
+
+	RefCntAutoPtr<IPipelineState> Renderer::acquirePipelineStateFromMaterial(MaterialId id, IRenderPass* pRenderPass) const
+	{
+		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
+		ASSERT(pMaterialManager->HasMaterial(id), "Material is not found.");
+
+		const Material& material = pMaterialManager->GetMaterial(id);
+
+		RefCntAutoPtr<IPipelineState> pOutPipelineState;
+
+		const MATERIAL_PIPELINE_TYPE pipelineType = material.GetPipelineType();
+		if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
+		{
+			ASSERT(pRenderPass != nullptr, "Render pass must be set in graphics pipeline.");
+
+			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(pRenderPass);
+			pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
+		}
+		else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
+		{
+			ASSERT(pRenderPass == nullptr, "Render pass must be null in compute pipeline.");
+			ComputePipelineStateCreateInfo psoCI = material.BuildComputePipelineStateCreateInfo();
+			pOutPipelineState = m_pPipelineStateManager->AcquireCompute(psoCI);
+		}
+		else
+		{
+			ASSERT(false, "Unsupported pipeline type.");
+		}
+
+		SHADER_TYPE supportedShaderTypes[] =
+		{
+			SHADER_TYPE_VERTEX,
+			SHADER_TYPE_PIXEL,
+			SHADER_TYPE_COMPUTE,
+		};
+
+		for (SHADER_TYPE type : supportedShaderTypes)
+		{
+			if (auto* var = pOutPipelineState->GetStaticVariableByName(type, "g_ObjectTable"))
+			{
+				var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.GBuffer")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
+			}
+		}
+
+		return pOutPipelineState;
+	}
+
+	RefCntAutoPtr<IShaderResourceBinding> Renderer::acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso)
+	{
+		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
+		ASSERT(pMaterialManager->HasMaterial(id), "Material is not found.");
+
+		const Material& material = pMaterialManager->GetMaterial(id);
+
+		RefCntAutoPtr<IShaderResourceBinding> pOutSRB;
+
+		// Create SRB
+		pso->CreateShaderResourceBinding(&pOutSRB, true);
+		ASSERT(pOutSRB, "Failed to create SRB.");
+
+		// Initialize and bind resources
+		uint32 cbIndex = 0;
+		uint32 cbCount = material.GetTemplate().GetCBufferCount();
+		for (; cbIndex < cbCount; ++cbIndex)
+		{
+			const auto& cb = material.GetTemplate().GetCBuffer(cbIndex);
+			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
+			{
+				break;
+			}
+		}
+
+		if (cbIndex < cbCount)
+		{
+			const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(cbIndex);
+
+			BufferDesc desc = {};
+			desc.Name = "MaterialConstants";
+			desc.Usage = USAGE_DEFAULT;
+			desc.BindFlags = BIND_UNIFORM_BUFFER;
+			desc.CPUAccessFlags = CPU_ACCESS_NONE;
+			desc.Size = cb.ByteSize;
+
+			RefCntAutoPtr<IBuffer> pConstantBuffer;
+			m_pDevice->CreateBuffer(desc, nullptr, &pConstantBuffer);
+
+			// Bind by name for first stage that exposes it.
+			for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
+			{
+				ASSERT(shader, "Shader in source instance is null.");
+
+				const SHADER_TYPE st = shader->GetDesc().ShaderType;
+				IShaderResourceVariable* var = pOutSRB->GetVariableByName(st, MaterialTemplate::MATERIAL_CBUFFER_NAME);
+				if (var)
+				{
+					var->Set(pConstantBuffer);
+				}
+			}
+
+			// Immediate initial binding
+			const uint8* pBlob = material.GetCBufferBlobData(cbIndex);
+			const uint32 blobSize = material.GetCBufferBlobSize(cbIndex);
+			ASSERT(pBlob && blobSize > 0, "Invalid blob data.");
+			ASSERT(blobSize <= pConstantBuffer->GetDesc().Size, "Blob size exceeds CB size.");
+
+			m_pImmediateContext->UpdateBuffer(
+				pConstantBuffer,
+				0,
+				blobSize,
+				pBlob,
+				RESOURCE_STATE_TRANSITION_MODE_TRANSITION
+			);
+
+			m_NewBuffersThisFrame.push_back(pConstantBuffer);
+		}
+
+		// Textures
+		const uint32 resCount = material.GetTemplate().GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
+		{
+			const MaterialResourceDesc& resDesc = material.GetTemplate().GetResource(i);
+
+			if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
+				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
+				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
+			{
+				continue;
+			}
+
+			const MaterialTextureBinding& b = material.GetTextureBinding(i);
+
+			RefCntAutoPtr<ITexture> pTexture;
+			ITextureView* pView = nullptr;
+
+			if (b.TextureRef.has_value())
+			{
+				pTexture = CreateTextureRenderData(b.TextureRef.value());
+				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			}
+			else
+			{
+				pTexture = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"));
+				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			}
+
+			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
+			{
+				var->Set(pView);
+			}
+			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_PIXEL, resDesc.Name.c_str()))
+			{
+				var->Set(pView);
+			}
+
+			if (pTexture)
+			{
+				m_NewTexturesThisFrame.push_back(pTexture);
+			}
+		}
+
+		return pOutSRB;
 	}
 } // namespace shz
 

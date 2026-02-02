@@ -37,11 +37,6 @@ namespace shz
 		rebuildAutoResourceLayout();
 	}
 
-	void Material::SetRenderPassName(const std::string& name)
-	{
-		m_RenderPassName = name;
-	}
-
 	void Material::SetBlendMode(MATERIAL_BLEND_MODE mode)
 	{
 		if (m_Options.BlendMode == mode)
@@ -412,9 +407,10 @@ namespace shz
 	}
 
 
-	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(
-		const std::unordered_map<std::string, IRenderPass*>& renderPassLut) const
+	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const
 	{
+		ASSERT(pRenderPass, "RenderPass is null.");
+
 		GraphicsPipelineStateCreateInfo outGraphicsPipelineStateCI = {};
 
 		PipelineStateDesc& psDesc = outGraphicsPipelineStateCI.PSODesc;
@@ -431,11 +427,7 @@ namespace shz
 
 			gp->pRenderPass = nullptr;
 			gp->SubpassIndex = 0;
-
-			auto it = renderPassLut.find(m_RenderPassName);
-			ASSERT(it != renderPassLut.end(), "Render pass '%s' not found in LUT.", m_RenderPassName.c_str());
-
-			gp->pRenderPass = it->second;
+			gp->pRenderPass = pRenderPass;
 
 			// IMPORTANT:
 			// When pRenderPass != null:
@@ -515,7 +507,6 @@ namespace shz
 	{
 		m_Name.clear();
 		m_TemplateName.clear();
-		m_RenderPassName = "GBuffer";
 
 		m_Options = {};
 
