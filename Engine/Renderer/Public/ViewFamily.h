@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 #include "Engine/Core/Math/Math.h"
-#include "RenderTarget.h"
 
 namespace shz
 {
@@ -17,7 +16,6 @@ namespace shz
 
     struct ViewFamily
     {
-        RenderTarget Target;
         std::vector<View> Views;
 
         float DeltaTime;

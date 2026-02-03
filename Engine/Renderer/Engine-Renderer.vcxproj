@@ -161,7 +161,6 @@
     <ClInclude Include="Public\Renderer.h" />
     <ClInclude Include="Public\RenderResourceRegistry.h" />
     <ClInclude Include="Public\RenderScene.h" />
-    <ClInclude Include="Public\RenderTarget.h" />
     <ClInclude Include="Public\ViewFamily.h" />
   </ItemGroup>
   <ItemGroup>

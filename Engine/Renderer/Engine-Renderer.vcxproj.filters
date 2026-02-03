@@ -27,9 +27,6 @@
     <ClInclude Include="Public\ViewFamily.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderTarget.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\RenderResourceCache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
