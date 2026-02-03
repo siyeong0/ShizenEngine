@@ -134,6 +134,7 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
 		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
+		// Render graph
 		void compileRenderGraphOrder();
 		void buildTransitionsForPass(RenderPassBase* pass, std::vector<StateTransitionDesc>& outBarriers);
 		RESOURCE_STATE mapUsageToState(const RenderPassResourceAccess& a) const;

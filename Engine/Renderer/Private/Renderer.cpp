@@ -1461,14 +1461,14 @@ namespace shz
 
 	IDeviceObject* Renderer::resolveDeviceObject(const RenderPassResourceAccess& a) const
 	{
+		ASSERT(m_pRegistry, "Registry is null.");
+
 		if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE)
 		{
-			ASSERT(m_pRegistry, "Registry is null.");
 			return m_pRegistry->GetTexture(a.ResourceId);
 		}
 		else if (a.Kind == RENDER_RESOURCE_KIND_BUFFER)
 		{
-			ASSERT(m_pRegistry, "Registry is null.");
 			return m_pRegistry->GetBuffer(a.ResourceId);
 		}
 		else if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL)
@@ -1490,198 +1490,6 @@ namespace shz
 		ASSERT(false, "Unknown resource kind.");
 		return nullptr;
 	}
-
-	//void Renderer::compileRenderGraphOrder()
-	//{
-	//	m_CompiledPassOrder.clear();
-
-	//	std::vector<RenderPassBase*> passes;
-	//	passes.reserve(m_Passes.size());
-	//	for (const auto& pair : m_Passes)
-	//	{
-	//		RenderPassBase* p = pair.second.get();
-	//		ASSERT(p, "Pass is null.");
-	//		passes.push_back(p);
-	//	}
-
-	//	if (passes.empty())
-	//	{
-	//		return;
-	//	}
-
-	//	// Deterministic: sort by pass name
-	//	std::sort(
-	//		passes.begin(),
-	//		passes.end(),
-	//		[](const RenderPassBase* a, const RenderPassBase* b)
-	//		{
-	//			return std::strcmp(a->GetName(), b->GetName()) < 0;
-	//		});
-
-	//	const uint32 n = static_cast<uint32>(passes.size());
-
-	//	// Build edges
-	//	std::vector<std::vector<uint32>> adj;
-	//	adj.resize(n);
-
-	//	std::vector<uint32> indeg;
-	//	indeg.resize(n, 0);
-
-	//	auto addEdge = [&](uint32 u, uint32 v)
-	//	{
-	//		if (u == v) return;
-
-	//		// de-dup edge (u->v)
-	//		for (uint32 x : adj[u])
-	//		{
-	//			if (x == v)
-	//			{
-	//				return;
-	//			}
-	//		}
-
-	//		adj[u].push_back(v);
-	//		indeg[v] += 1;
-	//	};
-
-	//	auto isWrite = [](const RenderPassResourceAccess& a)
-	//	{
-	//		if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-	//		if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-	//		return false;
-	//	};
-
-	//	auto isRead = [](const RenderPassResourceAccess& a)
-	//	{
-	//		if (a.Access == RENDER_ACCESS_READ || a.Access == RENDER_ACCESS_READWRITE) return true;
-	//		if (a.Usage == RENDER_USAGE_SRV || a.Usage == RENDER_USAGE_CBV || a.Usage == RENDER_USAGE_DSV_READ) return true;
-	//		if (a.Usage == RENDER_USAGE_INDIRECT_ARGUMENT) return true;
-	//		return false;
-	//	};
-
-	//	// Collect per-resource writers/readers
-	//	struct UseList final
-	//	{
-	//		std::vector<uint32> Writers;
-	//		std::vector<uint32> Readers;
-	//	};
-
-	//	std::unordered_map<uint64, UseList> uses;
-
-	//	for (uint32 i = 0; i < n; ++i)
-	//	{
-	//		const auto accesses = passes[i]->GetDeclaredResourceAccesses();
-
-	//		// per-pass per-resource dedup (avoid pushing same i many times)
-	//		std::unordered_map<uint64, uint8> localFlags;
-	//		localFlags.reserve(accesses.size());
-
-	//		for (const auto& a : accesses)
-	//		{
-	//			uint8& f = localFlags[a.ResourceId];
-
-	//			// bit0: read, bit1: write
-	//			if (isRead(a))  f |= 1;
-	//			if (isWrite(a)) f |= 2;
-	//		}
-
-	//		for (const auto& kv : localFlags)
-	//		{
-	//			const uint64 rid = kv.first;
-	//			const uint8  f = kv.second;
-
-	//			UseList& ul = uses[rid];
-
-	//			if (f & 1) ul.Readers.push_back(i);
-	//			if (f & 2) ul.Writers.push_back(i);
-	//		}
-	//	}
-
-	//	// Build dependency edges:
-	//	// - Writer -> Reader
-	//	// - Writer -> Writer (serialize writers, stable by pass index)
-	//	for (auto& kv : uses)
-	//	{
-	//		UseList& ul = kv.second;
-
-	//		// serialize writers
-	//		if (ul.Writers.size() >= 2)
-	//		{
-	//			std::sort(ul.Writers.begin(), ul.Writers.end());
-	//			ul.Writers.erase(std::unique(ul.Writers.begin(), ul.Writers.end()), ul.Writers.end());
-
-	//			for (uint32 wi = 1; wi < static_cast<uint32>(ul.Writers.size()); ++wi)
-	//			{
-	//				addEdge(ul.Writers[wi - 1], ul.Writers[wi]);
-	//			}
-	//		}
-	//		else if (ul.Writers.size() == 1)
-	//		{
-	//			// unique
-	//			// (no-op)
-	//		}
-
-	//		// writer -> reader
-	//		if (!ul.Writers.empty() && !ul.Readers.empty())
-	//		{
-	//			std::sort(ul.Readers.begin(), ul.Readers.end());
-	//			ul.Readers.erase(std::unique(ul.Readers.begin(), ul.Readers.end()), ul.Readers.end());
-
-	//			for (uint32 w : ul.Writers)
-	//			{
-	//				for (uint32 r : ul.Readers)
-	//				{
-	//					// if same pass both writes & reads same resource, no edge needed.
-	//					if (w == r) continue;
-	//					addEdge(w, r);
-	//				}
-	//			}
-	//		}
-	//	}
-
-	//	// Kahn topo sort
-	//	std::vector<uint32> q;
-	//	q.reserve(n);
-
-	//	for (uint32 i = 0; i < n; ++i)
-	//	{
-	//		if (indeg[i] == 0)
-	//		{
-	//			q.push_back(i);
-	//		}
-	//	}
-
-	//	std::vector<uint32> order;
-	//	order.reserve(n);
-
-	//	for (uint32 qi = 0; qi < static_cast<uint32>(q.size()); ++qi)
-	//	{
-	//		const uint32 u = q[qi];
-	//		order.push_back(u);
-
-	//		for (uint32 v : adj[u])
-	//		{
-	//			ASSERT(indeg[v] > 0, "Invalid indegree.");
-	//			indeg[v] -= 1;
-	//			if (indeg[v] == 0)
-	//			{
-	//				q.push_back(v);
-	//			}
-	//		}
-	//	}
-
-	//	if (order.size() != n)
-	//	{
-	//		// cycle detected -> fallback
-	//		m_CompiledPassOrder = passes;
-	//		return;
-	//	}
-
-	//	for (uint32 idx : order)
-	//	{
-	//		m_CompiledPassOrder.push_back(passes[idx]);
-	//	}
-	//}
 
 	void Renderer::compileRenderGraphOrder()
 	{
@@ -1707,13 +1515,6 @@ namespace shz
 
 		// ------------------------------------------------------------
 		// Baseline deterministic ordering (even when graph has no edges)
-		//
-		// NOTE:
-		// - RenderGraph dependency should be driven by resource read/write.
-		// - But when there is no shared resource between passes, there is no edge,
-		//   so we still need a deterministic fallback order.
-		// - We use a simple stage hint derived from pass name keywords.
-		//   (You can replace this with a real per-pass "Phase/OrderHint" later.)
 		// ------------------------------------------------------------
 		auto getStageHint = [](const char* name) -> int32
 		{
@@ -1743,9 +1544,7 @@ namespace shz
 			return 1000;
 		};
 
-		std::sort(
-			passes.begin(),
-			passes.end(),
+		std::sort(passes.begin(), passes.end(),
 			[&](const RenderPassBase* a, const RenderPassBase* b)
 			{
 				const int32 sa = getStageHint(a ? a->GetName() : "");
@@ -1761,9 +1560,7 @@ namespace shz
 
 		const uint32 n = static_cast<uint32>(passes.size());
 
-		// ------------------------------------------------------------
-		// Helpers: access classification
-		// ------------------------------------------------------------
+		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
 		{
 			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
@@ -1788,7 +1585,7 @@ namespace shz
 			std::vector<uint32> Writers;
 		};
 
-		std::map<uint64, UseList> uses; // deterministic iteration by ResourceId
+		std::map<uint64, UseList> uses;
 
 		for (uint32 i = 0; i < n; ++i)
 		{
@@ -1802,8 +1599,14 @@ namespace shz
 			for (const auto& a : accesses)
 			{
 				uint8& f = localFlags[a.ResourceId];
-				if (isRead(a))  f |= 1;
-				if (isWrite(a)) f |= 2;
+				if (isRead(a))
+				{
+					f |= 1;
+				}
+				if (isWrite(a))
+				{
+					f |= 2;
+				}
 			}
 
 			for (const auto& kv : localFlags)
@@ -1812,14 +1615,19 @@ namespace shz
 				const uint8  f = kv.second;
 
 				UseList& ul = uses[rid];
-				if (f & 1) ul.Readers.push_back(i);
-				if (f & 2) ul.Writers.push_back(i);
+				if (f & 1)
+				{
+					ul.Readers.push_back(i);
+				}
+				if (f & 2)
+				{
+					ul.Writers.push_back(i);
+				}
 			}
 		}
 
 		// ------------------------------------------------------------
 		// Build adjacency (edges) WITHOUT per-insert de-dup.
-		// We'll sort+unique adjacency later for determinism & correct indeg.
 		// ------------------------------------------------------------
 		std::vector<std::vector<uint32>> adj;
 		adj.resize(n);
@@ -1859,7 +1667,7 @@ namespace shz
 			std::sort(ul.Writers.begin(), ul.Writers.end());
 			ul.Writers.erase(std::unique(ul.Writers.begin(), ul.Writers.end()), ul.Writers.end());
 
-			// (1) Serialize writers: WAW
+			// 1. Serialize writers
 			if (ul.Writers.size() >= 2)
 			{
 				for (uint32 wi = 1; wi < static_cast<uint32>(ul.Writers.size()); ++wi)
@@ -1868,7 +1676,7 @@ namespace shz
 				}
 			}
 
-			// (2) lastWriter -> pure readers (RAW to final version)
+			// 2. lastWriter -> pure readers
 			if (!ul.Writers.empty() && !ul.Readers.empty())
 			{
 				const uint32 lastWriter = ul.Writers.back();
@@ -1967,8 +1775,6 @@ namespace shz
 
 		const auto accesses = pass->GetDeclaredResourceAccesses();
 
-		// 같은 resource를 같은 pass에서 여러 번 선언했을 수 있으니 dedup
-		// (가장 보수적으로: WRITE가 있으면 WRITE 우선)
 		struct Agg final
 		{
 			RenderPassResourceAccess A;
@@ -1995,7 +1801,6 @@ namespace shz
 			}
 			else
 			{
-				// write가 더 강함
 				if (isWrite(a) && !isWrite(slot.A))
 				{
 					slot.A = a;
@@ -2014,11 +1819,6 @@ namespace shz
 
 			RESOURCE_STATE prev = RESOURCE_STATE_UNKNOWN;
 
-			// -----------------------------------------------------------------
-			// IMPORTANT:
-			// - External(특히 SwapChain backbuffer)은 ResourceId로 상태 추적하면 안 됨.
-			// - 실제 pObj(=현재 backbuffer texture) 기준으로 추적해야 함.
-			// -----------------------------------------------------------------
 			if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL)
 			{
 				auto it = m_ExternalStates.find(pObj);
