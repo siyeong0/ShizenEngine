@@ -154,6 +154,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\DeferredSystem.h" />
     <ClInclude Include="Public\ForwardSystem.h" />
+    <ClInclude Include="Public\GrassSystem.h" />
     <ClInclude Include="Public\PostProcessSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
   </ItemGroup>
@@ -166,6 +167,7 @@
     </ClCompile>
     <ClCompile Include="Private\DeferredSystem.cpp" />
     <ClCompile Include="Private\ForwardSystem.cpp" />
+    <ClCompile Include="Private\GrassSystem.cpp" />
     <ClCompile Include="Private\PostProcessSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
   </ItemGroup>

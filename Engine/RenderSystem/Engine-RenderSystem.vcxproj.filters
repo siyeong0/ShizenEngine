@@ -30,6 +30,9 @@
     <ClInclude Include="Public\PostProcessSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\GrassSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -45,6 +48,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\PostProcessSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GrassSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

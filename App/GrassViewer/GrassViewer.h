@@ -25,6 +25,7 @@
 #include "Engine/RenderSystem/Public/ForwardSystem.h"
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
+#include "Engine/RenderSystem/Public/GrassSystem.h"
 
 namespace shz
 {
@@ -67,6 +68,7 @@ namespace shz
 		std::unique_ptr<DeferredSystem> m_pDeferredSystem;
 		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
 		std::unique_ptr<ShadowSystem> m_pShadowSystem;
+		std::unique_ptr<GrassSystem> m_pGrassSystem;
 
 		ViewportState     m_Viewport = {};
 		ViewFamily        m_ViewFamily = {};

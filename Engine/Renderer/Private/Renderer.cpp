@@ -2,15 +2,16 @@
 #include "Engine/Renderer/Public/Renderer.h"
 
 #include "Engine/Core/Math/Math.h"
+
+#include "Engine/Image/Public/TextureUtilities.h"
 #include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
+
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
-#include "Engine/Image/Public/TextureUtilities.h"
 
 #include "Engine/Renderer/Public/DrawPacket.h"
-#include "Engine/RenderPass/Public/ShadowRenderPass.h"
-#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {
@@ -287,8 +288,7 @@ namespace shz
 
 		m_PipelineBindingCache.clear();
 
-		m_NewBuffersThisFrame.clear();
-		m_NewTexturesThisFrame.clear();
+		m_PendingBarriers.clear();
 
 		m_CreateInfo = {};
 		m_PassCtx = {};
@@ -583,19 +583,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Common barriers
 		// ------------------------------------------------------------
-		std::vector<StateTransitionDesc> preBarriers = {};
-		auto pushBarrier = [&preBarriers](IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
-		{
-			ASSERT(pObj, "Device object is null.");
-
-			StateTransitionDesc b = {};
-			b.pResource = pObj;
-			b.OldState = from;
-			b.NewState = to;
-			b.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
-			preBarriers.push_back(b);
-		};
-
 		pushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
@@ -621,10 +608,6 @@ namespace shz
 			const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(objDense);
 			ASSERT(obj.pMesh, "Invalid scene object.");
 
-			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
-			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
-
 			for (const auto& section : obj.pMesh->Sections)
 			{
 				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("GBuffer"));
@@ -649,10 +632,6 @@ namespace shz
 				continue;
 			}
 
-			ASSERT(obj.pMesh->VertexBuffer && obj.pMesh->IndexBuffer, "Buffer is null.");
-			pushBarrier(obj.pMesh->VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-			pushBarrier(obj.pMesh->IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
-
 			for (const auto& section : obj.pMesh->Sections)
 			{
 				uint64 hash = hashCombine64(section.MaterialId, STRING_HASH("Shadow"));
@@ -667,25 +646,15 @@ namespace shz
 			}
 		}
 
-		for (RefCntAutoPtr<IBuffer> newBuffer : m_NewBuffersThisFrame)
+		if (!m_PendingBarriers.empty())
 		{
-			ASSERT(newBuffer, "Buffer is null.");
-			pushBarrier(newBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		}
-		for (RefCntAutoPtr<ITexture> newTexure : m_NewTexturesThisFrame)
-		{
-			ASSERT(newTexure, "Texture is null.");
-			pushBarrier(newTexure, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		}
+			std::vector<StateTransitionDesc> descs;
+			descs.reserve(m_PendingBarriers.size());
+			for (auto& pb : m_PendingBarriers) descs.push_back(pb.Desc);
 
-
-		if (!preBarriers.empty())
-		{
-			ctx->TransitionResourceStates(static_cast<uint32>(preBarriers.size()), preBarriers.data());
+			ctx->TransitionResourceStates((uint32)descs.size(), descs.data());
 		}
-
-		m_NewBuffersThisFrame.clear();
-		m_NewTexturesThisFrame.clear();
+		m_PendingBarriers.clear();
 
 		// Apply pending buffer updates
 		for (const BufferUpdateDesc& bud : m_PendingBufferUpdates)
@@ -906,6 +875,11 @@ namespace shz
 			return false;
 		};
 
+		auto hasClearValue = [&](uint64 resourceId) -> bool
+		{
+			return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
+		};
+
 		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
 		{
 			OptimizedClearValue cv = {};
@@ -971,11 +945,19 @@ namespace shz
 				const TextureDesc& td = pTex->GetDesc();
 				const TextureViewDesc& vd = pRTV->GetDesc();
 
+				const bool bClear = hasClearValue(a.ResourceId);
+
 				RenderPassAttachmentDesc at = {};
-				at.Format = vd.Format;          // ✅ View format
+				at.Format = vd.Format; // View format
 				at.SampleCount = td.SampleCount;
-				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+
+				at.LoadOp = bClear ? ATTACHMENT_LOAD_OP_CLEAR : ATTACHMENT_LOAD_OP_LOAD;
 				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+
+				// Color attachment는 stencil 의미 없지만 안전하게 discard
+				at.StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
+				at.StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
+
 				at.InitialState = RESOURCE_STATE_RENDER_TARGET;
 				at.FinalState = RESOURCE_STATE_RENDER_TARGET;
 
@@ -987,14 +969,15 @@ namespace shz
 				colorRefs.emplace_back(cr);
 
 				rpItem.StaticFBAttachments.emplace_back(pRTV);
+
 				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/false));
 			}
 			// -------------------------------------------------------------
 			// Texture DSV write (single depth)
 			// -------------------------------------------------------------
 			else if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE &&
-				bWrite &&
-				a.Usage == RENDER_USAGE_DSV_WRITE &&
+				// bWrite && TODO: Read만 해도 DSV 생성하도록 해놈. 더 근본적인 해결?
+				(a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_DSV_READ) &&
 				a.TextureViewType == TEXTURE_VIEW_DEPTH_STENCIL)
 			{
 				ASSERT(!bHasDepth, "Multiple depth attachments are not supported yet.");
@@ -1008,11 +991,18 @@ namespace shz
 				const TextureDesc& td = pTex->GetDesc();
 				const TextureViewDesc& vd = pDSV->GetDesc();
 
+				const bool bClear = hasClearValue(a.ResourceId);
+
 				RenderPassAttachmentDesc at = {};
-				at.Format = vd.Format;         // ✅ View format
+				at.Format = vd.Format; // View format
 				at.SampleCount = td.SampleCount;
-				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+
+				at.LoadOp = bClear ? ATTACHMENT_LOAD_OP_CLEAR : ATTACHMENT_LOAD_OP_LOAD;
 				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+
+				at.StencilLoadOp = bClear ? ATTACHMENT_LOAD_OP_CLEAR : ATTACHMENT_LOAD_OP_LOAD;
+				at.StencilStoreOp = ATTACHMENT_STORE_OP_STORE;
+
 				at.InitialState = RESOURCE_STATE_DEPTH_WRITE;
 				at.FinalState = RESOURCE_STATE_DEPTH_WRITE;
 
@@ -1023,14 +1013,13 @@ namespace shz
 				depthRef.State = RESOURCE_STATE_DEPTH_WRITE;
 
 				rpItem.StaticFBAttachments.emplace_back(pDSV);
+
 				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/true));
 
 				bHasDepth = true;
 			}
 			// -------------------------------------------------------------
 			// SwapChain backbuffer RTV write (EXTERNAL)
-			// - RenderPass는 만들 수 있음 (format은 swapchain desc)
-			// - Framebuffer는 "현재 backbuffer RTV"가 필요하므로 런타임에 생성/갱신
 			// -------------------------------------------------------------
 			else if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL &&
 				bWrite &&
@@ -1040,12 +1029,18 @@ namespace shz
 				ASSERT(m_pSwapChain, "SwapChain is null.");
 
 				const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
+				const bool bClear = hasClearValue(a.ResourceId);
 
 				RenderPassAttachmentDesc at = {};
 				at.Format = scDesc.ColorBufferFormat;
 				at.SampleCount = 1;
-				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+
+				at.LoadOp = bClear ? ATTACHMENT_LOAD_OP_CLEAR : ATTACHMENT_LOAD_OP_LOAD;
 				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+
+				at.StencilLoadOp = ATTACHMENT_LOAD_OP_DISCARD;
+				at.StencilStoreOp = ATTACHMENT_STORE_OP_DISCARD;
+
 				at.InitialState = RESOURCE_STATE_RENDER_TARGET;
 				at.FinalState = RESOURCE_STATE_RENDER_TARGET;
 
@@ -1103,6 +1098,7 @@ namespace shz
 			}
 			else
 			{
+				// present pass renderpass 기억
 				m_pPresentRenderPass = rpItem.pRHIRenderpass;
 			}
 		}
@@ -1111,6 +1107,7 @@ namespace shz
 			// compute-only / no RP
 			rpItem.ClearValues.clear();
 			rpItem.StaticFBAttachments.clear();
+			rpItem.bUseSwapChainBackBuffer = false;
 		}
 
 		// -----------------------------------------------------------------
@@ -1129,10 +1126,57 @@ namespace shz
 		}
 	}
 
-
 	// ---------------------------------------------------------------------
 	// Resource registry wrappers
 	// ---------------------------------------------------------------------
+
+	RefCntAutoPtr<ITexture> Renderer::GetTexture(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetTexture(id);
+	}
+
+	RefCntAutoPtr<ITextureView> Renderer::GetTextureSRV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetTextureSRV(id);
+	}
+
+	RefCntAutoPtr<ITextureView> Renderer::GetTextureRTV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetTextureRTV(id);
+	}
+
+	RefCntAutoPtr<ITextureView> Renderer::GetTextureDSV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetTextureDSV(id);
+	}
+
+	RefCntAutoPtr<ITextureView> Renderer::GetTextureUAV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetTextureUAV(id);
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::GetBuffer(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetBuffer(id);
+	}
+
+	RefCntAutoPtr<IBufferView> Renderer::GetBufferSRV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetBufferSRV(id);
+	}
+
+	RefCntAutoPtr<IBufferView> Renderer::GetBufferUAV(uint64 id) const
+	{
+		ASSERT(m_pRegistry, "RenderResourceRegistry is null. Initialize renderer first.");
+		return m_pRegistry->GetBufferUAV(id);
+	}
 
 	uint64 Renderer::AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData)
 	{
@@ -1340,6 +1384,9 @@ namespace shz
 			out.Sections.push_back(d);
 		}
 
+		pushBarrier(out.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+		pushBarrier(out.IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
 		m_StaticMeshCache.Store(key, std::move(out));
 		return m_StaticMeshCache.Acquire(key);
 	}
@@ -1457,6 +1504,27 @@ namespace shz
 		m_pShadowOpaquePSO = pOpaquePSO;
 		m_pShadowMaskedPSO = pMaskedPSO;
 	}
+
+	// ---------------------------------------------------------------------
+	// Barrier helper
+	// ---------------------------------------------------------------------
+
+	void Renderer::pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to)
+	{
+		ASSERT(pObj, "Device object is null.");
+
+		PendingBarrier pb = {};
+		pb.Hold = pObj; 
+
+		pb.Desc = {};
+		pb.Desc.pResource = pb.Hold;
+		pb.Desc.OldState = from;
+		pb.Desc.NewState = to;
+		pb.Desc.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
+
+		m_PendingBarriers.push_back(std::move(pb));
+	}
+
 
 	// ---------------------------------------------------------------------
 	// Resource wrappers
@@ -1691,7 +1759,7 @@ namespace shz
 				RESOURCE_STATE_TRANSITION_MODE_TRANSITION
 			);
 
-			m_NewBuffersThisFrame.emplace(pConstantBuffer);
+			pushBarrier(pConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		}
 
 		// Textures
@@ -1738,7 +1806,7 @@ namespace shz
 			if (bSet)
 			{
 				ASSERT(pTexture, "");
-				m_NewTexturesThisFrame.emplace(pTexture);
+				pushBarrier(pTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 			}
 		}
 
@@ -1817,30 +1885,28 @@ namespace shz
 		// ------------------------------------------------------------
 		// Baseline deterministic ordering (even when graph has no edges)
 		// ------------------------------------------------------------
-		auto getStageHint = [](const char* name) -> int32
+		auto getStageHint = [](const std::string& name) -> int32
 		{
-			// Lower comes earlier.
-			// Tune these buckets as your renderer grows.
-			if (!name) return 1000;
+			auto contains = [&](const std::string& needle) {return name.find(needle) != std::string::npos; };
 
 			// Shadow / depth-pre
-			if (std::strstr(name, "Shadow"))   return 100;
-			if (std::strstr(name, "Depth"))    return 150;
+			if (contains("Shadow"))   return 100;
+			if (contains("Depth"))    return 150;
 
 			// GBuffer / prepass
-			if (std::strstr(name, "GBuffer"))  return 200;
+			if (contains("GBuffer"))  return 200;
 
 			// Deferred lighting
-			if (std::strstr(name, "Deferred")) return 300;
-			if (std::strstr(name, "Light"))    return 320; // "Lighting", etc.
+			if (contains("Deferred")) return 300;
+			if (contains("Light"))    return 320; // "Lighting", etc.
 
 			// Forward/transparent
-			if (std::strstr(name, "Forward"))  return 400;
-			if (std::strstr(name, "Trans"))    return 420;
+			if (contains("Forward"))  return 400;
+			if (contains("Trans"))    return 420;
 
 			// Post
-			if (std::strstr(name, "Post"))     return 500;
-			if (std::strstr(name, "Tonemap"))  return 520;
+			if (contains("Post"))     return 500;
+			if (contains("Tonemap"))  return 520;
 
 			return 1000;
 		};
@@ -1866,17 +1932,41 @@ namespace shz
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
 		{
-			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-			return false;
+			if (a.Access == RENDER_ACCESS_WRITE)     return true;
+			if (a.Access == RENDER_ACCESS_READ)      return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+			switch (a.Usage)
+			{
+			case RENDER_USAGE_RTV:
+			case RENDER_USAGE_DSV_WRITE:
+			case RENDER_USAGE_UAV:
+				return true;
+			default:
+				return false;
+			}
 		};
 
 		auto isRead = [](const RenderPassResourceAccess& a) -> bool
 		{
-			if (a.Access == RENDER_ACCESS_READ || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_SRV || a.Usage == RENDER_USAGE_CBV || a.Usage == RENDER_USAGE_DSV_READ) return true;
-			if (a.Usage == RENDER_USAGE_INDIRECT_ARGUMENT) return true;
-			return false;
+			if (a.Access == RENDER_ACCESS_READ)      return true;
+			if (a.Access == RENDER_ACCESS_WRITE)     return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+			switch (a.Usage)
+			{
+			case RENDER_USAGE_SRV:
+			case RENDER_USAGE_CBV:
+			case RENDER_USAGE_DSV_READ:
+			case RENDER_USAGE_INDIRECT_ARGUMENT:
+				return true;
+
+			case RENDER_USAGE_UAV:
+				return false;
+
+			default:
+				return false;
+			}
 		};
 
 		// ------------------------------------------------------------
@@ -1997,6 +2087,52 @@ namespace shz
 			}
 		}
 
+		auto passName = [&](uint32 passIndex) -> const char*
+		{
+			return m_PassTable.at(passes[passIndex]).Name.c_str();
+		};
+
+		auto dumpUse = [&](uint64 rid, const UseList& ul)
+		{
+			std::cout << "RID=" << rid << "\n  Writers:";
+			for (uint32 w : ul.Writers) std::cout << " " << passName(w);
+			std::cout << "\n  Readers:";
+			for (uint32 r : ul.Readers) std::cout << " " << passName(r);
+			std::cout << "\n\n";
+		};
+
+		// 사이클 난 케이스에서만 보고 싶으면 조건으로 걸어도 됨
+		for (const auto& kv : uses)
+		{
+			const uint64 rid = kv.first;
+			const UseList& ul = kv.second;
+
+			// Lighting/GrassForward가 서로 물리는 리소스만 좁혀서 출력
+			bool hasLightingW = false, hasGrassW = false, hasLightingR = false, hasGrassR = false;
+
+			for (auto w : ul.Writers)
+			{
+				auto& n = m_PassTable.at(passes[w]).Name;
+				if (n == "Lighting")     hasLightingW = true;
+				if (n == "GrassForward") hasGrassW = true;
+			}
+			for (auto r : ul.Readers)
+			{
+				auto& n = m_PassTable.at(passes[r]).Name;
+				if (n == "Lighting")     hasLightingR = true;
+				if (n == "GrassForward") hasGrassR = true;
+			}
+
+			// "GrassForward -> Lighting"가 생기려면:
+			// GrassForward가 last writer이고 Lighting이 pure reader로 들어있어야 함.
+			// 일단 둘 다 등장하는 리소스만 찍자.
+			if ((hasLightingW || hasLightingR) && (hasGrassW || hasGrassR))
+			{
+				dumpUse(rid, ul);
+			}
+		}
+
+
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
 		// ------------------------------------------------------------
@@ -2060,7 +2196,35 @@ namespace shz
 		// ------------------------------------------------------------
 		// Cycle fallback
 		// ------------------------------------------------------------
-		ASSERT(order.size() == n, "Compile failed.");
+		if (order.size() != n)
+		{
+			std::cout << "\n[RenderGraph] cycle suspected. Remaining passes:\n";
+			for (uint32 i = 0; i < n; ++i)
+			{
+				if (indeg[i] > 0)
+				{
+					const auto& p = m_PassTable.at(passes[i]);
+					std::cout << " - " << p.Name << " (indeg=" << indeg[i] << ")\n";
+				}
+			}
+
+			std::cout << "\n[RenderGraph] edges among remaining:\n";
+			for (uint32 u = 0; u < n; ++u)
+			{
+				if (indeg[u] == 0) continue;
+				const auto& pu = m_PassTable.at(passes[u]);
+
+				for (uint32 v : adj[u])
+				{
+					if (indeg[v] == 0) continue;
+					const auto& pv = m_PassTable.at(passes[v]);
+					std::cout << "   " << pu.Name << " -> " << pv.Name << "\n";
+				}
+			}
+
+			ASSERT(false, "Compile failed (cycle).");
+		}
+
 
 		for (uint32 idx : order)
 		{

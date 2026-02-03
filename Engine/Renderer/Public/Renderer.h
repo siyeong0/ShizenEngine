@@ -1,15 +1,12 @@
 #pragma once
-#include <vector>
-#include <memory>
-#include <unordered_set>
-#include <unordered_map>
-#include <string>
-#include <functional>
-
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
 
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
+
+#include "Engine/RuntimeData/Public/Material.h"
+#include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
@@ -25,21 +22,15 @@
 
 #include "Engine/ImGui/Public/ImGuiImplShizen.hpp"
 
-#include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/Renderer/Public/RenderScene.h"
-#include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.hpp"
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 
-#include "Engine/Renderer/Public/RenderPassContext.h"
-#include "Engine/RenderPass/Public/RenderPassBase.h"
-
-#include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/RuntimeData/Public/TerrainHeightField.h"
-
-#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
+#include "Engine/Renderer/Public/RenderPassContext.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 namespace shz
 {
@@ -104,6 +95,16 @@ namespace shz
 			std::function<void()> onCreated = {});
 
 		// Resource registry wrappers
+		RefCntAutoPtr<ITexture> GetTexture(uint64 id) const;
+		RefCntAutoPtr<ITextureView> GetTextureSRV(uint64 id) const;
+		RefCntAutoPtr<ITextureView> GetTextureRTV(uint64 id) const;
+		RefCntAutoPtr<ITextureView> GetTextureDSV(uint64 id) const;
+		RefCntAutoPtr<ITextureView> GetTextureUAV(uint64 id) const;
+
+		RefCntAutoPtr<IBuffer> GetBuffer(uint64 id) const;
+		RefCntAutoPtr<IBufferView> GetBufferSRV(uint64 id) const;
+		RefCntAutoPtr<IBufferView> GetBufferUAV(uint64 id) const;
+
 		uint64 AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		uint64 AddTexture(uint64 id, const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		uint64 AddTexture(const std::string& name, RefCntAutoPtr<ITexture>&& tex);
@@ -154,6 +155,8 @@ namespace shz
 		void SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO);
 
 	private:
+		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
+
 		RefCntAutoPtr<ITexture> createTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		RefCntAutoPtr<ITexture> createTexture(const AssetRef<Texture>& assetRef);
 		RefCntAutoPtr<ITexture> createTexture(const std::string& name, const Texture& texture);
@@ -203,8 +206,12 @@ namespace shz
 		};
 		std::unordered_map<uint64, PipelineBinding> m_PipelineBindingCache;
 
-		std::unordered_set<RefCntAutoPtr<IBuffer>> m_NewBuffersThisFrame;
-		std::unordered_set<RefCntAutoPtr<ITexture>> m_NewTexturesThisFrame;
+		struct PendingBarrier final
+		{
+			RefCntAutoPtr<IDeviceObject> Hold;
+			StateTransitionDesc Desc;
+		};
+		std::vector<PendingBarrier> m_PendingBarriers;
 
 		struct BufferUpdateDesc
 		{

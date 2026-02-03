@@ -10,5 +10,10 @@
 #include <unordered_set>
 #include <map>
 #include <queue>
+#include <vector>
+#include <memory>
+#include <unordered_map>
+#include <string>
+#include <functional>
 
 #endif //PCH_H
