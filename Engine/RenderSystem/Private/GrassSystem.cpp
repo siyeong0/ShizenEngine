@@ -57,8 +57,6 @@ namespace shz
 	// ---------------------------------------------------------------------
 	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect)
 	{
-		ASSERT(m_pGrassMesh, "Grass mesh not set. Call SetGrassModle() before InstallPasses().");
-
 		// Allocate indirect slot for grass
 		m_IndirectSlot = indirect.AllocateSlot("GrassSystem");
 
@@ -492,40 +490,29 @@ namespace shz
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				pContext->SetPipelineState(m_pGrassPSO);
-				pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				for (const DrawIndirectPacket& pkt : ctx.ForwardIndirectPackets)
+				{
+					pContext->SetPipelineState(m_pGrassPSO);
+					pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
-				uint64 offsets[] = { 0 };
+					IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
+					uint64 offsets[] = { 0 };
 
-				pContext->SetVertexBuffers(
-					0,
-					1,
-					ppVertexBuffers,
-					offsets,
-					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-					SET_VERTEX_BUFFERS_FLAG_RESET);
+					pContext->SetVertexBuffers(
+						0,
+						1,
+						ppVertexBuffers,
+						offsets,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+						SET_VERTEX_BUFFERS_FLAG_RESET);
 
-				pContext->SetIndexBuffer(
-					m_pGrassMesh->IndexBuffer,
-					0,
-					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					pContext->SetIndexBuffer(
+						pkt.IndexBuffer,
+						0,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				DrawIndexedIndirectAttribs ia = {};
-				ia.IndexType = m_pGrassMesh->IndexType;
-
-				ia.pAttribsBuffer = ctx.pRegistry->GetBuffer(kIndirectArgsBuffer);
-				ia.DrawArgsOffset = IndirectArgsSystem::GetArgsOffsetBytes(m_IndirectSlot);
-				ia.DrawCount = 1;
-				ia.DrawArgsStride = 20;
-
-				ia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
-
-				ia.pCounterBuffer = nullptr;
-				ia.CounterOffset = 0;
-				ia.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
-
-				pContext->DrawIndexedIndirect(ia);
+					pContext->DrawIndexedIndirect(pkt.DrawAttribs);
+				}
 			},
 				[this, &renderer]()
 			{
@@ -623,6 +610,201 @@ namespace shz
 
 				m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
 				ASSERT(m_pGrassSRB, "Grass SRB create failed.");
+			});
+		// =====================================================================
+		// Pass X) GrassShadow (graphics, DrawIndexedIndirect into ShadowMap)
+		//  - Shadow pass가 ShadowMap을 clear했다고 가정 (여기서는 clear 금지)
+		// =====================================================================
+		renderer.AddPass(
+			"GrassShadow",
+			[&](RenderPassBuilder& b)
+			{
+				const uint64 kShadowMap = STRING_HASH("ShadowMap");
+				const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
+				const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
+
+				// Shadow map에 depth write (additive)
+				b.DeclareTextureDSVWrite(kShadowMap);
+
+				// Grass instances SRV read
+				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
+
+				// Indirect args read -> RDG가 INDIRECT_ARGUMENT 전이 생성
+				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
+
+				b.DeclareBufferSRVRead(STRING_HASH("DEP00"));
+
+				// GrassShadow VS가 grass render cb를 쓰면 이것도
+				// (GrassShadow.vsh에서 안 쓰면 빼도 됨)
+				b.DeclareBufferCBVRead(STRING_HASH("GrassRenderConstantsCB"));
+			},
+			[this](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(m_pGrassShadowPSO && m_pGrassShadowSRB, "GrassShadow PSO/SRB not ready.");
+
+				IDeviceContext* pContext = ctx.pImmediateContext;
+
+				// viewport to shadow map resolution
+				Viewport vp = {};
+				vp.Width = float(ctx.ShadowMapResolution);
+				vp.Height = float(ctx.ShadowMapResolution);
+				vp.MinDepth = 0.f;
+				vp.MaxDepth = 1.f;
+				pContext->SetViewports(1, &vp, 0, 0);
+
+				const std::vector<DrawIndirectPacket>& packets = ctx.ShadowIndirectPackets;
+
+				// 잔디 shadow는 보통 "하나의 PSO/SRB + 하나의 VB/IB"로 끝날 확률이 높지만,
+				// 그래도 패킷 기반으로 안전하게 처리
+				IPipelineState* pLastPSO = nullptr;
+				IShaderResourceBinding* pLastSRB = nullptr;
+				IBuffer* pLastVB = nullptr;
+				IBuffer* pLastIB = nullptr;
+
+				for (const DrawIndirectPacket& pktIn : packets)
+				{
+					ASSERT(pktIn.VertexBuffer && pktIn.IndexBuffer, "Invalid indirect packet VB/IB.");
+
+					// 이 패스는 GrassShadow 전용 PSO/SRB를 강제로 사용
+					if (pLastPSO != m_pGrassShadowPSO)
+					{
+						pLastPSO = m_pGrassShadowPSO;
+						pLastSRB = nullptr;
+						pContext->SetPipelineState(pLastPSO);
+					}
+
+					if (pLastSRB != m_pGrassShadowSRB)
+					{
+						pLastSRB = m_pGrassShadowSRB;
+						pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					}
+
+					if (pLastVB != pktIn.VertexBuffer)
+					{
+						IBuffer* ppVB[] = { pktIn.VertexBuffer };
+						uint64 offsets[] = { 0 };
+
+						pContext->SetVertexBuffers(
+							0, 1, ppVB, offsets,
+							RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+							SET_VERTEX_BUFFERS_FLAG_RESET);
+
+						pLastVB = pktIn.VertexBuffer;
+					}
+
+					if (pLastIB != pktIn.IndexBuffer)
+					{
+						pContext->SetIndexBuffer(pktIn.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						pLastIB = pktIn.IndexBuffer;
+					}
+
+					// DrawIndexedIndirectAttribs 는 "pAttribsBuffer"가 반드시 필요
+					DrawIndexedIndirectAttribs dia = pktIn.DrawAttribs;
+
+					// RenderScene에서 null로 두는 정책이었으니 여기서 꽂아줌
+					// (이게 없으면 너가 봤던 INDIRECT_ARGUMENT state 에러/혹은 null deref가 나기 쉬움)
+					dia.pAttribsBuffer = ctx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+
+					// 안전: state transition mode는 VERIFY로 두되,
+					// RDG가 DeclareBufferIndirectArgsRead로 상태전이를 만들어줬다는 가정
+					dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
+					pContext->DrawIndexedIndirect(dia);
+				}
+			},
+				[this, &renderer]()
+			{
+				// ------------------------------------------------------------
+				// Build PSO for GrassShadow
+				//  - VS: GrassShadow.vsh
+				//  - PS: Shadow.psh (depth-only)
+				// ------------------------------------------------------------
+				GraphicsPipelineStateCreateInfo psoCI = {};
+				psoCI.PSODesc.Name = "PSO_GrassShadow";
+				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+				auto& gp = psoCI.GraphicsPipeline;
+				gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+				// Depth-only target: RTV 0, DSV is from render pass
+				gp.NumRenderTargets = 0;
+				gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+				gp.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+				gp.RasterizerDesc.CullMode = CULL_MODE_NONE; // grass는 양면/얇은 지오메트리 많음
+				gp.RasterizerDesc.FrontCounterClockwise = true;
+
+				gp.DepthStencilDesc.DepthEnable = true;
+				gp.DepthStencilDesc.DepthWriteEnable = true;
+				gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+				// Input layout: GrassForward랑 동일(너가 이미 쓰는 스트라이드 그대로)
+				static LayoutElement layoutElems[] =
+				{
+					LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+					LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+					LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+					LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+				};
+				gp.InputLayout.LayoutElements = layoutElems;
+				gp.InputLayout.NumElements = _countof(layoutElems);
+
+				// Shaders
+				{
+					ShaderCreateInfo vsCI = {};
+					vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					vsCI.EntryPoint = "main";
+					vsCI.Desc.Name = "GrassShadow VS";
+					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+					vsCI.Desc.UseCombinedTextureSamplers = false;
+					vsCI.FilePath = m_GrassShadowVS.c_str();
+
+					ShaderCreateInfo psCI = {};
+					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					psCI.EntryPoint = "main";
+					psCI.Desc.Name = "GrassShadow PS(Shadow.psh)";
+					psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+					psCI.Desc.UseCombinedTextureSamplers = false;
+					psCI.FilePath = m_ShadowPS.c_str();
+
+					renderer.CreateShader(vsCI, &psoCI.pVS);
+					renderer.CreateShader(psCI, &psoCI.pPS);
+					ASSERT(psoCI.pVS && psoCI.pPS, "GrassShadow VS/PS compile failed.");
+				}
+
+				// Resource layout
+				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+				// (필요한 mutable이 있으면 여기에 추가)
+				// GrassShadow.vsh가 g_GrassInstances(StructuredBuffer) + SHADOW_CONSTANTS( CB ) 등을 static으로 받도록 구성하는 게 가장 간단
+				// Shadow.psh가 샘플링을 안 하면 samplers는 필요 없음
+
+				m_pGrassShadowPSO = renderer.AcquirePipelineState(STRING_HASH("GrassShadow"), psoCI, true);
+				ASSERT(m_pGrassShadowPSO, "AcquirePipelineState(GrassShadow) failed.");
+
+				// ---- Bind static resources ----
+				// Grass instances
+				if (auto* var = m_pGrassShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
+				{
+					var->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
+				}
+
+				// Shadow constants (GrassShadow.vsh에서 cbuffer SHADOW_CONSTANTS를 쓴다고 가정)
+				if (auto* var = m_pGrassShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
+				{
+					var->Set(renderer.GetBuffer(STRING_HASH("SHADOW_CONSTANTS")));
+				}
+
+				// Grass render constants를 GrassShadow.vsh에서 쓰면(예: wind/flatten 동일 적용)
+				if (auto* var = m_pGrassShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
+				{
+					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+				}
+
+				m_pGrassShadowPSO->CreateShaderResourceBinding(&m_pGrassShadowSRB, true);
+				ASSERT(m_pGrassShadowSRB, "GrassShadow SRB create failed.");
 			});
 	}
 } // namespace shz

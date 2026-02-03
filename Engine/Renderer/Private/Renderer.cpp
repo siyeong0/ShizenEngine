@@ -194,9 +194,11 @@ namespace shz
 			};
 
 			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
+			AddBuffer(STRING_HASH("ObjectTable.Forward"), std::move(createObjectTable("ObjectTableSB.Forward")));
 			AddBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
 
 			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ObjectTable", STRING_HASH("ObjectTable.GBuffer"));
+			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ForwardObjectTable", STRING_HASH("ObjectTable.Forward"));
 			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ShadowObjectTable", STRING_HASH("ObjectTable.Shadow"));
 		}
 
@@ -388,7 +390,8 @@ namespace shz
 		IBuffer* pShadowCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("SHADOW_CONSTANTS"));
 
 		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.GBuffer"));
-		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Shadow"));;
+		IBuffer* pObjSB_Forward = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Forward"));
+		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Shadow"));
 
 		ITexture* pEnvTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvTex"));
 		ITexture* pEnvDiffTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex"));
@@ -399,7 +402,7 @@ namespace shz
 		ASSERT(pFrameCB, "FrameCB missing (registry).");
 		ASSERT(pDrawCB, "DrawCB missing (registry).");
 		ASSERT(pShadowCB, "ShadowCB missing (registry).");
-		ASSERT(pObjSB_GB && pObjSB_Shadow, "ObjectTable SB missing (registry).");
+		ASSERT(pObjSB_GB && pObjSB_Forward && pObjSB_Shadow, "ObjectTable SB missing (registry).");
 		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
 		ASSERT(pErrorTex, "Error texture missing (registry).");
 
@@ -469,7 +472,6 @@ namespace shz
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
 			const float ShadowVisibleDistance = 100.0f;
 
-			// TODO: replace with actual shadow map size if you store it
 			const float shadowMapWidth = 4096.0f;
 			const float shadowMapHeight = 4096.0f;
 
@@ -624,6 +626,7 @@ namespace shz
 		pushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
 		pushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pObjSB_Forward, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
@@ -633,11 +636,15 @@ namespace shz
 		pushBarrier(pErrorTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
 		// ------------------------------------------------------------
-		// Visible objects: VB/IB + Material textures/CB barriers (dedup)
+		// Visible objects: material pipeline binding cache build (dedup)
 		// ------------------------------------------------------------
 		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
+		(void)pMaterialManager;
 
-		auto hashCombine64 = [](uint64 h, uint64 v) {return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)); };
+		auto hashCombine64 = [](uint64 h, uint64 v)
+		{
+			return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+		};
 
 		for (uint32 objDense : visibleObjectIndexMain)
 		{
@@ -682,6 +689,45 @@ namespace shz
 			}
 		}
 
+		for (const auto& io : scene.GetIndirectObjects())
+		{
+			if (!io.bEnabled) continue;
+
+			const auto& d = io.Desc;
+			if (!d.pMesh) continue;
+
+			const uint64 passKey = d.PassKey;
+
+			for (const auto& sec : d.pMesh->Sections)
+			{
+				const uint64 hash = hashCombine64(sec.MaterialId, passKey);
+				auto it = m_PipelineBindingCache.find(hash);
+				if (it == m_PipelineBindingCache.end())
+				{
+					PipelineBinding pb;
+					pb.pPSO = acquirePipelineStateFromMaterial(sec.MaterialId, passKey);
+					pb.pSRB = acquireShaderResourceBindingFromMaterial(sec.MaterialId, pb.pPSO);
+					m_PipelineBindingCache[hash] = pb;
+				}
+			}
+
+			if (d.bCastShadow)
+			{
+				for (const auto& sec : d.pMesh->Sections)
+				{
+					const uint64 hash = hashCombine64(sec.MaterialId, STRING_HASH("Shadow"));
+					auto it = m_PipelineBindingCache.find(hash);
+					if (it == m_PipelineBindingCache.end())
+					{
+						PipelineBinding pb;
+						pb.pPSO = acquirePipelineStateFromMaterial(sec.MaterialId, STRING_HASH("Shadow"));
+						pb.pSRB = acquireShaderResourceBindingFromMaterial(sec.MaterialId, pb.pPSO);
+						m_PipelineBindingCache[hash] = pb;
+					}
+				}
+			}
+		}
+
 		if (!m_PendingBarriers.empty())
 		{
 			std::vector<StateTransitionDesc> descs;
@@ -701,7 +747,6 @@ namespace shz
 			const auto& desc = pBuf->GetDesc();
 			ASSERT(desc.Size >= bud.Data.size(), "Update size exceeds buffer size.");
 
-			// Diligent UpdateBuffer expects Uint32 size
 			ASSERT(bud.Data.size() <= std::numeric_limits<uint32>::max(), "Update too large.");
 			const uint32 updateSize = static_cast<uint32>(bud.Data.size());
 
@@ -709,7 +754,6 @@ namespace shz
 
 			if (bCpuWritableDynamic)
 			{
-				// Dynamic buffers must be updated via Map/Unmap, not UpdateBuffer()
 				void* pData = nullptr;
 				ctx->MapBuffer(pBuf, MAP_WRITE, MAP_FLAG_DISCARD, pData);
 				ASSERT(pData, "MapBuffer returned null.");
@@ -718,7 +762,6 @@ namespace shz
 			}
 			else
 			{
-				// Default/Sparse buffers can be updated via UpdateBuffer()
 				ASSERT(desc.Usage == USAGE_DEFAULT || desc.Usage == USAGE_SPARSE,
 					"Unable to update buffer '%s': only USAGE_DEFAULT/USAGE_SPARSE can use UpdateBuffer(). "
 					"For USAGE_DYNAMIC use MapBuffer().",
@@ -732,9 +775,7 @@ namespace shz
 					RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 			}
 		}
-
 		m_PendingBufferUpdates.clear();
-
 
 		// ------------------------------------------------------------
 		// Helper: pack object table using instanceRemap
@@ -756,67 +797,79 @@ namespace shz
 		};
 
 		// ------------------------------------------------------------
-		// Helper: build packets from draw items
+		// Pipeline resolver (lambda)
 		// ------------------------------------------------------------
-		auto buildPacketsFromDrawItems = [&](uint64 passKey, const std::vector<RenderScene::DrawItem>& items) -> std::vector<DrawPacket>
+		auto pipelineResolver = [this](uint64 passKey, MaterialId materialId, IPipelineState** outPSO, IShaderResourceBinding** outSRB) -> bool
 		{
-			std::vector<DrawPacket> out;
-			out.reserve(items.size());
+			ASSERT(outPSO && outSRB, "Invalid out pointers.");
 
-			for (const RenderScene::DrawItem& di : items)
+			auto hashCombine64Local = [](uint64 h, uint64 v)
 			{
-				RenderScene::BatchView bv = {};
-				bool ok = scene.TryGetBatchView(di.BatchId, bv);
-				ASSERT(ok, "Invalid batch id.");
+				return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+			};
 
-				const StaticMeshRenderData* mesh = bv.pMesh;
-				ASSERT(mesh, "Batch mesh is null.");
-				ASSERT(bv.SectionIndex < static_cast<uint32>(mesh->Sections.size()), "SectionIndex OOB.");
+			const uint64 hash = hashCombine64Local(materialId, passKey);
 
-				const auto& sec = mesh->Sections[bv.SectionIndex];
+			auto it = m_PipelineBindingCache.find(hash);
+			ASSERT(it != m_PipelineBindingCache.end(), "PSO/SRB is not set to cache.");
 
-				DrawPacket pkt = {};
-				pkt.VertexBuffer = mesh->VertexBuffer;
-				pkt.IndexBuffer = mesh->IndexBuffer;
-
-				pkt.DrawCallType = EDrawCallType::Direct;
-
-				pkt.DrawAttribs = {};
-				pkt.DrawAttribs.IndexType = mesh->IndexType;
-				pkt.DrawAttribs.NumIndices = sec.IndexCount;
-				pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
-				pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
-				pkt.DrawAttribs.NumInstances = di.InstanceCount;
-				pkt.DrawAttribs.FirstInstanceLocation = di.StartInstanceLocation;
-				pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
-
-				uint64 pbHash = hashCombine64(sec.MaterialId, passKey);
-				ASSERT(m_PipelineBindingCache.contains(pbHash), "Cache not found.");
-				const PipelineBinding& pb = m_PipelineBindingCache[pbHash];
-				pkt.PSO = pb.pPSO;
-				pkt.SRB = pb.pSRB;
-
-				out.push_back(pkt);
-			}
-
-			return out;
+			*outPSO = it->second.pPSO;
+			*outSRB = it->second.pSRB;
+			return (*outPSO != nullptr && *outSRB != nullptr);
 		};
 
 		// ------------------------------------------------------------
-		// Build draw lists + pack object tables + build packets
+		// Build packets + pack object tables
 		// ------------------------------------------------------------
-		std::vector<RenderScene::DrawItem> drawItems;
 		std::vector<uint32> instanceRemap;
 
 		// GBuffer
-		scene.BuildDrawList(STRING_HASH("GBuffer"), visibleObjectIndexMain, drawItems, instanceRemap);
+		scene.BuildDrawPackets(
+			STRING_HASH("GBuffer"),
+			visibleObjectIndexMain,
+			pipelineResolver,
+			m_PassCtx.MainDrawPackets,
+			instanceRemap);
+
 		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
-		m_PassCtx.MainDrawPackets = buildPacketsFromDrawItems(STRING_HASH("GBuffer"), drawItems);
+
+		// Forward
+		scene.BuildDrawPackets(
+			STRING_HASH("Forward"),
+			visibleObjectIndexMain,
+			pipelineResolver,
+			m_PassCtx.ForwardDrawPackets,
+			instanceRemap);
+
+		packObjectTableFromRemap(pObjSB_Forward, instanceRemap);
 
 		// Shadow
-		scene.BuildDrawList(STRING_HASH("Shadow"), visibleObjectIndexShadow, drawItems, instanceRemap);
+		scene.BuildDrawPackets(
+			STRING_HASH("Shadow"),
+			visibleObjectIndexShadow,
+			pipelineResolver,
+			m_PassCtx.ShadowDrawPackets,
+			instanceRemap);
+
 		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
-		m_PassCtx.ShadowDrawPackets = buildPacketsFromDrawItems(STRING_HASH("Shadow"), drawItems);
+
+		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
+		scene.BuildIndirectDrawPackets(STRING_HASH("GrassForward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
+		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
+
+		IBuffer* pIndirectArgs = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
+
+		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
+		{
+			for (DrawIndirectPacket& p : packets)
+			{
+				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+			}
+		};
+		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
+		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
+		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
 
 		// ------------------------------------------------------------
 		// Execute passes
@@ -854,6 +907,7 @@ namespace shz
 			}
 		}
 	}
+
 
 	void Renderer::EndFrame()
 	{
@@ -1873,11 +1927,11 @@ namespace shz
 
 		if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE)
 		{
-			return m_pRegistry->GetTexture(a.ResourceId);
+			return m_pRegistry->HasTexture(a.ResourceId) ? m_pRegistry->GetTexture(a.ResourceId) : nullptr;
 		}
 		else if (a.Kind == RENDER_RESOURCE_KIND_BUFFER)
 		{
-			return m_pRegistry->GetBuffer(a.ResourceId);
+			return m_pRegistry->HasBuffer(a.ResourceId) ? m_pRegistry->GetBuffer(a.ResourceId) : nullptr;
 		}
 		else if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL)
 		{
@@ -1917,51 +1971,6 @@ namespace shz
 		}
 
 		ASSERT(!passes.empty(), "Requires at least one render pass.");
-
-		// ------------------------------------------------------------
-		// Baseline deterministic ordering (even when graph has no edges)
-		// ------------------------------------------------------------
-		auto getStageHint = [](const std::string& name) -> int32
-		{
-			auto contains = [&](const std::string& needle) {return name.find(needle) != std::string::npos; };
-
-			// Shadow / depth-pre
-			if (contains("Shadow"))   return 100;
-			if (contains("Depth"))    return 150;
-
-			// GBuffer / prepass
-			if (contains("GBuffer"))  return 200;
-
-			// Deferred lighting
-			if (contains("Deferred")) return 300;
-			if (contains("Light"))    return 320; // "Lighting", etc.
-
-			// Forward/transparent
-			if (contains("Forward"))  return 400;
-			if (contains("Trans"))    return 420;
-
-			// Post
-			if (contains("Post"))     return 500;
-			if (contains("Tonemap"))  return 520;
-
-			return 1000;
-		};
-
-		std::sort(passes.begin(), passes.end(),
-			[&](uint64 a, uint64 b)
-			{
-				const RenderPassItem& passA = m_PassTable.at(a);
-				const RenderPassItem& passB = m_PassTable.at(b);
-				const int32 sa = getStageHint(a ? passA.Name.c_str() : "");
-				const int32 sb = getStageHint(b ? passB.Name.c_str() : "");
-
-				if (sa != sb) return sa < sb;
-
-				// Stable within stage: lexicographic name
-				const char* na = a ? passA.Name.c_str() : "";
-				const char* nb = b ? passB.Name.c_str() : "";
-				return std::strcmp(na, nb) < 0;
-			});
 
 		const uint32 n = static_cast<uint32>(passes.size());
 
@@ -2137,38 +2146,6 @@ namespace shz
 			std::cout << "\n\n";
 		};
 
-		// 사이클 난 케이스에서만 보고 싶으면 조건으로 걸어도 됨
-		for (const auto& kv : uses)
-		{
-			const uint64 rid = kv.first;
-			const UseList& ul = kv.second;
-
-			// Lighting/GrassForward가 서로 물리는 리소스만 좁혀서 출력
-			bool hasLightingW = false, hasGrassW = false, hasLightingR = false, hasGrassR = false;
-
-			for (auto w : ul.Writers)
-			{
-				auto& n = m_PassTable.at(passes[w]).Name;
-				if (n == "Lighting")     hasLightingW = true;
-				if (n == "GrassForward") hasGrassW = true;
-			}
-			for (auto r : ul.Readers)
-			{
-				auto& n = m_PassTable.at(passes[r]).Name;
-				if (n == "Lighting")     hasLightingR = true;
-				if (n == "GrassForward") hasGrassR = true;
-			}
-
-			// "GrassForward -> Lighting"가 생기려면:
-			// GrassForward가 last writer이고 Lighting이 pure reader로 들어있어야 함.
-			// 일단 둘 다 등장하는 리소스만 찍자.
-			if ((hasLightingW || hasLightingR) && (hasGrassW || hasGrassR))
-			{
-				dumpUse(rid, ul);
-			}
-		}
-
-
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
 		// ------------------------------------------------------------
@@ -2314,7 +2291,7 @@ namespace shz
 			const RenderPassResourceAccess& a = kv.second.A;
 
 			IDeviceObject* pObj = resolveDeviceObject(a);
-			ASSERT(pObj, "Resolve device object failed for ResourceId=%llu", (unsigned long long)a.ResourceId);
+			if (!pObj) continue;
 
 			const RESOURCE_STATE desired = mapUsageToState(a);
 

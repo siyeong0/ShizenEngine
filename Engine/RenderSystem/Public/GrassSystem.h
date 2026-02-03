@@ -21,13 +21,11 @@ namespace shz
 
 		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect);
 
-		void SetGrassModle(const struct StaticMeshRenderData* mesh) { m_pGrassMesh = mesh; }
+		uint32 GetIndirectSlot() const { return m_IndirectSlot; }
 
 	private:
 		static constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
 		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
-
-		const struct StaticMeshRenderData* m_pGrassMesh = nullptr;
 
 		// Indirect slot for this system
 		uint32 m_IndirectSlot = 0;
@@ -47,10 +45,16 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         m_pGrassPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
 
+		// Shadow
+		RefCntAutoPtr<IPipelineState>         m_pGrassShadowPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pGrassShadowSRB;
+
 		// Shaders
 		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
 		std::string m_InteractionCS = "InteractionFieldUpdate.hlsl";
 		std::string m_GrassVS = "GrassForward.vsh";
 		std::string m_GrassPS = "GrassForward.psh";
+		std::string m_GrassShadowVS = "GrassShadow.vsh";		
+		std::string m_ShadowPS = "Shadow.psh";
 	};
 } // namespace shz

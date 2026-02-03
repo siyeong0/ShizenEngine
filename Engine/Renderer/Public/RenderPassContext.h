@@ -47,10 +47,18 @@ namespace shz
 		std::vector<DrawPacket> ForwardDrawPackets = {};
 		std::vector<DrawPacket> ShadowDrawPackets = {};
 
+		std::vector<DrawIndirectPacket> MainIndirectPackets = {};
+		std::vector<DrawIndirectPacket> ForwardIndirectPackets = {};
+		std::vector<DrawIndirectPacket> ShadowIndirectPackets = {};
+
 		void ResetFrame()
 		{
 			MainDrawPackets.clear();
+			ForwardDrawPackets.clear();
 			ShadowDrawPackets.clear();
+			MainIndirectPackets.clear();
+			ForwardIndirectPackets.clear();
+			ShadowIndirectPackets.clear();
 		}
 	};
 } // namespace shz

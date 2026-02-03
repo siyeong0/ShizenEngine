@@ -22,9 +22,18 @@ namespace shz
 		IPipelineState* PSO = nullptr;
 		IShaderResourceBinding* SRB = nullptr;
 
-		EDrawCallType DrawCallType = EDrawCallType::Direct;
-
 		DrawIndexedAttribs DrawAttribs = {};
-		DrawIndexedIndirectAttribs DrawIndirectAttribs = {};
 	};
+
+	struct DrawIndirectPacket final
+	{
+		IBuffer* VertexBuffer = nullptr;
+		IBuffer* IndexBuffer = nullptr;
+
+		IPipelineState* PSO = nullptr;
+		IShaderResourceBinding* SRB = nullptr;
+
+		DrawIndexedIndirectAttribs DrawAttribs = {};
+	};
+
 } // namespace shz

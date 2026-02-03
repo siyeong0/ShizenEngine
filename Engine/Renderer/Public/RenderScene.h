@@ -8,6 +8,7 @@
 
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Renderer/Public/DrawPacket.h"
 
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
 #include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
@@ -47,11 +48,24 @@ namespace shz
 			bool CastShadow = false;
 		};
 
-		struct DrawItem final
+		struct IndirectObjectDesc final
 		{
-			uint32 BatchId = 0;
-			uint32 StartInstanceLocation = 0;
-			uint32 InstanceCount = 0;
+			const StaticMeshRenderData* pMesh = nullptr;
+
+			// 어떤 pass에서 그릴지 (Forward/Shadow 등)
+			uint64 PassKey = 0;
+
+			bool bCastShadow = true;
+
+			// Indirect args 슬롯 (0..MAX_NUM_INDIRECTS-1)
+			uint32 IndirectSlot = 0;
+		};
+
+		// Indirect object handle (SceneObject와 별개)
+		struct IndirectObject final
+		{
+			IndirectObjectDesc Desc = {};
+			bool bEnabled = true;
 		};
 
 	public:
@@ -75,6 +89,13 @@ namespace shz
 		const SceneObject* GetObjectOrNull(Handle<SceneObject> h) const noexcept;
 
 		uint32 GetObjectCount() const noexcept { return static_cast<uint32>(m_ObjectDense.size()); }
+
+		Handle<IndirectObject> AddIndirect(const IndirectObjectDesc& desc);
+		void RemoveIndirect(Handle<IndirectObject> h);
+		IndirectObject* GetIndirectOrNull(Handle<IndirectObject> h) noexcept;
+		const IndirectObject* GetIndirectOrNull(Handle<IndirectObject> h) const noexcept;
+		uint32 GetIndirectCount() const noexcept { return static_cast<uint32>(m_IndirectDense.size()); }
+		const std::vector<IndirectObject>& GetIndirectObjects() const noexcept { return m_IndirectDense; }
 
 		// Lights
 		Handle<LightObject> AddLight(const LightObject& light);
@@ -109,12 +130,17 @@ namespace shz
 			return m_ObjectDense[denseIndex].OcIndex;
 		}
 
-		// Visible-aware draw list
-		void BuildDrawList(
+		void BuildDrawPackets(
 			uint64 passKey,
 			const std::vector<uint32>& visibleObjectDenseIndices,
-			std::vector<DrawItem>& outDrawItems,
+			const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+			std::vector<DrawPacket>& outPackets,
 			std::vector<uint32>& outInstanceRemap) const;
+
+		void BuildIndirectDrawPackets(
+			uint64 passKey,
+			const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+			std::vector<DrawIndirectPacket>& outPackets) const;
 
 		// Renderer가 BatchId로 상태를 조회할 수 있게
 		uint32 GetBatchCount() const noexcept { return static_cast<uint32>(m_Batches.size()); }
@@ -299,6 +325,14 @@ namespace shz
 		std::vector<uint32> m_ObjectSparse;
 		std::vector<ObjectRecord> m_ObjectDense;
 		std::vector<Handle<SceneObject>> m_ObjectHandles;
+
+		// ------------------------------------------------------------
+		// Indirect objects: Dense/Sparse (public handle)
+		// ------------------------------------------------------------
+		std::vector<Slot<IndirectObject>> m_IndirectSlots;
+		std::vector<uint32> m_IndirectSparse;
+		std::vector<IndirectObject> m_IndirectDense;
+		std::vector<Handle<IndirectObject>> m_IndirectHandles;
 
 		// ------------------------------------------------------------
 		// Lights: Dense/Sparse

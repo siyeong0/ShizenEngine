@@ -26,6 +26,8 @@ namespace shz
 				// depth target write
 				b.DeclareTextureDSVWrite(kShadowMap);
 
+				b.DeclareBufferUAV(STRING_HASH("DEP00"), RENDER_ACCESS_WRITE);
+
 				// clear
 				b.SetClearDepthStencil(kShadowMap, 1.f, 0);
 			},
@@ -96,33 +98,21 @@ namespace shz
 					}
 
 					// Draw
-					if (pkt.DrawCallType == EDrawCallType::Direct)
-					{
-						DrawIndexedAttribs dia = pkt.DrawAttribs;
+					DrawIndexedAttribs dia = pkt.DrawAttribs;
 
-						// DRAW_CONSTANTS update (StartInstanceLocation)
-						{
-							MapHelper<hlsl::DrawConstants> map(
-								pContext,
-								ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
-								MAP_WRITE,
-								MAP_FLAG_DISCARD);
-
-							hlsl::DrawConstants* dst = map;
-							dst->StartInstanceLocation = dia.FirstInstanceLocation;
-						}
-
-						pContext->DrawIndexed(dia);
-					}
-					else if (pkt.DrawCallType == EDrawCallType::Indirect)
+					// DRAW_CONSTANTS update (StartInstanceLocation)
 					{
-						DrawIndexedIndirectAttribs dia = pkt.DrawIndirectAttribs;
-						pContext->DrawIndexedIndirect(dia);
+						MapHelper<hlsl::DrawConstants> map(
+							pContext,
+							ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
+							MAP_WRITE,
+							MAP_FLAG_DISCARD);
+
+						hlsl::DrawConstants* dst = map;
+						dst->StartInstanceLocation = dia.FirstInstanceLocation;
 					}
-					else
-					{
-						ASSERT(false, "Unsupported draw call type.");
-					}
+
+					pContext->DrawIndexed(dia);
 				}
 			},
 				[this, &renderer]()

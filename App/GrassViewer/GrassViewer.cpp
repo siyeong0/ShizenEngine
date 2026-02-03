@@ -329,24 +329,6 @@ namespace shz
 			m_pShadowSystem = std::make_unique<ShadowSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
 
-			// ------------------------------------------------------------
-			// Grass model
-			// ------------------------------------------------------------
-			{
-				AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
-				AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-				ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
-
-				grassPtr->RecomputeBounds();
-				const Box& b = grassPtr->GetBounds();
-				float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-				grassPtr->ApplyUniformScale(yScale01);
-				grassPtr->MoveBottomToOrigin(true);
-
-				const StaticMeshRenderData& grassMesh = m_pRenderer->CreateStaticMeshRenderData(*grassPtr);
-				m_pGrassSystem->SetGrassModle(&grassMesh);
-			}
-
 			m_pDeferredSystem->InstallPasses(*m_pRenderer);
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
@@ -916,6 +898,29 @@ namespace shz
 				rb.bStartActive = true;
 				e.set<CRigidbody>(rb);
 			}
+		}
+
+		// ------------------------------------------------------------
+		// Grass model
+		// ------------------------------------------------------------
+		{
+			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
+			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
+			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
+
+			grassPtr->RecomputeBounds();
+			const Box& b = grassPtr->GetBounds();
+			float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+			grassPtr->ApplyUniformScale(yScale01);
+			grassPtr->MoveBottomToOrigin(true);
+
+			RenderScene::IndirectObjectDesc indirectDesc = {};
+			indirectDesc.pMesh = &m_pRenderer->CreateStaticMeshRenderData(*grassPtr);
+			indirectDesc.bCastShadow = true;
+			indirectDesc.PassKey = STRING_HASH("GrassForward");
+			indirectDesc.IndirectSlot = m_pGrassSystem->GetIndirectSlot();
+
+			m_pRenderScene->AddIndirect(indirectDesc);
 		}
 	}
 

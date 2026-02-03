@@ -17,6 +17,12 @@ namespace shz
 			s.DenseIndex = INVALID_INDEX;
 			s.bOccupied = false;
 		}
+		for (Slot<IndirectObject>& s : m_IndirectSlots)
+		{
+			s.Owner.Reset();
+			s.DenseIndex = INVALID_INDEX;
+			s.bOccupied = false;
+		}
 		for (Slot<LightObject>& s : m_LightSlots)
 		{
 			s.Owner.Reset();
@@ -25,10 +31,14 @@ namespace shz
 		}
 
 		m_ObjectSparse.clear();
+		m_IndirectSparse.clear();
 		m_LightSparse.clear();
 
 		m_ObjectDense.clear();
 		m_ObjectHandles.clear();
+
+		m_IndirectDense.clear();
+		m_IndirectHandles.clear();
 
 		m_LightDense.clear();
 		m_LightHandles.clear();
@@ -252,6 +262,86 @@ namespace shz
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
+	Handle<RenderScene::IndirectObject> RenderScene::AddIndirect(const IndirectObjectDesc& desc)
+	{
+		ASSERT(desc.pMesh, "AddIndirect: mesh is null.");
+		ASSERT(desc.PassKey != 0, "AddIndirect: PassKey is 0.");
+
+		UniqueHandle<IndirectObject> owner = UniqueHandle<IndirectObject>::Make();
+		const Handle<IndirectObject> h = owner.Get();
+		ASSERT(h.IsValid(), "Failed to allocate IndirectObject handle.");
+
+		const uint32 handleIndex = h.GetIndex();
+		ensureCapacity(handleIndex, m_IndirectSlots);
+		ensureCapacity(handleIndex, m_IndirectSparse);
+
+		Slot<IndirectObject>& slot = m_IndirectSlots[handleIndex];
+		ASSERT(!slot.bOccupied && !slot.Owner.Get().IsValid(), "IndirectObject slot already occupied.");
+
+		const uint32 denseIndex = static_cast<uint32>(m_IndirectDense.size());
+
+		IndirectObject io = {};
+		io.Desc = desc;
+		io.bEnabled = true;
+
+		m_IndirectDense.emplace_back(std::move(io));
+		m_IndirectHandles.emplace_back(h);
+
+		slot.Owner = std::move(owner);
+		slot.DenseIndex = denseIndex;
+		slot.bOccupied = true;
+
+		m_IndirectSparse[handleIndex] = denseIndex;
+		return h;
+	}
+
+	void RenderScene::RemoveIndirect(Handle<IndirectObject> h)
+	{
+		const uint32 denseIndex = findDenseIndex(h, m_IndirectSlots);
+		ASSERT(denseIndex != INVALID_INDEX, "Attempted to remove non-existing IndirectObject.");
+
+		const uint32 lastIndex = static_cast<uint32>(m_IndirectDense.size() - 1);
+		if (denseIndex != lastIndex)
+		{
+			m_IndirectDense[denseIndex] = std::move(m_IndirectDense[lastIndex]);
+
+			const Handle<IndirectObject> movedHandle = m_IndirectHandles[lastIndex];
+			m_IndirectHandles[denseIndex] = movedHandle;
+
+			const uint32 movedHandleIndex = movedHandle.GetIndex();
+			Slot<IndirectObject>& movedSlot = m_IndirectSlots[movedHandleIndex];
+			ASSERT(movedSlot.bOccupied && movedSlot.Owner.Get() == movedHandle, "Moved slot mismatch.");
+			movedSlot.DenseIndex = denseIndex;
+
+			m_IndirectSparse[movedHandleIndex] = denseIndex;
+		}
+
+		m_IndirectDense.pop_back();
+		m_IndirectHandles.pop_back();
+
+		const uint32 handleIndex = h.GetIndex();
+		Slot<IndirectObject>& slot = m_IndirectSlots[handleIndex];
+		slot.Owner.Reset();
+		slot.DenseIndex = INVALID_INDEX;
+		slot.bOccupied = false;
+		m_IndirectSparse[handleIndex] = INVALID_INDEX;
+	}
+
+	RenderScene::IndirectObject* RenderScene::GetIndirectOrNull(Handle<IndirectObject> h) noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_IndirectSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_IndirectDense[(size_t)dense];
+	}
+
+	const RenderScene::IndirectObject* RenderScene::GetIndirectOrNull(Handle<IndirectObject> h) const noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_IndirectSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_IndirectDense[(size_t)dense];
+	}
+
+
 	// ------------------------------------------------------------
 	// Lights
 	// ------------------------------------------------------------
@@ -349,13 +439,14 @@ namespace shz
 	// ------------------------------------------------------------
 	// Draw list build
 	// ------------------------------------------------------------
-	void RenderScene::BuildDrawList(
+	void RenderScene::BuildDrawPackets(
 		uint64 passKey,
 		const std::vector<uint32>& visibleObjectDenseIndices,
-		std::vector<DrawItem>& outDrawItems,
+		const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+		std::vector<DrawPacket>& outPackets,
 		std::vector<uint32>& outInstanceRemap) const
 	{
-		outDrawItems.clear();
+		outPackets.clear();
 		outInstanceRemap.clear();
 
 		if (visibleObjectDenseIndices.empty())
@@ -369,10 +460,9 @@ namespace shz
 
 		for (uint32 objDense : visibleObjectDenseIndices)
 		{
-			ASSERT(objDense < static_cast<uint32>(m_ObjectDense.size()), "Object dense index out of bounds.");
-
+			ASSERT(objDense < static_cast<uint32>(m_ObjectDense.size()), "Object dense index OOB.");
 			const uint32 oc = m_ObjectDense[objDense].OcIndex;
-			ASSERT(oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()), "Invalid object constant index.");
+			ASSERT(oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()), "Invalid OcIndex.");
 			ocVisible[oc] = 1;
 		}
 
@@ -384,7 +474,6 @@ namespace shz
 			{
 				continue;
 			}
-
 			if (b.PassKey != passKey)
 			{
 				continue;
@@ -396,7 +485,7 @@ namespace shz
 			for (const BatchInstance& inst : b.Instances)
 			{
 				const uint32 oc = inst.OcIndex;
-				ASSERT(oc < static_cast<uint32>(ocVisible.size()), "Object constant index out of bounds.");
+				ASSERT(oc < static_cast<uint32>(ocVisible.size()), "OcIndex OOB.");
 				if (ocVisible[oc])
 				{
 					outInstanceRemap.push_back(oc);
@@ -406,14 +495,120 @@ namespace shz
 
 			if (count == 0)
 			{
-				continue; // If nothing is visible, do not draw this batch
+				continue;
 			}
 
-			DrawItem di = {};
-			di.BatchId = batchId;
-			di.StartInstanceLocation = start;
-			di.InstanceCount = count;
-			outDrawItems.emplace_back(di);
+			// Resolve PSO/SRB
+			IPipelineState* pso = nullptr;
+			IShaderResourceBinding* srb = nullptr;
+			if (!resolver(passKey, b.MaterialId, &pso, &srb))
+			{
+				// material/pso 준비 안 됐으면 skip (or assert)
+				continue;
+			}
+
+			// Build DrawPacket
+			ASSERT(b.pMesh, "Batch mesh is null.");
+			ASSERT(b.SectionIndex < static_cast<uint32>(b.pMesh->Sections.size()), "SectionIndex OOB.");
+			const auto& sec = b.pMesh->Sections[b.SectionIndex];
+
+			DrawPacket pkt = {};
+			pkt.VertexBuffer = b.pMesh->VertexBuffer;
+			pkt.IndexBuffer = b.pMesh->IndexBuffer;
+			pkt.PSO = pso;
+			pkt.SRB = srb;
+
+			pkt.DrawAttribs = {};
+			pkt.DrawAttribs.IndexType = b.pMesh->IndexType;
+			pkt.DrawAttribs.NumIndices = sec.IndexCount;
+			pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+			pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+			pkt.DrawAttribs.NumInstances = count;
+			pkt.DrawAttribs.FirstInstanceLocation = start;
+			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+			outPackets.emplace_back(pkt);
+		}
+	}
+
+	void RenderScene::BuildIndirectDrawPackets(
+		uint64 passKey,
+		const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+		std::vector<DrawIndirectPacket>& outPackets) const
+	{
+		outPackets.clear();
+
+		for (const IndirectObject& io : m_IndirectDense)
+		{
+			if (!io.bEnabled)
+			{
+				continue;
+			}
+
+			const IndirectObjectDesc& d = io.Desc;
+
+			const bool bIsMainPass = (d.PassKey == passKey);
+			const bool bIsShadowPass = (passKey == STRING_HASH("Shadow")) && d.bCastShadow;
+
+			if (!bIsMainPass && !bIsShadowPass)
+			{
+				continue;
+			}
+
+			ASSERT(d.pMesh, "IndirectObject mesh is null.");
+			const StaticMeshRenderData* mesh = d.pMesh;
+
+			const uint32 sectionCount = static_cast<uint32>(mesh->Sections.size());
+			if (sectionCount == 0)
+			{
+				continue;
+			}
+
+			// 정책: mesh의 section마다 indirect args slot을 하나씩 사용한다.
+			// slot = d.IndirectSlot + sectionIndex
+			for (uint32 si = 0; si < sectionCount; ++si)
+			{
+				const StaticMeshRenderData::Section& sec = mesh->Sections[si];
+
+				const uint32 slot = d.IndirectSlot + si;
+				// MAX_NUM_INDIRECTS = 256 (HLSL과 맞춰 사용)
+				ASSERT(slot < 256u, "IndirectSlot out of range. base=%u, si=%u", d.IndirectSlot, si);
+
+				IPipelineState* pso = nullptr;
+				IShaderResourceBinding* srb = nullptr;
+				if (!resolver(passKey, sec.MaterialId, &pso, &srb))
+				{
+					// 파이프라인 준비가 안 됐으면 스킵(혹은 ASSERT로 바꿔도 됨)
+					continue;
+				}
+
+				DrawIndirectPacket pkt = {};
+				pkt.VertexBuffer = mesh->VertexBuffer;
+				pkt.IndexBuffer = mesh->IndexBuffer;
+				pkt.PSO = pso;
+				pkt.SRB = srb;
+
+				// DrawIndexedIndirectAttribs 설정
+				// - 실제 인덱스/인스턴스 카운트는 IndirectArgsBuffer(=g_IndirectArgs)에 들어있다.
+				// - 여기서는 offset/stride/count/indexType만 채운다.
+				// - pAttribsBuffer는 Renderer가 패스 실행 직전에 꽂아준다.
+				pkt.DrawAttribs = {};
+				pkt.DrawAttribs.IndexType = mesh->IndexType;
+
+				pkt.DrawAttribs.DrawArgsOffset = slot * 20u; // INDIRECT_ARGS_STRIDE_BYTES
+				pkt.DrawAttribs.DrawCount = 1;
+				pkt.DrawAttribs.DrawArgsStride = 20;
+
+				pkt.DrawAttribs.pAttribsBuffer = nullptr;
+				pkt.DrawAttribs.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
+				// counter는 안 쓰는 정책
+				pkt.DrawAttribs.pCounterBuffer = nullptr;
+				pkt.DrawAttribs.CounterOffset = 0;
+				pkt.DrawAttribs.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
+
+				outPackets.emplace_back(pkt);
+			}
 		}
 	}
 
