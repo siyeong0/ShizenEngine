@@ -61,6 +61,29 @@ struct ObjectConstants
 };
 
 // ----------------------------------------------
+// Indirect
+// ----------------------------------------------
+#define MAX_NUM_INDIRECTS 256
+
+struct IndirectArgsTemplate
+{
+    uint IndexCountPerInstance;
+    uint StartIndexLocation;
+    uint BaseVertexLocation;
+    uint StartInstanceLocation;
+};
+
+struct IndirectConstants
+{
+    uint NumSlots;
+    uint MaxInstances;
+    uint Pad0;
+    uint Pad1;
+
+    IndirectArgsTemplate Templates[MAX_NUM_INDIRECTS];
+};
+
+// ----------------------------------------------
 // Grass instance (GPU generated)
 // ----------------------------------------------
 struct GrassInstance

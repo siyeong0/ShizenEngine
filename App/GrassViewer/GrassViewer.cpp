@@ -222,30 +222,6 @@ namespace shz
 					m_pRenderer->AddBuffer(STRING_HASH("GrassInstanceBuffer"), bd);
 				}
 
-				// Indirect args (RAW 20 bytes)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassIndirectArgs";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
-					bd.Mode = BUFFER_MODE_RAW;
-					bd.Size = 20;
-
-					m_pRenderer->AddBuffer(STRING_HASH("GrassIndirectArgs"), bd);
-				}
-
-				// Counter (RAW 4 bytes)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassCounter";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_UNORDERED_ACCESS;
-					bd.Mode = BUFFER_MODE_RAW;
-					bd.Size = 4;
-
-					m_pRenderer->AddBuffer(STRING_HASH("GrassCounter"), bd);
-				}
-
 				// GrassGenConstantsCB (CS)
 				{
 					BufferDesc bd = {};
@@ -347,16 +323,11 @@ namespace shz
 		// Create render systems
 		// -----------------------------------------------------------------
 		{
+			m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
 			m_pDeferredSystem = std::make_unique<DeferredSystem>();
 			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 			m_pShadowSystem = std::make_unique<ShadowSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
-
-			m_pDeferredSystem->InstallPasses(*m_pRenderer);
-			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
-			m_pShadowSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer);
-
 
 			// ------------------------------------------------------------
 			// Grass model
@@ -375,6 +346,12 @@ namespace shz
 				const StaticMeshRenderData& grassMesh = m_pRenderer->CreateStaticMeshRenderData(*grassPtr);
 				m_pGrassSystem->SetGrassModle(&grassMesh);
 			}
+
+			m_pDeferredSystem->InstallPasses(*m_pRenderer);
+			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
+			m_pShadowSystem->InstallPasses(*m_pRenderer);
+			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
 		}
 
 

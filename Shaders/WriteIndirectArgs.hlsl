@@ -1,36 +1,57 @@
 #include "HLSL_Structures.hlsli"
 
-// 20 bytes: D3D12_DRAW_INDEXED_ARGUMENTS layout
+static const uint INDIRECT_ARGS_STRIDE_BYTES = 20u;
+static const uint INDIRECT_COUNT_STRIDE_BYTES = 4u;
+
+// Constants
+cbuffer INDIRECT_ARGS_WRITER_CB
+{
+    IndirectConstants g_IndirectCB;
+};
+
 RWByteAddressBuffer g_IndirectArgs;
+RWByteAddressBuffer g_IndirectCounts;
 
-// uint Counter (4 bytes) at byte offset 0
-RWByteAddressBuffer g_Counter;
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+static uint ClampInstanceCount(uint count, uint maxCount)
+{
+    // If maxCount == 0 -> treat as "no clamp" (optional)
+    if (maxCount == 0u)
+    {
+        return count;
+    }
 
-static const uint MAX_INSTANCES = 1u << 24;
+    return min(count, maxCount);
+}
 
-// ----------------------------------------------------------------------------
-// Indirect args
-// ----------------------------------------------------------------------------
-static const uint INDEX_COUNT_PER_INSTANCE = 39;
-static const uint START_INDEX_LOCATION = 0;
-static const uint BASE_VERTEX_LOCATION = 0;
-static const uint START_INSTANCE_LOCATION = 0;
-
-[numthreads(1, 1, 1)]
+//------------------------------------------------------------------------------
+// Main
+//------------------------------------------------------------------------------
+[numthreads(64, 1, 1)]
 void WriteIndirectArgs(uint3 tid : SV_DispatchThreadID)
 {
-    uint instanceCount = g_Counter.Load(0);
-    instanceCount = min(instanceCount, MAX_INSTANCES);
+    uint slot = tid.x;
 
-    // D3D12_DRAW_INDEXED_ARGUMENTS:
-    //   uint IndexCountPerInstance
-    //   uint InstanceCount
-    //   uint StartIndexLocation
-    //   int  BaseVertexLocation
-    //   uint StartInstanceLocation
-    g_IndirectArgs.Store(0, INDEX_COUNT_PER_INSTANCE);
-    g_IndirectArgs.Store(4, instanceCount);
-    g_IndirectArgs.Store(8, START_INDEX_LOCATION);
-    g_IndirectArgs.Store(12, BASE_VERTEX_LOCATION);
-    g_IndirectArgs.Store(16, START_INSTANCE_LOCATION);
+    // Out of bounds
+    if (slot >= g_IndirectCB.NumSlots || slot >= MAX_NUM_INDIRECTS)
+    {
+        return;
+    }
+
+    // Read instance count for this slot (written by instance build kernel)
+    uint instanceCount = g_IndirectCounts.Load(slot * INDIRECT_COUNT_STRIDE_BYTES);
+    instanceCount = ClampInstanceCount(instanceCount, g_IndirectCB.MaxInstances);
+
+    // Read template for this slot
+    IndirectArgsTemplate t = g_IndirectCB.Templates[slot];
+
+    // Write args at slot * 20
+    uint base = slot * INDIRECT_ARGS_STRIDE_BYTES;
+    g_IndirectArgs.Store(base + 0u, t.IndexCountPerInstance);
+    g_IndirectArgs.Store(base + 4u, instanceCount);
+    g_IndirectArgs.Store(base + 8u, t.StartIndexLocation);
+    g_IndirectArgs.Store(base + 12u, t.BaseVertexLocation);
+    g_IndirectArgs.Store(base + 16u, t.StartInstanceLocation);
 }

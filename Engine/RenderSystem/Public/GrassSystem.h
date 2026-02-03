@@ -1,6 +1,5 @@
 #pragma once
-#include <string>
-
+#include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/IPipelineState.h"
@@ -9,6 +8,7 @@
 namespace shz
 {
 	class Renderer;
+	class IndirectArgsSystem;
 
 	class GrassSystem final
 	{
@@ -19,7 +19,7 @@ namespace shz
 		GrassSystem(const GrassSystem&) = delete;
 		GrassSystem& operator=(const GrassSystem&) = delete;
 
-		void InstallPasses(Renderer& renderer);
+		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect);
 
 		void SetGrassModle(const struct StaticMeshRenderData* mesh) { m_pGrassMesh = mesh; }
 
@@ -28,6 +28,9 @@ namespace shz
 		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
 
 		const struct StaticMeshRenderData* m_pGrassMesh = nullptr;
+
+		// Indirect slot for this system
+		uint32 m_IndirectSlot = 0;
 
 		// Interaction pass (2 CSOs)
 		RefCntAutoPtr<IPipelineState>         m_pInteractionDecayCSO;
@@ -40,10 +43,6 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         m_pGenCSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGenSRB;
 
-		// Write indirect args
-		RefCntAutoPtr<IPipelineState>         m_pWriteArgsCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pWriteArgsSRB;
-
 		// Render
 		RefCntAutoPtr<IPipelineState>         m_pGrassPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
@@ -51,7 +50,6 @@ namespace shz
 		// Shaders
 		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
 		std::string m_InteractionCS = "InteractionFieldUpdate.hlsl";
-		std::string m_WriteArgsCS = "WriteIndirectArgs.hlsl";
 		std::string m_GrassVS = "GrassForward.vsh";
 		std::string m_GrassPS = "GrassForward.psh";
 	};

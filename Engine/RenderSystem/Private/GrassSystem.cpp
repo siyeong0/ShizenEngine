@@ -8,8 +8,7 @@
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 
-#include "Engine/GraphicsTools/Public/MapHelper.hpp"
-#include "Engine/RHI/Interface/GraphicsTypes.h"
+#include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 
 namespace shz
 {
@@ -56,9 +55,24 @@ namespace shz
 	// ---------------------------------------------------------------------
 	// InstallPasses
 	// ---------------------------------------------------------------------
-
-	void GrassSystem::InstallPasses(Renderer& renderer)
+	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect)
 	{
+		ASSERT(m_pGrassMesh, "Grass mesh not set. Call SetGrassModle() before InstallPasses().");
+
+		// Allocate indirect slot for grass
+		m_IndirectSlot = indirect.AllocateSlot("GrassSystem");
+
+		// Register template for grass slot
+		{
+			hlsl::IndirectArgsTemplate t = {};
+			t.IndexCountPerInstance = 39; // TODO: mesh에서 얻는 값으로 교체
+			t.StartIndexLocation = 0;
+			t.BaseVertexLocation = 0;
+			t.StartInstanceLocation = 0;
+
+			indirect.SetTemplate(m_IndirectSlot, t);
+		}
+
 		// Resource IDs (centralized)
 		const uint64 kInteractionField = STRING_HASH("InteractionField");
 		const uint64 kInteractionStamps = STRING_HASH("InteractionStampBuffer");
@@ -68,10 +82,11 @@ namespace shz
 		const uint64 kGrassRenderCB = STRING_HASH("GrassRenderConstantsCB");
 
 		const uint64 kGrassDensityField = STRING_HASH("GrassDensityField");
-
 		const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
-		const uint64 kGrassCounter = STRING_HASH("GrassCounter");
-		const uint64 kGrassIndirectArgs = STRING_HASH("GrassIndirectArgs");
+
+		// Shared indirect resources (Renderer created)
+		const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
+		const uint64 kIndirectCountBuffer = STRING_HASH("IndirectCountBuffer");
 
 		const uint64 kLightingTex = STRING_HASH("Lighting");
 		const uint64 kDepthTex = STRING_HASH("GBufferDepth");
@@ -122,8 +137,7 @@ namespace shz
 					{
 						hlsl::InteractionStamp s = interactionStamps[i];
 
-						// NOTE: you used fixed 1025/spacing(1,1)/center=1 in old pass.
-						// If you want, read these from GrassGenConstantsCB later.
+						// NOTE: old constants (1025/spacing(1,1)/center=1)
 						s.CenterXZ = WorldXZToTerrainUV(1025, 1025, 1.0f, 1.0f, 1, s.CenterXZ);
 						s.Radius = WorldRadiusToUv_MinAxis(1025, 1025, 1.0f, 1.0f, s.Radius);
 
@@ -167,7 +181,7 @@ namespace shz
 					pContext->DispatchCompute(disp);
 				}
 
-				// (D) Apply stamps (optional)
+				// (D) Apply stamps
 				if (stampCount > 0)
 				{
 					if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_RWInteractionField"))
@@ -182,10 +196,6 @@ namespace shz
 			},
 				[this, &renderer, kInteractionStamps, kInteractionConstantsCB]()
 			{
-				// Create 2 compute PSOs + SRBs once
-				// NOTE: This needs Renderer to have access to Device/ShaderFactory/PipelineStateManager internally.
-				// You already do that in Deferred/Post code.
-
 				// ------------------------------------------------------------
 				// (1) Decay PSO
 				// ------------------------------------------------------------
@@ -296,6 +306,7 @@ namespace shz
 
 		// =====================================================================
 		// Pass 2) GrassGenerateInstances (compute)
+		//  - g_Counter UAV는 이제 IndirectCountBuffer를 사용 (slot0 offset만 0으로 리셋)
 		// =====================================================================
 		renderer.AddPass(
 			"GrassGenerateInstances",
@@ -303,7 +314,7 @@ namespace shz
 			{
 				// Outputs
 				b.DeclareBufferUAV(kGrassInstanceBuffer, RENDER_ACCESS_WRITE);
-				b.DeclareBufferUAV(kGrassCounter, RENDER_ACCESS_WRITE);
+				b.DeclareBufferUAV(kIndirectCountBuffer, RENDER_ACCESS_WRITE); // <-- shared counts
 
 				// Inputs
 				b.DeclareTextureSRVRead(kGrassDensityField);
@@ -312,7 +323,7 @@ namespace shz
 				// Constants
 				b.DeclareBufferCBVRead(kGrassGenCB);
 			},
-			[this, kGrassCounter, kGrassDensityField, kInteractionField, kGrassInstanceBuffer, kGrassGenCB](RenderPassContext& ctx)
+			[this, kIndirectCountBuffer, kGrassDensityField, kInteractionField, kGrassInstanceBuffer, kGrassGenCB](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pScene, "Scene is null.");
@@ -322,19 +333,22 @@ namespace shz
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				// (0) Reset counter (COPY_DEST -> UAV back)
+				// (0) Reset counter for my slot (slot * 4 bytes)
 				{
 					const uint32 zero = 0;
+					const uint32 offset = m_IndirectSlot * 4u;
+
 					pContext->UpdateBuffer(
-						ctx.pRegistry->GetBuffer(kGrassCounter),
-						0, sizeof(uint32),
+						ctx.pRegistry->GetBuffer(kIndirectCountBuffer),
+						offset,
+						sizeof(uint32),
 						&zero,
 						RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
 					StateTransitionDesc trBack[] =
 					{
 						{
-							ctx.pRegistry->GetBuffer(kGrassCounter),
+							ctx.pRegistry->GetBuffer(kIndirectCountBuffer),
 							RESOURCE_STATE_UNKNOWN,
 							RESOURCE_STATE_UNORDERED_ACCESS,
 							STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -358,7 +372,6 @@ namespace shz
 						var->Set(ctx.pRegistry->GetTextureSRV(kInteractionField), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 
-					// External heightmap transition
 					StateTransitionDesc tr =
 					{
 						ctx.pScene->GetHeightMap(),
@@ -382,7 +395,7 @@ namespace shz
 					pContext->DispatchCompute(disp);
 				}
 			},
-				[this, &renderer, kGrassInstanceBuffer, kGrassCounter, kGrassGenCB]()
+				[this, &renderer, kGrassInstanceBuffer, kIndirectCountBuffer, kGrassGenCB]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -406,7 +419,7 @@ namespace shz
 				ShaderResourceVariableDesc vars[] =
 				{
 					{ SHADER_TYPE_COMPUTE, "g_OutInstances",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_Counter",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_Counter",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE }, // <-- 이름은 유지(셰이더 호환)
 					{ SHADER_TYPE_COMPUTE, "g_HeightMap",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_DensityField",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -442,7 +455,8 @@ namespace shz
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
 				{
-					var->Set(renderer.GetBufferUAV(kGrassCounter));
+					// shared IndirectCountBuffer로 바인딩
+					var->Set(renderer.GetBufferUAV(kIndirectCountBuffer));
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
 				{
@@ -451,107 +465,26 @@ namespace shz
 			});
 
 		// =====================================================================
-		// Pass 3) GrassWriteIndirectArgs (compute)
-		// =====================================================================
-		renderer.AddPass(
-			"GrassWriteIndirectArgs",
-			[&](RenderPassBuilder& b)
-			{
-				// Counter: read
-				b.DeclareBufferUAV(kGrassCounter, RENDER_ACCESS_READ);
-				// Args: write
-				b.DeclareBufferUAV(kGrassIndirectArgs, RENDER_ACCESS_WRITE);
-			},
-			[this](RenderPassContext& ctx)
-			{
-				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
-				ASSERT(m_pWriteArgsCSO && m_pWriteArgsSRB, "WriteArgs PSO/SRB not ready.");
-
-				IDeviceContext* pContext = ctx.pImmediateContext;
-
-				pContext->SetPipelineState(m_pWriteArgsCSO);
-				pContext->CommitShaderResources(m_pWriteArgsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
-				DispatchComputeAttribs disp = {};
-				disp.ThreadGroupCountX = 1;
-				disp.ThreadGroupCountY = 1;
-				disp.ThreadGroupCountZ = 1;
-				pContext->DispatchCompute(disp);
-			},
-				[this, &renderer, kGrassCounter, kGrassIndirectArgs]()
-			{
-				ShaderCreateInfo csCI = {};
-				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				csCI.EntryPoint = "WriteIndirectArgs";
-				csCI.Desc.Name = "WriteIndirectArgsCS";
-				csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
-				csCI.Desc.UseCombinedTextureSamplers = false;
-				csCI.FilePath = m_WriteArgsCS.c_str();
-
-				RefCntAutoPtr<IShader> cs;
-				renderer.CreateShader(csCI, &cs);
-				ASSERT(cs, "WriteIndirectArgsCS compile failed.");
-
-				ComputePipelineStateCreateInfo psoCI = {};
-				psoCI.PSODesc.Name = "PSO_GrassWriteIndirectArgs";
-				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
-
-				auto& rl = psoCI.PSODesc.ResourceLayout;
-				rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-				ShaderResourceVariableDesc vars[] =
-				{
-					{ SHADER_TYPE_COMPUTE, "g_IndirectArgs", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_Counter",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				};
-				rl.Variables = vars;
-				rl.NumVariables = _countof(vars);
-
-				psoCI.pCS = cs;
-
-				m_pWriteArgsCSO = renderer.AcquirePipelineState(psoCI, true);
-				ASSERT(m_pWriteArgsCSO, "AcquireCompute(WriteIndirectArgs) failed.");
-
-				m_pWriteArgsCSO->CreateShaderResourceBinding(&m_pWriteArgsSRB, true);
-				ASSERT(m_pWriteArgsSRB, "WriteIndirectArgs SRB create failed.");
-
-				if (auto* var = m_pWriteArgsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_IndirectArgs"))
-				{
-					var->Set(renderer.GetBufferUAV(kGrassIndirectArgs));
-				}
-				if (auto* var = m_pWriteArgsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
-				{
-					var->Set(renderer.GetBufferUAV(kGrassCounter));
-				}
-			});
-
-		// =====================================================================
-		// Pass 4) GrassForward (graphics, DrawIndexedIndirect)
+		// Pass 3) GrassForward (graphics, DrawIndexedIndirect)
+		//  - 전역 IndirectWriteArgs 패스가 미리 args를 만들어둔다고 가정
 		// =====================================================================
 		renderer.AddPass(
 			"GrassForward",
 			[&](RenderPassBuilder& b)
 			{
-				// Accumulate into Lighting => RTV readwrite (LOAD)
 				b.DeclareTextureRTVReadWrite(kLightingTex);
-
-				// Depth. TODO: 읽고 쓰지만 Lighting 보다 이후에 나오기 위해(Lighting은 읽기만 함)
 				b.DeclareTextureDSVRead(kDepthTex);
 
-				// Inputs
 				b.DeclareTextureSRVRead(kShadowMap);
 
-				// Ordering / bind
 				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
-				b.DeclareBufferIndirectArgsRead(kGrassIndirectArgs);
 
-				// Constants
+				// Indirect args read (shared buffer)
+				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
+
 				b.DeclareBufferCBVRead(kGrassRenderCB);
-
-				// IMPORTANT:
-				// - NO clear set here => should become LOAD in AddPass logic
 			},
-			[this, kGrassIndirectArgs](RenderPassContext& ctx)
+			[this, kIndirectArgsBuffer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
@@ -561,8 +494,6 @@ namespace shz
 
 				pContext->SetPipelineState(m_pGrassPSO);
 				pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-
-				// VB/IB
 
 				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
 				uint64 offsets[] = { 0 };
@@ -580,22 +511,24 @@ namespace shz
 					0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				// Indirect draw
 				DrawIndexedIndirectAttribs ia = {};
 				ia.IndexType = m_pGrassMesh->IndexType;
-				ia.pAttribsBuffer = ctx.pRegistry->GetBuffer(STRING_HASH("GrassIndirectArgs"));
-				ia.DrawArgsOffset = 0;
+
+				ia.pAttribsBuffer = ctx.pRegistry->GetBuffer(kIndirectArgsBuffer);
+				ia.DrawArgsOffset = IndirectArgsSystem::GetArgsOffsetBytes(m_IndirectSlot);
 				ia.DrawCount = 1;
 				ia.DrawArgsStride = 20;
+
 				ia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
 				ia.pCounterBuffer = nullptr;
 				ia.CounterOffset = 0;
 				ia.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
+
 				pContext->DrawIndexedIndirect(ia);
 			},
 				[this, &renderer]()
 			{
-				// Create Grass graphics PSO once (and SRB).
 				GraphicsPipelineStateCreateInfo psoCI = {};
 				psoCI.PSODesc.Name = "PSO_Grass";
 				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
@@ -610,7 +543,6 @@ namespace shz
 				gp.DepthStencilDesc.DepthWriteEnable = true;
 				gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-				// Shaders
 				ShaderCreateInfo vsCI = {};
 				vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 				vsCI.EntryPoint = "main";
@@ -631,7 +563,6 @@ namespace shz
 				renderer.CreateShader(psCI, &psoCI.pPS);
 				ASSERT(psoCI.pVS && psoCI.pPS, "Grass VS/PS compile failed.");
 
-				// Resource layout
 				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
 				ShaderResourceVariableDesc vars[] =
@@ -664,7 +595,6 @@ namespace shz
 				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-				// Input layout (same as your old grass mesh)
 				static LayoutElement layoutElems[] =
 				{
 					LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
@@ -675,7 +605,6 @@ namespace shz
 				gp.InputLayout.LayoutElements = layoutElems;
 				gp.InputLayout.NumElements = _countof(layoutElems);
 
-				// IMPORTANT: bind to pass renderpass via passId
 				m_pGrassPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForward"), psoCI, true);
 				ASSERT(m_pGrassPSO, "AcquirePipelineState(GrassForward) failed.");
 
