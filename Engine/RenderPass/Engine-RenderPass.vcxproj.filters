@@ -33,19 +33,10 @@
     <ClInclude Include="Public\PostRenderPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\DrawPacket.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\GrassRenderPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderPassContext.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\GrassInteractionPass.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\GrassBuildInstancesPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\GrassGenerateInstancesPass.h">
@@ -75,9 +66,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\GrassInteractionPass.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Private\GrassBuildInstancesPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\GrassGenerateInstancesPass.cpp">

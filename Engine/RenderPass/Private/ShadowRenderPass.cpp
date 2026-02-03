@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
-#include "Engine/RenderPass/Public/RenderPassContext.h"
+#include "Engine/Renderer/Public/RenderPassContext.h"
 
 #include "Engine/RHI/Interface/GraphicsTypes.h"
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"

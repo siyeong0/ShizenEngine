@@ -154,7 +154,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\DrawPacket.h" />
     <ClInclude Include="Public\GBufferRenderPass.h" />
     <ClInclude Include="Public\GrassGenerateInstancesPass.h" />
     <ClInclude Include="Public\GrassInteractionPass.h" />
@@ -162,7 +161,6 @@
     <ClInclude Include="Public\LightingRenderPass.h" />
     <ClInclude Include="Public\PostRenderPass.h" />
     <ClInclude Include="Public\RenderPassBase.h" />
-    <ClInclude Include="Public\RenderPassContext.h" />
     <ClInclude Include="Public\ShadowRenderPass.h" />
     <ClInclude Include="Public\WriteIndirectArgsPass.h" />
   </ItemGroup>

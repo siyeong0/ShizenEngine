@@ -8,7 +8,7 @@
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Image/Public/TextureUtilities.h"
 
-#include "Engine/RenderPass/Public/DrawPacket.h"
+#include "Engine/Renderer/Public/DrawPacket.h"
 #include "Engine/RenderPass/Public/ShadowRenderPass.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 

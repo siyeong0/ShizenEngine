@@ -31,7 +31,7 @@
 #include "Engine/Renderer/Public/RenderResourceCache.hpp"
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 
-#include "Engine/RenderPass/Public/RenderPassContext.h"
+#include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/RenderPass/Public/RenderPassBase.h"
 
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"

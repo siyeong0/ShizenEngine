@@ -13,7 +13,7 @@
 
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
-#include "Engine/RenderPass/Public/DrawPacket.h"
+#include "Engine/Renderer/Public/DrawPacket.h"
 
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
