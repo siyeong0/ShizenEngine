@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
+#include <functional>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -38,6 +39,7 @@
 #include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
+#include "Engine/Renderer/Public/RenderPassBuilder.h"
 
 namespace shz
 {
@@ -81,7 +83,25 @@ namespace shz
 		void OnResize(uint32 width, uint32 height);
 
 		// Render pass management
-		void AddPass(std::unique_ptr<RenderPassBase> pass);
+		struct RenderPassItem
+		{
+			std::string Name;
+			std::vector<RenderPassResourceAccess> ResourceAccess;
+			std::function<void(RenderPassContext&)> ExecuteLambda;
+
+			std::vector<OptimizedClearValue> ClearValues;
+
+			RefCntAutoPtr<IRenderPass> pRHIRenderpass;
+			RefCntAutoPtr<IFramebuffer> pRHIFramebuffer;
+			std::vector<ITextureView*> StaticFBAttachments;
+			bool bUseSwapChainBackBuffer = false;
+		};
+
+		void AddPass(
+			const std::string& name, 
+			std::function<void(RenderPassBuilder&)> buildLambda, 
+			std::function<void(RenderPassContext&)> executeLambda,
+			std::function<void()> onCreated = {});
 
 		// Resource registry wrappers
 		uint64 AddTexture(const std::string& name, const TextureDesc& desc, const TextureData* pInitData = nullptr);
@@ -117,9 +137,21 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
+		// Shader
+		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);
+
+		// PipelineState
+		RefCntAutoPtr<IPipelineState> AcquirePipelineState(const GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
+		RefCntAutoPtr<IPipelineState> AcquirePipelineState(const ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
+		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
+		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
+
 		// Material templates
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
+
+		// Shadow pso, srb
+		void SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO);
 
 	private:
 		RefCntAutoPtr<ITexture> createTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
@@ -136,11 +168,14 @@ namespace shz
 
 		// Render graph
 		void compileRenderGraphOrder();
-		void buildTransitionsForPass(RenderPassBase* pass, std::vector<StateTransitionDesc>& outBarriers);
+		void buildTransitionsForPass(uint64 passId, std::vector<StateTransitionDesc>& outBarriers);
 		RESOURCE_STATE mapUsageToState(const RenderPassResourceAccess& a) const;
 		IDeviceObject* resolveDeviceObject(const RenderPassResourceAccess& a) const;
 
 	private:
+		RefCntAutoPtr<IFramebuffer> m_pSwapChainFramebuffer; 
+		RefCntAutoPtr<IRenderPass> m_pPresentRenderPass;
+
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
 
 		RendererCreateInfo m_CreateInfo = {};
@@ -156,6 +191,7 @@ namespace shz
 		uint32 m_Height = 0;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
@@ -180,12 +216,14 @@ namespace shz
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
 		RenderPassContext m_PassCtx = {};
-		std::unordered_map<std::string, std::unique_ptr<RenderPassBase>> m_Passes;
-		std::unordered_map<uint64, IRenderPass*> m_RHIRenderPasses;
-
+		std::unordered_map<uint64, RenderPassItem> m_PassTable;
+		std::unordered_map<uint64, std::string> m_PassNameTable;
 		bool m_bRenderGraphDirty = true;
-		std::vector<RenderPassBase*> m_CompiledPassOrder = {};
+		std::vector<uint64> m_CompiledPassOrder = {};
 		std::unordered_map<uint64, RESOURCE_STATE> m_ResourceStates = {};
 		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
+
+		RefCntAutoPtr<IPipelineState> m_pShadowOpaquePSO;
+		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
 	};
 } // namespace shz

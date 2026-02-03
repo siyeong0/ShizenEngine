@@ -475,7 +475,6 @@ namespace shz
 			else if (shaderType == SHADER_TYPE_MESH)          outGraphicsPipelineStateCI.pMS = shader.RawPtr();
 		}
 
-		// Diligent/your utils assert: mesh stages can't be combined with legacy stages
 		ASSERT(!(bHasMeshStages && bHasLegacyStages), "Invalid shader stage mix: mesh stages can't be combined with VS/GS/HS/DS.");
 
 		return outGraphicsPipelineStateCI;

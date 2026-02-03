@@ -26,7 +26,11 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> AcquireCompute(const ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 
 		void RegisterStaticTextureResource(const std::string& name, RenderResourceId id);
-		void RegisterStaticBufferResource(const std::string& name, RenderResourceId id);
+
+		void RegisterStaticBufferCBV(const std::string& name, RenderResourceId id); // ConstantBuffer
+		void RegisterStaticBufferSRV(const std::string& name, RenderResourceId id); // Structured/Typed/ByteAddress SRV
+		void RegisterStaticBufferUAV(const std::string& name, RenderResourceId id); // RWStructured/RWByteAddress UAV 
+
 
 	private:
 		void bindCommonStaticResources(IPipelineState* pPSO);
@@ -39,6 +43,8 @@ namespace shz
 		std::unordered_map<size_t, RefCntAutoPtr<IPipelineState>> m_ComputePSOMap;
 
 		std::vector<std::pair<std::string, RenderResourceId>> m_CommonStaticTextureResources;
-		std::vector<std::pair<std::string, RenderResourceId>> m_CommonStaticBufferResources;
+		std::unordered_map<std::string, RenderResourceId> m_CommonStaticBufferCBVs;
+		std::unordered_map<std::string, RenderResourceId> m_CommonStaticBufferSRVs;
+		std::unordered_map<std::string, RenderResourceId> m_CommonStaticBufferUAVs;
 	};
 } // namespace shz

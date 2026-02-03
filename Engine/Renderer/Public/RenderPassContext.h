@@ -38,6 +38,8 @@ namespace shz
 		float DeltaTime = 0.0f;
 		uint32 ShadowMapResolution = 4096;
 
+		RefCntAutoPtr<IRenderPass> pRHIRenderPass;
+
 		// ------------------------------------------------------------
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------

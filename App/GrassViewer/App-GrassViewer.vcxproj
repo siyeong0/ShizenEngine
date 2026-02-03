@@ -182,6 +182,9 @@
     <ProjectReference Include="..\..\Engine\RenderPass\Engine-RenderPass.vcxproj">
       <Project>{9e437443-630f-4ebf-ac14-9c6c17c6f7fd}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Engine\RenderSystem\Engine-RenderSystem.vcxproj">
+      <Project>{575b95e9-809e-428a-80af-e3548231d6f2}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Engine\RHI\Engine-RHI.vcxproj">
       <Project>{945ab006-8bd2-442f-822d-2b72abf5ed6c}</Project>
     </ProjectReference>

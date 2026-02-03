@@ -172,9 +172,9 @@ namespace shz
 			m_pRegistry->RegisterBuffer(STRING_HASH("DRAW_CONSTANTS"), std::move(drawCB));
 			m_pRegistry->RegisterBuffer(STRING_HASH("SHADOW_CONSTANTS"), std::move(shadowCB));
 
-			m_pPipelineStateManager->RegisterStaticBufferResource("FRAME_CONSTANTS", STRING_HASH("FRAME_CONSTANTS"));
-			m_pPipelineStateManager->RegisterStaticBufferResource("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
-			m_pPipelineStateManager->RegisterStaticBufferResource("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferCBV("FRAME_CONSTANTS", STRING_HASH("FRAME_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferCBV("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
 			{
@@ -194,6 +194,9 @@ namespace shz
 
 			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
 			AddBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
+
+			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ObjectTable", STRING_HASH("ObjectTable.GBuffer"));
+			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ShadowObjectTable", STRING_HASH("ObjectTable.Shadow"));
 		}
 
 		// -----------------------------------------------------------------
@@ -263,8 +266,11 @@ namespace shz
 	{
 		ReleaseSwapChainBuffers();
 
-		m_Passes.clear();
-		m_RHIRenderPasses.clear();
+		m_PassTable.clear();
+		m_CompiledPassOrder.clear();
+		m_ResourceStates.clear();
+		m_ExternalStates.clear();
+		m_PassNameTable.clear();
 
 		m_StaticMeshCache.Clear();
 
@@ -303,17 +309,30 @@ namespace shz
 			m_bRenderGraphDirty = false;
 
 			std::cout << "Compiled pass order : " << std::endl;
-			for (RenderPassBase* pass : m_CompiledPassOrder)
+			for (uint64 passId : m_CompiledPassOrder)
 			{
-				std::cout << pass->GetName() << std::endl;
+				std::cout << m_PassNameTable[passId] << std::endl;
 			}
 			std::cout << std::endl << std::endl;
 		}
 
-		for (RenderPassBase* pass : m_CompiledPassOrder)
 		{
-			ASSERT(pass, "Pass is null.");
-			pass->BeginFrame(m_PassCtx);
+			ASSERT(m_pDevice, "Device is null.");
+			ASSERT(m_pSwapChain, "SwapChain is null.");
+			ASSERT(m_pPresentRenderPass, "Present RenderPass is null.");
+
+			ITextureView* pBBRTV = m_pSwapChain->GetCurrentBackBufferRTV();
+			ASSERT(pBBRTV, "Current backbuffer RTV is null.");
+
+			FramebufferDesc fb = {};
+			fb.Name = "FB_SwapChainBackBuffer";
+			fb.pRenderPass = m_pPresentRenderPass;
+			fb.AttachmentCount = 1;
+			fb.ppAttachments = &pBBRTV;
+
+			m_pSwapChainFramebuffer.Release();
+			m_pDevice->CreateFramebuffer(fb, &m_pSwapChainFramebuffer);
+			ASSERT(m_pSwapChainFramebuffer, "CreateFramebuffer(FB_SwapChainBackBuffer) failed.");
 		}
 	}
 
@@ -799,36 +818,45 @@ namespace shz
 		// ------------------------------------------------------------
 		std::vector<StateTransitionDesc> barriers;
 
-		for (RenderPassBase* pass : m_CompiledPassOrder)
+		for (uint64 passId : m_CompiledPassOrder)
 		{
-			ASSERT(pass, "Pass is null.");
+			ASSERT(passId != 0, "Invalid pass ID.");
+			RenderPassItem& pass = m_PassTable[passId];
 
-			buildTransitionsForPass(pass, barriers);
+			buildTransitionsForPass(passId, barriers);
 			if (!barriers.empty())
 			{
 				ctx->TransitionResourceStates(static_cast<uint32>(barriers.size()), barriers.data());
 			}
 
-			pass->Execute(m_PassCtx);
+			if (pass.pRHIRenderpass)
+			{
+				m_PassCtx.pRHIRenderPass = pass.pRHIRenderpass;
+
+				BeginRenderPassAttribs rp = {};
+				rp.pRenderPass = pass.pRHIRenderpass;
+				rp.pFramebuffer = !pass.bUseSwapChainBackBuffer ? pass.pRHIFramebuffer : m_pSwapChainFramebuffer;
+				rp.ClearValueCount = static_cast<uint32>(pass.ClearValues.size());
+				rp.pClearValues = pass.ClearValues.empty() ? nullptr : pass.ClearValues.data();
+
+				ctx->BeginRenderPass(rp);
+				pass.ExecuteLambda(m_PassCtx);
+				ctx->EndRenderPass();
+			}
+			else
+			{
+				pass.ExecuteLambda(m_PassCtx);
+			}
 		}
 	}
 
 	void Renderer::EndFrame()
 	{
-		for (RenderPassBase* pass : m_CompiledPassOrder)
-		{
-			ASSERT(pass, "Pass is null.");
-			pass->EndFrame(m_PassCtx);
-		}
 	}
 
 	void Renderer::ReleaseSwapChainBuffers()
 	{
-		for (RenderPassBase* pass : m_CompiledPassOrder)
-		{
-			ASSERT(pass, "Pass is null.");
-			pass->ReleaseSwapChainBuffers(m_PassCtx);
-		}
+
 	}
 
 	void Renderer::OnResize(uint32 width, uint32 height)
@@ -837,12 +865,6 @@ namespace shz
 		m_Width = width;
 		m_Height = height;
 
-		for (RenderPassBase* pass : m_CompiledPassOrder)
-		{
-			ASSERT(pass, "Pass is null.");
-			pass->OnResize(m_PassCtx, width, height);
-		}
-
 		m_bRenderGraphDirty = true;
 	}
 
@@ -850,23 +872,263 @@ namespace shz
 	// Render pass management
 	// ---------------------------------------------------------------------
 
-	void Renderer::AddPass(std::unique_ptr<RenderPassBase> pass)
+	void Renderer::AddPass(
+		const std::string& name,
+		std::function<void(RenderPassBuilder&)> buildLambda,
+		std::function<void(RenderPassContext&)> executeLambda,
+		std::function<void()> onCreated)
 	{
-		ASSERT(pass, "Pass is null.");
+		ASSERT(!name.empty(), "Pass name is empty.");
+		ASSERT(buildLambda, "buildLambda is null.");
+		ASSERT(executeLambda, "executeLambda is null.");
+		ASSERT(m_pDevice, "Device is null.");
+		ASSERT(m_pRegistry, "Registry is null.");
 
-		const char* name = pass->GetName();
-		ASSERT(name && name[0] != '\0', "Pass name is empty.");
+		const uint64 passId = STRING_HASH(name.c_str());
+		ASSERT(m_PassTable.find(passId) == m_PassTable.end(), "%s pass already exist.", name.c_str());
 
-		auto it = m_Passes.find(name);
-		ASSERT(it == m_Passes.end(), "Duplicate pass name.");
+		RenderPassItem rpItem = {};
+		rpItem.Name = name;
+		rpItem.ExecuteLambda = std::move(executeLambda);
 
-		pass->Initialize(m_PassCtx);
+		RenderPassBuilder builder = {};
+		buildLambda(builder);
 
-		m_Passes.emplace(name, std::move(pass));
-		m_RHIRenderPasses.emplace(STRING_HASH(name), m_Passes[name]->GetRHIRenderPass());
+		rpItem.ResourceAccess.swap(builder.DeclaredAccesses);
 
+		// -----------------------------------------------------------------
+		// Helpers
+		// -----------------------------------------------------------------
+		auto isWriteAccess = [](const RenderPassResourceAccess& a) -> bool
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
+
+		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
+		{
+			OptimizedClearValue cv = {};
+			if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
+			{
+				cv = it->second;
+			}
+			else
+			{
+				// default: black / depth=1
+				if (bDepth)
+				{
+					cv.DepthStencil.Depth = 1.f;
+					cv.DepthStencil.Stencil = 0;
+				}
+				else
+				{
+					cv.Color[0] = 0.f;
+					cv.Color[1] = 0.f;
+					cv.Color[2] = 0.f;
+					cv.Color[3] = 0.f;
+				}
+			}
+			return cv;
+		};
+
+		// -----------------------------------------------------------------
+		// Build RHI RenderPass + Framebuffer attachments
+		// (attachment order == framebuffer order == clearvalue order)
+		// -----------------------------------------------------------------
+		std::vector<RenderPassAttachmentDesc> attachments;
+		std::vector<AttachmentReference>      colorRefs;
+
+		AttachmentReference depthRef = {};
+		bool bHasDepth = false;
+
+		rpItem.ClearValues.clear();
+		rpItem.StaticFBAttachments.clear();
+
+		attachments.reserve(8);
+		colorRefs.reserve(8);
+		rpItem.ClearValues.reserve(8);
+		rpItem.StaticFBAttachments.reserve(8);
+
+		for (const RenderPassResourceAccess& a : rpItem.ResourceAccess)
+		{
+			const bool bWrite = isWriteAccess(a);
+
+			// -------------------------------------------------------------
+			// Texture RTV write
+			// -------------------------------------------------------------
+			if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE &&
+				bWrite &&
+				a.Usage == RENDER_USAGE_RTV &&
+				a.TextureViewType == TEXTURE_VIEW_RENDER_TARGET)
+			{
+				ITexture* pTex = m_pRegistry->GetTexture(a.ResourceId);
+				ASSERT(pTex, "RTV texture not found.");
+
+				ITextureView* pRTV = m_pRegistry->GetTextureRTV(a.ResourceId);
+				ASSERT(pRTV, "RTV view not found.");
+
+				const TextureDesc& td = pTex->GetDesc();
+				const TextureViewDesc& vd = pRTV->GetDesc();
+
+				RenderPassAttachmentDesc at = {};
+				at.Format = vd.Format;          // ✅ View format
+				at.SampleCount = td.SampleCount;
+				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+				at.InitialState = RESOURCE_STATE_RENDER_TARGET;
+				at.FinalState = RESOURCE_STATE_RENDER_TARGET;
+
+				attachments.emplace_back(at);
+
+				AttachmentReference cr = {};
+				cr.AttachmentIndex = static_cast<uint32>(attachments.size() - 1);
+				cr.State = RESOURCE_STATE_RENDER_TARGET;
+				colorRefs.emplace_back(cr);
+
+				rpItem.StaticFBAttachments.emplace_back(pRTV);
+				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/false));
+			}
+			// -------------------------------------------------------------
+			// Texture DSV write (single depth)
+			// -------------------------------------------------------------
+			else if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE &&
+				bWrite &&
+				a.Usage == RENDER_USAGE_DSV_WRITE &&
+				a.TextureViewType == TEXTURE_VIEW_DEPTH_STENCIL)
+			{
+				ASSERT(!bHasDepth, "Multiple depth attachments are not supported yet.");
+
+				ITexture* pTex = m_pRegistry->GetTexture(a.ResourceId);
+				ASSERT(pTex, "DSV texture not found.");
+
+				ITextureView* pDSV = m_pRegistry->GetTextureDSV(a.ResourceId);
+				ASSERT(pDSV, "DSV view not found.");
+
+				const TextureDesc& td = pTex->GetDesc();
+				const TextureViewDesc& vd = pDSV->GetDesc();
+
+				RenderPassAttachmentDesc at = {};
+				at.Format = vd.Format;         // ✅ View format
+				at.SampleCount = td.SampleCount;
+				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+				at.InitialState = RESOURCE_STATE_DEPTH_WRITE;
+				at.FinalState = RESOURCE_STATE_DEPTH_WRITE;
+
+				attachments.emplace_back(at);
+
+				depthRef = {};
+				depthRef.AttachmentIndex = static_cast<uint32>(attachments.size() - 1);
+				depthRef.State = RESOURCE_STATE_DEPTH_WRITE;
+
+				rpItem.StaticFBAttachments.emplace_back(pDSV);
+				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/true));
+
+				bHasDepth = true;
+			}
+			// -------------------------------------------------------------
+			// SwapChain backbuffer RTV write (EXTERNAL)
+			// - RenderPass는 만들 수 있음 (format은 swapchain desc)
+			// - Framebuffer는 "현재 backbuffer RTV"가 필요하므로 런타임에 생성/갱신
+			// -------------------------------------------------------------
+			else if (a.Kind == RENDER_RESOURCE_KIND_EXTERNAL &&
+				bWrite &&
+				a.ResourceId == STRING_HASH("SwapChain.BackBuffer") &&
+				a.Usage == RENDER_USAGE_RTV)
+			{
+				ASSERT(m_pSwapChain, "SwapChain is null.");
+
+				const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
+
+				RenderPassAttachmentDesc at = {};
+				at.Format = scDesc.ColorBufferFormat;
+				at.SampleCount = 1;
+				at.LoadOp = ATTACHMENT_LOAD_OP_CLEAR;
+				at.StoreOp = ATTACHMENT_STORE_OP_STORE;
+				at.InitialState = RESOURCE_STATE_RENDER_TARGET;
+				at.FinalState = RESOURCE_STATE_RENDER_TARGET;
+
+				attachments.emplace_back(at);
+
+				AttachmentReference cr = {};
+				cr.AttachmentIndex = static_cast<uint32>(attachments.size() - 1);
+				cr.State = RESOURCE_STATE_RENDER_TARGET;
+				colorRefs.emplace_back(cr);
+
+				// Framebuffer attachment slot reserved for BB, filled later
+				rpItem.bUseSwapChainBackBuffer = true;
+				rpItem.StaticFBAttachments.emplace_back(nullptr);
+
+				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/false));
+			}
+		}
+
+		// -----------------------------------------------------------------
+		// Create RenderPass / Framebuffer
+		// -----------------------------------------------------------------
+		if (!attachments.empty())
+		{
+			SubpassDesc subpass = {};
+			subpass.RenderTargetAttachmentCount = static_cast<uint32>(colorRefs.size());
+			subpass.pRenderTargetAttachments = colorRefs.empty() ? nullptr : colorRefs.data();
+			subpass.pDepthStencilAttachment = bHasDepth ? &depthRef : nullptr;
+
+			RenderPassDesc rpDesc = {};
+			rpDesc.Name = rpItem.Name.c_str();
+			rpDesc.AttachmentCount = static_cast<uint32>(attachments.size());
+			rpDesc.pAttachments = attachments.data();
+			rpDesc.SubpassCount = 1;
+			rpDesc.pSubpasses = &subpass;
+
+			m_pDevice->CreateRenderPass(rpDesc, &rpItem.pRHIRenderpass);
+			ASSERT(rpItem.pRHIRenderpass, "CreateRenderPass failed.");
+
+			// ClearValues must match attachment count
+			ASSERT(rpItem.ClearValues.size() == attachments.size(), "ClearValues mismatch.");
+
+			// Framebuffer:
+			// - If it uses swapchain BB, we cannot finalize FB here (need current BB view)
+			// - Otherwise create once here.
+			if (!rpItem.bUseSwapChainBackBuffer)
+			{
+				FramebufferDesc fbDesc = {};
+				fbDesc.Name = (std::string("FB_") + rpItem.Name).c_str();
+				fbDesc.pRenderPass = rpItem.pRHIRenderpass;
+				fbDesc.AttachmentCount = static_cast<uint32>(rpItem.StaticFBAttachments.size());
+				fbDesc.ppAttachments = rpItem.StaticFBAttachments.data();
+
+				m_pDevice->CreateFramebuffer(fbDesc, &rpItem.pRHIFramebuffer);
+				ASSERT(rpItem.pRHIFramebuffer, "CreateFramebuffer failed.");
+			}
+			else
+			{
+				m_pPresentRenderPass = rpItem.pRHIRenderpass;
+			}
+		}
+		else
+		{
+			// compute-only / no RP
+			rpItem.ClearValues.clear();
+			rpItem.StaticFBAttachments.clear();
+		}
+
+		// -----------------------------------------------------------------
+		// Store & mark dirty
+		// -----------------------------------------------------------------
+		m_PassTable.emplace(passId, std::move(rpItem));
 		m_bRenderGraphDirty = true;
+
+		m_PassNameTable[passId] = name;
+
+		// Important: call onCreated after stored so AcquirePipelineState(passId, ...)
+		// can fetch rpItem.pRHIRenderpass.
+		if (onCreated)
+		{
+			onCreated();
+		}
 	}
+
 
 	// ---------------------------------------------------------------------
 	// Resource registry wrappers
@@ -1125,6 +1387,50 @@ namespace shz
 		return out;
 	}
 
+	void Renderer::CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader)
+	{
+		// TODO: 중복 생성 제거
+		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
+		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+
+		m_pDevice->CreateShader(sci, ppOutShader);
+		ASSERT(*ppOutShader, "Failed to create shader.");
+	}
+
+	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineState(const GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources)
+	{
+		ASSERT(m_pPipelineStateManager, "Renderer is not initialized yet.");
+		ASSERT(desc.GraphicsPipeline.pRenderPass != nullptr, "Render pass is not set.");
+		return m_pPipelineStateManager->AcquireGraphics(desc, bBindCommonResources);
+	}
+
+	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineState(const ComputePipelineStateCreateInfo& desc, bool bBindCommonResources)
+	{
+		ASSERT(m_pPipelineStateManager, "Renderer is not initialized yet.");
+		return m_pPipelineStateManager->AcquireCompute(desc, bBindCommonResources);
+	}
+
+	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineState(uint64 passId, GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources)
+	{
+		ASSERT(m_pPipelineStateManager, "Renderer is not initialized yet.");
+		ASSERT(m_PassTable.contains(passId), "Unknown render pass.");
+
+		desc.GraphicsPipeline.pRenderPass = m_PassTable.at(passId).pRHIRenderpass;
+		desc.GraphicsPipeline.SubpassIndex = 0;
+		desc.GraphicsPipeline.NumRenderTargets = 0;
+		desc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
+		desc.GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;
+
+		return m_pPipelineStateManager->AcquireGraphics(desc, bBindCommonResources);
+	}
+
+	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources)
+	{
+		ASSERT(m_pPipelineStateManager, "Renderer is not initialized yet.");
+		// Compute pass does not require render pass.
+		return m_pPipelineStateManager->AcquireCompute(desc, bBindCommonResources);
+	}
+
 	// ---------------------------------------------------------------------
 	// Material templates
 	// ---------------------------------------------------------------------
@@ -1144,6 +1450,12 @@ namespace shz
 			names.push_back(pair.first);
 		}
 		return names;
+	}
+
+	void Renderer::SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO)
+	{
+		m_pShadowOpaquePSO = pOpaquePSO;
+		m_pShadowMaskedPSO = pMaskedPSO;
 	}
 
 	// ---------------------------------------------------------------------
@@ -1270,11 +1582,11 @@ namespace shz
 		{
 			if (material.GetBlendMode() == MATERIAL_BLEND_MODE_OPAQUE)
 			{
-				return static_cast<ShadowRenderPass*>(m_Passes.at("Shadow").get())->m_pShadowPSO;
+				return m_pShadowOpaquePSO;
 			}
 			else if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
 			{
-				return static_cast<ShadowRenderPass*>(m_Passes.at("Shadow").get())->m_pShadowMaskedPSO;
+				return m_pShadowMaskedPSO;
 			}
 			else
 			{
@@ -1288,8 +1600,8 @@ namespace shz
 		if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
 		{
 			ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
-			ASSERT(m_RHIRenderPasses.contains(renderPassKey), "Render pass not found.");
-			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_RHIRenderPasses.at(renderPassKey));
+			ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
+			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
 			pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
 		}
 		else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
@@ -1309,14 +1621,6 @@ namespace shz
 			SHADER_TYPE_PIXEL,
 			SHADER_TYPE_COMPUTE,
 		};
-
-		for (SHADER_TYPE type : supportedShaderTypes)
-		{
-			if (auto* var = pOutPipelineState->GetStaticVariableByName(type, "g_ObjectTable"))
-			{
-				var->Set(m_pRegistry->GetBufferSRV(STRING_HASH("ObjectTable.GBuffer")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE); // TODO: different tables per pass
-			}
-		}
 
 		return pOutPipelineState;
 	}
@@ -1498,20 +1802,17 @@ namespace shz
 		// ------------------------------------------------------------
 		// Collect passes
 		// ------------------------------------------------------------
-		std::vector<RenderPassBase*> passes;
-		passes.reserve(m_Passes.size());
+		std::vector<uint64> passes;
+		passes.reserve(m_PassTable.size());
 
-		for (const auto& pair : m_Passes)
+		for (const auto& pair : m_PassTable)
 		{
-			RenderPassBase* p = pair.second.get();
-			ASSERT(p, "Pass is null.");
-			passes.push_back(p);
+			uint64 passId = pair.first;
+			ASSERT(passId != 0, "Invalid pass ID.");
+			passes.push_back(passId);
 		}
 
-		if (passes.empty())
-		{
-			return;
-		}
+		ASSERT(!passes.empty(), "Requires at least one render pass.");
 
 		// ------------------------------------------------------------
 		// Baseline deterministic ordering (even when graph has no edges)
@@ -1545,16 +1846,18 @@ namespace shz
 		};
 
 		std::sort(passes.begin(), passes.end(),
-			[&](const RenderPassBase* a, const RenderPassBase* b)
+			[&](uint64 a, uint64 b)
 			{
-				const int32 sa = getStageHint(a ? a->GetName() : "");
-				const int32 sb = getStageHint(b ? b->GetName() : "");
+				const RenderPassItem& passA = m_PassTable.at(a);
+				const RenderPassItem& passB = m_PassTable.at(b);
+				const int32 sa = getStageHint(a ? passA.Name.c_str() : "");
+				const int32 sb = getStageHint(b ? passB.Name.c_str() : "");
 
 				if (sa != sb) return sa < sb;
 
 				// Stable within stage: lexicographic name
-				const char* na = a ? a->GetName() : "";
-				const char* nb = b ? b->GetName() : "";
+				const char* na = a ? passA.Name.c_str() : "";
+				const char* nb = b ? passB.Name.c_str() : "";
 				return std::strcmp(na, nb) < 0;
 			});
 
@@ -1589,7 +1892,7 @@ namespace shz
 
 		for (uint32 i = 0; i < n; ++i)
 		{
-			const auto accesses = passes[i]->GetDeclaredResourceAccesses();
+			const auto& accesses = m_PassTable.at(passes[i]).ResourceAccess;
 
 			// Per-pass per-resource flags:
 			// bit0 = read, bit1 = write
@@ -1766,14 +2069,12 @@ namespace shz
 		}
 	}
 
-
-
-	void Renderer::buildTransitionsForPass(RenderPassBase* pass, std::vector<StateTransitionDesc>& outBarriers)
+	void Renderer::buildTransitionsForPass(uint64 passId, std::vector<StateTransitionDesc>& outBarriers)
 	{
-		ASSERT(pass, "Pass is null.");
+		ASSERT(passId != 0, "Invalid pass ID.");
 		outBarriers.clear();
 
-		const auto accesses = pass->GetDeclaredResourceAccesses();
+		const auto& accesses = m_PassTable.at(passId).ResourceAccess;
 
 		struct Agg final
 		{

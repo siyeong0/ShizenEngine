@@ -10,7 +10,7 @@ cbuffer DRAW_CONSTANTS
     DrawConstants g_DrawCB;
 };
 
-StructuredBuffer<ObjectConstants> g_ObjectTable;
+StructuredBuffer<ObjectConstants> g_ShadowObjectTable;
 
 struct VSInput
 {
@@ -26,7 +26,7 @@ struct PSInput
 
 void main(in VSInput VSIn, out PSInput PSIn, uint instanceID : SV_InstanceID)
 {
-    ObjectConstants oc = g_ObjectTable[g_DrawCB.StartInstanceLocation + instanceID];
+    ObjectConstants oc = g_ShadowObjectTable[g_DrawCB.StartInstanceLocation + instanceID];
 
     float4 WPos = mul(float4(VSIn.Pos, 1.0), oc.World);
     PSIn.Pos = mul(WPos, g_ShadowCB.LightViewProj);

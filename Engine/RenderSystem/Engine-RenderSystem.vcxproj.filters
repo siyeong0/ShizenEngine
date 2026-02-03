@@ -18,37 +18,16 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\Renderer.h">
+    <ClInclude Include="Public\ShadowSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderScene.h">
+    <ClInclude Include="Public\DeferredSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\ViewFamily.h">
+    <ClInclude Include="Public\ForwardSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\RenderResourceCache.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\PipelineStateManager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\StaticMeshRenderData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\RenderResourceRegistry.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\RenderGraphTypes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\DrawPacket.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\RenderPassContext.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\RenderPassBuilder.h">
+    <ClInclude Include="Public\PostProcessSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -56,20 +35,17 @@
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\Renderer.cpp">
+    <ClCompile Include="Private\ShadowSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\RenderScene.cpp">
+    <ClCompile Include="Private\DeferredSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\PipelineStateManager.cpp">
+    <ClCompile Include="Private\ForwardSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\RenderResourceRegistry.cpp">
+    <ClCompile Include="Private\PostProcessSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
 </Project>

@@ -65,18 +65,39 @@ namespace shz
 
 	void PipelineStateManager::RegisterStaticTextureResource(const std::string& name, RenderResourceId id)
 	{
+		ASSERT(!name.empty(), "name is empty.");
 		ASSERT(m_pResourceRegistry->GetTexture(id) != nullptr, "Texture resource with ID %llu not found in registry", id);
 		m_CommonStaticTextureResources.emplace_back(name, id);
 	}
-	void PipelineStateManager::RegisterStaticBufferResource(const std::string& name, RenderResourceId id)
+
+	void PipelineStateManager::RegisterStaticBufferCBV(const std::string& name, RenderResourceId id)
 	{
+		ASSERT(!name.empty(), "name is empty.");
 		ASSERT(m_pResourceRegistry->GetBuffer(id) != nullptr, "Buffer resource with ID %llu not found in registry", id);
-		m_CommonStaticBufferResources.emplace_back(name, id);
+		m_CommonStaticBufferCBVs[name] = id;
+	}
+
+	void PipelineStateManager::RegisterStaticBufferSRV(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(!name.empty(), "name is empty.");
+		ASSERT(m_pResourceRegistry->GetBuffer(id) != nullptr, "Buffer resource with ID %llu not found in registry", id);
+		m_CommonStaticBufferSRVs[name] = id;
+	}
+
+	void PipelineStateManager::RegisterStaticBufferUAV(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(!name.empty(), "name is empty.");
+		ASSERT(m_pResourceRegistry->GetBuffer(id) != nullptr, "Buffer resource with ID %llu not found in registry", id);
+		m_CommonStaticBufferUAVs[name] = id;
 	}
 
 	void PipelineStateManager::bindCommonStaticResources(IPipelineState* pPSO)
 	{
-		SHADER_TYPE shaderTypes[] = {
+		ASSERT(pPSO, "PSO is null.");
+		ASSERT(m_pResourceRegistry, "ResourceRegistry is null.");
+
+		const SHADER_TYPE SHADER_TYPES[] =
+		{
 			SHADER_TYPE_VERTEX,
 			SHADER_TYPE_PIXEL,
 			SHADER_TYPE_GEOMETRY,
@@ -94,38 +115,55 @@ namespace shz
 			SHADER_TYPE_TILE
 		};
 
+		auto bindStaticVarAllStages = [&](const std::string& name, auto* pObject)
+		{
+			for (SHADER_TYPE st : SHADER_TYPES)
+			{
+				if (IShaderResourceVariable* pVar = pPSO->GetStaticVariableByName(st, name.c_str()))
+				{
+					pVar->Set(pObject);
+				}
+			}
+		};
+
+		// ------------------------------------------------------------
+		// Textures (SRV)
+		// ------------------------------------------------------------
 		for (const auto& [name, id] : m_CommonStaticTextureResources)
 		{
-			ITextureView* pTextureView = m_pResourceRegistry->GetTextureSRV(id);
-			ASSERT(pTextureView != nullptr, "Texture resource with ID %llu not found in registry", id);
-			if (pTextureView)
-			{
-				for (SHADER_TYPE shaderType : shaderTypes)
-				{
-					IShaderResourceVariable* pVar = pPSO->GetStaticVariableByName(shaderType, name.c_str());
-					if (pVar)
-					{
-						pVar->Set(pTextureView);
-					}
-				}
-			}
-		}
-		for (const auto& [name, id] : m_CommonStaticBufferResources)
-		{
-			IBuffer* pBuffer = m_pResourceRegistry->GetBuffer(id);
-			ASSERT(pBuffer != nullptr, "Buffer resource with ID %llu not found in registry", id);
-			if (pBuffer)
-			{
-				for (SHADER_TYPE shaderType : shaderTypes)
-				{
-					IShaderResourceVariable* pVar = pPSO->GetStaticVariableByName(shaderType, name.c_str());
-					if (pVar)
-					{
-						pVar->Set(pBuffer);
-					}
-				}
-			}
+			ITextureView* pSRV = m_pResourceRegistry->GetTextureSRV(id);
+			ASSERT(pSRV != nullptr, "Texture SRV '%s' (id=%llu) not found.", name.c_str(), id);
+			bindStaticVarAllStages(name, pSRV);
 		}
 
+		// ------------------------------------------------------------
+		// Buffers: CBV (Constant / Uniform buffer) -> IBuffer*
+		// ------------------------------------------------------------
+		for (const auto& [name, id] : m_CommonStaticBufferCBVs)
+		{
+			IBuffer* pBuf = m_pResourceRegistry->GetBuffer(id);
+			ASSERT(pBuf != nullptr, "Buffer(CBV) '%s' (id=%llu) not found.", name.c_str(), id);
+			bindStaticVarAllStages(name, pBuf);
+		}
+
+		// ------------------------------------------------------------
+		// Buffers: SRV (StructuredBuffer / ByteAddressBuffer / Typed Buffer SRV) -> IBufferView*
+		// ------------------------------------------------------------
+		for (const auto& [name, id] : m_CommonStaticBufferSRVs)
+		{
+			IBufferView* pSRV = m_pResourceRegistry->GetBufferSRV(id);
+			ASSERT(pSRV != nullptr, "Buffer SRV '%s' (id=%llu) not found.", name.c_str(), id);
+			bindStaticVarAllStages(name, pSRV);
+		}
+
+		// ------------------------------------------------------------
+		// Buffers: UAV (RWStructuredBuffer / RWByteAddressBuffer / Typed UAV) -> IBufferView*
+		// ------------------------------------------------------------
+		for (const auto& [name, id] : m_CommonStaticBufferUAVs)
+		{
+			IBufferView* pUAV = m_pResourceRegistry->GetBufferUAV(id);
+			ASSERT(pUAV != nullptr, "Buffer UAV '%s' (id=%llu) not found.", name.c_str(), id);
+			bindStaticVarAllStages(name, pUAV);
+		}
 	}
 } // namespace shz

@@ -21,6 +21,11 @@
 
 #include "Engine/ECSIntegration/Public/PhysicsSystem.h"
 
+#include "Engine/RenderSystem/Public/DeferredSystem.h"
+#include "Engine/RenderSystem/Public/ForwardSystem.h"
+#include "Engine/RenderSystem/Public/ShadowSystem.h"
+#include "Engine/RenderSystem/Public/PostProcessSystem.h"
+
 namespace shz
 {
 	class GrassViewer final : public SampleBase
@@ -58,6 +63,10 @@ namespace shz
 
 		std::unique_ptr<shz::EcsWorld>     m_pEcs = nullptr;
 		std::unique_ptr<PhysicsSystem>    m_pPhysicsSystem = nullptr;
+
+		std::unique_ptr<DeferredSystem> m_pDeferredSystem;
+		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
+		std::unique_ptr<ShadowSystem> m_pShadowSystem;
 
 		ViewportState     m_Viewport = {};
 		ViewFamily        m_ViewFamily = {};

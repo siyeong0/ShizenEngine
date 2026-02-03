@@ -15,15 +15,10 @@
 #include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 
-#include "Engine/RenderPass/Public/RenderPassBase.h"
-#include "Engine/RenderPass/Public/ShadowRenderPass.h"
-#include "Engine/RenderPass/Public/GBufferRenderPass.h"
-#include "Engine/RenderPass/Public/LightingRenderPass.h"
-#include "Engine/RenderPass/Public/PostRenderPass.h"
-#include "Engine/RenderPass/Public/GrassRenderPass.h"
-#include "Engine/RenderPass/Public/GrassInteractionPass.h"
-#include "Engine/RenderPass/Public/GrassGenerateInstancesPass.h"
-#include "Engine/RenderPass/Public/WriteIndirectArgsPass.h"
+#include "Engine/RenderSystem/Public/DeferredSystem.h"
+#include "Engine/RenderSystem/Public/ForwardSystem.h"
+#include "Engine/RenderSystem/Public/ShadowSystem.h"
+#include "Engine/RenderSystem/Public/PostProcessSystem.h"
 
 namespace shz
 {
@@ -349,17 +344,16 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
-		// Create render passes
+		// Create render systems
 		// -----------------------------------------------------------------
 		{
-			m_pRenderer->AddPass(std::make_unique<ShadowRenderPass>());
-			m_pRenderer->AddPass(std::make_unique<GBufferRenderPass>());
-			m_pRenderer->AddPass(std::make_unique<LightingRenderPass>());
-			m_pRenderer->AddPass(std::make_unique<GrassInteractionPass>());
-			m_pRenderer->AddPass(std::make_unique<GrassGenerateInstancesPass>());
-			m_pRenderer->AddPass(std::make_unique<WriteIndirectArgsPass>(STRING_HASH("GrassCounter"), STRING_HASH("GrassIndirectArgs")));
-			m_pRenderer->AddPass(std::make_unique<GrassRenderPass>());
-			m_pRenderer->AddPass(std::make_unique<PostRenderPass>());
+			m_pDeferredSystem = std::make_unique<DeferredSystem>();
+			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
+			m_pShadowSystem = std::make_unique<ShadowSystem>();
+
+			m_pDeferredSystem->InstallPasses(*m_pRenderer);
+			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
+			m_pShadowSystem->InstallPasses(*m_pRenderer);
 		}
 
 
