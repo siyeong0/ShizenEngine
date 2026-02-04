@@ -320,11 +320,10 @@ namespace shz
 				// Constants
 				b.DeclareBufferCBVRead(kGrassGenCB);
 			},
-			[this, kIndirectCountBuffer, kGrassDensityField, kInteractionField, kGrassInstanceBuffer, kGrassGenCB](RenderPassContext& ctx)
+			[this, &renderer, kIndirectCountBuffer, kGrassDensityField, kInteractionField, kGrassInstanceBuffer, kGrassGenCB](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pScene, "Scene is null.");
-				ASSERT(ctx.pScene->GetHeightMap(), "HeightMap is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
 				ASSERT(m_pGenCSO && m_pGenSRB, "GrassGenerate PSO/SRB not ready.");
 
@@ -358,7 +357,7 @@ namespace shz
 				{
 					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
 					{
-						var->Set(ctx.pScene->GetHeightMap()->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+						var->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 					{
@@ -371,7 +370,7 @@ namespace shz
 
 					StateTransitionDesc tr =
 					{
-						ctx.pScene->GetHeightMap(),
+						renderer.GetTexture(STRING_HASH("HeightField")),
 						RESOURCE_STATE_UNKNOWN,
 						RESOURCE_STATE_SHADER_RESOURCE,
 						STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -416,7 +415,7 @@ namespace shz
 				ShaderResourceVariableDesc vars[] =
 				{
 					{ SHADER_TYPE_COMPUTE, "g_OutInstances",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_Counter",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE }, // <-- 이름은 유지(셰이더 호환)
+					{ SHADER_TYPE_COMPUTE, "g_Counter",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_HeightMap",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_DensityField",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },

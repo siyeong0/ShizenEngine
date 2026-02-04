@@ -7,4 +7,7 @@
 #ifndef PCH_H
 #define PCH_H
 
+#include <cmath>
+#include <limits>
+
 #endif //PCH_H

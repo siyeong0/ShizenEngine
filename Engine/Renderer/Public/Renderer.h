@@ -6,7 +6,6 @@
 
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
-#include "Engine/RuntimeData/Public/TerrainHeightField.h"
 
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
@@ -136,7 +135,6 @@ namespace shz
 		// RenderData 
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
-		RefCntAutoPtr<ITexture> CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain);
 
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);

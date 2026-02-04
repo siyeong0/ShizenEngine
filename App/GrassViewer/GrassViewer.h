@@ -14,11 +14,10 @@
 #include "Engine/AssetManager/Public/AssetTypeTraits.h"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
+#include "Engine/Framework/Public/TerrainSystem.h"
 
 #include "Engine/ECS/Public/EcsWorld.h"
-
 #include "Engine/ECS/Public/Components.h"
-
 #include "Engine/ECSIntegration/Public/PhysicsSystem.h"
 
 #include "Engine/RenderSystem/Public/DeferredSystem.h"
@@ -63,8 +62,10 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
-		std::unique_ptr<shz::EcsWorld>     m_pEcs = nullptr;
-		std::unique_ptr<PhysicsSystem>    m_pPhysicsSystem = nullptr;
+		std::unique_ptr<shz::EcsWorld> m_pEcs;
+		std::unique_ptr<PhysicsSystem> m_pPhysicsSystem;
+
+		std::unique_ptr<TerrainSystem> m_pTerrainSystem;
 
 		std::unique_ptr<DeferredSystem> m_pDeferredSystem;
 		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;

@@ -10,9 +10,6 @@
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/DrawPacket.h"
 
-#include "Engine/RuntimeData/Public/TerrainHeightField.h"
-#include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
-
 namespace shz
 {
 	namespace hlsl
@@ -161,13 +158,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Height field / Terrain
 		// ------------------------------------------------------------
-		void SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world = Matrix4x4::Identity());
-		void ClearTerrain();
-
-		bool HasTerrain() const noexcept { return m_TerrainMesh.IsValid() && m_TerrainMesh.IsAlive(); }
-
-		const RefCntAutoPtr<ITexture> GetHeightMap() const noexcept { return m_pTerrainHeightMap; }
-		const Handle<SceneObject>& GetTerrainMeshHandle() const noexcept { return m_TerrainMesh; }
 		void AddInteractionStamp(const hlsl::InteractionStamp& stamp) { m_InteractionStamps.emplace_back(stamp); }
 		void ConsumeInteractionStamps(std::vector<hlsl::InteractionStamp>* out) { out->swap(m_InteractionStamps); m_InteractionStamps.clear(); }
 
@@ -361,9 +351,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Terrain / Height field
 		// ------------------------------------------------------------
-		RefCntAutoPtr<ITexture> m_pTerrainHeightMap = {};
-		Handle<SceneObject> m_TerrainMesh = {};
-
 		std::vector<hlsl::InteractionStamp> m_InteractionStamps;
 	};
 } // namespace shz

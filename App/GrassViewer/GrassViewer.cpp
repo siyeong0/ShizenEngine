@@ -11,8 +11,6 @@
 #include "Engine/RuntimeData/Public/StaticMeshImporter.h"
 #include "Engine/RuntimeData/Public/TextureImporter.h"
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
-#include "Engine/RuntimeData/Public/TerrainHeightFieldImporter.h"
-#include "Engine/RuntimeData/Public/TerrainMeshBuilder.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 
 #include "Engine/RenderSystem/Public/DeferredSystem.h"
@@ -104,7 +102,6 @@ namespace shz
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
-			m_pAssetManager->RegisterImporter(AssetTypeTraits<TerrainHeightField>::TypeID, TerrainHeightFieldImporter{});
 		}
 
 		// Renderer + shader factory
@@ -145,19 +142,19 @@ namespace shz
 			static constexpr uint32 NUM_GBUFFERS = 4;
 			{
 				auto createGBufferTextureDesc = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> TextureDesc
-					{
-						TextureDesc td = {};
-						td.Name = name;
-						td.Type = RESOURCE_DIM_TEX_2D;
-						td.Width = w;
-						td.Height = h;
-						td.MipLevels = 1;
-						td.Format = fmt;
-						td.SampleCount = 1;
-						td.Usage = USAGE_DEFAULT;
-						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-						return td;
-					};
+				{
+					TextureDesc td = {};
+					td.Name = name;
+					td.Type = RESOURCE_DIM_TEX_2D;
+					td.Width = w;
+					td.Height = h;
+					td.MipLevels = 1;
+					td.Format = fmt;
+					td.SampleCount = 1;
+					td.Usage = USAGE_DEFAULT;
+					td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+					return td;
+				};
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
@@ -316,6 +313,60 @@ namespace shz
 
 					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), desc, &initData);
 				}
+			}
+		}
+
+		// -----------------------------------------------------------------
+		// Terrain system
+		// -----------------------------------------------------------------
+		{
+			m_pTerrainSystem = std::make_unique<TerrainSystem>();
+
+			TerrainSystem::CreateInfo tci = {};
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+			// tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsDiffuse.png";
+			tci.WorldSpacingX = 1.0f;
+			tci.WorldSpacingZ = 1.0f;
+			tci.HeightScale = 100.0f;
+			tci.HeightOffset = 0.0f;
+			tci.bCenterXZ = true;
+
+			m_pTerrainSystem->Initialize(*m_pAssetManager, tci);
+			ASSERT(m_pTerrainSystem->IsValid(), "Failed to initialize TerrainSystem.");
+
+			// Create height field texture R16_UNORM 
+			{
+				const uint32 width = m_pTerrainSystem->GetWidth();
+				const uint32 height = m_pTerrainSystem->GetHeight();
+
+				const std::vector<uint16>& dataU16 = m_pTerrainSystem->GetHeightU16();
+				ASSERT(!dataU16.empty(), "TerrainHeightField data is empty.");
+				ASSERT(uint64(dataU16.size()) == uint64(width) * uint64(height), "TerrainHeightField data size mismatch.");
+
+				TextureDesc desc = {};
+				desc.Name = "HeightField";
+				desc.Type = RESOURCE_DIM_TEX_2D;
+				desc.Width = width;
+				desc.Height = height;
+				desc.MipLevels = 1;
+				desc.ArraySize = 1;
+
+				// Height map: 16-bit normalized [0..1] -> shader reads float
+				desc.Format = TEX_FORMAT_R16_UNORM;
+
+				desc.Usage = USAGE_DEFAULT;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+
+				TextureSubResData sr = {};
+				sr.pData = dataU16.data();
+				sr.Stride = width * sizeof(uint16); // row pitch (tightly packed)
+				sr.DepthStride = 0;
+
+				TextureData initData = {};
+				initData.pSubResources = &sr;
+				initData.NumSubresources = 1;
+
+				m_pRenderer->AddTexture(STRING_HASH("HeightField"), desc, &initData);
 			}
 		}
 
@@ -668,14 +719,9 @@ namespace shz
 
 		auto& ecs = m_pEcs->World();
 
-		// Load terrain (RenderScene는 기존대로 유지)
-		const std::string heightPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-
-		AssetRef<TerrainHeightField> terrainRef = m_pAssetManager->RegisterAsset<TerrainHeightField>(heightPath);
-		AssetPtr<TerrainHeightField> terrainPtr = m_pAssetManager->LoadBlocking<TerrainHeightField>(terrainRef);
-		ASSERT(terrainPtr && terrainPtr->IsValid(), "Failed to load terrain height field.");
-
-		// Build terrain mesh + set RenderScene terrain
+		// ------------------------------------------------------------
+		// Build terrain mesh + add to RenderScene (replaces SetTerrain)
+		// ------------------------------------------------------------
 		{
 			StaticMesh terrainMesh;
 
@@ -691,49 +737,38 @@ namespace shz
 			tm.SetFloat("g_MetallicFactor", 0.0f);
 			tm.SetUint("g_MaterialFlags", 0);
 
-			TerrainMeshBuilder meshBuilder;
-			TerrainMeshBuildSettings buildSettings = {};
-			meshBuilder.BuildStaticMesh(&terrainMesh, *terrainPtr, tmId, buildSettings);
+			TerrainSystem::MeshBuildSettings buildSettings = {};
+			const bool bOk = m_pTerrainSystem->BuildStaticMesh(&terrainMesh, tmId, buildSettings);
+			ASSERT(bOk && terrainMesh.IsValid(), "Failed to build terrain mesh.");
 
-			m_pRenderScene->SetTerrain(
-				m_pRenderer->CreateTextureRenderDataFromHeightField(*terrainPtr),
-				m_pRenderer->CreateStaticMeshRenderData(terrainMesh));
+			const StaticMeshRenderData& terrainMeshRD = m_pRenderer->CreateStaticMeshRenderData(terrainMesh);
+			const Matrix4x4 terrainTRS = Matrix4x4::Identity();
+
+			m_pRenderScene->AddObject(
+				terrainMeshRD,
+				terrainTRS,
+				true);
 		}
 
 		// ------------------------------------------------------------
 		// Physics Terrain: HeightFieldCollider + Static Rigidbody
 		// ------------------------------------------------------------
 		{
-			const uint32 W = terrainPtr->GetWidth();
-			const uint32 H = terrainPtr->GetHeight();
+			const uint32 W = m_pTerrainSystem->GetWidth();
+			const uint32 H = m_pTerrainSystem->GetHeight();
 
-			// 기존 코드에서도 "Jolt heightfield는 square 기대"라고 ASSERT 했었음.
-			// 새 Physics 래퍼는 square 강제는 안 하지만, 데이터가 square일 때 가장 안전.
 			ASSERT(W == H, "HeightField collider: width/height must be equal (square) for your current pipeline.");
 
 			// Convert to float heights (world meters)
-			const auto& src = terrainPtr->GetDataU16(); // 네 코드에 있었던 API 가정
-			ASSERT(src.size() == size_t(W) * size_t(H), "HeightField data size mismatch.");
-
 			std::vector<float> samples;
-			samples.resize(src.size());
+			m_pTerrainSystem->BuildPhysicsHeightSamples(samples);
+			ASSERT(samples.size() == size_t(W) * size_t(H), "HeightField samples size mismatch.");
 
-			const float heightScale = terrainPtr->GetHeightScale();
-			const float heightOffset = terrainPtr->GetHeightOffset();
+			const float spacingX = m_pTerrainSystem->GetWorldSpacingX();
+			const float spacingZ = m_pTerrainSystem->GetWorldSpacingZ();
 
-			for (size_t i = 0; i < src.size(); ++i)
-			{
-				const float n = float(src[i]) / 65535.0f;
-				samples[i] = n * heightScale + heightOffset;
-			}
-
-			const float spacingX = terrainPtr->GetWorldSpacingX();
-			const float spacingZ = terrainPtr->GetWorldSpacingZ();
-
-			// 기존 코드가 worldOrigin을 shape offset으로 넣었는데,
-			// 새 래퍼에서는 shape offset을 따로 안 받으므로 Transform 위치로 맞춰줌.
-			const float worldOriginX = -terrainPtr->GetWorldSizeX() * 0.5f;
-			const float worldOriginZ = -terrainPtr->GetWorldSizeZ() * 0.5f;
+			const float worldOriginX = m_pTerrainSystem->GetWorldOriginX();
+			const float worldOriginZ = m_pTerrainSystem->GetWorldOriginZ();
 
 			flecs::entity e = ecs.entity();
 			e.set<CName>({ "TerrainPhysics" });
@@ -800,7 +835,7 @@ namespace shz
 			{
 				const float x = distX(rng);
 				const float z = distZ(rng);
-				const float y = terrainPtr->SampleWorldHeight(x, z);
+				const float y = m_pTerrainSystem->SampleWorldHeight(x, z); // <-- changed
 
 				const float yaw = distYaw(rng);
 				const float scale = distScale(rng);
@@ -836,12 +871,10 @@ namespace shz
 
 			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
 
-			// Spawn config
 			constexpr uint32 kHelmetCount = 300;
 			constexpr float  kMinY = 20.0f;
 			constexpr float  kMaxY = 50.0f;
 
-			// XZ grid offsets
 			constexpr int   kGridX = 6;
 			constexpr float kSpacingX = 1.0f;
 			constexpr float kSpacingZ = 1.0f;
@@ -872,7 +905,6 @@ namespace shz
 				tr.Scale = { 1.0f, 1.0f, 1.0f };
 				e.set<CTransform>(tr);
 
-				// Render object
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;

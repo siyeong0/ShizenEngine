@@ -1481,49 +1481,6 @@ namespace shz
 		return m_StaticMeshCache.Acquire(key);
 	}
 
-	RefCntAutoPtr<ITexture> Renderer::CreateTextureRenderDataFromHeightField(const TerrainHeightField& terrain)
-	{
-		RefCntAutoPtr<ITexture> out;
-
-		const uint32 width = terrain.GetWidth();
-		const uint32 height = terrain.GetHeight();
-
-		const std::vector<uint16>& dataU16 = terrain.GetDataU16();
-		ASSERT(!dataU16.empty(), "TerrainHeightField data is empty.");
-		ASSERT(uint64(dataU16.size()) == uint64(width) * uint64(height), "TerrainHeightField data size mismatch.");
-
-		// ---------------------------------------------------------------------
-		// Create R16_UNORM texture with initial data
-		// ---------------------------------------------------------------------
-		TextureDesc desc = {};
-		desc.Name = "HeightField R16_UNORM";
-		desc.Type = RESOURCE_DIM_TEX_2D;
-		desc.Width = width;
-		desc.Height = height;
-		desc.MipLevels = 1;
-		desc.ArraySize = 1;
-
-		// Height map: 16-bit normalized [0..1] -> shader reads float
-		desc.Format = TEX_FORMAT_R16_UNORM;
-
-		desc.Usage = USAGE_DEFAULT;
-		desc.BindFlags = BIND_SHADER_RESOURCE;
-
-		TextureSubResData sr = {};
-		sr.pData = dataU16.data();
-		sr.Stride = width * sizeof(uint16); // row pitch (tightly packed)
-		sr.DepthStride = 0;
-
-		TextureData initData = {};
-		initData.pSubResources = &sr;
-		initData.NumSubresources = 1;
-
-		m_pDevice->CreateTexture(desc, &initData, &out);
-		ASSERT(out, "CreateTexture(HeightField) failed.");
-
-		return out;
-	}
-
 	void Renderer::CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader)
 	{
 		// TODO: 중복 생성 제거

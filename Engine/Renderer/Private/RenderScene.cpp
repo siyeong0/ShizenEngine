@@ -51,9 +51,6 @@ namespace shz
 		m_OcDirty.clear();
 		m_DirtyOcIndices.clear();
 
-		m_pTerrainHeightMap = {};
-		m_TerrainMesh = {};
-
 		m_InteractionStamps.clear();
 	}
 
@@ -623,28 +620,6 @@ namespace shz
 		outView.bCastShadow = b.bCastShadow;
 		outView.PassKey = b.PassKey;
 		return true;
-	}
-
-	// ------------------------------------------------------------
-	// Terrain
-	// ------------------------------------------------------------
-	void RenderScene::SetTerrain(RefCntAutoPtr<ITexture> heightMap, const StaticMeshRenderData& terrainMesh, const Matrix4x4& world)
-	{
-		ClearTerrain();
-
-		m_pTerrainHeightMap = heightMap;
-		m_TerrainMesh = AddObject(terrainMesh, world, /*bCastShadow=*/true);
-	}
-
-	void RenderScene::ClearTerrain()
-	{
-		if (m_TerrainMesh.IsValid() && m_TerrainMesh.IsAlive())
-		{
-			RemoveObject(m_TerrainMesh);
-			m_TerrainMesh = {};
-		}
-
-		m_pTerrainHeightMap = nullptr;
 	}
 
 	// ------------------------------------------------------------
