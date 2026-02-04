@@ -1,3 +1,6 @@
+// Terrain.vsh
+// Assumes HeightField.hlsli is the one you pasted (spacing-aware WorldXZ->UV mapping)
+
 #include "HLSL_Structures.hlsli"
 #include "HeightField.hlsli"
 
@@ -21,38 +24,37 @@ SamplerState g_LinearClampSampler;
 
 struct VSInput
 {
-    float3 Pos : ATTRIB0;
-    float2 UV : ATTRIB1;
+    float3 Pos : ATTRIB0; // grid pos: x,z in [0..16]
+    float2 UV : ATTRIB1; // local [0..1] (not used for height; kept for debug/optional)
 };
 
 struct VSOutput
 {
     float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0;
+    float2 UV : TEXCOORD0; // surface uv (world 0..1 over entire terrain, then scale/bias)
     float3 WorldPos : TEXCOORD1;
     float3 WorldN : TEXCOORD2;
     float3 WorldT : TEXCOORD3;
 };
 
-static float smooth01(float t)
+static float2 snapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
 {
-    t = saturate(t);
-    return t * t * (3.0 - 2.0 * t);
-}
-
-static float2 snapWorldXZ(float2 worldXZ, float2 originXZ, float2 spacingXZ, float stepMul)
-{
-    float2 cell = spacingXZ * stepMul;
-    float2 g = (worldXZ - originXZ) / max(cell, 1e-6.xx);
-    float2 gi = floor(g + 0.5);
-    return originXZ + gi * cell;
+    float2 cell = hf.WorldSpacingXZ * stepMul;
+    float2 g = (worldXZ - hf.WorldOriginXZ) / max(cell, 1e-6.xx);
+    float2 gi = floor(g + 0.5.xx);
+    return hf.WorldOriginXZ + gi * cell;
 }
 
 static float sampleWorldHeightAt(float2 worldXZ)
 {
-    float2 uv = HF_WorldXZToUV(worldXZ, g_HeightFieldCB, g_TerrainDrawCB.HeightUVScale, g_TerrainDrawCB.HeightUVBias);
-    uv = HF_ClampUVToTexelCenter(uv, g_HeightFieldCB.HeightTexelSize);
-    return HF_SampleWorldHeight(g_HeightField, g_LinearClampSampler, uv, g_HeightFieldCB, 0.0);
+    return HF_SampleWorldHeightAtWorldXZ(
+        g_HeightField,
+        g_LinearClampSampler,
+        worldXZ,
+        g_HeightFieldCB,
+        g_TerrainDrawCB.HeightUVScale,
+        g_TerrainDrawCB.HeightUVBias,
+        0.0);
 }
 
 static float3 computeNormalAt(float2 worldXZ, float stepMul)
@@ -76,9 +78,13 @@ static float3 computeNormalAt(float2 worldXZ, float stepMul)
 
 void main(in VSInput IN, out VSOutput OUT)
 {
+    // Local grid [0..1] within this chunk
     float2 grid01 = IN.Pos.xz * (1.0 / 16.0);
+
+    // Chunk-local -> world XZ (meters)
     float2 worldXZ = g_TerrainDrawCB.ChunkOriginXZ + grid01 * g_TerrainDrawCB.ChunkSizeXZ;
 
+    // LOD morph
     float stepFine = max(1.0, g_TerrainDrawCB.NormalSampleStep);
     float stepCoarse = stepFine * 2.0;
 
@@ -86,25 +92,25 @@ void main(in VSInput IN, out VSOutput OUT)
     if (g_TerrainDrawCB.LodIndex >= 4)
         alpha = 0.0;
 
-    float2 originXZ = float2(g_HeightFieldCB.WorldOriginXZ.x, g_HeightFieldCB.WorldOriginXZ.y);
-
     float hFine = sampleWorldHeightAt(worldXZ);
 
-    float2 worldXZCoarse = snapWorldXZ(worldXZ, originXZ, g_HeightFieldCB.WorldSpacingXZ, stepCoarse);
+    float2 worldXZCoarse = snapWorldXZ(worldXZ, g_HeightFieldCB, stepCoarse);
     float hCoarse = sampleWorldHeightAt(worldXZCoarse);
 
     float wy = lerp(hCoarse, hFine, alpha);
 
     float3 worldPos = float3(worldXZ.x, wy, worldXZ.y);
     OUT.WorldPos = worldPos;
+
     OUT.Pos = mul(float4(worldPos, 1.0), g_FrameCB.ViewProj);
 
+    // Surface UV: entire terrain mapped to [0..1] then optional tiling
     float2 uvWorld01 = (worldXZ - g_HeightFieldCB.WorldOriginXZ) / max(g_HeightFieldCB.WorldSizeXZ, 1e-6.xx);
     OUT.UV = uvWorld01 * g_TerrainDrawCB.SurfaceUVScale + g_TerrainDrawCB.SurfaceUVBias;
 
+    // Normal + tangent
     float3 NFine = computeNormalAt(worldXZ, stepFine);
     float3 NCoarse = computeNormalAt(worldXZCoarse, stepCoarse);
-
     float3 N = normalize(lerp(NCoarse, NFine, alpha));
 
     float3 T = float3(1.0, 0.0, 0.0);
@@ -112,6 +118,4 @@ void main(in VSInput IN, out VSOutput OUT)
 
     OUT.WorldN = N;
     OUT.WorldT = T;
-    
-    //OUT.WorldN = g_TerrainDrawCB.DebugChunkColor;
 }

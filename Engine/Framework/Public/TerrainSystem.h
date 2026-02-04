@@ -72,8 +72,8 @@ namespace shz
 		float GetHeightScale()  const noexcept { return m_HeightScale; }
 		float GetHeightOffset() const noexcept { return m_HeightOffset; }
 
-		float GetWorldSizeX() const noexcept { return (m_Width > 0 ? float(m_Width - 1) : 0.0f) * m_WorldSpacingX; }
-		float GetWorldSizeZ() const noexcept { return (m_Height > 0 ? float(m_Height - 1) : 0.0f) * m_WorldSpacingZ; }
+		float GetWorldSizeX() const noexcept { return float(m_Width - 1) * m_WorldSpacingX; }
+		float GetWorldSizeZ() const noexcept { return float(m_Height - 1) * m_WorldSpacingZ; }
 
 		float GetWorldOriginX() const noexcept;
 		float GetWorldOriginZ() const noexcept;

@@ -36,10 +36,7 @@ Texture2D<float> g_DensityField;
 Texture2D<float> g_InteractionField;
 
 // Samplers
-// IMPORTANT: Height + Interaction use CLAMP sampler (shared with terrain).
 SamplerState g_LinearClampSampler;
-
-// Density is world-tiled => WRAP is expected for density map.
 SamplerState g_LinearWrapSampler;
 
 // ----------------------------------------------------------------------------
@@ -117,8 +114,6 @@ float SampleWorldHeight(float2 worldXZ)
 float SampleInteraction(float2 worldXZ)
 {
     float2 uv = WorldXZToHeightUV(worldXZ);
-
-    // Interaction uses the SAME UV + texel-center clamp + CLAMP sampler as height
     return g_InteractionField.SampleLevel(g_LinearClampSampler, uv, 0.0).r;
 }
 
@@ -129,6 +124,7 @@ float ComputeSlope01(float2 worldXZ)
 {
     float2 e = g_HeightFieldCB.WorldSpacingXZ;
 
+    // NOTE: slope uses 1-texel spacing steps (world meters)
     float hX1 = SampleHeightNormalized(worldXZ + float2(e.x, 0));
     float hX0 = SampleHeightNormalized(worldXZ - float2(e.x, 0));
     float hZ1 = SampleHeightNormalized(worldXZ + float2(0, e.y));
@@ -186,6 +182,52 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 }
 
 // ----------------------------------------------------------------------------
+// Chunk grid mapping (HeightField-space aligned)
+// ----------------------------------------------------------------------------
+// IMPORTANT:
+// We align grass chunks in the SAME world space as the terrain heightfield:
+//
+// - Heightfield world origin: g_HeightFieldCB.WorldOriginXZ
+// - Heightfield spacing:      g_HeightFieldCB.WorldSpacingXZ
+// - Heightfield extents:      [origin .. origin+WorldSize]
+//
+// Grass chunk origin is computed relative to WorldOriginXZ, not absolute 0,
+// so centerXZ terrain (negative origin) stays perfectly aligned.
+int2 WorldXZToChunkCoord(float2 worldXZ, float chunkSize)
+{
+    float2 rel = worldXZ - g_HeightFieldCB.WorldOriginXZ;
+    float inv = rcp(max(chunkSize, 1e-6));
+    float2 c = floor(rel * inv);
+    return int2((int) c.x, (int) c.y);
+}
+
+float2 ChunkCoordToWorldOrigin(int2 chunkCoord, float chunkSize)
+{
+    return g_HeightFieldCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
+}
+
+// Clamp generated chunk origin so we don't spawn outside heightfield coverage.
+// (Optional but recommended; prevents ¡°edge smear¡± when camera near bounds)
+bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
+{
+    float2 hfMin = g_HeightFieldCB.WorldOriginXZ;
+    float2 hfMax = g_HeightFieldCB.WorldOriginXZ + g_HeightFieldCB.WorldSizeXZ;
+
+    // we want [origin .. origin+chunkSize] to intersect hf bounds
+    float2 o = chunkOriginXZ;
+    float2 e = o + chunkSize.xx;
+
+    // if completely outside, reject
+    if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
+        return false;
+
+    // clamp origin so sampling stays within a reasonable range
+    // NOTE: we don't force full containment; just keep origin near bounds.
+    chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
+    return true;
+}
+
+// ----------------------------------------------------------------------------
 // Chunk-based generation
 // ----------------------------------------------------------------------------
 [numthreads(8, 8, 1)]
@@ -197,10 +239,15 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
     float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
     float chunkSize = g_GrassGenCB.ChunkSize;
 
-    int2 camChunk = int2(floor(camXZ / max(chunkSize, 1e-6)));
+    // Heightfield-aligned chunk coord around camera
+    int2 camChunk = WorldXZToChunkCoord(camXZ, chunkSize);
     int2 worldChunk = camChunk + chunkGrid;
 
-    float2 chunkOriginXZ = float2(worldChunk) * chunkSize;
+    float2 chunkOriginXZ = ChunkCoordToWorldOrigin(worldChunk, chunkSize);
+
+    // Optional clamp/reject outside bounds
+    if (!ClampChunkToHeightfield(chunkOriginXZ, chunkSize))
+        return;
 
     // Conservative vertical bounds: sample one height and expand range
     float chunkOriginHeight = SampleWorldHeight(chunkOriginXZ);
@@ -227,6 +274,7 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * chunkSize;
         float2 posXZ = chunkOriginXZ + localXZ;
 
+        // Spawn radius (camera-local)
         float2 dc = posXZ - camXZ;
         if (dot(dc, dc) > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
             continue;

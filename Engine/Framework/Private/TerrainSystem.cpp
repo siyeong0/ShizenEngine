@@ -309,9 +309,9 @@ namespace shz
 		{
 			if (!bStitchL)
 			{
-				// If bottom/top are stitched, left must NOT use odd boundary verts at those corners.
-				const uint32 qzBegin = bStitchB ? 1u : 0u;
-				const uint32 qzEnd = bStitchT ? (quadsPerSide - 1u) : quadsPerSide;
+				// Left non-stitch: ALWAYS exclude corners to avoid double-emission with Bottom/Top.
+				const uint32 qzBegin = 1u;
+				const uint32 qzEnd = (quadsPerSide > 1) ? (quadsPerSide - 1u) : 0u;
 
 				for (uint32 qz = qzBegin; qz < qzEnd; ++qz)
 				{
@@ -333,8 +333,9 @@ namespace shz
 		{
 			if (!bStitchR)
 			{
-				const uint32 qzBegin = bStitchB ? 1u : 0u;
-				const uint32 qzEnd = bStitchT ? (quadsPerSide - 1u) : quadsPerSide;
+				// Right non-stitch: ALWAYS exclude corners to avoid double-emission with Bottom/Top.
+				const uint32 qzBegin = 1u;
+				const uint32 qzEnd = (quadsPerSide > 1) ? (quadsPerSide - 1u) : 0u;
 
 				for (uint32 qz = qzBegin; qz < qzEnd; ++qz)
 				{
@@ -547,7 +548,8 @@ namespace shz
 				lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), 4u);
 
 				{
-					const float3 cam = view.CameraPosition;
+					// const float3 cam = view.CameraPosition;
+					const float3 cam = float3{0.0f, 300.0f, 0.0f};
 
 					for (uint32 cz = 0; cz < numChunksZ; ++cz)
 					{
@@ -802,8 +804,8 @@ namespace shz
 					gp.RasterizerDesc.FrontCounterClockwise = true;
 
 					// TEST
-					/*gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-					gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;*/
+					//gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					//gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 
 					gp.DepthStencilDesc.DepthEnable = true;
 					gp.DepthStencilDesc.DepthWriteEnable = true;
