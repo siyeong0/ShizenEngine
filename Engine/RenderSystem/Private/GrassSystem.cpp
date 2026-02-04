@@ -304,7 +304,6 @@ namespace shz
 
 		// =====================================================================
 		// Pass 2) GrassGenerateInstances (compute)
-		//  - g_Counter UAV는 이제 IndirectCountBuffer를 사용 (slot0 offset만 0으로 리셋)
 		// =====================================================================
 		renderer.AddPass(
 			"GrassGenerateInstances",
@@ -464,7 +463,6 @@ namespace shz
 
 		// =====================================================================
 		// Pass 3) GrassForward (graphics, DrawIndexedIndirect)
-		//  - 전역 IndirectWriteArgs 패스가 미리 args를 만들어둔다고 가정
 		// =====================================================================
 		renderer.AddPass(
 			"GrassForward",
@@ -613,7 +611,6 @@ namespace shz
 			});
 		// =====================================================================
 		// Pass X) GrassShadow (graphics, DrawIndexedIndirect into ShadowMap)
-		//  - Shadow pass가 ShadowMap을 clear했다고 가정 (여기서는 clear 금지)
 		// =====================================================================
 		renderer.AddPass(
 			"GrassShadow",
@@ -656,8 +653,6 @@ namespace shz
 
 				const std::vector<DrawIndirectPacket>& packets = ctx.ShadowIndirectPackets;
 
-				// 잔디 shadow는 보통 "하나의 PSO/SRB + 하나의 VB/IB"로 끝날 확률이 높지만,
-				// 그래도 패킷 기반으로 안전하게 처리
 				IPipelineState* pLastPSO = nullptr;
 				IShaderResourceBinding* pLastSRB = nullptr;
 				IBuffer* pLastVB = nullptr;
@@ -667,7 +662,6 @@ namespace shz
 				{
 					ASSERT(pktIn.VertexBuffer && pktIn.IndexBuffer, "Invalid indirect packet VB/IB.");
 
-					// 이 패스는 GrassShadow 전용 PSO/SRB를 강제로 사용
 					if (pLastPSO != m_pGrassShadowPSO)
 					{
 						pLastPSO = m_pGrassShadowPSO;
@@ -700,15 +694,10 @@ namespace shz
 						pLastIB = pktIn.IndexBuffer;
 					}
 
-					// DrawIndexedIndirectAttribs 는 "pAttribsBuffer"가 반드시 필요
 					DrawIndexedIndirectAttribs dia = pktIn.DrawAttribs;
 
-					// RenderScene에서 null로 두는 정책이었으니 여기서 꽂아줌
-					// (이게 없으면 너가 봤던 INDIRECT_ARGUMENT state 에러/혹은 null deref가 나기 쉬움)
 					dia.pAttribsBuffer = ctx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
 
-					// 안전: state transition mode는 VERIFY로 두되,
-					// RDG가 DeclareBufferIndirectArgsRead로 상태전이를 만들어줬다는 가정
 					dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
 					pContext->DrawIndexedIndirect(dia);
@@ -733,14 +722,13 @@ namespace shz
 				gp.RTVFormats[0] = TEX_FORMAT_UNKNOWN;
 				gp.DSVFormat = TEX_FORMAT_UNKNOWN;
 
-				gp.RasterizerDesc.CullMode = CULL_MODE_NONE; // grass는 양면/얇은 지오메트리 많음
+				gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 				gp.RasterizerDesc.FrontCounterClockwise = true;
 
 				gp.DepthStencilDesc.DepthEnable = true;
 				gp.DepthStencilDesc.DepthWriteEnable = true;
 				gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-				// Input layout: GrassForward랑 동일(너가 이미 쓰는 스트라이드 그대로)
 				static LayoutElement layoutElems[] =
 				{
 					LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
@@ -777,10 +765,6 @@ namespace shz
 				// Resource layout
 				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-				// (필요한 mutable이 있으면 여기에 추가)
-				// GrassShadow.vsh가 g_GrassInstances(StructuredBuffer) + SHADOW_CONSTANTS( CB ) 등을 static으로 받도록 구성하는 게 가장 간단
-				// Shadow.psh가 샘플링을 안 하면 samplers는 필요 없음
-
 				m_pGrassShadowPSO = renderer.AcquirePipelineState(STRING_HASH("GrassShadow"), psoCI, true);
 				ASSERT(m_pGrassShadowPSO, "AcquirePipelineState(GrassShadow) failed.");
 
@@ -791,13 +775,13 @@ namespace shz
 					var->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
 				}
 
-				// Shadow constants (GrassShadow.vsh에서 cbuffer SHADOW_CONSTANTS를 쓴다고 가정)
+				// Shadow constants 
 				if (auto* var = m_pGrassShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "SHADOW_CONSTANTS"))
 				{
 					var->Set(renderer.GetBuffer(STRING_HASH("SHADOW_CONSTANTS")));
 				}
 
-				// Grass render constants를 GrassShadow.vsh에서 쓰면(예: wind/flatten 동일 적용)
+				// Grass render constants
 				if (auto* var = m_pGrassShadowPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
 				{
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));

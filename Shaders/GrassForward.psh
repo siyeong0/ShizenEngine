@@ -69,7 +69,7 @@ float4 main(PSInput IN) : SV_TARGET0
 
 	// Shadow
     float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
-    float bias = 0.0005 + (1.0 - NdotL) * 0.0005;
+    float bias = 0.0001 + (1.0 - NdotL) * 0.0001;
     float shadow = SampleShadow_PCF16(g_ShadowMap, g_ShadowCmpSampler, sh, bias, 2.0);
     
 	// Base PBR lighting (IBL + direct)
