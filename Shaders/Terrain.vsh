@@ -94,4 +94,6 @@ void main(in VSInput IN, out VSOutput OUT)
 
     OUT.WorldN = N;
     OUT.WorldT = T;
+    
+    OUT.WorldN = g_TerrainDrawCB.DebugChunkColor;
 }

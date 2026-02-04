@@ -105,6 +105,8 @@ struct TerrainDrawConstants
     float _pad0;
     float _pad1;
     float _pad2;
+    
+    float4 DebugChunkColor;
 };
 
 // ----------------------------------------------

@@ -397,7 +397,7 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
+			//m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
 		}
 
 
@@ -840,10 +840,10 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+			/*	mr.RenderObjectHandle = m_pRenderScene->AddObject(
 					*pTreeMeshes[meshIdx],
 					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					mr.bCastShadow);
+					mr.bCastShadow);*/
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -894,10 +894,10 @@ namespace shz
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				/*mr.RenderObjectHandle = m_pRenderScene->AddObject(
 					helmetMeshRD,
 					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					true);
+					true);*/
 				e.set<CMeshRenderer>(mr);
 
 				CBoxCollider box = {};
@@ -938,7 +938,7 @@ namespace shz
 			indirectDesc.PassKey = STRING_HASH("GrassForward");
 			indirectDesc.IndirectSlot = m_pGrassSystem->GetIndirectSlot();
 
-			m_pRenderScene->AddIndirect(indirectDesc);
+			// m_pRenderScene->AddIndirect(indirectDesc);
 		}
 	}
 

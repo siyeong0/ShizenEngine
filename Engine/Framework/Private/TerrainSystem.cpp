@@ -218,7 +218,7 @@ namespace shz
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
-				// TEMP: whole terrain as 1 chunk, LOD0
+				// TEMP: whole terrain as LOD0
 				const uint32 lod = 0;
 
 				const float worldOriginX = GetWorldOriginX();
@@ -257,7 +257,6 @@ namespace shz
 						const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
 						const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
 
-						// 마지막 청크는 남은 구간만 그리기(늘어나지 않게)
 						const float remainX = worldOriginX + worldSizeX - chunkOriginX;
 						const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
 
@@ -278,6 +277,18 @@ namespace shz
 						dc.SurfaceUVScale = float2{ 1, 1 };
 						dc.SurfaceUVBias = float2{ 0, 0 };
 						dc.NormalSampleStep = 1.0f;
+
+						auto hash01 = [](uint32 v) -> float
+						{
+							v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16; return float(v & 0x00FFFFFFu) / 16777216.0f;
+						};
+
+						uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
+						float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
+						float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
+						float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
+
+						dc.DebugChunkColor = float4{ r, g, b, 1.0f };
 
 						MapHelper<hlsl::TerrainDrawConstants> map(
 							pCtx,
@@ -357,8 +368,8 @@ namespace shz
 					gp.RasterizerDesc.FrontCounterClockwise = true;
 
 					// TEST
-					/*gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-					gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;*/
+					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 
 					gp.DepthStencilDesc.DepthEnable = true;
 					gp.DepthStencilDesc.DepthWriteEnable = true;
