@@ -380,8 +380,6 @@ namespace shz
 		if (!m_CI.DiffusePath.empty())
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
-			m_DiffuseTex = assetManager.LoadBlocking<Texture>(m_DiffuseTexRef);
-			ASSERT(m_DiffuseTex && m_DiffuseTex->IsValid(), "Failed to load diffuse Texture asset.");
 		}
 
 		// CPU height array
@@ -410,7 +408,6 @@ namespace shz
 		m_DiffuseTexRef = {};
 
 		m_HeightTex.Reset();
-		m_DiffuseTex.Reset();
 
 		m_HeightU16.clear();
 		m_HeightU16.shrink_to_fit();
@@ -483,15 +480,9 @@ namespace shz
 
 				const uint32 numChunksX = uint32(std::ceil(worldSizeX / m_ChunkSize));
 				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / m_ChunkSize));
-
 				if (numChunksX == 0 || numChunksZ == 0)
-				{
 					return;
-				}
 
-				// ------------------------------
-				// Setup pipeline + VB once
-				// ------------------------------
 				pCtx->SetPipelineState(m_pTerrainGBufferPSO);
 				pCtx->CommitShaderResources(m_pTerrainGBufferSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
@@ -504,9 +495,6 @@ namespace shz
 						SET_VERTEX_BUFFERS_FLAG_RESET);
 				}
 
-				// ------------------------------
-				// View + frustum
-				// ------------------------------
 				ASSERT(ctx.pViewFamily, "ViewFamily is null.");
 				const ViewFamily& viewFamily = *ctx.pViewFamily;
 				ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
@@ -518,30 +506,43 @@ namespace shz
 					ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
 				}
 
-				auto selectLodByDistance = [&](float dist) -> uint32
-				{
-					const float d0 = 128.0f;
-					const float d1 = 256.0f;
-					const float d2 = 512.0f;
-					const float d3 = 1024.0f;
-
-					if (dist < d0) return 0;
-					if (dist < d1) return 1;
-					if (dist < d2) return 2;
-					if (dist < d3) return 3;
-					return 4;
-				};
-
-				const uint32 steps[5] = { 1, 2, 4, 8, 16 };
-
 				auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
 				{
 					return cz * numChunksX + cx;
 				};
 
-				// ------------------------------
-				// Precompute per-chunk LOD (then clamp neighbor diff <= 1)
-				// ------------------------------
+				struct LodRange final { float End; };
+				const LodRange lodRanges[5] =
+				{
+					{ 128.0f },
+					{ 256.0f },
+					{ 512.0f },
+					{ 1024.0f },
+					{ FLT_MAX },
+				};
+
+				auto selectLodOnly = [&](float dist) -> uint32
+				{
+					if (dist < lodRanges[0].End) return 0;
+					if (dist < lodRanges[1].End) return 1;
+					if (dist < lodRanges[2].End) return 2;
+					if (dist < lodRanges[3].End) return 3;
+					return 4;
+				};
+
+				auto morphForClampedLod = [&](float dist, uint32 lod) -> float
+				{
+					if (lod >= 4)
+						return 0.0f;
+
+					const float d1 = lodRanges[lod].End;
+					const float d0 = d1 * 0.85f;
+
+					const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
+					const float s = t * t * (3.0f - 2.0f * t); // smoothstep
+					return s;
+				};
+
 				std::vector<uint8> lodGrid;
 				lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), 4u);
 
@@ -574,15 +575,12 @@ namespace shz
 							const float dz = cam.z - czw;
 							const float dist = std::sqrt(dx * dx + dz * dz);
 
-							const uint32 lod = selectLodByDistance(dist);
+							const uint32 lod = selectLodOnly(dist);
 							lodGrid[idx2D(cx, cz)] = uint8(Clamp(lod, 0u, 4u));
 						}
 					}
 				}
 
-				// Clamp rule:
-				// - For any neighbor pair, coarser LOD cannot be more than (finer + 1).
-				// - Iterate until stable (grid is small, cost negligible).
 				{
 					bool changed = true;
 					uint32 iter = 0;
@@ -604,19 +602,8 @@ namespace shz
 
 									uint8& b = lodGrid[idx2D(nx, nz)];
 
-									// If b is too coarse compared to a, pull b closer (coarser -> finer)
-									if (b > uint8(a + 1))
-									{
-										b = uint8(a + 1);
-										changed = true;
-									}
-
-									// If a is too coarse compared to b, pull a closer
-									if (a > uint8(b + 1))
-									{
-										a = uint8(b + 1);
-										changed = true;
-									}
+									if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
+									if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
 								};
 
 								if (cx > 0) clampPair(cx - 1, cz);
@@ -638,6 +625,8 @@ namespace shz
 				const float yMin = m_HeightOffset;
 				const float yMax = m_HeightOffset + m_HeightScale;
 
+				const float3 cam = view.CameraPosition;
+
 				for (uint32 cz = 0; cz < numChunksZ; ++cz)
 				{
 					for (uint32 cx = 0; cx < numChunksX; ++cx)
@@ -654,9 +643,6 @@ namespace shz
 						if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
 							continue;
 
-						// ------------------------------
-						// Frustum culling (chunk AABB)
-						// ------------------------------
 						Box localBounds = {};
 						localBounds.Min = float3{ 0.f, yMin, 0.f };
 						localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
@@ -666,9 +652,6 @@ namespace shz
 						if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 							continue;
 
-						// ------------------------------
-						// LOD + stitch mask from neighbors
-						// ------------------------------
 						const uint32 lod = uint32(lodGrid[idx2D(cx, cz)]);
 						ASSERT(lod < 5, "Invalid LOD.");
 
@@ -677,19 +660,15 @@ namespace shz
 						auto nLod = [&](int32 nx, int32 nz) -> uint32
 						{
 							if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
-							{
-								return lod; // treat out-of-bounds as same (no stitch)
-							}
+								return lod;
 							return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
 						};
 
-						// If neighbor is coarser (bigger lod index), we stitch on this edge.
 						if (nLod(int32(cx) - 1, int32(cz)) > lod) mask |= Stitch_Left;
 						if (nLod(int32(cx) + 1, int32(cz)) > lod) mask |= Stitch_Right;
 						if (nLod(int32(cx), int32(cz) - 1) > lod) mask |= Stitch_Bottom;
 						if (nLod(int32(cx), int32(cz) + 1) > lod) mask |= Stitch_Top;
 
-						// Bind IB when (lod or mask) changes
 						if (lod != currentLod || uint32(mask) != currentMask)
 						{
 							currentLod = lod;
@@ -702,9 +681,15 @@ namespace shz
 							dia.NumIndices = m_LodIndexCount[lod][mask];
 						}
 
-						// ------------------------------
-						// Per-chunk constants
-						// ------------------------------
+						const float cxw = chunkOriginX + 0.5f * chunkSizeX;
+						const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+
+						const float dx = cam.x - cxw;
+						const float dz = cam.z - czw;
+						const float dist = std::sqrt(dx * dx + dz * dz);
+
+						const float morph = morphForClampedLod(dist, lod);
+
 						hlsl::TerrainDrawConstants dc = {};
 						dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
 						dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
@@ -716,6 +701,23 @@ namespace shz
 
 						const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
 						dc.NormalSampleStep = normalSteps[lod];
+
+						dc.LodIndex = lod;
+						dc.LodMorphAlpha = morph;
+
+						// Debug
+						auto hash01 = [](uint32 v) -> float
+						{
+							v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16; return float(v & 0x00FFFFFFu) / 16777216.0f;
+						};
+
+						uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
+						//uint32 h = lod;
+						float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
+						float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
+						float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
+						dc.DebugChunkColor = float4{ r, g, b, 1.0f };
+
 
 						MapHelper<hlsl::TerrainDrawConstants> map(
 							pCtx,
@@ -729,7 +731,7 @@ namespace shz
 					}
 				}
 			},
-				[this, &renderer]()
+			[this, &renderer]()
 			{
 				// VB
 				{
@@ -876,7 +878,8 @@ namespace shz
 
 					MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
 					Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
-					tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
+					//tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
+					tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
 					tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 					tm.SetFloat("g_EmissiveIntensity", 0.0f);
 					tm.SetFloat("g_RoughnessFactor", 0.85f);
@@ -884,7 +887,15 @@ namespace shz
 					tm.SetFloat("g_OcclusionStrength", 1.0f);
 					tm.SetFloat("g_AlphaCutoff", 0.5f);
 					tm.SetFloat("g_MetallicFactor", 0.0f);
-					tm.SetUint("g_MaterialFlags", 0);
+					if (m_DiffuseTexRef.IsValid())
+					{
+						tm.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D, m_DiffuseTexRef);
+						tm.SetUint("g_MaterialFlags", 1);
+					}
+					else
+					{
+						tm.SetUint("g_MaterialFlags", 0);
+					}
 
 					m_pTerrainGBufferSRB = renderer.AcquireShaderResourceBindingFromMaterial(tmId, m_pTerrainGBufferPSO);
 

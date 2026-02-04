@@ -92,7 +92,6 @@ namespace shz
 		const AssetRef<Texture>& GetDiffuseTextureRef() const noexcept { return m_DiffuseTexRef; }
 
 		const Texture* GetHeightTexture() const noexcept { return m_HeightTex.Get(); }
-		const Texture* GetDiffuseTexture() const noexcept { return m_DiffuseTex.Get(); }
 
 		// Physics
 		void BuildPhysicsHeightSamples(std::vector<float>& outHeightsWorldMeters) const;
@@ -119,7 +118,6 @@ namespace shz
 		AssetRef<Texture> m_DiffuseTexRef = {};
 
 		AssetPtr<Texture> m_HeightTex;
-		AssetPtr<Texture> m_DiffuseTex;
 
 		std::vector<uint16> m_HeightU16 = {};
 

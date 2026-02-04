@@ -323,11 +323,15 @@ namespace shz
 			m_pTerrainSystem = std::make_unique<TerrainSystem>();
 
 			TerrainSystem::CreateInfo tci = {};
-			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+			// tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
 			// tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsDiffuse.png";
+
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/HeightMap.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/Diffuse.png";
+
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 100.0f;
+			tci.HeightScale = 3000.0f;
 			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
 
@@ -840,10 +844,10 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					*pTreeMeshes[meshIdx],
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					mr.bCastShadow);
+				//mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				//	*pTreeMeshes[meshIdx],
+				//	Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+				//	mr.bCastShadow);
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -894,10 +898,10 @@ namespace shz
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					helmetMeshRD,
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					true);
+				//mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				//	helmetMeshRD,
+				//	Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+				//	true);
 				e.set<CMeshRenderer>(mr);
 
 				CBoxCollider box = {};
@@ -938,7 +942,7 @@ namespace shz
 			indirectDesc.PassKey = STRING_HASH("GrassForward");
 			indirectDesc.IndirectSlot = m_pGrassSystem->GetIndirectSlot();
 
-			m_pRenderScene->AddIndirect(indirectDesc);
+			//m_pRenderScene->AddIndirect(indirectDesc);
 		}
 	}
 

@@ -102,9 +102,12 @@ struct TerrainDrawConstants
 
     // Normal sampling step multiplier (>= 1)
     float NormalSampleStep;
+    
+    float LodMorphAlpha;
+    uint LodIndex;
     float _pad0;
-    float _pad1;
-    float _pad2;
+    
+    float4 DebugChunkColor;
 };
 
 // ----------------------------------------------
