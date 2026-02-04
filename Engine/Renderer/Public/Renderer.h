@@ -99,6 +99,17 @@ namespace shz
 			std::function<void(RenderPassContext&)> executeLambda,
 			std::function<void()> onCreated = {});
 
+		// 
+		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
+		RefCntAutoPtr<ITexture> CreateTexture(const AssetRef<Texture>& assetRef);
+		RefCntAutoPtr<ITexture> CreateTexture(const std::string& name, const Texture& texture);
+		RefCntAutoPtr<ITexture> CreateTexture(uint64 id, const Texture& texture);
+		void UpdateTexture2D(IDeviceContext* pCtx, ITexture* pTexture, uint32 arraySlice, const Texture& sourceImage, RESOURCE_STATE_TRANSITION_MODE transitionMode) const;
+
+		RefCntAutoPtr<IBuffer> CreateBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
+		RefCntAutoPtr<IBuffer> CreateVertexBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
+		RefCntAutoPtr<IBuffer> CreateIndexBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
+
 		// Resource registry wrappers
 		RefCntAutoPtr<ITexture> GetTexture(uint64 id) const;
 		RefCntAutoPtr<ITextureView> GetTextureSRV(uint64 id) const;
@@ -125,6 +136,11 @@ namespace shz
 
 		uint64 AddUniformBuffer(const std::string& name, uint64 sizeBytes);
 		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
+
+		void RegisterStaticTextureResource(const std::string& name, RenderResourceId id);
+		void RegisterStaticBufferCBV(const std::string& name, RenderResourceId id); // ConstantBuffer
+		void RegisterStaticBufferSRV(const std::string& name, RenderResourceId id); // Structured/Typed/ByteAddress SRV
+		void RegisterStaticBufferUAV(const std::string& name, RenderResourceId id); // RWStructured/RWByteAddress UAV 
 
 		template<typename T>
 		void UpdateBuffer(uint64 id, const T& data)
@@ -164,15 +180,6 @@ namespace shz
 
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
-
-		RefCntAutoPtr<ITexture> createTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
-		RefCntAutoPtr<ITexture> createTexture(const AssetRef<Texture>& assetRef);
-		RefCntAutoPtr<ITexture> createTexture(const std::string& name, const Texture& texture);
-		RefCntAutoPtr<ITexture> createTexture(uint64 id, const Texture& texture);
-
-		RefCntAutoPtr<IBuffer> createBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
-
-		void updateTexture2D(IDeviceContext* pCtx, ITexture* pTexture, uint32 arraySlice, const Texture& sourceImage, RESOURCE_STATE_TRANSITION_MODE transitionMode) const;
 
 		// Render graph
 		void compileRenderGraphOrder();

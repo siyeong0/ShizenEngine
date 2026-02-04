@@ -57,6 +57,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GrassForward.vsh = Shaders\GrassForward.vsh
 		Shaders\GrassGenerateInstances.hlsl = Shaders\GrassGenerateInstances.hlsl
 		Shaders\GrassShadow.vsh = Shaders\GrassShadow.vsh
+		Shaders\HeightField.hlsli = Shaders\HeightField.hlsli
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\InteractionFieldUpdate.hlsl = Shaders\InteractionFieldUpdate.hlsl
 		Shaders\Lighting.psh = Shaders\Lighting.psh
@@ -67,6 +68,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\Shadow.vsh = Shaders\Shadow.vsh
 		Shaders\ShadowMasked.psh = Shaders\ShadowMasked.psh
 		Shaders\ShadowMasked.vsh = Shaders\ShadowMasked.vsh
+		Shaders\Terrain.vsh = Shaders\Terrain.vsh
 		Shaders\WriteIndirectArgs.hlsl = Shaders\WriteIndirectArgs.hlsl
 	EndProjectSection
 EndProject

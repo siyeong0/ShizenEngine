@@ -1,9 +1,15 @@
 #include "HLSL_Structures.hlsli"
+#include "HeightField.hlsli"
 
 // Constant Buffers
 cbuffer FRAME_CONSTANTS
 {
     FrameConstants g_FrameCB;
+};
+
+cbuffer HEIGHT_FIELD_CONSTANTS
+{
+    HeightFieldConstants g_HeightFieldCB;
 };
 
 cbuffer GRASS_GEN_CONSTANTS
@@ -20,8 +26,8 @@ RWByteAddressBuffer g_Counter;
 // Instance cap (must match buffer capacity on CPU side)
 static const uint MAX_INSTANCES = 1u << 24;
 
-// Heightmap (R16_UNORM sampled as normalized float 0..1)
-Texture2D<float> g_HeightMap;
+// HeightField (R16_UNORM sampled as normalized float 0..1)
+Texture2D<float> g_HeightField;
 
 // Density field (recommend: R8_UNORM, grayscale, tiled in world space)
 Texture2D<float> g_DensityField;
@@ -29,6 +35,11 @@ Texture2D<float> g_DensityField;
 // Interaction field (0..1). 1 = heavily pressed.
 Texture2D<float> g_InteractionField;
 
+// Samplers
+// IMPORTANT: Height + Interaction use CLAMP sampler (shared with terrain).
+SamplerState g_LinearClampSampler;
+
+// Density is world-tiled => WRAP is expected for density map.
 SamplerState g_LinearWrapSampler;
 
 // ----------------------------------------------------------------------------
@@ -54,57 +65,6 @@ uint Hash2i(int2 v, uint salt)
     uint x = (uint) v.x;
     uint y = (uint) v.y;
     return (x * 73856093u) ^ (y * 19349663u) ^ salt;
-}
-
-// ----------------------------------------------------------------------------
-// Terrain mapping (world XZ -> heightmap UV)
-// ----------------------------------------------------------------------------
-float GetTerrainSizeX()
-{
-    return float(max((int) g_GrassGenCB.HFWidth - 1, 0)) * g_GrassGenCB.SpacingX;
-}
-
-float GetTerrainSizeZ()
-{
-    return float(max((int) g_GrassGenCB.HFHeight - 1, 0)) * g_GrassGenCB.SpacingZ;
-}
-
-float GetTerrainOriginX()
-{
-    return (g_GrassGenCB.CenterXZ != 0) ? (-0.5 * GetTerrainSizeX()) : 0.0;
-}
-
-float GetTerrainOriginZ()
-{
-    return (g_GrassGenCB.CenterXZ != 0) ? (-0.5 * GetTerrainSizeZ()) : 0.0;
-}
-
-float WorldXToU(float worldX)
-{
-    float sizeX = max(GetTerrainSizeX(), 1e-6);
-    return (worldX - GetTerrainOriginX()) / sizeX;
-}
-
-float WorldZToV(float worldZ)
-{
-    float sizeZ = max(GetTerrainSizeZ(), 1e-6);
-    return (worldZ - GetTerrainOriginZ()) / sizeZ;
-}
-
-float SampleHeightNormalized(float2 worldXZ)
-{
-    float2 uv;
-    uv.x = WorldXToU(worldXZ.x);
-    uv.y = WorldZToV(worldXZ.y);
-    uv = saturate(uv);
-
-    return g_HeightMap.SampleLevel(g_LinearWrapSampler, uv, 0.0);
-}
-
-float SampleWorldHeight(float2 worldXZ)
-{
-    float hN = SampleHeightNormalized(worldXZ);
-    return g_GrassGenCB.YOffset + (g_GrassGenCB.HeightOffset + hN * g_GrassGenCB.HeightScale);
 }
 
 // ----------------------------------------------------------------------------
@@ -134,32 +94,48 @@ float SampleWorldDensity(float2 worldXZ)
 }
 
 // ----------------------------------------------------------------------------
-// Interaction sampling (terrain-mapped)
+// Height/Interaction sampling (SHARED mapping rules with Terrain.vsh)
 // ----------------------------------------------------------------------------
+float2 WorldXZToHeightUV(float2 worldXZ)
+{
+    // Grass uses pure base mapping: scale=1, bias=0
+    return HF_WorldXZToUV(worldXZ, g_HeightFieldCB, float2(1.0, 1.0), float2(0.0, 0.0));
+}
+
+float SampleHeightNormalized(float2 worldXZ)
+{
+    float2 uv = WorldXZToHeightUV(worldXZ);
+    return HF_SampleHeight01(g_HeightField, g_LinearClampSampler, uv);
+}
+
+float SampleWorldHeight(float2 worldXZ)
+{
+    float2 uv = WorldXZToHeightUV(worldXZ);
+    return HF_SampleWorldHeight(g_HeightField, g_LinearClampSampler, uv, g_HeightFieldCB, g_GrassGenCB.YOffset);
+}
+
 float SampleInteraction(float2 worldXZ)
 {
-    float2 uv;
-    uv.x = WorldXToU(worldXZ.x);
-    uv.y = WorldZToV(worldXZ.y);
-    uv = saturate(uv);
+    float2 uv = WorldXZToHeightUV(worldXZ);
 
-    return g_InteractionField.SampleLevel(g_LinearWrapSampler, uv, 0.0).r; // 0..1
+    // Interaction uses the SAME UV + texel-center clamp + CLAMP sampler as height
+    return g_InteractionField.SampleLevel(g_LinearClampSampler, uv, 0.0).r;
 }
 
 // ----------------------------------------------------------------------------
-// Slope / Height masks
+// Slope / Height masks (uses SAME height sampling rules)
 // ----------------------------------------------------------------------------
 float ComputeSlope01(float2 worldXZ)
 {
-    float2 e = float2(g_GrassGenCB.SpacingX, g_GrassGenCB.SpacingZ);
+    float2 e = g_HeightFieldCB.WorldSpacingXZ;
 
     float hX1 = SampleHeightNormalized(worldXZ + float2(e.x, 0));
     float hX0 = SampleHeightNormalized(worldXZ - float2(e.x, 0));
     float hZ1 = SampleHeightNormalized(worldXZ + float2(0, e.y));
     float hZ0 = SampleHeightNormalized(worldXZ - float2(0, e.y));
 
-    float dhdx = (hX1 - hX0) * g_GrassGenCB.HeightScale / max(2.0f * e.x, 1e-6);
-    float dhdz = (hZ1 - hZ0) * g_GrassGenCB.HeightScale / max(2.0f * e.y, 1e-6);
+    float dhdx = (hX1 - hX0) * g_HeightFieldCB.HeightScale / max(2.0f * e.x, 1e-6);
+    float dhdz = (hZ1 - hZ0) * g_HeightFieldCB.HeightScale / max(2.0f * e.y, 1e-6);
 
     float s = length(float2(dhdx, dhdz)); // ~tan(theta)
 
@@ -226,15 +202,11 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 
     float2 chunkOriginXZ = float2(worldChunk) * chunkSize;
 
+    // Conservative vertical bounds: sample one height and expand range
     float chunkOriginHeight = SampleWorldHeight(chunkOriginXZ);
 
-    float3 chunkMin = float3(chunkOriginXZ.x,
-                             chunkOriginHeight - 20.0,
-                             chunkOriginXZ.y);
-
-    float3 chunkMax = float3(chunkOriginXZ.x + chunkSize,
-                             chunkOriginHeight + 20.0,
-                             chunkOriginXZ.y + chunkSize);
+    float3 chunkMin = float3(chunkOriginXZ.x, chunkOriginHeight - 20.0, chunkOriginXZ.y);
+    float3 chunkMax = float3(chunkOriginXZ.x + chunkSize, chunkOriginHeight + 20.0, chunkOriginXZ.y + chunkSize);
 
     if (!AabbInsideFrustum(chunkMin, chunkMax))
         return;
@@ -259,12 +231,12 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         if (dot(dc, dc) > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
             continue;
 
-        // Base density
+        // Base density (tiled)
         float density = SampleWorldDensity(posXZ);
         if (density <= 0.001f)
             continue;
 
-        // Slope/height masks
+        // Slope/height masks (height sampling is unified)
         float hN = SampleHeightNormalized(posXZ);
         float slope01 = ComputeSlope01(posXZ);
 
@@ -275,12 +247,8 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         if (density <= 0.001f)
             continue;
 
-        // --- Interaction: sample ONCE per instance attempt ---
-        float press = SampleInteraction(posXZ); // 0..1
-        press = saturate(press);
-
-        if (density <= 0.001f)
-            continue;
+        // Interaction (unified UV/sampler with height)
+        float press = saturate(SampleInteraction(posXZ));
 
         // Density-gated attempts
         if (Rand01(seed ^ 0x41A7u) > density)
@@ -317,7 +285,6 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
                  g_GrassGenCB.BendStrengthMax,
                  Rand01(seed ^ 0x8888u));
 
-        // Store interaction pressure for VS (NO texture sampling in VS)
         inst.Press = press;
 
         g_OutInstances[idx] = inst;

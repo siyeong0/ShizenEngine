@@ -35,13 +35,6 @@ namespace shz
 				b.DeclareTextureRTVWrite(kMRAO);
 				b.DeclareTextureRTVWrite(kEmissive);
 				b.DeclareTextureDSVWrite(kDepth);
-
-				// Clear (same intent as old pass)
-				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearDepthStencil(kDepth, 1.f, 0);
 			},
 			[](RenderPassContext& ctx)
 			{

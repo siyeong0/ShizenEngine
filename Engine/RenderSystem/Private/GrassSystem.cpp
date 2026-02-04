@@ -276,6 +276,7 @@ namespace shz
 						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 					};
+
 					ImmutableSamplerDesc samplers[] =
 					{
 						{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
@@ -355,7 +356,7 @@ namespace shz
 
 				// (1) Bind per-frame textures
 				{
-					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightMap"))
+					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
 					{
 						var->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
@@ -416,7 +417,6 @@ namespace shz
 				{
 					{ SHADER_TYPE_COMPUTE, "g_OutInstances",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_Counter",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_HeightMap",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_DensityField",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -424,6 +424,11 @@ namespace shz
 				rl.Variables = vars;
 				rl.NumVariables = _countof(vars);
 
+				SamplerDesc linearClamp =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
 				SamplerDesc linearWrap =
 				{
 					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
@@ -431,6 +436,7 @@ namespace shz
 				};
 				ImmutableSamplerDesc samplers[] =
 				{
+					{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
 					{ SHADER_TYPE_COMPUTE, "g_LinearWrapSampler", linearWrap },
 				};
 				rl.ImmutableSamplers = samplers;
@@ -451,7 +457,6 @@ namespace shz
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
 				{
-					// shared IndirectCountBuffer로 바인딩
 					var->Set(renderer.GetBufferUAV(kIndirectCountBuffer));
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))

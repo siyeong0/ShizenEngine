@@ -144,7 +144,7 @@ namespace shz
 			initData.pSubResources = subres.data();
 			initData.NumSubresources = static_cast<uint32>(subres.size());
 
-			RefCntAutoPtr<ITexture> errorTex = createTexture(desc, &initData);
+			RefCntAutoPtr<ITexture> errorTex = CreateTexture(desc, &initData);
 			ASSERT(errorTex, "CreateTexture failed.");
 
 			AddTexture(STRING_HASH("ErrorTex"), std::move(errorTex));
@@ -188,7 +188,7 @@ namespace shz
 				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
 				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-				RefCntAutoPtr<IBuffer> sb = createBuffer(desc, nullptr);
+				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
 				ASSERT(sb, "Object table create failed.");
 				return sb;
 			};
@@ -283,7 +283,7 @@ namespace shz
 			td.Format = TEX_FORMAT_R32_TYPELESS;
 			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
-			m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), createTexture(td));
+			m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
 
 			TextureViewDesc dsvDesc = {};
 			dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
@@ -1110,6 +1110,136 @@ namespace shz
 	}
 
 	// ---------------------------------------------------------------------
+// Resource wrappers
+// ---------------------------------------------------------------------
+
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const TextureDesc& desc, const TextureData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<ITexture> tex;
+		m_pDevice->CreateTexture(desc, pInitData, &tex);
+		return tex;
+	}
+
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const AssetRef<Texture>& assetRef)
+	{
+		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
+		if (m_pRegistry->HasTexture(key))
+		{
+			return m_pRegistry->GetTexture(key);
+		}
+
+		AssetPtr<Texture> assetPtr = m_pAssetManager->Acquire(assetRef);
+		ASSERT(assetPtr, "Failed to acquire TextureAsset.");
+
+		return CreateTexture(key, *assetPtr);
+	}
+
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const std::string& name, const Texture& texture)
+	{
+		return CreateTexture(STRING_HASH(name), texture);
+	}
+
+	RefCntAutoPtr<ITexture> Renderer::CreateTexture(uint64 id, const Texture& texture)
+	{
+		const auto& mips = texture.GetMips();
+		ASSERT(!mips.empty(), "TextureAsset has no mips.");
+
+		const uint32 width = mips[0].Width;
+		const uint32 height = mips[0].Height;
+
+		TextureDesc desc = {};
+		desc.Type = RESOURCE_DIM_TEX_2D;
+		desc.Width = width;
+		desc.Height = height;
+		desc.MipLevels = static_cast<uint32>(mips.size());
+		desc.ArraySize = 1;
+		desc.Format = texture.GetFormat();
+		desc.Usage = USAGE_DEFAULT;
+		desc.BindFlags = BIND_SHADER_RESOURCE;
+
+		std::vector<TextureSubResData> subres;
+		subres.resize(mips.size());
+
+		for (size_t i = 0; i < mips.size(); ++i)
+		{
+			const TextureMip& mip = mips[i];
+			TextureSubResData sr = {};
+			sr.pData = mip.Data.data();
+			sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+			sr.DepthStride = 0;
+			subres[i] = sr;
+		}
+
+		TextureData initData = {};
+		initData.pSubResources = subres.data();
+		initData.NumSubresources = static_cast<uint32>(subres.size());
+
+		m_pRegistry->RegisterTexture(id, CreateTexture(desc, &initData));
+		return m_pRegistry->GetTexture(id);
+	}
+
+	void Renderer::UpdateTexture2D(
+		IDeviceContext* pCtx,
+		ITexture* pTexture,
+		uint32 arraySlice,
+		const Texture& sourceImage,
+		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
+	{
+		ASSERT(pCtx, "Context is null.");
+		ASSERT(pTexture, "Texture is null.");
+
+		const auto& mips = sourceImage.GetMips();
+		ASSERT(!mips.empty(), "TextureAsset has no mips.");
+
+		for (uint32 mipLevel = 0; mipLevel < static_cast<uint32>(mips.size()); ++mipLevel)
+		{
+			TextureSubResData subResData = {};
+			subResData.pData = mips[mipLevel].Data.data();
+			subResData.Stride = static_cast<uint64>(mips[mipLevel].Width) * GetTextureFormatAttribs(sourceImage.GetFormat()).GetElementSize();
+			subResData.DepthStride = 0;
+
+			// Update entire subresource (no box)
+			IBox box = {}; // empty -> full resource
+			pCtx->UpdateTexture(
+				pTexture,
+				mipLevel,
+				arraySlice,
+				box,
+				subResData,
+				transitionMode,
+				RESOURCE_STATE_TRANSITION_MODE_NONE
+			);
+		}
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::CreateBuffer(const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<IBuffer> buf;
+		m_pDevice->CreateBuffer(desc, pInitData, &buf);
+		return buf;
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::CreateVertexBuffer(const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<IBuffer> buf;
+		m_pDevice->CreateBuffer(desc, pInitData, &buf);
+		pushBarrier(buf, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+		return buf;
+	}
+
+	RefCntAutoPtr<IBuffer> Renderer::CreateIndexBuffer(const BufferDesc& desc, const BufferData* pInitData)
+	{
+		ASSERT(m_pDevice, "Device is null.");
+		RefCntAutoPtr<IBuffer> buf;
+		m_pDevice->CreateBuffer(desc, pInitData, &buf);
+		pushBarrier(buf, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+		return buf;
+	}
+
+	// ---------------------------------------------------------------------
 	// Resource registry wrappers
 	// ---------------------------------------------------------------------
 
@@ -1170,7 +1300,7 @@ namespace shz
 	uint64 Renderer::AddTexture(uint64 id, const TextureDesc& desc, const TextureData* pInitData)
 	{
 		ASSERT(m_pRegistry, "Registry is null.");
-		RefCntAutoPtr<ITexture> tex = createTexture(desc, pInitData);
+		RefCntAutoPtr<ITexture> tex = CreateTexture(desc, pInitData);
 		ASSERT(tex, "AddTexture: CreateTexture failed.");
 		m_pRegistry->RegisterTexture(id, std::move(tex));
 		return id;
@@ -1211,7 +1341,7 @@ namespace shz
 	uint64 Renderer::AddBuffer(uint64 id, const BufferDesc& desc, const BufferData* pInitData)
 	{
 		ASSERT(m_pRegistry, "Registry is null.");
-		RefCntAutoPtr<IBuffer> buf = createBuffer(desc, pInitData);
+		RefCntAutoPtr<IBuffer> buf = CreateBuffer(desc, pInitData);
 		ASSERT(buf, "AddBuffer: CreateBuffer failed.");
 		m_pRegistry->RegisterBuffer(id, std::move(buf));
 		return id;
@@ -1251,6 +1381,30 @@ namespace shz
 
 		m_pRegistry->RegisterBuffer(id, std::move(buf));
 		return id;
+	}
+
+	void Renderer::RegisterStaticTextureResource(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(m_pRegistry->HasTexture(id), "Unnkown resource.");
+		m_pPipelineStateManager->RegisterStaticTextureResource(name, id);
+	}
+
+	void Renderer::RegisterStaticBufferCBV(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(m_pRegistry->HasBuffer(id), "Unnkown resource.");
+		m_pPipelineStateManager->RegisterStaticBufferCBV(name, id);
+	}
+
+	void Renderer::RegisterStaticBufferSRV(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(m_pRegistry->HasBuffer(id), "Unnkown resource.");
+		m_pPipelineStateManager->RegisterStaticBufferSRV(name, id);
+	}
+
+	void Renderer::RegisterStaticBufferUAV(const std::string& name, RenderResourceId id)
+	{
+		ASSERT(m_pRegistry->HasBuffer(id), "Unnkown resource.");
+		m_pPipelineStateManager->RegisterStaticBufferUAV(name, id);
 	}
 
 	// ---------------------------------------------------------------------
@@ -1584,7 +1738,7 @@ namespace shz
 
 			if (b.TextureRef.has_value())
 			{
-				pTexture = createTexture(b.TextureRef.value());
+				pTexture = CreateTexture(b.TextureRef.value());
 				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 			}
 			else
@@ -1660,119 +1814,6 @@ namespace shz
 		pb.Desc.Flags = STATE_TRANSITION_FLAG_UPDATE_STATE;
 
 		m_PendingBarriers.push_back(std::move(pb));
-	}
-
-
-	// ---------------------------------------------------------------------
-	// Resource wrappers
-	// ---------------------------------------------------------------------
-
-	RefCntAutoPtr<ITexture> Renderer::createTexture(const TextureDesc& desc, const TextureData* pInitData)
-	{
-		ASSERT(m_pDevice, "Device is null.");
-		RefCntAutoPtr<ITexture> tex;
-		m_pDevice->CreateTexture(desc, pInitData, &tex);
-		return tex;
-	}
-
-	RefCntAutoPtr<ITexture> Renderer::createTexture(const AssetRef<Texture>& assetRef)
-	{
-		uint64 key = std::hash<AssetID>{}(assetRef.GetID());
-		if (m_pRegistry->HasTexture(key))
-		{
-			return m_pRegistry->GetTexture(key);
-		}
-
-		AssetPtr<Texture> assetPtr = m_pAssetManager->Acquire(assetRef);
-		ASSERT(assetPtr, "Failed to acquire TextureAsset.");
-
-		return createTexture(key, *assetPtr);
-	}
-
-	RefCntAutoPtr<ITexture> Renderer::createTexture(const std::string& name, const Texture& texture)
-	{
-		return createTexture(STRING_HASH(name), texture);
-	}
-
-	RefCntAutoPtr<ITexture> Renderer::createTexture(uint64 id, const Texture& texture)
-	{
-		const auto& mips = texture.GetMips();
-		ASSERT(!mips.empty(), "TextureAsset has no mips.");
-
-		const uint32 width = mips[0].Width;
-		const uint32 height = mips[0].Height;
-
-		TextureDesc desc = {};
-		desc.Type = RESOURCE_DIM_TEX_2D;
-		desc.Width = width;
-		desc.Height = height;
-		desc.MipLevels = static_cast<uint32>(mips.size());
-		desc.ArraySize = 1;
-		desc.Format = texture.GetFormat();
-		desc.Usage = USAGE_DEFAULT;
-		desc.BindFlags = BIND_SHADER_RESOURCE;
-
-		std::vector<TextureSubResData> subres;
-		subres.resize(mips.size());
-
-		for (size_t i = 0; i < mips.size(); ++i)
-		{
-			const TextureMip& mip = mips[i];
-			TextureSubResData sr = {};
-			sr.pData = mip.Data.data();
-			sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
-			sr.DepthStride = 0;
-			subres[i] = sr;
-		}
-
-		TextureData initData = {};
-		initData.pSubResources = subres.data();
-		initData.NumSubresources = static_cast<uint32>(subres.size());
-
-		m_pRegistry->RegisterTexture(id, createTexture(desc, &initData));
-		return m_pRegistry->GetTexture(id);
-	}
-
-	RefCntAutoPtr<IBuffer> Renderer::createBuffer(const BufferDesc& desc, const BufferData* pInitData)
-	{
-		ASSERT(m_pDevice, "Device is null.");
-		RefCntAutoPtr<IBuffer> buf;
-		m_pDevice->CreateBuffer(desc, pInitData, &buf);
-		return buf;
-	}
-
-	void Renderer::updateTexture2D(
-		IDeviceContext* pCtx,
-		ITexture* pTexture,
-		uint32 arraySlice,
-		const Texture& sourceImage,
-		RESOURCE_STATE_TRANSITION_MODE transitionMode) const
-	{
-		ASSERT(pCtx, "Context is null.");
-		ASSERT(pTexture, "Texture is null.");
-
-		const auto& mips = sourceImage.GetMips();
-		ASSERT(!mips.empty(), "TextureAsset has no mips.");
-
-		for (uint32 mipLevel = 0; mipLevel < static_cast<uint32>(mips.size()); ++mipLevel)
-		{
-			TextureSubResData subResData = {};
-			subResData.pData = mips[mipLevel].Data.data();
-			subResData.Stride = static_cast<uint64>(mips[mipLevel].Width) * GetTextureFormatAttribs(sourceImage.GetFormat()).GetElementSize();
-			subResData.DepthStride = 0;
-
-			// Update entire subresource (no box)
-			IBox box = {}; // empty -> full resource
-			pCtx->UpdateTexture(
-				pTexture,
-				mipLevel,
-				arraySlice,
-				box,
-				subResData,
-				transitionMode,
-				RESOURCE_STATE_TRANSITION_MODE_NONE
-			);
-		}
 	}
 
 	RESOURCE_STATE Renderer::mapUsageToState(const RenderPassResourceAccess& a) const

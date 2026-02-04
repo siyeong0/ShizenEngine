@@ -4,13 +4,26 @@
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 
-#include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 #include "Engine/Renderer/Public/Renderer.h"
+#include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
-#include "Engine/Renderer/Public/StaticMeshRenderData.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
+
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	} // namespace hlsl
+
+	struct TerrainVertex final
+	{
+		float3 Pos; // x,z in [0..16]
+		float2 UV;  // [0..1]
+	};
+
 	// ------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------
@@ -27,19 +40,78 @@ namespace shz
 		return static_cast<uint16>(iv > 65535u ? 65535u : iv);
 	}
 
+	static void buildGrid17x17VB(std::vector<TerrainVertex>& outVerts)
+	{
+		outVerts.clear();
+		outVerts.reserve(17 * 17);
+
+		for (uint32 z = 0; z < 17; ++z)
+		{
+			for (uint32 x = 0; x < 17; ++x)
+			{
+				const float u = float(x) / 16.0f;
+				const float v = float(z) / 16.0f;
+
+				TerrainVertex vtx = {};
+				vtx.Pos = float3{ float(x), 0.0f, float(z) };
+				vtx.UV = float2{ u, v };
+				outVerts.emplace_back(vtx);
+			}
+		}
+	}
+
+	static void buildGridIndicesLOD(uint32 step, std::vector<uint16>& outIdxU16)
+	{
+		outIdxU16.clear();
+
+		const uint32 quadsPerSide = 16 / step;
+		const uint32 vertsPerSide = 17;
+
+		outIdxU16.reserve(quadsPerSide * quadsPerSide * 6);
+
+		auto vid = [&](uint32 gx, uint32 gz) -> uint16
+		{
+			return uint16(gz * vertsPerSide + gx);
+		};
+
+		for (uint32 qz = 0; qz < quadsPerSide; ++qz)
+		{
+			for (uint32 qx = 0; qx < quadsPerSide; ++qx)
+			{
+				const uint32 x0 = qx * step;
+				const uint32 z0 = qz * step;
+				const uint32 x1 = x0 + step;
+				const uint32 z1 = z0 + step;
+
+				const uint16 i0 = vid(x0, z0);
+				const uint16 i1 = vid(x1, z0);
+				const uint16 i2 = vid(x0, z1);
+				const uint16 i3 = vid(x1, z1);
+
+				outIdxU16.push_back(i0);
+				outIdxU16.push_back(i1);
+				outIdxU16.push_back(i2);
+
+				outIdxU16.push_back(i1);
+				outIdxU16.push_back(i3);
+				outIdxU16.push_back(i2);
+			}
+		}
+	}
+
 	// ------------------------------------------------------------
 	// Lifecycle
 	// ------------------------------------------------------------
-	void TerrainSystem::Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci)
+	void TerrainSystem::Initialize(AssetManager& assetManager, const CreateInfo& ci)
 	{
 		Cleanup();
-
 		m_CI = ci;
 
 		ASSERT(!m_CI.HeightMapPath.empty(), "TerrainSystem HeightMapPath is empty.");
 		ASSERT(m_CI.WorldSpacingX > 0.f && m_CI.WorldSpacingZ > 0.f, "Invalid spacing.");
 		ASSERT(m_CI.HeightScale >= 0.f, "HeightScale must be >= 0.");
 
+		m_ChunkSize = m_CI.ChunkSize;
 		m_WorldSpacingX = m_CI.WorldSpacingX;
 		m_WorldSpacingZ = m_CI.WorldSpacingZ;
 		m_HeightScale = m_CI.HeightScale;
@@ -51,7 +123,7 @@ namespace shz
 		m_HeightTex = assetManager.LoadBlocking<Texture>(m_HeightTexRef);
 		ASSERT(m_HeightTex && m_HeightTex->IsValid(), "Failed to load height Texture asset.");
 
-		// Optional diffuse
+		// Optional diffuse (CPU)
 		if (!m_CI.DiffusePath.empty())
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
@@ -59,33 +131,10 @@ namespace shz
 			ASSERT(m_DiffuseTex && m_DiffuseTex->IsValid(), "Failed to load diffuse Texture asset.");
 		}
 
-		// Build CPU height samples
+		// CPU height array
 		buildHeightU16FromHeightTexture(*m_HeightTex);
-
 		ASSERT(m_Width > 0 && m_Height > 0, "Terrain height texture has invalid dimensions.");
 		ASSERT(m_HeightU16.size() == size_t(m_Width) * size_t(m_Height), "Height data size mismatch.");
-
-		// Reset render data
-		MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
-		Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
-		tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
-		tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-		tm.SetFloat("g_EmissiveIntensity", 0.0f);
-		tm.SetFloat("g_RoughnessFactor", 0.85f);
-		tm.SetFloat("g_NormalScale", 1.0f);
-		tm.SetFloat("g_OcclusionStrength", 1.0f);
-		tm.SetFloat("g_AlphaCutoff", 0.5f);
-		tm.SetFloat("g_MetallicFactor", 0.0f);
-		tm.SetUint("g_MaterialFlags", 0);
-
-		MeshBuildSettings ms = {};
-		const bool bOk = BuildStaticMesh(&m_FullMeshCPU, tmId, ms);
-		ASSERT(bOk && m_FullMeshCPU.IsValid(), "TerrainSystem: failed to build full CPU mesh.");
-
-		m_pFullMeshRD = &renderer.CreateStaticMeshRenderData(m_FullMeshCPU, STRING_HASH("TerrainSystem.FullMesh"), "TerrainFullMeshRD");
-		ASSERT(m_pFullMeshRD != nullptr, "TerrainSystem: failed to create StaticMeshRenderData.");
-
-		m_TerrainTRS = Matrix4x4::Identity();
 	}
 
 	void TerrainSystem::Cleanup()
@@ -95,6 +144,7 @@ namespace shz
 		m_Width = 0;
 		m_Height = 0;
 
+		m_ChunkSize = 64.0f;
 		m_WorldSpacingX = 1.0f;
 		m_WorldSpacingZ = 1.0f;
 
@@ -112,22 +162,13 @@ namespace shz
 		m_HeightU16.clear();
 		m_HeightU16.shrink_to_fit();
 
-		m_FullMeshCPU.Clear();
-		m_pFullMeshRD = nullptr;
+		m_pTerrainGBufferPSO.Release();
+		m_pTerrainGBufferSRB.Release();
 
-		m_TerrainTRS = Matrix4x4::Identity();
-	}
+		m_pGridVB.Release();
+		for (auto& ib : m_pLodIB) ib.Release();
 
-	void TerrainSystem::Update(RenderScene& scene, const ViewFamily& view)
-	{
-		ASSERT(m_pFullMeshRD, "Mesh is not initialized.");
-		// TODO: Chunking
-		static bool bAdded = false;
-		if (!bAdded)
-		{
-			scene.AddObject(*m_pFullMeshRD, m_TerrainTRS);
-			bAdded = true;
-		}
+		for (uint32& c : m_LodIndexCount) c = 0;
 	}
 
 	float TerrainSystem::GetWorldOriginX() const noexcept
@@ -141,63 +182,277 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Height access
+	// Pass registration (feature-owned)
 	// ------------------------------------------------------------
-	float TerrainSystem::GetNormalizedHeightAt(uint32 x, uint32 z) const
+	void TerrainSystem::InstallPasses(Renderer& renderer)
 	{
-		ASSERT(x < m_Width, "X out of range.");
-		ASSERT(z < m_Height, "Z out of range.");
+		// TerrainGBuffer: clears + draws terrain into same GBuffer targets
+		renderer.AddPass(
+			"TerrainGBuffer",
+			[](RenderPassBuilder& b)
+			{
+				const uint64 kAlbedo = STRING_HASH("GBuffer0_Albedo");
+				const uint64 kNormal = STRING_HASH("GBuffer1_Normal");
+				const uint64 kMRAO = STRING_HASH("GBuffer2_MRAO");
+				const uint64 kEmissive = STRING_HASH("GBuffer3_Emissive");
+				const uint64 kDepth = STRING_HASH("GBufferDepth");
 
-		const uint32 idx = getIndex(x, z);
-		ASSERT(idx < static_cast<uint32>(m_HeightU16.size()), "Index out of range.");
-		return u16ToNormalized(m_HeightU16[idx]);
-	}
+				b.DeclareTextureRTVWrite(kAlbedo);
+				b.DeclareTextureRTVWrite(kNormal);
+				b.DeclareTextureRTVWrite(kMRAO);
+				b.DeclareTextureRTVWrite(kEmissive);
+				b.DeclareTextureDSVWrite(kDepth);
+				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
 
-	float TerrainSystem::GetWorldHeightAt(uint32 x, uint32 z) const
-	{
-		const float n = GetNormalizedHeightAt(x, z);
-		return m_HeightOffset + n * m_HeightScale;
-	}
+				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearDepthStencil(kDepth, 1.f, 0);
+			},
+			[this](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "Context is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(m_pTerrainGBufferPSO && m_pTerrainGBufferSRB, "Terrain PSO/SRB not initialized.");
 
-	float TerrainSystem::SampleNormalizedHeight(float worldX, float worldZ) const
-	{
-		ASSERT(m_WorldSpacingX > 0.f && m_WorldSpacingZ > 0.f, "Spacing must be > 0.");
+				IDeviceContext* pCtx = ctx.pImmediateContext;
 
-		const float originX = GetWorldOriginX();
-		const float originZ = GetWorldOriginZ();
+				// TEMP: whole terrain as 1 chunk, LOD0
+				const uint32 lod = 0;
 
-		const float gx = (worldX - originX) / m_WorldSpacingX;
-		const float gz = (worldZ - originZ) / m_WorldSpacingZ;
+				const float worldOriginX = GetWorldOriginX();
+				const float worldOriginZ = GetWorldOriginZ();
+				const float worldSizeX = GetWorldSizeX();
+				const float worldSizeZ = GetWorldSizeZ();
 
-		const float maxX = static_cast<float>(m_Width - 1);
-		const float maxZ = static_cast<float>(m_Height - 1);
+				const uint32 numChunksX = uint32(std::ceil(worldSizeX / m_ChunkSize));
+				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / m_ChunkSize));
 
-		const float x = Clamp(gx, 0.f, maxX);
-		const float z = Clamp(gz, 0.f, maxZ);
+				pCtx->SetPipelineState(m_pTerrainGBufferPSO);
+				pCtx->CommitShaderResources(m_pTerrainGBufferSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-		const uint32 x0 = static_cast<uint32>(std::floor(x));
-		const uint32 z0 = static_cast<uint32>(std::floor(z));
+				// VB/IB
+				{
+					IBuffer* vbs[] = { m_pGridVB };
+					uint64 offs[] = { 0 };
 
-		const uint32 x1 = (x0 + 1 < m_Width) ? (x0 + 1) : x0;
-		const uint32 z1 = (z0 + 1 < m_Height) ? (z0 + 1) : z0;
+					pCtx->SetVertexBuffers(
+						0, 1, vbs, offs,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+						SET_VERTEX_BUFFERS_FLAG_RESET);
 
-		const float tx = x - static_cast<float>(x0);
-		const float tz = z - static_cast<float>(z0);
+					pCtx->SetIndexBuffer(m_pLodIB[lod], 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				}
 
-		const float h00 = GetNormalizedHeightAt(x0, z0);
-		const float h10 = GetNormalizedHeightAt(x1, z0);
-		const float h01 = GetNormalizedHeightAt(x0, z1);
-		const float h11 = GetNormalizedHeightAt(x1, z1);
+				DrawIndexedAttribs dia = {};
+				dia.IndexType = VT_UINT16;
+				dia.NumIndices = m_LodIndexCount[lod];
+				dia.Flags = DRAW_FLAG_VERIFY_ALL;
 
-		const float hx0 = h00 + (h10 - h00) * tx;
-		const float hx1 = h01 + (h11 - h01) * tx;
-		return Clamp01(hx0 + (hx1 - hx0) * tz);
-	}
+				for (uint32 cz = 0; cz < numChunksZ; ++cz)
+				{
+					for (uint32 cx = 0; cx < numChunksX; ++cx)
+					{
+						const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
+						const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
 
-	float TerrainSystem::SampleWorldHeight(float worldX, float worldZ) const
-	{
-		const float n = SampleNormalizedHeight(worldX, worldZ);
-		return m_HeightOffset + n * m_HeightScale;
+						// 마지막 청크는 남은 구간만 그리기(늘어나지 않게)
+						const float remainX = worldOriginX + worldSizeX - chunkOriginX;
+						const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
+
+						const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
+						const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
+
+						if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
+							continue;
+
+						// (선택) 간단한 청크 프러스텀 컬링 넣고 싶으면 여기서 AABB 체크
+
+						hlsl::TerrainDrawConstants dc = {};
+						dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
+						dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
+
+						dc.HeightUVScale = float2{ 1, 1 };
+						dc.HeightUVBias = float2{ 0, 0 };
+						dc.SurfaceUVScale = float2{ 1, 1 };
+						dc.SurfaceUVBias = float2{ 0, 0 };
+						dc.NormalSampleStep = 1.0f;
+
+						MapHelper<hlsl::TerrainDrawConstants> map(
+							pCtx,
+							ctx.pRenderer->GetBuffer(STRING_HASH("TerrainDrawConstants")),
+							MAP_WRITE,
+							MAP_FLAG_DISCARD);
+
+						*map = dc;
+
+						pCtx->DrawIndexed(dia);
+					}
+				}
+			},
+				[this, &renderer]()
+			{
+				// VB
+				{
+					std::vector<TerrainVertex> verts;
+					buildGrid17x17VB(verts);
+
+					BufferDesc vb = {};
+					vb.Name = "Terrain.Grid17x17.VB";
+					vb.Usage = USAGE_IMMUTABLE;
+					vb.BindFlags = BIND_VERTEX_BUFFER;
+					vb.Size = uint32(verts.size() * sizeof(TerrainVertex));
+
+					BufferData init = {};
+					init.pData = verts.data();
+					init.DataSize = vb.Size;
+
+					m_pGridVB = renderer.CreateVertexBuffer(vb, &init);
+					ASSERT(m_pGridVB, "Create terrain VB failed.");
+				}
+
+				// IBs
+				const uint32 steps[5] = { 1, 2, 4, 8, 16 };
+				for (uint32 i = 0; i < 5; ++i)
+				{
+					std::vector<uint16> idx;
+					buildGridIndicesLOD(steps[i], idx);
+
+					m_LodIndexCount[i] = uint32(idx.size());
+
+					BufferDesc ib = {};
+					std::string name = "Terrain.Grid17x17.IB.step" + std::to_string(steps[i]);
+					ib.Name = name.c_str();
+					ib.Usage = USAGE_IMMUTABLE;
+					ib.BindFlags = BIND_INDEX_BUFFER;
+					ib.Size = uint32(idx.size() * sizeof(uint16));
+
+					BufferData init = {};
+					init.pData = idx.data();
+					init.DataSize = ib.Size;
+
+					m_pLodIB[i] = renderer.CreateIndexBuffer(ib, &init);
+					ASSERT(m_pLodIB[i], "Create terrain IB failed.");
+				}
+
+				{
+					BufferDesc cb = {};
+					cb.Name = "TERRAIN_DRAW_CONSTANTS";
+					cb.Usage = USAGE_DYNAMIC;
+					cb.BindFlags = BIND_UNIFORM_BUFFER;
+					cb.CPUAccessFlags = CPU_ACCESS_WRITE;
+					cb.Size = sizeof(hlsl::TerrainDrawConstants);
+					renderer.AddBuffer("TerrainDrawConstants", cb);
+				}
+
+				{
+					GraphicsPipelineStateCreateInfo psoCi = {};
+					psoCi.PSODesc.Name = "TerrainGBuffer PSO";
+					psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+					GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
+					gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+					gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
+					gp.RasterizerDesc.FrontCounterClockwise = true;
+
+					// TEST
+					/*gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;*/
+
+					gp.DepthStencilDesc.DepthEnable = true;
+					gp.DepthStencilDesc.DepthWriteEnable = true;
+					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+					LayoutElement elems[] =
+					{
+						LayoutElement{ 0, 0, 3, VT_FLOAT32, false }, // ATTRIB0 Pos
+						LayoutElement{ 1, 0, 2, VT_FLOAT32, false }, // ATTRIB1 UV
+					};
+					gp.InputLayout.LayoutElements = elems;
+					gp.InputLayout.NumElements = _countof(elems);
+
+					ShaderCreateInfo vsCI = {};
+					vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					vsCI.EntryPoint = "main";
+					vsCI.Desc.Name = "Terrain VS";
+					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+					vsCI.FilePath = m_TerrainVS.c_str();
+
+					ShaderCreateInfo psCI = {};
+					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					psCI.EntryPoint = "main";
+					psCI.Desc.Name = "Terrain PS (reuse GBuffer)";
+					psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+					psCI.FilePath = m_TerrainPS.c_str(); // GBuffer.psh
+
+					renderer.CreateShader(vsCI, &psoCi.pVS);
+					renderer.CreateShader(psCI, &psoCi.pPS);
+
+					psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+					ShaderResourceVariableDesc vars[] =
+					{
+						// VS
+						{ SHADER_TYPE_VERTEX, "TERRAIN_DRAW_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+						{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_NormalTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_MetallicRoughnessTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_AOTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_EmissiveTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "g_HeightTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					};
+
+					psoCi.PSODesc.ResourceLayout.Variables = vars;
+					psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+
+					SamplerDesc linearClamp =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+					};
+
+					SamplerDesc linearWrap =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+					};
+
+					ImmutableSamplerDesc samplers[] =
+					{
+						{ SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClamp },
+						{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
+					};
+					psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+					psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
+					// Pass-compatible PSO (important)
+					m_pTerrainGBufferPSO = renderer.AcquirePipelineState(STRING_HASH("TerrainGBuffer"), psoCi);
+					ASSERT(m_pTerrainGBufferPSO, "AcquirePipelineState(TerrainGBuffer) failed.");
+
+					MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
+					Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
+					tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
+					tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+					tm.SetFloat("g_EmissiveIntensity", 0.0f);
+					tm.SetFloat("g_RoughnessFactor", 0.85f);
+					tm.SetFloat("g_NormalScale", 1.0f);
+					tm.SetFloat("g_OcclusionStrength", 1.0f);
+					tm.SetFloat("g_AlphaCutoff", 0.5f);
+					tm.SetFloat("g_MetallicFactor", 0.0f);
+					tm.SetUint("g_MaterialFlags", 0);
+
+					m_pTerrainGBufferSRB = renderer.AcquireShaderResourceBindingFromMaterial(tmId, m_pTerrainGBufferPSO);
+
+					// Bind constant buffers
+					if (auto* v = m_pTerrainGBufferSRB->GetVariableByName(SHADER_TYPE_VERTEX, "TERRAIN_DRAW_CONSTANTS"))
+					{
+						v->Set(renderer.GetBuffer(STRING_HASH("TerrainDrawConstants")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					}
+				}
+			});
 	}
 
 	// ------------------------------------------------------------
@@ -220,18 +475,16 @@ namespace shz
 		const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
 
 		ASSERT(a.NumComponents > 0 && a.ComponentSize > 0, "Invalid format attribs.");
-		ASSERT(a.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed formats are not supported for heightmap CPU sampling.");
+		ASSERT(a.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed formats are not supported.");
 
-		const uint32 numComps = a.NumComponents;
-		const uint32 compSize = a.ComponentSize;
-		const uint32 bytesPerPixel = numComps * compSize;
+		const uint32 bytesPerPixel = a.NumComponents * a.ComponentSize;
 
 		const TextureMip& mip0 = heightTex.GetMips()[0];
 		ASSERT(mip0.Width == w && mip0.Height == h, "Mip0 size mismatch.");
 		ASSERT(!mip0.Data.empty(), "Mip0 data empty.");
 
 		const uint64 expectedMinBytes = uint64(w) * uint64(h) * uint64(bytesPerPixel);
-		ASSERT(uint64(mip0.Data.size()) >= expectedMinBytes, "Mip0 data is smaller than expected tightly packed size.");
+		ASSERT(uint64(mip0.Data.size()) >= expectedMinBytes, "Mip0 data smaller than expected.");
 
 		m_Width = w;
 		m_Height = h;
@@ -240,7 +493,7 @@ namespace shz
 		const uint8* src = mip0.Data.data();
 		const uint64 rowStride = uint64(w) * uint64(bytesPerPixel);
 
-		if (compSize == 1)
+		if (a.ComponentSize == 1)
 		{
 			const float inv = 1.f / 255.f;
 			for (uint32 z = 0; z < h; ++z)
@@ -250,11 +503,11 @@ namespace shz
 				{
 					const uint8* px = row + size_t(x) * bytesPerPixel;
 					const uint8 r = readR_U8(px);
-					m_HeightU16[getIndex(x, z)] = normalizedToU16(Clamp01(float(r) * inv));
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(float(r) * inv));
 				}
 			}
 		}
-		else if (compSize == 2)
+		else if (a.ComponentSize == 2)
 		{
 			const float inv = 1.f / 65535.f;
 			for (uint32 z = 0; z < h; ++z)
@@ -264,11 +517,11 @@ namespace shz
 				{
 					const uint16* px = reinterpret_cast<const uint16*>(rowBytes + size_t(x) * bytesPerPixel);
 					const uint16 r = readR_U16(px);
-					m_HeightU16[getIndex(x, z)] = normalizedToU16(Clamp01(float(r) * inv));
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(float(r) * inv));
 				}
 			}
 		}
-		else if (compSize == 4)
+		else if (a.ComponentSize == 4)
 		{
 			for (uint32 z = 0; z < h; ++z)
 			{
@@ -277,239 +530,75 @@ namespace shz
 				{
 					const float* px = reinterpret_cast<const float*>(rowBytes + size_t(x) * bytesPerPixel);
 					const float r = readR_F32(px);
-					m_HeightU16[getIndex(x, z)] = normalizedToU16(Clamp01(r));
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(r));
 				}
 			}
 		}
 		else
 		{
-			ASSERT(false, "Unsupported component size for height texture.");
+			ASSERT(false, "Unsupported component size.");
 		}
 	}
 
 	// ------------------------------------------------------------
-	// Mesh build (full mesh for now)
+	// Height access
 	// ------------------------------------------------------------
-	static inline uint32 idx2D(uint32 x, uint32 z, uint32 w) noexcept
+	float TerrainSystem::GetNormalizedHeightAt(uint32 x, uint32 z) const
 	{
-		return z * w + x;
+		ASSERT(x < m_Width, "X out of range.");
+		ASSERT(z < m_Height, "Z out of range.");
+
+		return u16ToNormalized(m_HeightU16[size_t(z) * size_t(m_Width) + x]);
 	}
 
-	float3 TerrainSystem::computeNormalCentralDiff(uint32 x, uint32 z, const MeshBuildSettings& s) const
+	float TerrainSystem::GetWorldHeightAt(uint32 x, uint32 z) const
 	{
-		const uint32 w = GetWidth();
-		const uint32 h = GetHeight();
-
-		const uint32 x0 = (x > 0) ? (x - 1) : x;
-		const uint32 x1 = (x + 1 < w) ? (x + 1) : x;
-
-		const uint32 z0 = (z > 0) ? (z - 1) : z;
-		const uint32 z1 = (z + 1 < h) ? (z + 1) : z;
-
-		const float hl = GetWorldHeightAt(x0, z);
-		const float hr = GetWorldHeightAt(x1, z);
-		const float hd = GetWorldHeightAt(x, z0);
-		const float hu = GetWorldHeightAt(x, z1);
-
-		const float dx = (hr - hl);
-		const float dz = (hu - hd);
-
-		const float up = std::max(0.001f, s.NormalUpBias);
-		return float3{ -dx, up, -dz }.Normalized();
+		return m_HeightOffset + GetNormalizedHeightAt(x, z) * m_HeightScale;
 	}
 
-	bool TerrainSystem::BuildStaticMesh(
-		StaticMesh* pOutMesh,
-		MaterialId terrainMaterial,
-		const MeshBuildSettings& settings) const
+	float TerrainSystem::SampleNormalizedHeight(float worldX, float worldZ) const
 	{
-		ASSERT(pOutMesh != nullptr, "pOutMesh is null.");
+		ASSERT(m_WorldSpacingX > 0.f && m_WorldSpacingZ > 0.f, "Spacing must be > 0.");
 
-		const uint32 w = GetWidth();
-		const uint32 h = GetHeight();
-		ASSERT(w >= 4 && h >= 4, "Heightmap resolution is too small.");
+		const float originX = GetWorldOriginX();
+		const float originZ = GetWorldOriginZ();
 
-		pOutMesh->Clear();
+		const float gx = (worldX - originX) / m_WorldSpacingX;
+		const float gz = (worldZ - originZ) / m_WorldSpacingZ;
 
-		const uint64 numVertices64 = uint64(w) * uint64(h);
-		if (numVertices64 > uint64(std::numeric_limits<uint32>::max()))
-		{
-			ASSERT(false, "Too many vertices.");
-			return false;
-		}
+		const float maxX = float(m_Width - 1);
+		const float maxZ = float(m_Height - 1);
 
-		const uint32 numVertices = uint32(numVertices64);
+		const float x = Clamp(gx, 0.f, maxX);
+		const float z = Clamp(gz, 0.f, maxZ);
 
-		std::vector<float3> positions;
-		std::vector<float3> normals;
-		std::vector<float2> uvs;
+		const uint32 x0 = uint32(std::floor(x));
+		const uint32 z0 = uint32(std::floor(z));
 
-		positions.resize(numVertices);
+		const uint32 x1 = (x0 + 1 < m_Width) ? (x0 + 1) : x0;
+		const uint32 z1 = (z0 + 1 < m_Height) ? (z0 + 1) : z0;
 
-		if (settings.bGenerateNormals) normals.resize(numVertices);
-		if (settings.bGenerateTexCoords) uvs.resize(numVertices);
+		const float tx = x - float(x0);
+		const float tz = z - float(z0);
 
-		const float spacingX = GetWorldSpacingX();
-		const float spacingZ = GetWorldSpacingZ();
+		const float h00 = GetNormalizedHeightAt(x0, z0);
+		const float h10 = GetNormalizedHeightAt(x1, z0);
+		const float h01 = GetNormalizedHeightAt(x0, z1);
+		const float h11 = GetNormalizedHeightAt(x1, z1);
 
-		const float sizeX = GetWorldSizeX();
-		const float sizeZ = GetWorldSizeZ();
+		const float hx0 = h00 + (h10 - h00) * tx;
+		const float hx1 = h01 + (h11 - h01) * tx;
+		return Clamp01(hx0 + (hx1 - hx0) * tz);
+	}
 
-		const float originX = m_bCenterXZ ? (-0.5f * sizeX) : 0.f;
-		const float originZ = m_bCenterXZ ? (-0.5f * sizeZ) : 0.f;
-
-		for (uint32 zz = 0; zz < h; ++zz)
-		{
-			for (uint32 xx = 0; xx < w; ++xx)
-			{
-				const uint32 i = idx2D(xx, zz, w);
-
-				const float wx = originX + float(xx) * spacingX;
-				const float wz = originZ + float(zz) * spacingZ;
-				const float wy = GetWorldHeightAt(xx, zz); // world meters already
-
-				positions[i] = float3{ wx, wy, wz };
-
-				if (settings.bGenerateNormals)
-				{
-					normals[i] = computeNormalCentralDiff(xx, zz, settings);
-				}
-
-				if (settings.bGenerateTexCoords)
-				{
-					const float u = (w > 1) ? (float(xx) / float(w - 1)) : 0.f;
-					const float v = (h > 1) ? (float(zz) / float(h - 1)) : 0.f;
-					uvs[i] = float2{ Clamp01(u), Clamp01(v) };
-				}
-			}
-		}
-
-		pOutMesh->SetPositions(std::move(positions));
-		if (settings.bGenerateNormals)   pOutMesh->SetNormals(std::move(normals));
-		if (settings.bGenerateTexCoords) pOutMesh->SetTexCoords(std::move(uvs));
-
-		const uint64 numQuads64 = uint64(w - 1) * uint64(h - 1);
-		const uint64 numIndices64 = numQuads64 * 6ull;
-
-		if (numIndices64 > uint64(std::numeric_limits<uint32>::max()))
-		{
-			ASSERT(false, "Too many indices.");
-			return false;
-		}
-
-		const uint32 numIndices = uint32(numIndices64);
-
-		const bool bCanUseU16 = (numVertices <= 65535u);
-		const bool bUseU16 = settings.bPreferU16Indices && bCanUseU16;
-
-		if (bUseU16)
-		{
-			std::vector<uint16> indices;
-			indices.resize(numIndices);
-
-			uint32 out = 0;
-			for (uint32 zz = 0; zz < h - 1; ++zz)
-			{
-				for (uint32 xx = 0; xx < w - 1; ++xx)
-				{
-					const uint32 i0 = idx2D(xx, zz, w);
-					const uint32 i1 = idx2D(xx + 1, zz, w);
-					const uint32 i2 = idx2D(xx, zz + 1, w);
-					const uint32 i3 = idx2D(xx + 1, zz + 1, w);
-
-					if (!settings.bFlipWinding)
-					{
-						indices[out++] = uint16(i0);
-						indices[out++] = uint16(i2);
-						indices[out++] = uint16(i1);
-
-						indices[out++] = uint16(i1);
-						indices[out++] = uint16(i2);
-						indices[out++] = uint16(i3);
-					}
-					else
-					{
-						indices[out++] = uint16(i0);
-						indices[out++] = uint16(i1);
-						indices[out++] = uint16(i2);
-
-						indices[out++] = uint16(i1);
-						indices[out++] = uint16(i3);
-						indices[out++] = uint16(i2);
-					}
-				}
-			}
-			pOutMesh->SetIndicesU16(std::move(indices));
-		}
-		else
-		{
-			std::vector<uint32> indices;
-			indices.resize(numIndices);
-
-			uint32 out = 0;
-			for (uint32 zz = 0; zz < h - 1; ++zz)
-			{
-				for (uint32 xx = 0; xx < w - 1; ++xx)
-				{
-					const uint32 i0 = idx2D(xx, zz, w);
-					const uint32 i1 = idx2D(xx + 1, zz, w);
-					const uint32 i2 = idx2D(xx, zz + 1, w);
-					const uint32 i3 = idx2D(xx + 1, zz + 1, w);
-
-					if (!settings.bFlipWinding)
-					{
-						indices[out++] = i0;
-						indices[out++] = i1;
-						indices[out++] = i2;
-
-						indices[out++] = i1;
-						indices[out++] = i3;
-						indices[out++] = i2;
-					}
-					else
-					{
-						indices[out++] = i0;
-						indices[out++] = i2;
-						indices[out++] = i1;
-
-						indices[out++] = i1;
-						indices[out++] = i2;
-						indices[out++] = i3;
-					}
-				}
-			}
-			pOutMesh->SetIndicesU32(std::move(indices));
-		}
-
-		StaticMesh::Section section = {};
-		section.FirstIndex = 0;
-		section.IndexCount = pOutMesh->GetIndexCount();
-		section.BaseVertex = 0;
-		section.MaterialSlot = 0;
-
-		std::vector<StaticMesh::Section> sections;
-		sections.emplace_back(static_cast<StaticMesh::Section&&>(section));
-		pOutMesh->SetSections(std::move(sections));
-
-		std::vector<MaterialId> materials;
-		materials.emplace_back(terrainMaterial);
-		pOutMesh->SetMaterialSlots(std::move(materials));
-
-		pOutMesh->RecomputeBounds();
-
-		if (!pOutMesh->IsValid())
-		{
-			ASSERT(false, "Built terrain StaticMesh is invalid.");
-			return false;
-		}
-
-		return true;
+	float TerrainSystem::SampleWorldHeight(float worldX, float worldZ) const
+	{
+		return m_HeightOffset + SampleNormalizedHeight(worldX, worldZ) * m_HeightScale;
 	}
 
 	void TerrainSystem::BuildPhysicsHeightSamples(std::vector<float>& outHeightsWorldMeters) const
 	{
 		outHeightsWorldMeters.resize(m_HeightU16.size());
-
 		for (size_t i = 0; i < m_HeightU16.size(); ++i)
 		{
 			const float n = float(m_HeightU16[i]) / 65535.0f;

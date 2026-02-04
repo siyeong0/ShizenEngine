@@ -15,7 +15,7 @@ struct FrameConstants
     float _pad0;
 
     float4 FrustumPlanesWS[6];
-    
+
     float2 ViewportSize;
     float2 InvViewportSize;
 
@@ -61,6 +61,53 @@ struct ObjectConstants
 };
 
 // ----------------------------------------------
+// HeightField (COMMON for Terrain/Grass/etc.)
+// ----------------------------------------------
+// Convention:
+// - Height texture stores normalized height in [0..1] sampled via linear clamp.
+// - WorldSizeXZ = ((Width-1)*SpacingX, (Height-1)*SpacingZ)
+// - WorldOriginXZ = (centered ? -0.5*WorldSize : 0) for each axis
+// - HeightTexelSize = (1/Width, 1/Height)
+struct HeightFieldConstants
+{
+    float2 WorldOriginXZ;
+    float2 WorldSizeXZ;
+
+    float2 WorldSpacingXZ; // (SpacingX, SpacingZ) in meters
+    float2 HeightTexelSize; // (1/Width, 1/Height)
+
+    float HeightScale; // meters
+    float HeightOffset; // meters
+    uint CenterXZ; // 0/1 (optional, mostly for debugging)
+    float NormalUpBias;
+};
+
+// ----------------------------------------------
+// Terrain
+// ----------------------------------------------
+
+struct TerrainDrawConstants
+{
+    // Chunk placement in world
+    float2 ChunkOriginXZ;
+    float2 ChunkSizeXZ;
+
+    // Height UV mapping (optional extra scale/bias on top of base World->UV)
+    float2 HeightUVScale;
+    float2 HeightUVBias;
+
+    // Surface UV mapping for material/tiling
+    float2 SurfaceUVScale;
+    float2 SurfaceUVBias;
+
+    // Normal sampling step multiplier (>= 1)
+    float NormalSampleStep;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+
+// ----------------------------------------------
 // Indirect
 // ----------------------------------------------
 #define MAX_NUM_INDIRECTS 256
@@ -90,35 +137,26 @@ struct GrassInstance
 {
     float3 PosWS;
     float Scale; // uniform scale
-    
+
     float Yaw;
     float Pitch;
     float BendStrength; // base bend amount (0..1-ish)
-    float Press; // Interaction (0..1): sampled from g_InteractionField in GenCS
+    float Press; // Interaction (0..1)
 };
 
 // ----------------------------------------------
 // Grass generation constants (Compute)
 // ----------------------------------------------
+// NOTE: Height decode is shared via HeightFieldConstants HF.
 struct GrassGenConstants
 {
-    // --- Terrain / Height decode ---
-    float HeightScale;
-    float HeightOffset;
+    // Optional extra vertical offset for grass placement (meters)
     float YOffset;
-    float _padT0;
+    float _padG0;
+    float _padG1;
+    float _padG2;
 
-    uint HFWidth;
-    uint HFHeight;
-    uint CenterXZ; // 0/1
-    uint _padT1;
-
-    float SpacingX;
-    float SpacingZ;
-    float _padT2;
-    float _padT3;
-
-    // --- Chunk placement ---
+    // Chunk placement
     float ChunkSize; // meters
     int ChunkHalfExtent; // half grid around camera
     uint SamplesPerChunk;
@@ -132,19 +170,19 @@ struct GrassGenConstants
     float BendStrengthMin;
     float BendStrengthMax;
     uint SeedSalt;
-    uint _padT4;
+    uint _padG3;
 
     // Density field (world tiled) tuning
-    float DensityTiling; // meters -> uv. ex) 0.02 => 50m period (1/50)
-    float DensityContrast; // 0..0.49. ex) 0.25 => smoothstep(0.25, 0.75)
-    float DensityPow; // < 1 boosts mids. ex) 0.65
+    float DensityTiling; // meters -> uv
+    float DensityContrast; // 0..0.49
+    float DensityPow; // curve
     float _padD0;
 
     // Slope/Height masks
-    float SlopeToDensity; // slope (tan-ish) -> 0..1 scale. ex) 0.12~0.25
-    float HeightMinN; // normalized 0..1 (heightmap space)
+    float SlopeToDensity; // slope -> 0..1
+    float HeightMinN; // normalized 0..1
     float HeightMaxN; // normalized 0..1
-    float HeightFadeN; // normalized fade width. ex) 0.02~0.05
+    float HeightFadeN; // normalized fade width
 };
 
 // ----------------------------------------------
@@ -161,22 +199,23 @@ struct GrassRenderConstants
     float DirectLightStrength;
 
     // Wind (world-space)
-    float2 WindDirXZ; // should be normalized
-    float WindStrength; // radians scale (or angle scale)
-    float WindSpeed; // time scale
+    float2 WindDirXZ;
+    float WindStrength;
+    float WindSpeed;
 
-    float WindFreq; // spatial frequency
-    float WindGust; // extra gust amplitude
-    float MaxBendAngle; // radians, clamp total bend
+    float WindFreq;
+    float WindGust;
+    float MaxBendAngle;
     float _pad1;
-    
-    // Interaction bending (Zelda-ish)
-    float InteractionBendAngle; // radians, e.g. 1.1 (~63 deg)
-    float InteractionSink; // meters, e.g. 0.05
-    float InteractionWindFade; // 0..1, pressed -> reduce wind (e.g. 0.7)
+
+    // Interaction bending
+    float InteractionBendAngle;
+    float InteractionSink;
+    float InteractionWindFade;
+    float _pad2;
 };
 
-// Must exist for C++ side too (Renderer.cpp includes this file under namespace hlsl)
+// Must exist for C++ side too
 struct ObjectIndexConstants
 {
     uint ObjectIndex;
@@ -185,8 +224,9 @@ struct ObjectIndexConstants
     uint _pad2;
 };
 
-
+// ----------------------------------------------
 // Interaction
+// ----------------------------------------------
 static const uint INTERACTION_STAMP_NONE = 0;
 static const uint INTERACTION_STAMP_SUBTRACT = 1u << 0;
 static const uint INTERACTION_STAMP_MAX_BLEND = 1u << 1;
@@ -210,9 +250,9 @@ struct InteractionConstants
     uint NumStamps;
     float DeltaTime;
 
-    float DecayPerSec; // e.g. 1.5 (press value decreases by 1.5 per second)
-    float ClampMax; // e.g. 1.0
-    float ClampMin; // e.g. 0.0
+    float DecayPerSec;
+    float ClampMax;
+    float ClampMin;
     float _Pad0;
 };
 
