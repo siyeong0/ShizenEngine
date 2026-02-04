@@ -624,19 +624,14 @@ namespace shz
 				const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
 				const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
 
-				// Shadow map에 depth write (additive)
 				b.DeclareTextureDSVWrite(kShadowMap);
 
-				// Grass instances SRV read
 				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
 
-				// Indirect args read -> RDG가 INDIRECT_ARGUMENT 전이 생성
 				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
 
 				b.DeclareBufferSRVRead(STRING_HASH("DEP00"));
 
-				// GrassShadow VS가 grass render cb를 쓰면 이것도
-				// (GrassShadow.vsh에서 안 쓰면 빼도 됨)
 				b.DeclareBufferCBVRead(STRING_HASH("GrassRenderConstantsCB"));
 			},
 			[this](RenderPassContext& ctx)

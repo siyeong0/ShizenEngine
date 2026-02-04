@@ -130,13 +130,16 @@ namespace shz
 		RefCntAutoPtr<IShaderResourceBinding> m_pTerrainGBufferSRB;
 
 		RefCntAutoPtr<IBuffer> m_pGridVB;
-		RefCntAutoPtr<IBuffer> m_pLodIB[5];
-		uint32 m_LodIndexCount[5] = { 0,0,0,0,0 };
+
+		// NOTE:
+		// - IB is selected by (LOD, StitchMask). Mask is 4-bit: L/R/B/T.
+		// - Neighbor LOD diff is clamped to <= 1 step for stitch simplicity.
+		RefCntAutoPtr<IBuffer> m_pLodIB[5][16];
+		uint32 m_LodIndexCount[5][16] = {};
 
 		// shader paths
 		std::string m_TerrainVS = "Terrain.vsh";
 		std::string m_TerrainPS = "GBuffer.psh"; // reuse
 
-		// NOTE: chunk system later. for now draw whole terrain as 1 chunk.
 	};
 } // namespace shz

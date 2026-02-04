@@ -92,6 +92,13 @@ namespace shz
 		return value;
 	}
 
+	inline uint32 Clamp(uint32 value, uint32 min, uint32 max)
+	{
+		if (value < min) return min;
+		if (value > max) return max;
+		return value;
+	}
+
 	inline float32 Clamp01(float32 value)
 	{
 		return Clamp(value, 0.0f, 1.0f);

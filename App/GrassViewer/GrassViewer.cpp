@@ -37,8 +37,8 @@ namespace shz
 
 		static void setupCameraDefault(FirstPersonCamera& cam, float aspect)
 		{
-			cam.SetPos(float3(-2.9f, 5.0f, 0.0f));
-			cam.SetRotation(-0.8f, 0.0f);
+			 cam.SetPos(float3(-2.9f, 5.0f, 0.0f));
+			 cam.SetRotation(-0.8f, 0.0f);
 			cam.SetMoveSpeed(3.0f);
 			cam.SetSpeedUpScales(5.0f, 1.0f);
 			cam.SetRotationSpeed(0.01f);
@@ -327,7 +327,7 @@ namespace shz
 			// tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsDiffuse.png";
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 1000.0f;
+			tci.HeightScale = 100.0f;
 			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
 
@@ -397,7 +397,7 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			//m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
 		}
 
 
@@ -840,10 +840,10 @@ namespace shz
 				mr.MeshRef = treeAssets[meshIdx];
 				mr.bCastShadow = true;
 
-			/*	mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
 					*pTreeMeshes[meshIdx],
 					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					mr.bCastShadow);*/
+					mr.bCastShadow);
 				e.set<CMeshRenderer>(mr);
 			}
 		}
@@ -894,10 +894,10 @@ namespace shz
 				CMeshRenderer mr = {};
 				mr.MeshRef = helmetRef;
 				mr.bCastShadow = true;
-				/*mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
 					helmetMeshRD,
 					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					true);*/
+					true);
 				e.set<CMeshRenderer>(mr);
 
 				CBoxCollider box = {};
@@ -938,7 +938,7 @@ namespace shz
 			indirectDesc.PassKey = STRING_HASH("GrassForward");
 			indirectDesc.IndirectSlot = m_pGrassSystem->GetIndirectSlot();
 
-			// m_pRenderScene->AddIndirect(indirectDesc);
+			m_pRenderScene->AddIndirect(indirectDesc);
 		}
 	}
 
