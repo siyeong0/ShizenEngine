@@ -407,6 +407,7 @@ namespace shz
 		ASSERT(pErrorTex, "Error texture missing (registry).");
 
 		m_PassCtx.pScene = &scene;
+		m_PassCtx.pViewFamily = &viewFamily;
 		m_PassCtx.DeltaTime = viewFamily.DeltaTime;
 
 		const View& view = viewFamily.Views[0];
@@ -470,10 +471,7 @@ namespace shz
 			cb->LightIntensity = lightIntensity;
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
-			const float ShadowVisibleDistance = 100.0f;
-
-			const float shadowMapWidth = 4096.0f;
-			const float shadowMapHeight = 4096.0f;
+			const float ShadowVisibleDistance = 1000.0f;
 
 			const float3 lightForward = lightDirWs;
 
@@ -549,8 +547,8 @@ namespace shz
 			float extentY = (maxY - minY);
 			float extent = Max(extentX, extentY);
 
-			const float unitsPerTexelSqX = extent / shadowMapWidth;
-			const float unitsPerTexelSqY = extent / shadowMapHeight;
+			const float unitsPerTexelSqX = extent / m_PassCtx.ShadowMapResolution;
+			const float unitsPerTexelSqY = extent / m_PassCtx.ShadowMapResolution;
 			const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
 
 			extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;

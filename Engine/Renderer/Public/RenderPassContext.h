@@ -35,6 +35,7 @@ namespace shz
 		PipelineStateManager* pPipelineStateManager = nullptr;
 		RenderResourceRegistry* pRegistry = nullptr;
 		RenderScene* pScene = nullptr;
+		const ViewFamily* pViewFamily = nullptr;
 		float DeltaTime = 0.0f;
 		uint32 ShadowMapResolution = 4096;
 

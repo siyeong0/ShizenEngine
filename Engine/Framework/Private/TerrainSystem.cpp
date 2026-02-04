@@ -218,9 +218,6 @@ namespace shz
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
-				// TEMP: whole terrain as LOD0
-				const uint32 lod = 0;
-
 				const float worldOriginX = GetWorldOriginX();
 				const float worldOriginZ = GetWorldOriginZ();
 				const float worldSizeX = GetWorldSizeX();
@@ -229,26 +226,58 @@ namespace shz
 				const uint32 numChunksX = uint32(std::ceil(worldSizeX / m_ChunkSize));
 				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / m_ChunkSize));
 
+				// ------------------------------
+				// Setup pipeline + VB once
+				// ------------------------------
 				pCtx->SetPipelineState(m_pTerrainGBufferPSO);
 				pCtx->CommitShaderResources(m_pTerrainGBufferSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				// VB/IB
 				{
 					IBuffer* vbs[] = { m_pGridVB };
 					uint64 offs[] = { 0 };
-
 					pCtx->SetVertexBuffers(
 						0, 1, vbs, offs,
 						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 						SET_VERTEX_BUFFERS_FLAG_RESET);
-
-					pCtx->SetIndexBuffer(m_pLodIB[lod], 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 				}
+
+				// ------------------------------
+				// View + frustum
+				// ------------------------------
+				ASSERT(ctx.pViewFamily, "ViewFamily is null.");
+				const ViewFamily& viewFamily = *ctx.pViewFamily;
+				ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
+				const View& view = viewFamily.Views[0];
+
+				ViewFrustumExt frustumMain = {};
+				{
+					const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+					ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+				}
+
+				auto selectLodByDistance = [&](float dist) -> uint32
+				{
+					const float d0 = 128.0f;
+					const float d1 = 256.0f;
+					const float d2 = 512.0f;
+					const float d3 = 1024.0f;
+
+					if (dist < d0) return 0;
+					if (dist < d1) return 1;
+					if (dist < d2) return 2;
+					if (dist < d3) return 3;
+					return 4;
+				};
 
 				DrawIndexedAttribs dia = {};
 				dia.IndexType = VT_UINT16;
-				dia.NumIndices = m_LodIndexCount[lod];
 				dia.Flags = DRAW_FLAG_VERIFY_ALL;
+
+				// 캐시: LOD 바뀔 때만 IB 바인드
+				uint32 currentLod = 0xFFFFFFFFu;
+
+				const float yMin = m_HeightOffset;
+				const float yMax = m_HeightOffset + m_HeightScale;
 
 				for (uint32 cz = 0; cz < numChunksZ; ++cz)
 				{
@@ -266,8 +295,41 @@ namespace shz
 						if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
 							continue;
 
-						// (선택) 간단한 청크 프러스텀 컬링 넣고 싶으면 여기서 AABB 체크
+						// ------------------------------
+						// Frustum culling (chunk AABB)
+						// ------------------------------
+						Box localBounds = {};
+						localBounds.Min = float3{ 0.f, yMin, 0.f };
+						localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
 
+						Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.f, chunkOriginZ });
+
+						if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+							continue;
+
+						// ------------------------------
+						// LOD by distance (XZ)
+						// ------------------------------
+						const float3 cam = view.CameraPosition;
+						const float cxw = chunkOriginX + 0.5f * chunkSizeX;
+						const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+
+						const float dx = cam.x - cxw;
+						const float dz = cam.z - czw;
+						const float dist = std::sqrt(dx * dx + dz * dz);
+
+						const uint32 lod = selectLodByDistance(dist);
+
+						if (lod != currentLod)
+						{
+							currentLod = lod;
+							pCtx->SetIndexBuffer(m_pLodIB[lod], 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+							dia.NumIndices = m_LodIndexCount[lod];
+						}
+
+						// ------------------------------
+						// Per-chunk constants
+						// ------------------------------
 						hlsl::TerrainDrawConstants dc = {};
 						dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
 						dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
@@ -276,7 +338,11 @@ namespace shz
 						dc.HeightUVBias = float2{ 0, 0 };
 						dc.SurfaceUVScale = float2{ 1, 1 };
 						dc.SurfaceUVBias = float2{ 0, 0 };
-						dc.NormalSampleStep = 1.0f;
+
+						// LOD별 노멀 샘플 간격도 같이 키우면 디버그 시 티가 잘 남
+						// (크랙 무시하므로 그냥 step과 동일하게 둬도 됨)
+						const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
+						dc.NormalSampleStep = normalSteps[lod];
 
 						auto hash01 = [](uint32 v) -> float
 						{
@@ -367,9 +433,9 @@ namespace shz
 					gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
 					gp.RasterizerDesc.FrontCounterClockwise = true;
 
-					// TEST
-					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-					gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
+					//// TEST
+					//gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					//gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 
 					gp.DepthStencilDesc.DepthEnable = true;
 					gp.DepthStencilDesc.DepthWriteEnable = true;

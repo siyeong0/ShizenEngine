@@ -327,7 +327,7 @@ namespace shz
 			// tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsDiffuse.png";
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 100.0f;
+			tci.HeightScale = 1000.0f;
 			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
 
