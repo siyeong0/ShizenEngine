@@ -3,6 +3,7 @@
 
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
+#include "Engine/Renderer/Public/Renderer.h"
 
 namespace shz
 {
@@ -439,7 +440,7 @@ namespace shz
 	void RenderScene::BuildDrawPackets(
 		uint64 passKey,
 		const std::vector<uint32>& visibleObjectDenseIndices,
-		const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+		const std::function<const MaterialPipelineBinding&(MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets,
 		std::vector<uint32>& outInstanceRemap) const
 	{
@@ -496,13 +497,9 @@ namespace shz
 			}
 
 			// Resolve PSO/SRB
-			IPipelineState* pso = nullptr;
-			IShaderResourceBinding* srb = nullptr;
-			if (!resolver(passKey, b.MaterialId, &pso, &srb))
-			{
-				// material/pso 준비 안 됐으면 skip (or assert)
-				continue;
-			}
+
+			const MaterialPipelineBinding& pb = resolver(b.MaterialId, passKey);
+			ASSERT(pb.pPSO && pb.pSRB, "Pipeline binding is null.");
 
 			// Build DrawPacket
 			ASSERT(b.pMesh, "Batch mesh is null.");
@@ -512,8 +509,8 @@ namespace shz
 			DrawPacket pkt = {};
 			pkt.VertexBuffer = b.pMesh->VertexBuffer;
 			pkt.IndexBuffer = b.pMesh->IndexBuffer;
-			pkt.PSO = pso;
-			pkt.SRB = srb;
+			pkt.PSO = pb.pPSO;
+			pkt.SRB = pb.pSRB;
 
 			pkt.DrawAttribs = {};
 			pkt.DrawAttribs.IndexType = b.pMesh->IndexType;
@@ -530,7 +527,7 @@ namespace shz
 
 	void RenderScene::BuildIndirectDrawPackets(
 		uint64 passKey,
-		const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawIndirectPacket>& outPackets) const
 	{
 		outPackets.clear();
@@ -571,19 +568,14 @@ namespace shz
 				// MAX_NUM_INDIRECTS = 256 (HLSL과 맞춰 사용)
 				ASSERT(slot < 256u, "IndirectSlot out of range. base=%u, si=%u", d.IndirectSlot, si);
 
-				IPipelineState* pso = nullptr;
-				IShaderResourceBinding* srb = nullptr;
-				if (!resolver(passKey, sec.MaterialId, &pso, &srb))
-				{
-					// 파이프라인 준비가 안 됐으면 스킵(혹은 ASSERT로 바꿔도 됨)
-					continue;
-				}
+				const MaterialPipelineBinding& pb = resolver(sec.MaterialId, passKey);
+				ASSERT(pb.pPSO && pb.pSRB, "Pipeline binding is null.");
 
 				DrawIndirectPacket pkt = {};
 				pkt.VertexBuffer = mesh->VertexBuffer;
 				pkt.IndexBuffer = mesh->IndexBuffer;
-				pkt.PSO = pso;
-				pkt.SRB = srb;
+				pkt.PSO = pb.pPSO;
+				pkt.SRB = pb.pSRB;
 
 				// DrawIndexedIndirectAttribs 설정
 				// - 실제 인덱스/인스턴스 카운트는 IndirectArgsBuffer(=g_IndirectArgs)에 들어있다.

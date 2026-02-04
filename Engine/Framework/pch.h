@@ -9,5 +9,8 @@
 
 #include <cmath>
 #include <limits>
+#include <algorithm>
+#include <limits>
+#include <cmath>
 
 #endif //PCH_H

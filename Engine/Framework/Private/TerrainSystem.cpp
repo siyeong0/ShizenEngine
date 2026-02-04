@@ -2,19 +2,24 @@
 #include "Engine/Framework/Public/TerrainSystem.h"
 
 #include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
+
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
+#include "Engine/Renderer/Public/Renderer.h"
+#include "Engine/Renderer/Public/RenderPassContext.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 namespace shz
 {
-	// -----------------------------
+	// ------------------------------------------------------------
 	// Helpers
-	// -----------------------------
-	float u16ToNormalized(uint16 v) noexcept
+	// ------------------------------------------------------------
+	static inline float u16ToNormalized(uint16 v) noexcept
 	{
 		return static_cast<float>(v) * (1.0f / 65535.0f);
 	}
 
-	uint16 normalizedToU16(float n) noexcept
+	static inline uint16 normalizedToU16(float n) noexcept
 	{
 		const float c = Clamp01(n);
 		const float scaled = c * 65535.0f;
@@ -22,10 +27,10 @@ namespace shz
 		return static_cast<uint16>(iv > 65535u ? 65535u : iv);
 	}
 
-	// -----------------------------
+	// ------------------------------------------------------------
 	// Lifecycle
-	// -----------------------------
-	void TerrainSystem::Initialize(AssetManager& assetManager, const CreateInfo& ci)
+	// ------------------------------------------------------------
+	void TerrainSystem::Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci)
 	{
 		Cleanup();
 
@@ -46,7 +51,7 @@ namespace shz
 		m_HeightTex = assetManager.LoadBlocking<Texture>(m_HeightTexRef);
 		ASSERT(m_HeightTex && m_HeightTex->IsValid(), "Failed to load height Texture asset.");
 
-		// Optional diffuse (CPU)
+		// Optional diffuse
 		if (!m_CI.DiffusePath.empty())
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
@@ -60,13 +65,31 @@ namespace shz
 		ASSERT(m_Width > 0 && m_Height > 0, "Terrain height texture has invalid dimensions.");
 		ASSERT(m_HeightU16.size() == size_t(m_Width) * size_t(m_Height), "Height data size mismatch.");
 
-		m_bValid = true;
+		// Reset render data
+		MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
+		Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
+		tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
+		tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+		tm.SetFloat("g_EmissiveIntensity", 0.0f);
+		tm.SetFloat("g_RoughnessFactor", 0.85f);
+		tm.SetFloat("g_NormalScale", 1.0f);
+		tm.SetFloat("g_OcclusionStrength", 1.0f);
+		tm.SetFloat("g_AlphaCutoff", 0.5f);
+		tm.SetFloat("g_MetallicFactor", 0.0f);
+		tm.SetUint("g_MaterialFlags", 0);
+
+		MeshBuildSettings ms = {};
+		const bool bOk = BuildStaticMesh(&m_FullMeshCPU, tmId, ms);
+		ASSERT(bOk && m_FullMeshCPU.IsValid(), "TerrainSystem: failed to build full CPU mesh.");
+
+		m_pFullMeshRD = &renderer.CreateStaticMeshRenderData(m_FullMeshCPU, STRING_HASH("TerrainSystem.FullMesh"), "TerrainFullMeshRD");
+		ASSERT(m_pFullMeshRD != nullptr, "TerrainSystem: failed to create StaticMeshRenderData.");
+
+		m_TerrainTRS = Matrix4x4::Identity();
 	}
 
 	void TerrainSystem::Cleanup()
 	{
-		m_bValid = false;
-
 		m_CI = {};
 
 		m_Width = 0;
@@ -88,6 +111,23 @@ namespace shz
 
 		m_HeightU16.clear();
 		m_HeightU16.shrink_to_fit();
+
+		m_FullMeshCPU.Clear();
+		m_pFullMeshRD = nullptr;
+
+		m_TerrainTRS = Matrix4x4::Identity();
+	}
+
+	void TerrainSystem::Update(RenderScene& scene, const ViewFamily& view)
+	{
+		ASSERT(m_pFullMeshRD, "Mesh is not initialized.");
+		// TODO: Chunking
+		static bool bAdded = false;
+		if (!bAdded)
+		{
+			scene.AddObject(*m_pFullMeshRD, m_TerrainTRS);
+			bAdded = true;
+		}
 	}
 
 	float TerrainSystem::GetWorldOriginX() const noexcept
@@ -100,18 +140,16 @@ namespace shz
 		return m_bCenterXZ ? (-0.5f * GetWorldSizeZ()) : 0.0f;
 	}
 
-	// -----------------------------
+	// ------------------------------------------------------------
 	// Height access
-	// -----------------------------
+	// ------------------------------------------------------------
 	float TerrainSystem::GetNormalizedHeightAt(uint32 x, uint32 z) const
 	{
-		ASSERT(IsValid(), "TerrainSystem is not valid.");
 		ASSERT(x < m_Width, "X out of range.");
 		ASSERT(z < m_Height, "Z out of range.");
 
 		const uint32 idx = getIndex(x, z);
 		ASSERT(idx < static_cast<uint32>(m_HeightU16.size()), "Index out of range.");
-
 		return u16ToNormalized(m_HeightU16[idx]);
 	}
 
@@ -123,7 +161,6 @@ namespace shz
 
 	float TerrainSystem::SampleNormalizedHeight(float worldX, float worldZ) const
 	{
-		ASSERT(IsValid(), "TerrainSystem is not valid.");
 		ASSERT(m_WorldSpacingX > 0.f && m_WorldSpacingZ > 0.f, "Spacing must be > 0.");
 
 		const float originX = GetWorldOriginX();
@@ -163,9 +200,9 @@ namespace shz
 		return m_HeightOffset + n * m_HeightScale;
 	}
 
-	// -----------------------------
+	// ------------------------------------------------------------
 	// CPU height build from Texture (base mip)
-	// -----------------------------
+	// ------------------------------------------------------------
 	static inline uint8  readR_U8(const uint8* p) noexcept { return p[0]; }
 	static inline uint16 readR_U16(const uint16* p) noexcept { return p[0]; }
 	static inline float  readR_F32(const float* p) noexcept { return p[0]; }
@@ -201,14 +238,11 @@ namespace shz
 		m_HeightU16.assign(size_t(w) * size_t(h), 0u);
 
 		const uint8* src = mip0.Data.data();
-
-		// Tightly packed: rowStride == w * bytesPerPixel
 		const uint64 rowStride = uint64(w) * uint64(bytesPerPixel);
 
 		if (compSize == 1)
 		{
 			const float inv = 1.f / 255.f;
-
 			for (uint32 z = 0; z < h; ++z)
 			{
 				const uint8* row = src + size_t(z) * size_t(rowStride);
@@ -216,15 +250,13 @@ namespace shz
 				{
 					const uint8* px = row + size_t(x) * bytesPerPixel;
 					const uint8 r = readR_U8(px);
-					const float n = Clamp01(float(r) * inv);
-					m_HeightU16[getIndex(x, z)] = normalizedToU16(n);
+					m_HeightU16[getIndex(x, z)] = normalizedToU16(Clamp01(float(r) * inv));
 				}
 			}
 		}
 		else if (compSize == 2)
 		{
 			const float inv = 1.f / 65535.f;
-
 			for (uint32 z = 0; z < h; ++z)
 			{
 				const uint8* rowBytes = src + size_t(z) * size_t(rowStride);
@@ -232,8 +264,7 @@ namespace shz
 				{
 					const uint16* px = reinterpret_cast<const uint16*>(rowBytes + size_t(x) * bytesPerPixel);
 					const uint16 r = readR_U16(px);
-					const float n = Clamp01(float(r) * inv);
-					m_HeightU16[getIndex(x, z)] = normalizedToU16(n);
+					m_HeightU16[getIndex(x, z)] = normalizedToU16(Clamp01(float(r) * inv));
 				}
 			}
 		}
@@ -256,9 +287,9 @@ namespace shz
 		}
 	}
 
-	// -----------------------------
-	// Mesh build (moved from TerrainMeshBuilder)
-	// -----------------------------
+	// ------------------------------------------------------------
+	// Mesh build (full mesh for now)
+	// ------------------------------------------------------------
 	static inline uint32 idx2D(uint32 x, uint32 z, uint32 w) noexcept
 	{
 		return z * w + x;
@@ -293,7 +324,6 @@ namespace shz
 		const MeshBuildSettings& settings) const
 	{
 		ASSERT(pOutMesh != nullptr, "pOutMesh is null.");
-		ASSERT(IsValid(), "TerrainSystem is invalid.");
 
 		const uint32 w = GetWidth();
 		const uint32 h = GetHeight();
@@ -310,22 +340,14 @@ namespace shz
 
 		const uint32 numVertices = uint32(numVertices64);
 
-		// Vertex streams
 		std::vector<float3> positions;
 		std::vector<float3> normals;
 		std::vector<float2> uvs;
 
 		positions.resize(numVertices);
 
-		if (settings.bGenerateNormals)
-		{
-			normals.resize(numVertices);
-		}
-
-		if (settings.bGenerateTexCoords)
-		{
-			uvs.resize(numVertices);
-		}
+		if (settings.bGenerateNormals) normals.resize(numVertices);
+		if (settings.bGenerateTexCoords) uvs.resize(numVertices);
 
 		const float spacingX = GetWorldSpacingX();
 		const float spacingZ = GetWorldSpacingZ();
@@ -336,8 +358,6 @@ namespace shz
 		const float originX = m_bCenterXZ ? (-0.5f * sizeX) : 0.f;
 		const float originZ = m_bCenterXZ ? (-0.5f * sizeZ) : 0.f;
 
-		const float originY = m_HeightOffset;
-
 		for (uint32 zz = 0; zz < h; ++zz)
 		{
 			for (uint32 xx = 0; xx < w; ++xx)
@@ -346,7 +366,7 @@ namespace shz
 
 				const float wx = originX + float(xx) * spacingX;
 				const float wz = originZ + float(zz) * spacingZ;
-				const float wy = originY + GetWorldHeightAt(xx, zz);
+				const float wy = GetWorldHeightAt(xx, zz); // world meters already
 
 				positions[i] = float3{ wx, wy, wz };
 
@@ -368,7 +388,6 @@ namespace shz
 		if (settings.bGenerateNormals)   pOutMesh->SetNormals(std::move(normals));
 		if (settings.bGenerateTexCoords) pOutMesh->SetTexCoords(std::move(uvs));
 
-		// Indices
 		const uint64 numQuads64 = uint64(w - 1) * uint64(h - 1);
 		const uint64 numIndices64 = numQuads64 * 6ull;
 
@@ -389,7 +408,6 @@ namespace shz
 			indices.resize(numIndices);
 
 			uint32 out = 0;
-
 			for (uint32 zz = 0; zz < h - 1; ++zz)
 			{
 				for (uint32 xx = 0; xx < w - 1; ++xx)
@@ -421,7 +439,6 @@ namespace shz
 					}
 				}
 			}
-
 			pOutMesh->SetIndicesU16(std::move(indices));
 		}
 		else
@@ -430,7 +447,6 @@ namespace shz
 			indices.resize(numIndices);
 
 			uint32 out = 0;
-
 			for (uint32 zz = 0; zz < h - 1; ++zz)
 			{
 				for (uint32 xx = 0; xx < w - 1; ++xx)
@@ -462,11 +478,9 @@ namespace shz
 					}
 				}
 			}
-
 			pOutMesh->SetIndicesU32(std::move(indices));
 		}
 
-		// Sections / materials
 		StaticMesh::Section section = {};
 		section.FirstIndex = 0;
 		section.IndexCount = pOutMesh->GetIndexCount();
@@ -492,13 +506,8 @@ namespace shz
 		return true;
 	}
 
-	// -----------------------------
-	// Physics helper
-	// -----------------------------
 	void TerrainSystem::BuildPhysicsHeightSamples(std::vector<float>& outHeightsWorldMeters) const
 	{
-		ASSERT(IsValid(), "TerrainSystem is invalid.");
-
 		outHeightsWorldMeters.resize(m_HeightU16.size());
 
 		for (size_t i = 0; i < m_HeightU16.size(); ++i)

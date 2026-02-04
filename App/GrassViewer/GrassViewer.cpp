@@ -331,9 +331,7 @@ namespace shz
 			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
 
-			m_pTerrainSystem->Initialize(*m_pAssetManager, tci);
-			ASSERT(m_pTerrainSystem->IsValid(), "Failed to initialize TerrainSystem.");
-
+			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);
 			// Create height field texture R16_UNORM 
 			{
 				const uint32 width = m_pTerrainSystem->GetWidth();
@@ -564,7 +562,7 @@ namespace shz
 		const float t = (float)currTime;
 
 		m_Camera.Update(m_InputController, dt);
-
+		m_pTerrainSystem->Update(*m_pRenderScene, m_ViewFamily);
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.CurrentTime = t;
 
@@ -718,37 +716,6 @@ namespace shz
 		ASSERT(m_pAssetManager && m_pRenderer && m_pRenderScene && m_pEcs && m_pPhysicsSystem, "Subsystem missing.");
 
 		auto& ecs = m_pEcs->World();
-
-		// ------------------------------------------------------------
-		// Build terrain mesh + add to RenderScene (replaces SetTerrain)
-		// ------------------------------------------------------------
-		{
-			StaticMesh terrainMesh;
-
-			MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
-			Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
-			tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
-			tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-			tm.SetFloat("g_EmissiveIntensity", 0.0f);
-			tm.SetFloat("g_RoughnessFactor", 0.85f);
-			tm.SetFloat("g_NormalScale", 1.0f);
-			tm.SetFloat("g_OcclusionStrength", 1.0f);
-			tm.SetFloat("g_AlphaCutoff", 0.5f);
-			tm.SetFloat("g_MetallicFactor", 0.0f);
-			tm.SetUint("g_MaterialFlags", 0);
-
-			TerrainSystem::MeshBuildSettings buildSettings = {};
-			const bool bOk = m_pTerrainSystem->BuildStaticMesh(&terrainMesh, tmId, buildSettings);
-			ASSERT(bOk && terrainMesh.IsValid(), "Failed to build terrain mesh.");
-
-			const StaticMeshRenderData& terrainMeshRD = m_pRenderer->CreateStaticMeshRenderData(terrainMesh);
-			const Matrix4x4 terrainTRS = Matrix4x4::Identity();
-
-			m_pRenderScene->AddObject(
-				terrainMeshRD,
-				terrainTRS,
-				true);
-		}
 
 		// ------------------------------------------------------------
 		// Physics Terrain: HeightFieldCollider + Static Rigidbody

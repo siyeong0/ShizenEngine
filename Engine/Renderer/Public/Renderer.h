@@ -54,6 +54,12 @@ namespace shz
 		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sky/skyBrdf.dds";
 	};
 
+	struct MaterialPipelineBinding
+	{
+		RefCntAutoPtr<IPipelineState> pPSO;
+		RefCntAutoPtr<IShaderResourceBinding> pSRB;
+	};
+
 	class Renderer final
 	{
 	public:
@@ -145,7 +151,11 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 
-		// Material templates
+		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 passKey);
+		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
+		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
+
+		// Material
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
@@ -163,9 +173,6 @@ namespace shz
 		RefCntAutoPtr<IBuffer> createBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
 
 		void updateTexture2D(IDeviceContext* pCtx, ITexture* pTexture, uint32 arraySlice, const Texture& sourceImage, RESOURCE_STATE_TRANSITION_MODE transitionMode) const;
-
-		RefCntAutoPtr<IPipelineState> acquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
-		RefCntAutoPtr<IShaderResourceBinding> acquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Render graph
 		void compileRenderGraphOrder();
@@ -196,13 +203,7 @@ namespace shz
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
-
-		struct PipelineBinding
-		{
-			RefCntAutoPtr<IPipelineState> pPSO;
-			RefCntAutoPtr<IShaderResourceBinding> pSRB;
-		};
-		std::unordered_map<uint64, PipelineBinding> m_PipelineBindingCache;
+		std::unordered_map<uint64, MaterialPipelineBinding> m_PipelineBindingCache;
 
 		struct PendingBarrier final
 		{

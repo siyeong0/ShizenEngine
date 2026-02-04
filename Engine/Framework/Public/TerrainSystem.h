@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
@@ -15,10 +16,14 @@
 
 namespace shz
 {
+	class Renderer;
+	class RenderScene;
+	struct ViewFamily;
+	struct StaticMeshRenderData;
+
 	class TerrainSystem final
 	{
 	public:
-		// CreateInfo
 		struct CreateInfo final
 		{
 			std::string HeightMapPath = {};
@@ -26,28 +31,19 @@ namespace shz
 
 			float WorldSpacingX = 1.0f;
 			float WorldSpacingZ = 1.0f;
-
 			float HeightScale = 100.0f;
 			float HeightOffset = 0.0f;
 
 			bool bCenterXZ = true;
-
-			// When reading from source height texture:
-			// - use only R channel
-			// - if format is RGB/RGBA, read first component as grayscale
 			bool bReadRChannelOnly = true;
 		};
 
-		// Mesh build settings
 		struct MeshBuildSettings final
 		{
 			bool bGenerateNormals = true;
 			bool bGenerateTexCoords = true;
 			bool bPreferU16Indices = true;
-
 			bool bFlipWinding = false;
-
-			// Normal computation tuning (same intent as your old builder)
 			float NormalUpBias = 2.0f;
 		};
 
@@ -58,10 +54,10 @@ namespace shz
 		TerrainSystem(const TerrainSystem&) = delete;
 		TerrainSystem& operator=(const TerrainSystem&) = delete;
 
-		void Initialize(AssetManager& assetManager, const CreateInfo& ci);
+		void Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci);
 		void Cleanup();
 
-		bool IsValid() const noexcept { return m_bValid; }
+		void Update(RenderScene& scene, const ViewFamily& view);
 
 		// Basic info
 		uint32 GetWidth()  const noexcept { return m_Width; }
@@ -85,7 +81,6 @@ namespace shz
 		float GetNormalizedHeightAt(uint32 x, uint32 z) const;
 		float GetWorldHeightAt(uint32 x, uint32 z) const;
 
-		// Bilinear
 		float SampleNormalizedHeight(float worldX, float worldZ) const;
 		float SampleWorldHeight(float worldX, float worldZ) const;
 
@@ -96,17 +91,12 @@ namespace shz
 		const Texture* GetHeightTexture() const noexcept { return m_HeightTex.Get(); }
 		const Texture* GetDiffuseTexture() const noexcept { return m_DiffuseTex.Get(); }
 
-		// Mesh build
+		// Mesh build (CPU, full resolution for now)
 		bool BuildStaticMesh(
 			StaticMesh* pOutMesh,
 			MaterialId terrainMaterial,
 			const MeshBuildSettings& settings) const;
 
-		// ------------------------------------------------------------
-		// Physics helper
-		// Convert stored u16 normalized into world-meter float samples
-		// (same as your old conversion block)
-		// ------------------------------------------------------------
 		void BuildPhysicsHeightSamples(std::vector<float>& outHeightsWorldMeters) const;
 
 	private:
@@ -116,8 +106,6 @@ namespace shz
 
 	private:
 		CreateInfo m_CI = {};
-
-		bool  m_bValid = false;
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;
@@ -136,7 +124,12 @@ namespace shz
 		AssetPtr<Texture> m_HeightTex;
 		AssetPtr<Texture> m_DiffuseTex;
 
-		// CPU height samples as u16 normalized
 		std::vector<uint16> m_HeightU16 = {};
+
+		// Render state (feature-owned)
+		StaticMesh m_FullMeshCPU = {};
+		const StaticMeshRenderData* m_pFullMeshRD = nullptr;
+
+		Matrix4x4 m_TerrainTRS = Matrix4x4::Identity();
 	};
 } // namespace shz

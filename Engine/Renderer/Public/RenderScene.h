@@ -130,13 +130,13 @@ namespace shz
 		void BuildDrawPackets(
 			uint64 passKey,
 			const std::vector<uint32>& visibleObjectDenseIndices,
-			const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+			const std::function<const struct MaterialPipelineBinding&(MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets,
 			std::vector<uint32>& outInstanceRemap) const;
 
 		void BuildIndirectDrawPackets(
 			uint64 passKey,
-			const std::function<bool(uint64, MaterialId, IPipelineState**, IShaderResourceBinding**)>& resolver,
+			const std::function<const struct MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawIndirectPacket>& outPackets) const;
 
 		// Renderer가 BatchId로 상태를 조회할 수 있게
