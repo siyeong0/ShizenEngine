@@ -717,19 +717,6 @@ namespace shz
 						const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
 						dc.NormalSampleStep = normalSteps[lod];
 
-						auto hash01 = [](uint32 v) -> float
-						{
-							v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16; return float(v & 0x00FFFFFFu) / 16777216.0f;
-						};
-
-						uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
-						//uint32 h = lod;
-						float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
-						float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
-						float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
-
-						dc.DebugChunkColor = float4{ r, g, b, 1.0f };
-
 						MapHelper<hlsl::TerrainDrawConstants> map(
 							pCtx,
 							ctx.pRenderer->GetBuffer(STRING_HASH("TerrainDrawConstants")),
