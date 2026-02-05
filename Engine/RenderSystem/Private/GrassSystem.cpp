@@ -31,7 +31,8 @@ namespace shz
 		{
 			hlsl::IndirectArgsTemplate t = {};
 			// t.IndexCountPerInstance = m_GrassDesc.pMeshLod0->IndexCount;
-			t.IndexCountPerInstance = 6; // Billboard
+			t.IndexCountPerInstance = m_GrassDesc.pCrossMeshLod1->IndexCount; // Cross
+			// t.IndexCountPerInstance = 6; // Billboard
 			t.StartIndexLocation = 0;
 			t.BaseVertexLocation = 0;
 			t.StartInstanceLocation = 0;
@@ -344,7 +345,7 @@ namespace shz
 				//DrawIndexedIndirectAttribs dia = {};
 				//dia.IndexType = m_GrassDesc.pMeshLod0->IndexType;
 
-				//dia.DrawArgsOffset = m_IndirectSlot * 20u;
+				//dia.DrawArgsOffset = m_IndirectSlot * 20;
 				//dia.DrawCount = 1;
 				//dia.DrawArgsStride = 20;
 
@@ -353,10 +354,10 @@ namespace shz
 
 				//pContext->DrawIndexedIndirect(dia);
 
-				pContext->SetPipelineState(m_pGrassBillboardPSO);
-				pContext->CommitShaderResources(m_pGrassBillboardSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pContext->SetPipelineState(m_pGrassCrossPSO);
+				pContext->CommitShaderResources(m_pGrassCrossSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				IBuffer* ppVertexBuffers[] = { m_GrassDesc.pBillboardMeshLod2->VertexBuffer };
+				IBuffer* ppVertexBuffers[] = { m_GrassDesc.pCrossMeshLod1->VertexBuffer };
 				uint64 offsets[] = { 0 };
 
 				pContext->SetVertexBuffers(
@@ -365,13 +366,13 @@ namespace shz
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pContext->SetIndexBuffer(
-					m_GrassDesc.pBillboardMeshLod2->IndexBuffer, 0,
+					m_GrassDesc.pCrossMeshLod1->IndexBuffer, 0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				DrawIndexedIndirectAttribs dia = {};
-				dia.IndexType = VT_UINT16;
+				dia.IndexType = m_GrassDesc.pCrossMeshLod1->IndexType;
 
-				dia.DrawArgsOffset = m_IndirectSlot * 20u;
+				dia.DrawArgsOffset = m_IndirectSlot * 20;
 				dia.DrawCount = 1;
 				dia.DrawArgsStride = 20;
 
@@ -379,6 +380,33 @@ namespace shz
 				dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
 				pContext->DrawIndexedIndirect(dia);
+
+				//pContext->SetPipelineState(m_pGrassBillboardPSO);
+				//pContext->CommitShaderResources(m_pGrassBillboardSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				//IBuffer* ppVertexBuffers[] = { m_GrassDesc.pBillboardMeshLod2->VertexBuffer };
+				//uint64 offsets[] = { 0 };
+
+				//pContext->SetVertexBuffers(
+				//	0, 1, ppVertexBuffers, offsets,
+				//	RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+				//	SET_VERTEX_BUFFERS_FLAG_RESET);
+
+				//pContext->SetIndexBuffer(
+				//	m_GrassDesc.pBillboardMeshLod2->IndexBuffer, 0,
+				//	RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				//DrawIndexedIndirectAttribs dia = {};
+				//dia.IndexType = VT_UINT16;
+
+				//dia.DrawArgsOffset = m_IndirectSlot * 20;
+				//dia.DrawCount = 1;
+				//dia.DrawArgsStride = 20;
+
+				//dia.pAttribsBuffer = renderer.GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+				//dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
+				//pContext->DrawIndexedIndirect(dia);
 			},
 				[this, &renderer]()
 			{
@@ -495,6 +523,12 @@ namespace shz
 					ASSERT(m_pGrassSRB, "Grass SRB create failed.");
 				}
 
+				// Grass cross-plane
+				{
+					m_pGrassCrossPSO = m_pGrassPSO;
+					m_pGrassCrossSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_GrassDesc.pCrossMeshLod1->Sections[0].MaterialId, m_pGrassPSO);
+				}
+
 				// Grass billboard 
 				{
 					GraphicsPipelineStateCreateInfo psoCI = {};
@@ -538,7 +572,7 @@ namespace shz
 
 					renderer.CreateShader(vsCI, &psoCI.pVS);
 					renderer.CreateShader(psCI, &psoCI.pPS);
-					ASSERT(psoCI.pVS&& psoCI.pPS, "Grass VS/PS compile failed.");
+					ASSERT(psoCI.pVS && psoCI.pPS, "Grass VS/PS compile failed.");
 
 					psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 

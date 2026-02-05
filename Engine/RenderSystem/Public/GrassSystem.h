@@ -52,6 +52,9 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         m_pGrassPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
 
+		RefCntAutoPtr<IPipelineState>         m_pGrassCrossPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pGrassCrossSRB;
+
 		RefCntAutoPtr<IPipelineState>         m_pGrassBillboardPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassBillboardSRB;
 

@@ -236,35 +236,17 @@
     {
       "BaseVertex": 0,
       "FirstIndex": 0,
-      "IndexCount": 6,
+      "IndexCount": 12,
       "LocalBounds": {
         "Max": [
           50.0,
           100.0,
-          0.0
+          50.0
         ],
         "Min": [
           -50.0,
           0.0,
-          0.0
-        ]
-      },
-      "MaterialSlot": 0
-    },
-    {
-      "BaseVertex": 4,
-      "FirstIndex": 6,
-      "IndexCount": 6,
-      "LocalBounds": {
-        "Max": [
-          50.0,
-          100.0,
-          0.0
-        ],
-        "Min": [
-          -50.0,
-          0.0,
-          0.0
+          -50.0
         ]
       },
       "MaterialSlot": 0

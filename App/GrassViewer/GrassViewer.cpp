@@ -377,18 +377,30 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
+				auto uniform01 = [](StaticMesh& mesh)
+				{
+					mesh.RecomputeBounds();
+					const Box& b = mesh.GetBounds();
+					float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+					mesh.ApplyUniformScale(yScale01);
+					mesh.MoveBottomToOrigin(true);
+				};
+
 				GrassDesc gd = {};
 
 				// LOD0 : Mesh
 				AssetRef<StaticMesh> grassMeshRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic.shzmesh.json");
 				AssetPtr<StaticMesh> grassMeshPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassMeshRef);
 				ASSERT(grassMeshPtr && grassMeshPtr->IsValid(), "Failed to load grass mesh.");
-				grassMeshPtr->RecomputeBounds();
-				const Box& b = grassMeshPtr->GetBounds();
-				float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-				grassMeshPtr->ApplyUniformScale(yScale01);
-				grassMeshPtr->MoveBottomToOrigin(true);
+				uniform01(*grassMeshPtr);
 				gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(*grassMeshPtr);
+
+				// LOD1 : Cross-plane
+				AssetRef<StaticMesh> grassCrossRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.shzmesh.json");
+				AssetPtr<StaticMesh> grassCrossPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassCrossRef);
+				ASSERT(grassCrossPtr&& grassCrossPtr->IsValid(), "Failed to load grass mesh.");
+				uniform01(*grassCrossPtr);
+				gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(*grassCrossPtr);
 
 				// LOD2 : Billboard
 				AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
