@@ -27,18 +27,10 @@ namespace shz
 		void SetGrassModel(const StaticMeshRenderData* pMesh) { m_pGrassMesh = pMesh; }
 
 	private:
-		static constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
 		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
 
 		// Indirect slot for this system
 		uint32 m_IndirectSlot = 0;
-
-		// Interaction pass (2 CSOs)
-		RefCntAutoPtr<IPipelineState>         m_pInteractionDecayCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pInteractionDecaySRB;
-
-		RefCntAutoPtr<IPipelineState>         m_pInteractionApplyCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pInteractionApplySRB;
 
 		// Generate instances
 		RefCntAutoPtr<IPipelineState>         m_pGenCSO;

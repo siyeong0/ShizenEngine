@@ -994,6 +994,19 @@ namespace shz
 		}
 	}
 
+	float2 TerrainSystem::WorldXZToDomainUV(const float2& worldXZ) const noexcept
+	{
+		const float originX = GetWorldOriginX();
+		const float originZ = GetWorldOriginZ();
+
+		const float sizeX = std::max(GetWorldSizeX(), 1e-6f);
+		const float sizeZ = std::max(GetWorldSizeZ(), 1e-6f);
+
+		const float u = (worldXZ.x - originX) / sizeX;
+		const float v = (worldXZ.y - originZ) / sizeZ;
+		return float2{ Clamp01(u), Clamp01(v) };
+	}
+
 	// ------------------------------------------------------------
 	// Height access
 	// ------------------------------------------------------------

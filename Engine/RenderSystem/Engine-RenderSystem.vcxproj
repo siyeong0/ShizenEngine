@@ -156,6 +156,7 @@
     <ClInclude Include="Public\ForwardSystem.h" />
     <ClInclude Include="Public\GrassSystem.h" />
     <ClInclude Include="Public\IndirectArgsSystem.h" />
+    <ClInclude Include="Public\InteractionSystem.h" />
     <ClInclude Include="Public\PostProcessSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
   </ItemGroup>
@@ -170,6 +171,7 @@
     <ClCompile Include="Private\ForwardSystem.cpp" />
     <ClCompile Include="Private\GrassSystem.cpp" />
     <ClCompile Include="Private\IndirectArgsSystem.cpp" />
+    <ClCompile Include="Private\InteractionSystem.cpp" />
     <ClCompile Include="Private\PostProcessSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
   </ItemGroup>

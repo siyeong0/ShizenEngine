@@ -78,6 +78,10 @@ namespace shz
 		float GetWorldOriginX() const noexcept;
 		float GetWorldOriginZ() const noexcept;
 
+		bool GetCenterXZ() const noexcept { return m_bCenterXZ; }
+
+		float2 WorldXZToDomainUV(const float2& worldXZ) const noexcept;
+
 		// CPU height data
 		const std::vector<uint16>& GetHeightU16() const noexcept { return m_HeightU16; }
 

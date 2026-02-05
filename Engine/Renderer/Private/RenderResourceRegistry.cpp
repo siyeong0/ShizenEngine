@@ -33,7 +33,7 @@ namespace shz
 	{
 		ASSERT(id != 0, "Id must be non-zero.");
 		ASSERT(pTexture, "Cannot register null texture.");
-		// ASSERT(!HasTexture(id), "Texture id already registered."); // TODO: Duplicate
+		ASSERT(!HasTexture(id), "Texture id already registered."); // TODO: Duplicate
 
 		TextureEntry& e = m_Textures[id];
 

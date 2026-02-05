@@ -25,6 +25,7 @@
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
+#include "Engine/RenderSystem/Public/InteractionSystem.h"
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 
 namespace shz
@@ -71,6 +72,7 @@ namespace shz
 		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
 		std::unique_ptr<ShadowSystem> m_pShadowSystem;
 		std::unique_ptr<GrassSystem> m_pGrassSystem;
+		std::unique_ptr<InteractionSystem> m_pInteractionSystem;
 		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 
 		ViewportState     m_Viewport = {};

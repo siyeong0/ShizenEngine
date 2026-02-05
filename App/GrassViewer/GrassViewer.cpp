@@ -220,8 +220,6 @@ namespace shz
 			// Grass buffers
 			{
 				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
-				constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
-				constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
 				// GrassInstanceBuffer
 				{
 					BufferDesc bd = {};
@@ -257,47 +255,6 @@ namespace shz
 					bd.Size = sizeof(hlsl::GrassRenderConstants);
 
 					m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
-				}
-
-				// Interaction field texture (R16_FLOAT SRV/UAV)
-				{
-					TextureDesc td = {};
-					td.Name = "InteractionField";
-					td.Type = RESOURCE_DIM_TEX_2D;
-					td.Width = INTERACTION_FIELD_SIZE;
-					td.Height = INTERACTION_FIELD_SIZE;
-					td.Format = TEX_FORMAT_R16_FLOAT;
-					td.MipLevels = 1;
-					td.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-					td.Usage = USAGE_DEFAULT;
-
-					m_pRenderer->AddTexture(STRING_HASH("InteractionField"), td);
-				}
-
-				// Interaction stamps (Structured, dynamic CPU write)
-				{
-					BufferDesc bd = {};
-					bd.Name = "InteractionStampBuffer";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_SHADER_RESOURCE;
-					bd.Mode = BUFFER_MODE_STRUCTURED;
-					bd.ElementByteStride = sizeof(hlsl::InteractionStamp);
-					bd.Size = uint64(MAX_NUM_INTERACTION_STAMPS) * uint64(sizeof(hlsl::InteractionStamp));
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-
-					m_pRenderer->AddBuffer(STRING_HASH("InteractionStampBuffer"), bd);
-				}
-
-				// Interaction constants
-				{
-					BufferDesc bd = {};
-					bd.Name = "InteractionConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = uint64(sizeof(hlsl::InteractionConstants));
-
-					m_pRenderer->AddBuffer(STRING_HASH("InteractionConstantsCB"), bd);
 				}
 
 				// Density texture for grass placement
@@ -414,6 +371,7 @@ namespace shz
 			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 			m_pShadowSystem = std::make_unique<ShadowSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
+			m_pInteractionSystem = std::make_unique<InteractionSystem>();
 
 			// ------------------------------------------------------------
 			// Grass model
@@ -440,6 +398,7 @@ namespace shz
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
 			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem, *m_pTerrainSystem);
+			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
 		}
 
 
@@ -557,8 +516,8 @@ namespace shz
 
 								hlsl::InteractionStamp stamp = {};
 								stamp.CenterXZ = float2{ pWS.x, pWS.z };
-								stamp.Radius = 1.0f;
-								stamp.FalloffPower = 1.0f;
+								stamp.Radius = 1.5f;
+								stamp.FalloffPower = 10.0f;
 								stamp.TargetId = 0;
 
 								if (contact.Type == EContactEventType::Added)

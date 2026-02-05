@@ -19,41 +19,6 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	static inline float2 WorldXZToTerrainUV(
-		int heightFieldWidth, int heightFieldHeight,
-		float spacingX, float spacingY,
-		uint centerXZ,
-		const float2& worldXZ)
-	{
-		const float sizeX = float(std::max<int>(int(heightFieldWidth) - 1, 0)) * spacingX;
-		const float sizeZ = float(std::max<int>(int(heightFieldHeight) - 1, 0)) * spacingY;
-
-		const float originX = (centerXZ != 0) ? (-0.5f * sizeX) : 0.0f;
-		const float originZ = (centerXZ != 0) ? (-0.5f * sizeZ) : 0.0f;
-
-		const float invSizeX = 1.0f / std::max(sizeX, 1e-6f);
-		const float invSizeZ = 1.0f / std::max(sizeZ, 1e-6f);
-
-		return float2
-		{
-			(worldXZ.x - originX) * invSizeX,
-			(worldXZ.y - originZ) * invSizeZ
-		};
-	}
-
-	static inline float WorldRadiusToUv_MinAxis(
-		int heightFieldWidth, int heightFieldHeight,
-		float spacingX, float spacingY,
-		float radiusWorld)
-	{
-		const float sizeX = float(std::max<int>(int(heightFieldWidth) - 1, 0)) * spacingX;
-		const float sizeZ = float(std::max<int>(int(heightFieldHeight) - 1, 0)) * spacingY;
-		const float sizeMin = std::max(std::min(sizeX, sizeZ), 1e-6f);
-		return radiusWorld / sizeMin;
-	}
-
-	static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
-
 	// ---------------------------------------------------------------------
 	// InstallPasses
 	// ---------------------------------------------------------------------
@@ -73,260 +38,25 @@ namespace shz
 			indirect.SetTemplate(m_IndirectSlot, t);
 		}
 
-		// -----------------------------------------------------------------
-	   // Resource IDs
-	   // -----------------------------------------------------------------
-		const uint64 kInteractionField = STRING_HASH("InteractionField");
-		const uint64 kInteractionStamps = STRING_HASH("InteractionStampBuffer");
-		const uint64 kInteractionConstantsCB = STRING_HASH("InteractionConstantsCB");
-
-		const uint64 kGrassGenCB = STRING_HASH("GrassGenConstantsCB");
-		const uint64 kGrassRenderCB = STRING_HASH("GrassRenderConstantsCB");
-
-		const uint64 kGrassDensityField = STRING_HASH("GrassDensityField");
-		const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
-
-		const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
-		const uint64 kIndirectCountBuffer = STRING_HASH("IndirectCountBuffer");
-
-		const uint64 kDepthTex = STRING_HASH("GBufferDepth");
-		const uint64 kShadowMap = STRING_HASH("ShadowMap");
-
-		// MSAA resources you added
-		const uint64 kGrassColorMSAA = STRING_HASH("GrassColorMSAA");
-		const uint64 kGrassDepthMSAA = STRING_HASH("GrassDepthMSAA");
-
 		// =====================================================================
-		// Pass 1) GrassInteraction (compute: decay + apply stamps)
-		// =====================================================================
-		renderer.AddPass(
-			"GrassInteraction",
-			[&](RenderPassBuilder& b)
-			{
-				// RW update target
-				b.DeclareTextureUAV(kInteractionField, RENDER_ACCESS_READWRITE);
-
-				// Inputs
-				b.DeclareBufferSRVRead(kInteractionStamps);
-				b.DeclareBufferCBVRead(kInteractionConstantsCB);
-
-				// CPU also reads this for mapping / other passes may use
-				b.DeclareBufferCBVRead(kGrassGenCB);
-			},
-			[this, &terrain, kInteractionField, kInteractionStamps, kInteractionConstantsCB](RenderPassContext& ctx)
-			{
-				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
-				ASSERT(ctx.pScene, "Scene is null.");
-				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pInteractionDecayCSO && m_pInteractionDecaySRB, "InteractionDecay PSO/SRB not ready.");
-				ASSERT(m_pInteractionApplyCSO && m_pInteractionApplySRB, "InteractionApply PSO/SRB not ready.");
-
-				IDeviceContext* pContext = ctx.pImmediateContext;
-
-				// (A) Upload stamps
-				uint32 stampCount = 0;
-				{
-					MapHelper<hlsl::InteractionStamp> stampMap(
-						pContext,
-						ctx.pRegistry->GetBuffer(kInteractionStamps),
-						MAP_WRITE,
-						MAP_FLAG_DISCARD);
-
-					std::vector<hlsl::InteractionStamp> interactionStamps;
-					ctx.pScene->ConsumeInteractionStamps(&interactionStamps);
-
-					stampCount = (uint32)std::min<size_t>(interactionStamps.size(), MAX_NUM_INTERACTION_STAMPS);
-
-					for (uint32 i = 0; i < stampCount; ++i)
-					{
-						hlsl::InteractionStamp s = interactionStamps[i];
-
-						s.CenterXZ = WorldXZToTerrainUV(terrain.GetWidth(), terrain.GetHeight(), terrain.GetWorldSpacingX(), terrain.GetWorldSpacingZ(), 1, s.CenterXZ);
-						s.Radius = WorldRadiusToUv_MinAxis(terrain.GetWidth(), terrain.GetHeight(), terrain.GetWorldSpacingX(), terrain.GetWorldSpacingZ(), s.Radius);
-
-						stampMap[i] = s;
-					}
-				}
-
-				// (B) Upload constants
-				{
-					MapHelper<hlsl::InteractionConstants> map(
-						pContext,
-						ctx.pRegistry->GetBuffer(kInteractionConstantsCB),
-						MAP_WRITE,
-						MAP_FLAG_DISCARD);
-
-					map->FieldWidth = INTERACTION_FIELD_SIZE;
-					map->FieldHeight = INTERACTION_FIELD_SIZE;
-					map->NumStamps = stampCount;
-					map->DeltaTime = ctx.DeltaTime;
-
-					map->DecayPerSec = 0.15f;
-					map->ClampMax = 1.0f;
-					map->ClampMin = 0.0f;
-					map->_Pad0 = 0.0f;
-				}
-
-				DispatchComputeAttribs disp = {};
-				disp.ThreadGroupCountX = DivUp(INTERACTION_FIELD_SIZE, 8);
-				disp.ThreadGroupCountY = DivUp(INTERACTION_FIELD_SIZE, 8);
-				disp.ThreadGroupCountZ = 1;
-
-				// (C) Decay
-				{
-					if (auto* var = m_pInteractionDecaySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_RWInteractionField"))
-					{
-						var->Set(ctx.pRegistry->GetTextureUAV(kInteractionField), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
-
-					pContext->SetPipelineState(m_pInteractionDecayCSO);
-					pContext->CommitShaderResources(m_pInteractionDecaySRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-					pContext->DispatchCompute(disp);
-				}
-
-				// (D) Apply stamps
-				if (stampCount > 0)
-				{
-					if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_RWInteractionField"))
-					{
-						var->Set(ctx.pRegistry->GetTextureUAV(kInteractionField), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
-
-					pContext->SetPipelineState(m_pInteractionApplyCSO);
-					pContext->CommitShaderResources(m_pInteractionApplySRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-					pContext->DispatchCompute(disp);
-				}
-			},
-				[this, &renderer, kInteractionStamps, kInteractionConstantsCB]()
-			{
-				// ------------------------------------------------------------
-				// (1) Decay PSO
-				// ------------------------------------------------------------
-				{
-					ShaderCreateInfo csCI = {};
-					csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					csCI.EntryPoint = "DecayInteractionField";
-					csCI.Desc.Name = "InteractionDecayCS";
-					csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
-					csCI.Desc.UseCombinedTextureSamplers = false;
-					csCI.FilePath = m_InteractionCS.c_str();
-
-					RefCntAutoPtr<IShader> cs;
-					renderer.CreateShader(csCI, &cs);
-					ASSERT(cs, "InteractionDecayCS compile failed.");
-
-					ComputePipelineStateCreateInfo psoCI = {};
-					psoCI.PSODesc.Name = "PSO_InteractionDecay";
-					psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
-
-					auto& rl = psoCI.PSODesc.ResourceLayout;
-					rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-					ShaderResourceVariableDesc vars[] =
-					{
-						{ SHADER_TYPE_COMPUTE, "g_RWInteractionField",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					};
-					rl.Variables = vars;
-					rl.NumVariables = _countof(vars);
-
-					psoCI.pCS = cs;
-
-					m_pInteractionDecayCSO = renderer.AcquirePipelineState(psoCI, true);
-					ASSERT(m_pInteractionDecayCSO, "AcquireCompute(InteractionDecay) failed.");
-
-					m_pInteractionDecayCSO->CreateShaderResourceBinding(&m_pInteractionDecaySRB, true);
-					ASSERT(m_pInteractionDecaySRB, "InteractionDecay SRB create failed.");
-
-					if (auto* var = m_pInteractionDecaySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS"))
-					{
-						var->Set(renderer.GetBuffer(kInteractionConstantsCB));
-					}
-				}
-
-				// ------------------------------------------------------------
-				// (2) ApplyStamps PSO
-				// ------------------------------------------------------------
-				{
-					ShaderCreateInfo csCI = {};
-					csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					csCI.EntryPoint = "ApplyInteractionStamps";
-					csCI.Desc.Name = "InteractionApplyStampsCS";
-					csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
-					csCI.Desc.UseCombinedTextureSamplers = false;
-					csCI.FilePath = m_InteractionCS.c_str();
-
-					RefCntAutoPtr<IShader> cs;
-					renderer.CreateShader(csCI, &cs);
-					ASSERT(cs, "InteractionApplyStampsCS compile failed.");
-
-					ComputePipelineStateCreateInfo psoCI = {};
-					psoCI.PSODesc.Name = "PSO_InteractionApplyStamps";
-					psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
-
-					auto& rl = psoCI.PSODesc.ResourceLayout;
-					rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-					ShaderResourceVariableDesc vars[] =
-					{
-						{ SHADER_TYPE_COMPUTE, "g_RWInteractionField",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_COMPUTE, "g_Stamps",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					};
-					rl.Variables = vars;
-					rl.NumVariables = _countof(vars);
-
-					SamplerDesc linearClamp =
-					{
-						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-					};
-
-					ImmutableSamplerDesc samplers[] =
-					{
-						{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
-					};
-					rl.ImmutableSamplers = samplers;
-					rl.NumImmutableSamplers = _countof(samplers);
-
-					psoCI.pCS = cs;
-
-					m_pInteractionApplyCSO = renderer.AcquirePipelineState(psoCI, true);
-					ASSERT(m_pInteractionApplyCSO, "AcquireCompute(InteractionApplyStamps) failed.");
-
-					m_pInteractionApplyCSO->CreateShaderResourceBinding(&m_pInteractionApplySRB, true);
-					ASSERT(m_pInteractionApplySRB, "InteractionApplyStamps SRB create failed.");
-
-					if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "INTERACTION_CONSTANTS"))
-					{
-						var->Set(renderer.GetBuffer(kInteractionConstantsCB));
-					}
-					if (auto* var = m_pInteractionApplySRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Stamps"))
-					{
-						var->Set(renderer.GetBufferSRV(kInteractionStamps));
-					}
-				}
-			});
-
-		// =====================================================================
-		// Pass 2) GrassGenerateInstances (compute)
+		// Pass 1) GrassGenerateInstances (compute)
 		// =====================================================================
 		renderer.AddPass(
 			"GrassGenerateInstances",
 			[&](RenderPassBuilder& b)
 			{
 				// Outputs
-				b.DeclareBufferUAV(kGrassInstanceBuffer, RENDER_ACCESS_WRITE);
-				b.DeclareBufferUAV(kIndirectCountBuffer, RENDER_ACCESS_WRITE); // <-- shared counts
+				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBuffer"), RENDER_ACCESS_WRITE);
+				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE); // <-- shared counts
 
 				// Inputs
-				b.DeclareTextureSRVRead(kGrassDensityField);
-				b.DeclareTextureSRVRead(kInteractionField);
+				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
+				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
 
 				// Constants
-				b.DeclareBufferCBVRead(kGrassGenCB);
+				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstantsCB"));
 			},
-			[this, &renderer, kIndirectCountBuffer, kGrassDensityField, kInteractionField, kGrassInstanceBuffer, kGrassGenCB](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pScene, "Scene is null.");
@@ -341,7 +71,7 @@ namespace shz
 					const uint32 offset = m_IndirectSlot * 4u;
 
 					pContext->UpdateBuffer(
-						ctx.pRegistry->GetBuffer(kIndirectCountBuffer),
+						ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")),
 						offset,
 						sizeof(uint32),
 						&zero,
@@ -350,7 +80,7 @@ namespace shz
 					StateTransitionDesc trBack[] =
 					{
 						{
-							ctx.pRegistry->GetBuffer(kIndirectCountBuffer),
+							ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")),
 							RESOURCE_STATE_UNKNOWN,
 							RESOURCE_STATE_UNORDERED_ACCESS,
 							STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -367,11 +97,11 @@ namespace shz
 					}
 					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 					{
-						var->Set(ctx.pRegistry->GetTextureSRV(kGrassDensityField), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+						var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 					{
-						var->Set(ctx.pRegistry->GetTextureSRV(kInteractionField), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+						var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 
 					StateTransitionDesc tr =
@@ -397,7 +127,7 @@ namespace shz
 					pContext->DispatchCompute(disp);
 				}
 			},
-				[this, &renderer, kGrassInstanceBuffer, kIndirectCountBuffer, kGrassGenCB]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -458,29 +188,29 @@ namespace shz
 				// Bind stable resources (buffers / CB)
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstances"))
 				{
-					var->Set(renderer.GetBufferUAV(kGrassInstanceBuffer));
+					var->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBuffer")));
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_Counter"))
 				{
-					var->Set(renderer.GetBufferUAV(kIndirectCountBuffer));
+					var->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
 				}
 				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
 				{
-					var->Set(renderer.GetBuffer(kGrassGenCB));
+					var->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstantsCB")));
 				}
 			});
 		// =====================================================================
-		// Pass 3) CopyLightingToGrassMSAA (graphics fullscreen)
+		// Pass 2) CopyLightingToGrassMSAA (graphics fullscreen)
 		//   Lighting(1x) -> GrassColorMSAA(4x)
 		// =====================================================================
 		renderer.AddPass(
 			"CopyLightingToGrassMSAA",
 			[&](RenderPassBuilder& b)
 			{
-				b.DeclareTextureRTVWrite(kGrassColorMSAA);
+				b.DeclareTextureRTVWrite(STRING_HASH("GrassColorMSAA"));
 				b.DeclareTextureSRVRead(STRING_HASH("LightingScene"));
 			},
-			[this, &renderer, kGrassColorMSAA](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
@@ -565,7 +295,7 @@ namespace shz
 				ASSERT(m_pCopyToMSAASRB, "CopyToMSAA SRB create failed.");
 			});
 		// =====================================================================
-		// Pass 4) GrassForwardMSAA (graphics, DrawIndexedIndirect)
+		// Pass 3) GrassForwardMSAA (graphics, DrawIndexedIndirect)
 		//   Draw into GrassColorMSAA(4x) + GrassDepthMSAA(4x)
 		//   Read scene depth from GBufferDepth as SRV (manual occlusion)
 		// =====================================================================
@@ -574,20 +304,20 @@ namespace shz
 			[&](RenderPassBuilder& b)
 			{
 				// MSAA targets
-				b.DeclareTextureRTVReadWrite(kGrassColorMSAA);
-				b.DeclareTextureDSVWrite(kGrassDepthMSAA);
+				b.DeclareTextureRTVReadWrite(STRING_HASH("GrassColorMSAA"));
+				b.DeclareTextureDSVWrite(STRING_HASH("GrassDepthMSAA"));
 
 				// Inputs
-				b.DeclareTextureSRVRead(kShadowMap);
-				b.DeclareTextureSRVRead(kDepthTex); // Scene depth SRV (R32_FLOAT)
+				b.DeclareTextureSRVRead(STRING_HASH("ShadowMap"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth")); // Scene depth SRV (R32_FLOAT)
 
-				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
-				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
-				b.DeclareBufferCBVRead(kGrassRenderCB);
+				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBuffer"));
+				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
+				b.DeclareBufferCBVRead(STRING_HASH("GrassRenderConstantsCB"));
 
-				b.SetClearDepthStencil(kGrassDepthMSAA, 1.f, 0);
+				b.SetClearDepthStencil(STRING_HASH("GrassDepthMSAA"), 1.f, 0);
 			},
-			[this, &renderer, kIndirectArgsBuffer](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
@@ -622,7 +352,7 @@ namespace shz
 
 				pContext->DrawIndexedIndirect(dia);
 			},
-				[this, &renderer, kDepthTex]()
+				[this, &renderer]()
 			{
 				GraphicsPipelineStateCreateInfo psoCI = {};
 				psoCI.PSODesc.Name = "PSO_GrassMSAA_A2C";
@@ -736,14 +466,14 @@ namespace shz
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
 
 				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SceneDepth"))
-					var->Set(renderer.GetTextureSRV(kDepthTex));
+					var->Set(renderer.GetTextureSRV(STRING_HASH("GBufferDepth")));
 
 				m_pGrassSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassPSO);
 				ASSERT(m_pGrassSRB, "Grass SRB create failed.");
 			});
 
 		// =====================================================================
-		// Pass 5) ResolveGrassToLighting
+		// Pass 4) ResolveGrassToLighting
 		//   Resolve GrassColorMSAA(4x) -> Lighting(1x)
 		// =====================================================================
 		renderer.AddPass(
@@ -751,16 +481,16 @@ namespace shz
 			[&](RenderPassBuilder& b)
 			{
 				b.DeclareTextureRTVWrite(STRING_HASH("LightingFinal"));
-				b.DeclareTextureSRVRead(kGrassColorMSAA);
+				b.DeclareTextureSRVRead(STRING_HASH("GrassColorMSAA"));
 			},
-			[this, &renderer, kGrassColorMSAA](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				ITexture* pSrc = ctx.pRegistry->GetTexture(kGrassColorMSAA);
+				ITexture* pSrc = ctx.pRegistry->GetTexture(STRING_HASH("GrassColorMSAA"));
 				ITexture* pDst = ctx.pRegistry->GetTexture(STRING_HASH("LightingFinal"));
 				ASSERT(pSrc && pDst, "Resolve textures are null.");
 
@@ -780,15 +510,11 @@ namespace shz
 			"GrassShadow",
 			[&](RenderPassBuilder& b)
 			{
-				const uint64 kShadowMap = STRING_HASH("ShadowMap");
-				const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
-				const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
+				b.DeclareTextureDSVWrite(STRING_HASH("ShadowMap"));
 
-				b.DeclareTextureDSVWrite(kShadowMap);
+				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBuffer"));
 
-				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
-
-				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
+				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
 
 				b.DeclareBufferSRVRead(STRING_HASH("DEP00"));
 

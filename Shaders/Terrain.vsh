@@ -1,6 +1,3 @@
-// Terrain.vsh
-// Assumes HeightField.hlsli is the one you pasted (spacing-aware WorldXZ->UV mapping)
-
 #include "HLSL_Structures.hlsli"
 #include "HeightField.hlsli"
 
