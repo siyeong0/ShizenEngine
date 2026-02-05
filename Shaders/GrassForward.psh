@@ -66,6 +66,28 @@ static const float BACKLIGHTING_POW = 2.0; // 1..8  : how concentrated the backl
 static const float EXTRA_SPECULAR_STRENGTH = 0.08; // 0..0.3
 static const float EXTRA_SPECULAR_POW = 32.0; // 8..128
 
+// Returns pseudo-random in [0,1)
+float Hash2D(float2 p)
+{
+    float v = 1.0e4 * sin(17.0 * p.x + 0.1 * p.y) * 0.1 + abs(sin(13.0 * p.y + p.x));
+    return frac(v);
+}
+
+float DitherThreshold(float4 svPos)
+{
+    float2 ip = floor(svPos.xy);
+    return Hash2D(ip);
+}
+
+void AlphaDitherTest(float alpha, float4 svPos)
+{
+    float r = DitherThreshold(svPos);
+    if (alpha < r)
+    {
+        discard;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Main 
 // ----------------------------------------------------------------------------
@@ -80,10 +102,7 @@ float4 main(PSInput IN) : SV_TARGET0
         baseColor4 *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
     }
     
-    if (g_GrassCB.AlphaCut > 0.0 && baseColor4.a < g_GrassCB.AlphaCut)
-    {
-        discard;
-    }
+    AlphaDitherTest(baseColor4.a * g_BaseColorFactor.a, IN.Pos);
     
     float3 baseColor = baseColor4.rgb;
 

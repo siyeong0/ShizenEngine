@@ -653,7 +653,7 @@ namespace shz
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassRenderConstantsCB"));
 			},
-			[this](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
@@ -669,57 +669,40 @@ namespace shz
 				vp.MaxDepth = 1.f;
 				pContext->SetViewports(1, &vp, 0, 0);
 
-				const std::vector<DrawIndirectPacket>& packets = ctx.ShadowIndirectPackets;
+				pContext->SetPipelineState(m_pGrassShadowPSO);
+				pContext->CommitShaderResources(m_pGrassShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				IPipelineState* pLastPSO = nullptr;
-				IShaderResourceBinding* pLastSRB = nullptr;
-				IBuffer* pLastVB = nullptr;
-				IBuffer* pLastIB = nullptr;
+				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
+				uint64 offsets[] = { 0 };
 
-				for (const DrawIndirectPacket& pktIn : packets)
-				{
-					ASSERT(pktIn.VertexBuffer && pktIn.IndexBuffer, "Invalid indirect packet VB/IB.");
+				pContext->SetVertexBuffers(
+					0,
+					1,
+					ppVertexBuffers,
+					offsets,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
 
-					if (pLastPSO != m_pGrassShadowPSO)
-					{
-						pLastPSO = m_pGrassShadowPSO;
-						pLastSRB = nullptr;
-						pContext->SetPipelineState(pLastPSO);
-					}
+				pContext->SetIndexBuffer(
+					m_pGrassMesh->IndexBuffer,
+					0,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-					if (pLastSRB != m_pGrassShadowSRB)
-					{
-						pLastSRB = m_pGrassShadowSRB;
-						pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-					}
+				DrawIndexedIndirectAttribs dia;
+				dia.IndexType = m_pGrassMesh->IndexType;
 
-					if (pLastVB != pktIn.VertexBuffer)
-					{
-						IBuffer* ppVB[] = { pktIn.VertexBuffer };
-						uint64 offsets[] = { 0 };
+				dia.DrawArgsOffset = m_IndirectSlot * 20u;
+				dia.DrawCount = 1;
+				dia.DrawArgsStride = 20;
 
-						pContext->SetVertexBuffers(
-							0, 1, ppVB, offsets,
-							RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-							SET_VERTEX_BUFFERS_FLAG_RESET);
+				dia.pAttribsBuffer = renderer.GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+				dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
-						pLastVB = pktIn.VertexBuffer;
-					}
+				dia.pCounterBuffer = nullptr;
+				dia.CounterOffset = 0;
+				dia.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
 
-					if (pLastIB != pktIn.IndexBuffer)
-					{
-						pContext->SetIndexBuffer(pktIn.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-						pLastIB = pktIn.IndexBuffer;
-					}
-
-					DrawIndexedIndirectAttribs dia = pktIn.DrawAttribs;
-
-					dia.pAttribsBuffer = ctx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
-
-					dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
-
-					pContext->DrawIndexedIndirect(dia);
-				}
+				pContext->DrawIndexedIndirect(dia);
 			},
 				[this, &renderer]()
 			{
@@ -783,6 +766,27 @@ namespace shz
 				// Resource layout
 				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
+				ShaderResourceVariableDesc vars[] =
+				{
+					{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				};
+				psoCI.PSODesc.ResourceLayout.Variables = vars;
+				psoCI.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+
+				SamplerDesc linearWrap =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+				};
+
+				ImmutableSamplerDesc samplers[] =
+				{
+					{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
+				};
+				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
 				m_pGrassShadowPSO = renderer.AcquirePipelineState(STRING_HASH("GrassShadow"), psoCI, true);
 				ASSERT(m_pGrassShadowPSO, "AcquirePipelineState(GrassShadow) failed.");
 
@@ -804,8 +808,7 @@ namespace shz
 				{
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
 				}
-
-				m_pGrassShadowPSO->CreateShaderResourceBinding(&m_pGrassShadowSRB, true);
+				m_pGrassShadowSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassShadowPSO);
 				ASSERT(m_pGrassShadowSRB, "GrassShadow SRB create failed.");
 			});
 	}

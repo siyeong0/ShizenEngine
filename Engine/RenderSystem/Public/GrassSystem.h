@@ -60,6 +60,6 @@ namespace shz
 		std::string m_GrassVS = "GrassForward.vsh";
 		std::string m_GrassPS = "GrassForward.psh";
 		std::string m_GrassShadowVS = "GrassShadow.vsh";		
-		std::string m_ShadowPS = "Shadow.psh";
+		std::string m_ShadowPS = "ShadowMasked.psh";
 	};
 } // namespace shz

@@ -28,6 +28,7 @@ struct VSInput
 struct PSInput
 {
     float4 Pos : SV_POSITION;
+    float2 UV : TEXCOORD0;
 };
 
 static const float EPS = 1e-8;
@@ -146,4 +147,5 @@ void main(in VSInput IN, out PSInput OUT, uint instanceID : SV_InstanceID)
 
     // Shadow clip
     OUT.Pos = mul(float4(p, 1.0f), g_ShadowCB.LightViewProj);
+    OUT.UV = IN.UV;
 }

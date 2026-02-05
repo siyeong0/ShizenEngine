@@ -471,7 +471,7 @@ namespace shz
 			cb->LightIntensity = lightIntensity;
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
-			const float ShadowVisibleDistance = 2000.0f;
+			const float ShadowVisibleDistance = 200.0f;
 
 			const float3 lightForward = lightDirWs;
 

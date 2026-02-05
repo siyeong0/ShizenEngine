@@ -323,16 +323,19 @@ namespace shz
 			m_pTerrainSystem = std::make_unique<TerrainSystem>();
 
 			TerrainSystem::CreateInfo tci = {};
-			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
+			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
+			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
 
 			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/HeightMap.png";
 			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/Diffuse.png";
 
-			tci.WorldSpacingX = 1.0f;
-			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 100.0f;
-			tci.HeightOffset = 0.0f;
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
+
+			tci.WorldSpacingX = 0.5f;
+			tci.WorldSpacingZ = 0.5f;
+			tci.HeightScale = 300.0f;
+			tci.HeightOffset = -30.0f;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pAssetManager, tci);

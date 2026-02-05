@@ -25,15 +25,36 @@ struct PSInput
     float2 UV : TEXCOORD0;
 };
 
+// Returns pseudo-random in [0,1)
+float Hash2D(float2 p)
+{
+    float v = 1.0e4 * sin(17.0 * p.x + 0.1 * p.y) * 0.1 + abs(sin(13.0 * p.y + p.x));
+    return frac(v);
+}
+
+float DitherThreshold(float4 svPos)
+{
+    float2 ip = floor(svPos.xy);
+    return Hash2D(ip);
+}
+
+void AlphaDitherTest(float alpha, float4 svPos)
+{
+    float r = DitherThreshold(svPos);
+    if (alpha < r)
+    {
+        discard;
+    }
+}
+
+
 void main(in PSInput PSIn)
 {
     const float ALPHA_CUTOFF = 0.5;
     if (g_MaterialFlags & MAT_HAS_BASECOLOR)
     {
         float alpha = g_BaseColorTex.Sample(g_LinearWrapSampler, PSIn.UV).a;
-        if (alpha < ALPHA_CUTOFF)
-        {
-            discard;
-        }
+        // Alpha cutout (MASK)
+        AlphaDitherTest(alpha * g_BaseColorFactor.a, PSIn.Pos);
     }
 }
