@@ -154,6 +154,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\BillboardRenderData.h" />
     <ClInclude Include="Public\DrawPacket.h" />
     <ClInclude Include="Public\PipelineStateManager.h" />
     <ClInclude Include="Public\RenderGraphTypes.h" />

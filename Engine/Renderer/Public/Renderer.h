@@ -25,11 +25,12 @@
 #include "Engine/Renderer/Public/ViewFamily.h"
 #include "Engine/Renderer/Public/RenderResourceCache.hpp"
 #include "Engine/Renderer/Public/PipelineStateManager.h"
+#include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/Renderer/Public/RenderResourceRegistry.h"
+#include "Engine/Renderer/Public/BillboardRenderData.h"
 
 namespace shz
 {
@@ -161,6 +162,12 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 
+		const BillboardRenderData& CreateBillboardRenderData(
+			const AssetRef<Texture>& colorTexRef, 
+			MATERIAL_BLEND_MODE blendMode, 
+			float2 scale = { 1.0f, 1.0f }, 
+			float2 pivot01 = { 0.5f, 0.5f });
+
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);
 
@@ -213,6 +220,8 @@ namespace shz
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
+		RenderResourceCache<BillboardRenderData> m_BillboardCache;
+
 		std::unordered_map<uint64, MaterialPipelineBinding> m_PipelineBindingCache;
 
 		struct PendingBarrier final

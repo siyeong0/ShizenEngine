@@ -377,19 +377,24 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
-				// AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
-				AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic.shzmesh.json");
-				// AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.shzmesh.json");
-				AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-				ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
+				GrassDesc gd = {};
 
-				grassPtr->RecomputeBounds();
-				const Box& b = grassPtr->GetBounds();
+				// LOD0 : Mesh
+				AssetRef<StaticMesh> grassMeshRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic.shzmesh.json");
+				AssetPtr<StaticMesh> grassMeshPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassMeshRef);
+				ASSERT(grassMeshPtr && grassMeshPtr->IsValid(), "Failed to load grass mesh.");
+				grassMeshPtr->RecomputeBounds();
+				const Box& b = grassMeshPtr->GetBounds();
 				float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-				grassPtr->ApplyUniformScale(yScale01);
-				grassPtr->MoveBottomToOrigin(true);
+				grassMeshPtr->ApplyUniformScale(yScale01);
+				grassMeshPtr->MoveBottomToOrigin(true);
+				gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(*grassMeshPtr);
 
-				m_pGrassSystem->SetGrassModel(&m_pRenderer->CreateStaticMeshRenderData(*grassPtr));
+				// LOD2 : Billboard
+				AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
+				gd.pBillboardMeshLod2 = &m_pRenderer->CreateBillboardRenderData(grassBillboardTexRef, MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+
+				m_pGrassSystem->SetGrassDesc(gd);
 			}
 
 			m_pTerrainSystem->InstallPasses(*m_pRenderer);

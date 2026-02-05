@@ -1528,6 +1528,92 @@ namespace shz
 		return m_StaticMeshCache.Acquire(key);
 	}
 
+	const BillboardRenderData& Renderer::CreateBillboardRenderData(
+		const AssetRef<Texture>& colorTexRef,
+		MATERIAL_BLEND_MODE blendMode,
+		float2 scale,
+		float2 pivot01)
+	{
+		ASSERT(scale.x > 0.0f && scale.y > 0.0f, "Scale value must be positive.");
+		ASSERT(pivot01.x >= 0.0f && pivot01.y >= 0.0f && pivot01.x <= 1.0f && pivot01.y <= 1.0f, "pivot value range must be 0~1.");
+
+		struct BillboardVertex final
+		{
+			float3 Pos = {};
+			float2 UV = {};
+		};
+
+		BillboardRenderData billboard = {};
+		billboard.BlendMode = blendMode;
+
+		billboard.BaseColorTex = CreateTexture(colorTexRef);
+		ASSERT(billboard.BaseColorTex, "Create billboard base color texture failed.");
+
+		// Vertex buffer
+		{
+			std::vector<BillboardVertex> vertices(4);
+			// Position extents around pivot
+			// pivot01.x = 0 => origin at left edge, 1 => origin at right edge
+			// pivot01.y = 0 => origin at bottom edge, 1 => origin at top edge
+			const float x0 = -pivot01.x * scale.x;
+			const float x1 = (1.0f - pivot01.x) * scale.x;
+
+			const float y0 = -pivot01.y * scale.y;
+			const float y1 = (1.0f - pivot01.y) * scale.y;
+
+			// Quad winding: 0-1-2, 0-2-3 (CCW in XY)
+			//  3 ---- 2
+			//  |      |
+			//  0 ---- 1
+			//
+			// UVs: (0,0)=bottom-left, (1,1)=top-right
+			vertices[0].Pos = float3{ x0, y0, 0.0f }; vertices[0].UV = float2{ 0.0f, 1.0f };
+			vertices[1].Pos = float3{ x1, y0, 0.0f }; vertices[1].UV = float2{ 1.0f, 1.0f };
+			vertices[2].Pos = float3{ x1, y1, 0.0f }; vertices[2].UV = float2{ 1.0f, 0.0f };
+			vertices[3].Pos = float3{ x0, y1, 0.0f }; vertices[3].UV = float2{ 0.0f, 0.0f };
+
+			// Buffer
+			BufferDesc vb = {};
+			vb.Name = "Billboard.Quad.VB";
+			vb.Usage = USAGE_IMMUTABLE;
+			vb.BindFlags = BIND_VERTEX_BUFFER;
+			vb.Size = uint32(vertices.size() * sizeof(BillboardVertex));
+
+			BufferData init = {};
+			init.pData = vertices.data();
+			init.DataSize = vb.Size;
+
+			billboard.VertexBuffer = CreateVertexBuffer(vb, &init);
+			ASSERT(billboard.VertexBuffer, "Create billboard VB failed.");
+		}
+		// Index buffer
+		{
+			std::vector<uint16> indices = 
+			{
+				0, 1, 2, 
+				0, 2, 3 
+			};
+
+			BufferDesc ib = {};
+			ib.Name = "Billboard.Quad.IB";
+			ib.Usage = USAGE_IMMUTABLE;
+			ib.BindFlags = BIND_INDEX_BUFFER;
+			ib.Size = uint32(indices.size() * sizeof(uint16));
+
+			BufferData init = {};
+			init.pData = indices.data();
+			init.DataSize = ib.Size;
+
+			billboard.IndexBuffer = CreateIndexBuffer(ib, &init);
+			ASSERT(billboard.IndexBuffer, "CreateBillboardRenderData: Create billboard IB failed.");
+		}
+
+		static uint64 sBillboardId = 1;
+
+		m_BillboardCache.Store(sBillboardId, std::move(billboard));
+		return m_BillboardCache.Acquire(sBillboardId++);
+	}
+
 	void Renderer::CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader)
 	{
 		// TODO: 중복 생성 제거

@@ -8,13 +8,7 @@
 
 #include "Engine/RuntimeData/Public/Material.h"
 
-#include "Engine/RHI/Interface/ITexture.h"
-#include "Engine/RHI/Interface/ITextureView.h"
-#include "Engine/RHI/Interface/ISampler.h"
-
 #include "Engine/RHI/Interface/IBuffer.h"
-#include "Engine/RHI/Interface/IPipelineState.h"
-#include "Engine/RHI/Interface/IShaderResourceBinding.h"
 
 namespace shz
 {

@@ -30,7 +30,8 @@ namespace shz
 		// Register template for grass slot
 		{
 			hlsl::IndirectArgsTemplate t = {};
-			t.IndexCountPerInstance = m_pGrassMesh->IndexCount;
+			// t.IndexCountPerInstance = m_GrassDesc.pMeshLod0->IndexCount;
+			t.IndexCountPerInstance = 6; // Billboard
 			t.StartIndexLocation = 0;
 			t.BaseVertexLocation = 0;
 			t.StartInstanceLocation = 0;
@@ -179,7 +180,7 @@ namespace shz
 
 				psoCI.pCS = cs;
 
-				m_pGenCSO = renderer.AcquirePipelineState(psoCI, true);
+				m_pGenCSO = renderer.AcquirePipelineState(psoCI);
 				ASSERT(m_pGenCSO, "AcquireCompute(GrassGenerateInstances) failed.");
 
 				m_pGenCSO->CreateShaderResourceBinding(&m_pGenSRB, true);
@@ -288,7 +289,7 @@ namespace shz
 				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-				m_pCopyToMSAAPSO = renderer.AcquirePipelineState(STRING_HASH("CopyLightingToGrassMSAA"), psoCI, true);
+				m_pCopyToMSAAPSO = renderer.AcquirePipelineState(STRING_HASH("CopyLightingToGrassMSAA"), psoCI);
 				ASSERT(m_pCopyToMSAAPSO, "AcquirePipelineState(CopyLightingToGrassMSAA) failed.");
 
 				m_pCopyToMSAAPSO->CreateShaderResourceBinding(&m_pCopyToMSAASRB, true);
@@ -325,10 +326,37 @@ namespace shz
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				pContext->SetPipelineState(m_pGrassPSO);
-				pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				//pContext->SetPipelineState(m_pGrassPSO);
+				//pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
+				//IBuffer* ppVertexBuffers[] = { m_GrassDesc.pMeshLod0->VertexBuffer };
+				//uint64 offsets[] = { 0 };
+
+				//pContext->SetVertexBuffers(
+				//	0, 1, ppVertexBuffers, offsets,
+				//	RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+				//	SET_VERTEX_BUFFERS_FLAG_RESET);
+
+				//pContext->SetIndexBuffer(
+				//	m_GrassDesc.pMeshLod0->IndexBuffer, 0,
+				//	RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				//DrawIndexedIndirectAttribs dia = {};
+				//dia.IndexType = m_GrassDesc.pMeshLod0->IndexType;
+
+				//dia.DrawArgsOffset = m_IndirectSlot * 20u;
+				//dia.DrawCount = 1;
+				//dia.DrawArgsStride = 20;
+
+				//dia.pAttribsBuffer = renderer.GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+				//dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
+				//pContext->DrawIndexedIndirect(dia);
+
+				pContext->SetPipelineState(m_pGrassBillboardPSO);
+				pContext->CommitShaderResources(m_pGrassBillboardSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				IBuffer* ppVertexBuffers[] = { m_GrassDesc.pBillboardMeshLod2->VertexBuffer };
 				uint64 offsets[] = { 0 };
 
 				pContext->SetVertexBuffers(
@@ -337,11 +365,11 @@ namespace shz
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pContext->SetIndexBuffer(
-					m_pGrassMesh->IndexBuffer, 0,
+					m_GrassDesc.pBillboardMeshLod2->IndexBuffer, 0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				DrawIndexedIndirectAttribs dia = {};
-				dia.IndexType = m_pGrassMesh->IndexType;
+				dia.IndexType = VT_UINT16;
 
 				dia.DrawArgsOffset = m_IndirectSlot * 20u;
 				dia.DrawCount = 1;
@@ -354,122 +382,229 @@ namespace shz
 			},
 				[this, &renderer]()
 			{
-				GraphicsPipelineStateCreateInfo psoCI = {};
-				psoCI.PSODesc.Name = "PSO_GrassMSAA_A2C";
-				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-				auto& gp = psoCI.GraphicsPipeline;
-				gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-				gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-				gp.RasterizerDesc.FrontCounterClockwise = true;
-
-				// MSAA must match attachment sample count (4x)
-				gp.SmplDesc.Count = 4;
-				gp.SmplDesc.Quality = 0;
-
-				// Fixed depth for grass self-occlusion
-				gp.DepthStencilDesc.DepthEnable = true;
-				gp.DepthStencilDesc.DepthWriteEnable = true;
-				gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-				// A2C ON
-				gp.BlendDesc.AlphaToCoverageEnable = true;
-
-				// Shaders
-				ShaderCreateInfo vsCI = {};
-				vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				vsCI.EntryPoint = "main";
-				vsCI.Desc.Name = "GrassVS";
-				vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				vsCI.Desc.UseCombinedTextureSamplers = false;
-				vsCI.FilePath = m_GrassVS.c_str();
-
-				ShaderCreateInfo psCI = {};
-				psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				psCI.EntryPoint = "main";
-				psCI.Desc.Name = "GrassPS";
-				psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				psCI.Desc.UseCombinedTextureSamplers = false;
-				psCI.FilePath = m_GrassPS.c_str();
-
-				renderer.CreateShader(vsCI, &psoCI.pVS);
-				renderer.CreateShader(psCI, &psoCI.pPS);
-				ASSERT(psoCI.pVS && psoCI.pPS, "Grass VS/PS compile failed.");
-
-				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-				ShaderResourceVariableDesc vars[] =
+				// Grass mesh
 				{
-					{ SHADER_TYPE_PIXEL, "g_BaseColorTex",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				};
-				psoCI.PSODesc.ResourceLayout.Variables = vars;
-				psoCI.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+					GraphicsPipelineStateCreateInfo psoCI = {};
+					psoCI.PSODesc.Name = "PSO_GrassMSAA_A2C";
+					psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-				SamplerDesc linearWrap =
+					auto& gp = psoCI.GraphicsPipeline;
+					gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					gp.RasterizerDesc.FrontCounterClockwise = true;
+
+					// MSAA must match attachment sample count (4x)
+					gp.SmplDesc.Count = 4;
+					gp.SmplDesc.Quality = 0;
+
+					// Fixed depth for grass self-occlusion
+					gp.DepthStencilDesc.DepthEnable = true;
+					gp.DepthStencilDesc.DepthWriteEnable = true;
+					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+					// A2C ON
+					gp.BlendDesc.AlphaToCoverageEnable = true;
+
+					// Shaders
+					ShaderCreateInfo vsCI = {};
+					vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					vsCI.EntryPoint = "main";
+					vsCI.Desc.Name = "GrassVS";
+					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+					vsCI.Desc.UseCombinedTextureSamplers = false;
+					vsCI.FilePath = m_GrassVS.c_str();
+
+					ShaderCreateInfo psCI = {};
+					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					psCI.EntryPoint = "main";
+					psCI.Desc.Name = "GrassPS";
+					psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+					psCI.Desc.UseCombinedTextureSamplers = false;
+					psCI.FilePath = m_GrassPS.c_str();
+
+					renderer.CreateShader(vsCI, &psoCI.pVS);
+					renderer.CreateShader(psCI, &psoCI.pPS);
+					ASSERT(psoCI.pVS && psoCI.pPS, "Grass VS/PS compile failed.");
+
+					psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+					ShaderResourceVariableDesc vars[] =
+					{
+						{ SHADER_TYPE_PIXEL, "g_BaseColorTex",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+						{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					};
+					psoCI.PSODesc.ResourceLayout.Variables = vars;
+					psoCI.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+
+					SamplerDesc linearWrap =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+					};
+					SamplerDesc linearClamp =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+					};
+					SamplerDesc pointClamp =
+					{
+						FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+					};
+
+					SamplerDesc shadowClamp = {};
+					shadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.AddressU = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.AddressV = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.AddressW = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+					ImmutableSamplerDesc samplers[] =
+					{
+						{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler",  linearWrap },
+						{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+						{ SHADER_TYPE_PIXEL, "g_PointClampSampler",  pointClamp },
+						{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
+					};
+					psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+					psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
+					static LayoutElement layoutElems[] =
+					{
+						LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+						LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+						LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+						LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+					};
+					gp.InputLayout.LayoutElements = layoutElems;
+					gp.InputLayout.NumElements = _countof(layoutElems);
+
+					m_pGrassPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForwardMSAA"), psoCI, true);
+					ASSERT(m_pGrassPSO, "AcquirePipelineState(GrassForwardMSAA) failed.");
+
+					// Static bindings
+					m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances")->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
+					m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS")->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+					m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS")->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+					m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SceneDepth")->Set(renderer.GetTextureSRV(STRING_HASH("GBufferDepth")));
+
+					m_pGrassSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_GrassDesc.pMeshLod0->Sections[0].MaterialId, m_pGrassPSO);
+					ASSERT(m_pGrassSRB, "Grass SRB create failed.");
+				}
+
+				// Grass billboard 
 				{
-					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-				};
-				SamplerDesc linearClamp =
-				{
-					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-				};
-				SamplerDesc pointClamp =
-				{
-					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
-					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-				};
+					GraphicsPipelineStateCreateInfo psoCI = {};
+					psoCI.PSODesc.Name = "PSO_GrassBillboardMSAA_A2C";
+					psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-				SamplerDesc shadowClamp = {};
-				shadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
-				shadowClamp.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
-				shadowClamp.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
-				shadowClamp.AddressU = TEXTURE_ADDRESS_CLAMP;
-				shadowClamp.AddressV = TEXTURE_ADDRESS_CLAMP;
-				shadowClamp.AddressW = TEXTURE_ADDRESS_CLAMP;
-				shadowClamp.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
+					auto& gp = psoCI.GraphicsPipeline;
+					gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-				ImmutableSamplerDesc samplers[] =
-				{
-					{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler",  linearWrap },
-					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
-					{ SHADER_TYPE_PIXEL, "g_PointClampSampler",  pointClamp },
-					{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
-				};
-				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+					gp.RasterizerDesc.FrontCounterClockwise = true;
 
-				static LayoutElement layoutElems[] =
-				{
-					LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
-					LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-					LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
-					LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
-				};
-				gp.InputLayout.LayoutElements = layoutElems;
-				gp.InputLayout.NumElements = _countof(layoutElems);
+					// MSAA must match attachment sample count (4x)
+					gp.SmplDesc.Count = 4;
+					gp.SmplDesc.Quality = 0;
 
-				m_pGrassPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForwardMSAA"), psoCI, true);
-				ASSERT(m_pGrassPSO, "AcquirePipelineState(GrassForwardMSAA) failed.");
+					// Fixed depth for grass self-occlusion
+					gp.DepthStencilDesc.DepthEnable = true;
+					gp.DepthStencilDesc.DepthWriteEnable = true;
+					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-				// Static bindings
-				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
-					var->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
+					// A2C ON
+					gp.BlendDesc.AlphaToCoverageEnable = true;
 
-				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
-					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+					// Shaders
+					ShaderCreateInfo vsCI = {};
+					vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					vsCI.EntryPoint = "main";
+					vsCI.Desc.Name = "GrassBillboardVS";
+					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+					vsCI.Desc.UseCombinedTextureSamplers = false;
+					vsCI.FilePath = m_GrassBillboardVS.c_str();
 
-				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS"))
-					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
+					ShaderCreateInfo psCI = {};
+					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+					psCI.EntryPoint = "main";
+					psCI.Desc.Name = "GrassBillbiardPS";
+					psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+					psCI.Desc.UseCombinedTextureSamplers = false;
+					psCI.FilePath = m_GrassBillboardPS.c_str();
 
-				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SceneDepth"))
-					var->Set(renderer.GetTextureSRV(STRING_HASH("GBufferDepth")));
+					renderer.CreateShader(vsCI, &psoCI.pVS);
+					renderer.CreateShader(psCI, &psoCI.pPS);
+					ASSERT(psoCI.pVS&& psoCI.pPS, "Grass VS/PS compile failed.");
 
-				m_pGrassSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassPSO);
-				ASSERT(m_pGrassSRB, "Grass SRB create failed.");
+					psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+					SamplerDesc linearWrap =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+					};
+					SamplerDesc linearClamp =
+					{
+						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+					};
+					SamplerDesc pointClamp =
+					{
+						FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+					};
+
+					SamplerDesc shadowClamp = {};
+					shadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.MagFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.MipFilter = FILTER_TYPE_COMPARISON_LINEAR;
+					shadowClamp.AddressU = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.AddressV = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.AddressW = TEXTURE_ADDRESS_CLAMP;
+					shadowClamp.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+					ImmutableSamplerDesc samplers[] =
+					{
+						{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler",  linearWrap },
+						{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+						{ SHADER_TYPE_PIXEL, "g_PointClampSampler",  pointClamp },
+						{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
+					};
+					psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+					psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
+					static LayoutElement layoutElems[] =
+					{
+						LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+						LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+					};
+					gp.InputLayout.LayoutElements = layoutElems;
+					gp.InputLayout.NumElements = _countof(layoutElems);
+
+					m_pGrassBillboardPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForwardMSAA"), psoCI);
+					ASSERT(m_pGrassBillboardPSO, "AcquirePipelineState(GrassForwardMSAA) failed.");
+
+					// Static bindings
+					if (auto* pVar = m_pGrassBillboardPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
+					{
+						pVar->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
+					}
+					if (auto* pVar = m_pGrassBillboardPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SceneDepth"))
+					{
+						pVar->Set(renderer.GetTextureSRV(STRING_HASH("GBufferDepth")));
+					}
+					if (auto* pVar = m_pGrassBillboardPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_BaseColorTex"))
+					{
+						pVar->Set(m_GrassDesc.pBillboardMeshLod2->BaseColorTex->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+					}
+
+					m_pGrassBillboardPSO->CreateShaderResourceBinding(&m_pGrassBillboardSRB, true);
+					ASSERT(m_pGrassBillboardSRB, "Grass SRB create failed.");
+				}
 			});
 
 		// =====================================================================
@@ -539,7 +674,7 @@ namespace shz
 				pContext->SetPipelineState(m_pGrassShadowPSO);
 				pContext->CommitShaderResources(m_pGrassShadowSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
+				IBuffer* ppVertexBuffers[] = { m_GrassDesc.pMeshLod0->VertexBuffer };
 				uint64 offsets[] = { 0 };
 
 				pContext->SetVertexBuffers(
@@ -551,12 +686,12 @@ namespace shz
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pContext->SetIndexBuffer(
-					m_pGrassMesh->IndexBuffer,
+					m_GrassDesc.pMeshLod0->IndexBuffer,
 					0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				DrawIndexedIndirectAttribs dia;
-				dia.IndexType = m_pGrassMesh->IndexType;
+				dia.IndexType = m_GrassDesc.pMeshLod0->IndexType;
 
 				dia.DrawArgsOffset = m_IndirectSlot * 20u;
 				dia.DrawCount = 1;
@@ -654,7 +789,7 @@ namespace shz
 				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-				m_pGrassShadowPSO = renderer.AcquirePipelineState(STRING_HASH("GrassShadow"), psoCI, true);
+				m_pGrassShadowPSO = renderer.AcquirePipelineState(STRING_HASH("GrassShadow"), psoCI);
 				ASSERT(m_pGrassShadowPSO, "AcquirePipelineState(GrassShadow) failed.");
 
 				// ---- Bind static resources ----
@@ -675,7 +810,7 @@ namespace shz
 				{
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
 				}
-				m_pGrassShadowSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassShadowPSO);
+				m_pGrassShadowSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_GrassDesc.pMeshLod0->Sections[0].MaterialId, m_pGrassShadowPSO);
 				ASSERT(m_pGrassShadowSRB, "GrassShadow SRB create failed.");
 			});
 	}
