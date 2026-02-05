@@ -181,7 +181,7 @@ namespace shz
 				td.Height = m_Viewport.Height;
 				td.MipLevels = 1;
 				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-				td.SampleCount = 4; 
+				td.SampleCount = 4;
 				td.Usage = USAGE_DEFAULT;
 				td.BindFlags = BIND_RENDER_TARGET;
 				m_pRenderer->AddTexture(STRING_HASH("GrassColorMSAA"), td);
@@ -672,8 +672,8 @@ namespace shz
 
 		{
 			hlsl::GrassGenConstants gen = {};
+			gen.YOffset = -0.05f;
 
-			// --- Chunk placement ---
 			gen.ChunkSize = 4.0f;
 			gen.ChunkHalfExtent = 32;
 			gen.SamplesPerChunk = 256;

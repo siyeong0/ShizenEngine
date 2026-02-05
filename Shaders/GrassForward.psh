@@ -84,15 +84,23 @@ float4 main(PSInput IN) : SV_TARGET0
     
     float2 uv = IN.UV;
     
-	// Base color
+    // Base color (for shading) + Alpha (for A2C coverage)
     float4 baseColor4 = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
-    if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
-    {
-        baseColor4 *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
-    }
-    
     float3 baseColor = baseColor4.rgb;
     float alpha = baseColor4.a;
+    if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
+    {
+        // Reduce mip alpha wash-out
+        // Negative bias => sample higher-res mip => keeps thin blades from vanishing
+        float4 tex = g_BaseColorTex.SampleBias(g_LinearWrapSampler, uv, -0.75f); // tune: -0.5 ~ -1.0
+        baseColor *= tex.rgb;
+        alpha *= tex.a;
+    }
+    // Kill tiny fringes, so distant grass doesn't look foggy
+    alpha = saturate((alpha - 0.02f) / (1.0f - 0.02f)); // tune cutoff: 0.01~0.05
+    // Coverage shaping for A2C
+    // pow < 1 => stronger coverage => less washed out
+    alpha = pow(alpha, 0.60f); // tune: 0.50~0.80
     
 	// Normal (two-sided grass)
     float3 N = normalize(IN.NormalWS);
