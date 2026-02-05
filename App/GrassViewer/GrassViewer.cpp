@@ -27,37 +27,6 @@ namespace shz
 
 	namespace
 	{
-		static constexpr const char* kShaderRoot = "C:/Dev/ShizenEngine/Shaders";
-
-		static void setupDefaultViewFamily(ViewFamily& vf)
-		{
-			vf.Views.clear();
-			vf.Views.push_back({});
-		}
-
-		static void setupCameraDefault(FirstPersonCamera& cam, float aspect)
-		{
-			cam.SetPos(float3(-2.9f, 5.0f, 0.0f));
-			cam.SetRotation(-0.8f, 0.0f);
-			cam.SetMoveSpeed(3.0f);
-			cam.SetSpeedUpScales(5.0f, 1.0f);
-			cam.SetRotationSpeed(0.01f);
-
-			cam.SetProjAttribs(
-				0.1f,
-				5000.0f,
-				aspect,
-				PI / 4.0f,
-				SURFACE_TRANSFORM_IDENTITY);
-		}
-
-		static void setupDefaultGlobalLight(RenderScene::LightObject& light)
-		{
-			light.Direction = float3(0.4f, -1.0f, 0.3f);
-			light.Color = float3(1.0f, 1.0f, 1.0f);
-			light.Intensity = 2.0f;
-		}
-
 		static void updatePrimaryView(
 			ViewFamily& vf,
 			const GrassViewer::ViewportState& vp,
@@ -110,7 +79,7 @@ namespace shz
 			ASSERT(m_pRenderer, "Renderer is null.");
 
 			ASSERT(m_pEngineFactory, "EngineFactory is null.");
-			m_pEngineFactory->CreateDefaultShaderSourceStreamFactory(kShaderRoot, &m_pShaderSourceFactory);
+			m_pEngineFactory->CreateDefaultShaderSourceStreamFactory("C:/Dev/ShizenEngine/Shaders", &m_pShaderSourceFactory);
 			ASSERT(m_pShaderSourceFactory, "ShaderSourceFactory is null.");
 
 			ASSERT(m_pSwapChain, "SwapChain is null.");
@@ -332,10 +301,10 @@ namespace shz
 			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
 			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
 
-			tci.WorldSpacingX = 0.5f;
-			tci.WorldSpacingZ = 0.5f;
+			tci.WorldSpacingX = 1.0f;
+			tci.WorldSpacingZ = 1.0f;
 			tci.HeightScale = 300.0f;
-			tci.HeightOffset = -30.0f;
+			tci.HeightOffset = -80.0f;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pAssetManager, tci);
@@ -423,7 +392,7 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem, *m_pTerrainSystem);
 		}
 
 
@@ -566,11 +535,30 @@ namespace shz
 		}
 
 		// ViewFamily + Camera
-		setupDefaultViewFamily(m_ViewFamily);
-		setupCameraDefault(m_Camera, (float)m_Viewport.Width / (float)m_Viewport.Height);
+		{
+			m_ViewFamily.Views.clear();
+			m_ViewFamily.Views.push_back({});
+
+			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			m_Camera.SetRotation(-0.8f, 0.0f);
+			m_Camera.SetMoveSpeed(3.0f);
+			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
+			m_Camera.SetRotationSpeed(0.01f);
+
+			m_Camera.SetProjAttribs(
+				0.1f,
+				5000.0f,
+				(float)m_Viewport.Width / (float)m_Viewport.Height,
+				PI / 4.0f,
+				SURFACE_TRANSFORM_IDENTITY);
+		}
 
 		// Light
-		setupDefaultGlobalLight(m_GlobalLight);
+		{
+			m_GlobalLight.Direction = float3(0.4f, -1.0f, 0.3f);
+			m_GlobalLight.Color = float3(1.0f, 1.0f, 1.0f);
+			m_GlobalLight.Intensity = 2.0f;
+		}
 		m_GlobalLightHandle = m_pRenderScene->AddLight(m_GlobalLight);
 		ASSERT(m_GlobalLightHandle.IsValid(), "Failed to add global light.");
 

@@ -9,6 +9,7 @@ namespace shz
 {
 	class Renderer;
 	class IndirectArgsSystem;
+	class TerrainSystem;
 	struct StaticMeshRenderData;
 
 	class GrassSystem final
@@ -20,7 +21,7 @@ namespace shz
 		GrassSystem(const GrassSystem&) = delete;
 		GrassSystem& operator=(const GrassSystem&) = delete;
 
-		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect);
+		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, TerrainSystem& terrain);
 
 		uint32 GetIndirectSlot() const { return m_IndirectSlot; }
 		void SetGrassModel(const StaticMeshRenderData* pMesh) { m_pGrassMesh = pMesh; }

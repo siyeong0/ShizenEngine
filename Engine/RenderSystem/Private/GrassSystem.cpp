@@ -10,6 +10,7 @@
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
+#include "Engine/Framework/Public/TerrainSystem.h"
 
 namespace shz
 {
@@ -56,7 +57,7 @@ namespace shz
 	// ---------------------------------------------------------------------
 	// InstallPasses
 	// ---------------------------------------------------------------------
-	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect)
+	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, TerrainSystem& terrain)
 	{
 		// Allocate indirect slot for grass
 		m_IndirectSlot = indirect.AllocateSlot("GrassSystem");
@@ -108,7 +109,7 @@ namespace shz
 				// CPU also reads this for mapping / other passes may use
 				b.DeclareBufferCBVRead(kGrassGenCB);
 			},
-			[this, kInteractionField, kInteractionStamps, kInteractionConstantsCB](RenderPassContext& ctx)
+			[this, &terrain, kInteractionField, kInteractionStamps, kInteractionConstantsCB](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pScene, "Scene is null.");
@@ -136,9 +137,8 @@ namespace shz
 					{
 						hlsl::InteractionStamp s = interactionStamps[i];
 
-						// NOTE: old constants (1025/spacing(1,1)/center=1)
-						s.CenterXZ = WorldXZToTerrainUV(1025, 1025, 1.0f, 1.0f, 1, s.CenterXZ);
-						s.Radius = WorldRadiusToUv_MinAxis(1025, 1025, 1.0f, 1.0f, s.Radius);
+						s.CenterXZ = WorldXZToTerrainUV(terrain.GetWidth(), terrain.GetHeight(), terrain.GetWorldSpacingX(), terrain.GetWorldSpacingZ(), 1, s.CenterXZ);
+						s.Radius = WorldRadiusToUv_MinAxis(terrain.GetWidth(), terrain.GetHeight(), terrain.GetWorldSpacingX(), terrain.GetWorldSpacingZ(), s.Radius);
 
 						stampMap[i] = s;
 					}
