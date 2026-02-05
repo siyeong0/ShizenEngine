@@ -732,7 +732,7 @@ namespace shz
 		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
-		scene.BuildIndirectDrawPackets(STRING_HASH("GrassForward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
+		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
 
 		IBuffer* pIndirectArgs = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));

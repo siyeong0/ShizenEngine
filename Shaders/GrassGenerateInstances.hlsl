@@ -326,7 +326,7 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
             densityScaleBias;
 
         inst.Yaw = Rand01(seed ^ 0x6666u) * 6.2831853f;
-        inst.Pitch = lerp(-0.90f, 0.90f, Rand01(seed ^ 0x7777u));
+        inst.Pitch = lerp(g_GrassGenCB.MinPitch, g_GrassGenCB.MaxPitch, Rand01(seed ^ 0x7777u));
 
         inst.BendStrength =
             lerp(g_GrassGenCB.BendStrengthMin,

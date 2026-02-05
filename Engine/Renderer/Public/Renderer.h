@@ -168,7 +168,7 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 
 		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 passKey);
-		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey = 0) const;
+		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey) const;
 		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Material

@@ -9,6 +9,7 @@ namespace shz
 {
 	class Renderer;
 	class IndirectArgsSystem;
+	struct StaticMeshRenderData;
 
 	class GrassSystem final
 	{
@@ -22,6 +23,7 @@ namespace shz
 		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect);
 
 		uint32 GetIndirectSlot() const { return m_IndirectSlot; }
+		void SetGrassModel(const StaticMeshRenderData* pMesh) { m_pGrassMesh = pMesh; }
 
 	private:
 		static constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
@@ -48,6 +50,9 @@ namespace shz
 		// Shadow
 		RefCntAutoPtr<IPipelineState>         m_pGrassShadowPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassShadowSRB;
+
+		// Mesh
+		const StaticMeshRenderData* m_pGrassMesh = nullptr;
 
 		// Shaders
 		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";

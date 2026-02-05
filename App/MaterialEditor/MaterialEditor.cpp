@@ -129,8 +129,6 @@ namespace shz
 			case MATERIAL_BLEND_MODE_OPAQUE:        return "OPAQUE";
 			case MATERIAL_BLEND_MODE_MASKED:        return "MASKED";
 			case MATERIAL_BLEND_MODE_TRANSPARENT:   return "TRANSLUCENT";
-			case MATERIAL_BLEND_MODE_ADDITIVE:      return "ADDITIVE";
-			case MATERIAL_BLEND_MODE_PREMULTIPLIED: return "PREMULTIPLIED";
 			default:                                return "UNKNOWN";
 			}
 		}
@@ -155,7 +153,7 @@ namespace shz
 	// Main object access
 	// ------------------------------------------------------------
 
-	RenderScene::RenderObject* MaterialEditor::GetMainRenderObjectOrNull()
+	RenderScene::SceneObject* MaterialEditor::GetMainRenderObjectOrNull()
 	{
 		if (!m_pRenderScene)
 			return nullptr;
@@ -256,7 +254,7 @@ namespace shz
 		ASSERT(cpu, "CPU mesh is null.");
 
 		// Build GPU render data
-		m_Main.MeshRD = m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh");
+		m_Main.pMeshRD = &m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh");
 
 		if (m_bUniformScale)
 		{
@@ -265,7 +263,7 @@ namespace shz
 		}
 
 		m_Main.ObjectId = m_pRenderScene->AddObject(
-			m_Main.MeshRD, 
+			*m_Main.pMeshRD, 
 			Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale), 
 			m_Main.bCastShadow);
 		ASSERT(m_Main.ObjectId.IsValid(), "Failed to add RenderObject.");
@@ -285,12 +283,12 @@ namespace shz
 		if (!cpu)
 			return false;
 
-		RenderScene::RenderObject* obj = GetMainRenderObjectOrNull();
+		RenderScene::SceneObject* obj = GetMainRenderObjectOrNull();
 		if (!obj)
 			return false;
 
-		m_Main.MeshRD = m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh (Rebuild)");
-		obj->Mesh = m_Main.MeshRD;
+		m_Main.pMeshRD = &m_pRenderer->CreateStaticMeshRenderData(*cpu, m_Main.RebuildKey++, "MaterialEditor Main Mesh (Rebuild)");
+		obj->pMesh = m_Main.pMeshRD;
 
 		return true;
 	}
@@ -379,9 +377,6 @@ namespace shz
 
 		// 1) Create new material bound to new template
 		Material newMat(oldMat.GetName(), newTemplateName);
-
-		// 2) Copy render pass name and options (these have getters)
-		newMat.SetRenderPassName(oldMat.GetRenderPassName());
 
 		newMat.SetBlendMode(oldMat.GetBlendMode());
 		newMat.SetCullMode(oldMat.GetCullMode());
@@ -528,15 +523,15 @@ namespace shz
 		{
 			uint32 flags = 0;
 
-			if (HasTexturePath(ui.TexturePaths, "g_BaseColorTex"))          flags |= MAT_HAS_BASECOLOR;
-			if (HasTexturePath(ui.TexturePaths, "g_NormalTex"))             flags |= MAT_HAS_NORMAL;
+			if (HasTexturePath(ui.TexturePaths, "g_BaseColorTex"))          flags |= hlsl::MAT_HAS_BASECOLOR;
+			if (HasTexturePath(ui.TexturePaths, "g_NormalTex"))             flags |= hlsl::MAT_HAS_NORMAL;
 
 			if (HasTexturePath(ui.TexturePaths, "g_MRTex") ||
-				HasTexturePath(ui.TexturePaths, "g_MetallicRoughnessTex"))   flags |= MAT_HAS_MR;
+				HasTexturePath(ui.TexturePaths, "g_MetallicRoughnessTex"))   flags |= hlsl::MAT_HAS_MR;
 
-			if (HasTexturePath(ui.TexturePaths, "g_AOTex"))                 flags |= MAT_HAS_AO;
-			if (HasTexturePath(ui.TexturePaths, "g_EmissiveTex"))           flags |= MAT_HAS_EMISSIVE;
-			if (HasTexturePath(ui.TexturePaths, "g_HeightTex"))             flags |= MAT_HAS_HEIGHT;
+			if (HasTexturePath(ui.TexturePaths, "g_AOTex"))                 flags |= hlsl::MAT_HAS_AO;
+			if (HasTexturePath(ui.TexturePaths, "g_EmissiveTex"))           flags |= hlsl::MAT_HAS_EMISSIVE;
+			if (HasTexturePath(ui.TexturePaths, "g_HeightTex"))             flags |= hlsl::MAT_HAS_HEIGHT;
 
 			if (const char* flagsName = FindMaterialFlagsParamName(tmpl))
 			{
@@ -578,7 +573,9 @@ namespace shz
 		const uint32 slotCount = baked.GetMaterialSlotCount();
 		for (uint32 slot = 0; slot < slotCount; ++slot)
 		{
-			Material& mat = baked.GetMaterialSlot(slot);
+			MaterialId matId = baked.GetMaterialSlot(slot);
+
+			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 
 			SlotUiState& ui = GetOrCreateSlotUi(slot);
 			if (ui.Dirty)
@@ -782,6 +779,80 @@ namespace shz
 			{ 0.0f, 0.0f, 0.0f },
 			{ 1.0f, 1.0f, 1.0f },
 			true);
+
+		// GBuffer textures
+		static constexpr uint32 NUM_GBUFFERS = 4;
+		{
+			auto createGBufferTextureDesc = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> TextureDesc
+			{
+				TextureDesc td = {};
+				td.Name = name;
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = w;
+				td.Height = h;
+				td.MipLevels = 1;
+				td.Format = fmt;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+				return td;
+			};
+			m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
+			m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
+			m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
+			m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+
+			TextureDesc td = {};
+			td.Name = "GBufferDepth";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = m_Viewport.Width;
+			td.Height = m_Viewport.Height;
+			td.MipLevels = 1;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.Format = TEX_FORMAT_R32_TYPELESS;
+			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+
+			m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), td);
+
+			TextureViewDesc vd = {};
+			vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+			vd.Format = TEX_FORMAT_D32_FLOAT;
+
+			m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+
+			vd = {};
+			vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+			vd.Format = TEX_FORMAT_R32_FLOAT;
+			m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+		}
+
+		// Lighting
+		{
+			TextureDesc td = {};
+			td.Name = "Lighting";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = m_Viewport.Width;
+			td.Height = m_Viewport.Height;
+			td.MipLevels = 1;
+			td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+			m_pRenderer->AddTexture(STRING_HASH("Lighting"), td);
+		}
+
+		// Render systems
+		{
+			m_pDeferredSystem = std::make_unique<DeferredSystem>();
+			m_pShadowSystem = std::make_unique<ShadowSystem>();
+			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
+
+			m_pDeferredSystem->InstallPasses(*m_pRenderer);
+			m_pShadowSystem->InstallPasses(*m_pRenderer);
+			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
+		}
 	}
 
 	void MaterialEditor::Render()
@@ -1010,7 +1081,7 @@ namespace shz
 		// Apply transform live
 		if (m_Main.ImportedCpuMesh != nullptr)
 		{
-			if (RenderScene::RenderObject* obj = GetMainRenderObjectOrNull())
+			if (RenderScene::SceneObject* obj = GetMainRenderObjectOrNull())
 			{
 				obj->World = Matrix4x4::TRS(m_Main.Position, m_Main.Rotation, m_Main.Scale);
 				obj->WorldInvTranspose = obj->World.Inversed().Transposed();
@@ -1062,7 +1133,7 @@ namespace shz
 				m_pRenderer->OnResize(newW, newH);
 		}
 
-		ITextureView* pColor = m_pRenderer ? m_pRenderer->GetLightingSRV() : nullptr;
+		ITextureView* pColor = m_pRenderer ? m_pRenderer->GetTextureSRV(STRING_HASH("Lighting")) : nullptr;
 		if (pColor)
 		{
 			ImTextureID tid = reinterpret_cast<ImTextureID>(pColor);
@@ -1111,7 +1182,8 @@ namespace shz
 		}
 
 		const uint32 slotIndex = (uint32)std::clamp<int32>(m_SelectedSlot, 0, (int32)slotCount - 1);
-		Material& mat = cpu->GetMaterialSlot(slotIndex);
+		MaterialId matId = cpu->GetMaterialSlot(slotIndex);
+		Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 		const MaterialTemplate& tmpl = mat.GetTemplate();
 
 		SlotUiState& ui = GetOrCreateSlotUi(slotIndex);
@@ -1173,13 +1245,6 @@ namespace shz
 
 			ImGui::SameLine();
 			ImGui::TextDisabled("Current: %s", mat.GetTemplateName().c_str());
-
-			// Render pass name (unchanged)
-			{
-				std::string rp = mat.GetRenderPassName();
-				if (InputTextStdString("RenderPass", rp))
-					mat.SetRenderPassName(rp);
-			}
 		}
 
 		ImGui::Spacing();
@@ -1198,20 +1263,16 @@ namespace shz
 				case MATERIAL_BLEND_MODE_OPAQUE:        sel = 0; break;
 				case MATERIAL_BLEND_MODE_MASKED:        sel = 1; break;
 				case MATERIAL_BLEND_MODE_TRANSPARENT:   sel = 2; break;
-				case MATERIAL_BLEND_MODE_ADDITIVE:      sel = 3; break;
-				case MATERIAL_BLEND_MODE_PREMULTIPLIED: sel = 4; break;
 				default:                                sel = 0; break;
 				}
 
-				if (ImGui::Combo("BlendMode", &sel, items, 5))
+				if (ImGui::Combo("BlendMode", &sel, items, 3))
 				{
 					static const MATERIAL_BLEND_MODE map[] =
 					{
 						MATERIAL_BLEND_MODE_OPAQUE,
 						MATERIAL_BLEND_MODE_MASKED,
 						MATERIAL_BLEND_MODE_TRANSPARENT,
-						MATERIAL_BLEND_MODE_ADDITIVE,
-						MATERIAL_BLEND_MODE_PREMULTIPLIED
 					};
 					mat.SetBlendMode(map[sel]);
 					ui.Dirty = true;
@@ -1576,21 +1637,6 @@ namespace shz
 
 		ImGuiIO& io = ImGui::GetIO();
 		ImGui::Text("ImGui FPS: %.1f", io.Framerate);
-
-		if (m_pRenderer)
-		{
-			const auto passTable = m_pRenderer->GetPassDrawCallCountTable();
-
-			uint64 total = 0;
-			for (const auto& kv : passTable)
-				total += kv.second;
-
-			ImGui::Separator();
-			ImGui::Text("Total Draw Calls: %llu", (unsigned long long)total);
-
-			for (const auto& kv : passTable)
-				ImGui::Text("%s: %llu", kv.first.c_str(), (unsigned long long)kv.second);
-		}
 
 		ImGui::End();
 	}

@@ -7,6 +7,7 @@
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 
@@ -63,7 +64,7 @@ namespace shz
 		// Register template for grass slot
 		{
 			hlsl::IndirectArgsTemplate t = {};
-			t.IndexCountPerInstance = 39; // TODO: mesh에서 얻는 값으로 교체
+			t.IndexCountPerInstance = m_pGrassMesh->IndexCount;
 			t.StartIndexLocation = 0;
 			t.BaseVertexLocation = 0;
 			t.StartInstanceLocation = 0;
@@ -484,7 +485,7 @@ namespace shz
 
 				b.DeclareBufferCBVRead(kGrassRenderCB);
 			},
-			[this, kIndirectArgsBuffer](RenderPassContext& ctx)
+			[this, &renderer, kIndirectArgsBuffer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
@@ -492,29 +493,40 @@ namespace shz
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				for (const DrawIndirectPacket& pkt : ctx.ForwardIndirectPackets)
-				{
-					pContext->SetPipelineState(m_pGrassPSO);
-					pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pContext->SetPipelineState(m_pGrassPSO);
+				pContext->CommitShaderResources(m_pGrassSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-					IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
-					uint64 offsets[] = { 0 };
+				IBuffer* ppVertexBuffers[] = { m_pGrassMesh->VertexBuffer };
+				uint64 offsets[] = { 0 };
 
-					pContext->SetVertexBuffers(
-						0,
-						1,
-						ppVertexBuffers,
-						offsets,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
+				pContext->SetVertexBuffers(
+					0,
+					1,
+					ppVertexBuffers,
+					offsets,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+					SET_VERTEX_BUFFERS_FLAG_RESET);
 
-					pContext->SetIndexBuffer(
-						pkt.IndexBuffer,
-						0,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pContext->SetIndexBuffer(
+					m_pGrassMesh->IndexBuffer,
+					0,
+					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-					pContext->DrawIndexedIndirect(pkt.DrawAttribs);
-				}
+				DrawIndexedIndirectAttribs dia;
+				dia.IndexType = m_pGrassMesh->IndexType;
+			
+				dia.DrawArgsOffset = m_IndirectSlot * 20u;
+				dia.DrawCount = 1;
+				dia.DrawArgsStride = 20;
+
+				dia.pAttribsBuffer = renderer.GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+				dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
+
+				dia.pCounterBuffer = nullptr;
+				dia.CounterOffset = 0;
+				dia.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
+
+				pContext->DrawIndexedIndirect(dia);
 			},
 				[this, &renderer]()
 			{
@@ -557,10 +569,16 @@ namespace shz
 				ShaderResourceVariableDesc vars[] =
 				{
 					{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				psoCI.PSODesc.ResourceLayout.Variables = vars;
 				psoCI.PSODesc.ResourceLayout.NumVariables = _countof(vars);
 
+				SamplerDesc linearWrap =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+				};
 				SamplerDesc linearClamp =
 				{
 					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
@@ -578,6 +596,7 @@ namespace shz
 
 				ImmutableSamplerDesc samplers[] =
 				{
+					{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
 					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
 					{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
 				};
@@ -610,7 +629,7 @@ namespace shz
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
 				}
 
-				m_pGrassPSO->CreateShaderResourceBinding(&m_pGrassSRB, true);
+				m_pGrassSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassPSO);
 				ASSERT(m_pGrassSRB, "Grass SRB create failed.");
 			});
 		// =====================================================================

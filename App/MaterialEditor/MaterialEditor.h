@@ -9,6 +9,10 @@
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 #include "Engine/Renderer/Public/ViewFamily.h"
+#include "Engine/RenderSystem/Public/DeferredSystem.h"
+#include "Engine/RenderSystem/Public/ShadowSystem.h"
+#include "Engine/RenderSystem/Public/PostProcessSystem.h"
+#include "Engine/Framework/Public/TerrainSystem.h"
 
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/AssetManager/Public/AssetRef.hpp"
@@ -78,8 +82,8 @@ namespace shz
 			StaticMesh* ImportedCpuMesh = nullptr; // owns CPU mesh when imported
 
 			// GPU + Scene
-			StaticMeshRenderData MeshRD = {};
-			Handle<RenderScene::RenderObject> ObjectId = {};
+			const StaticMeshRenderData* pMeshRD = {};
+			Handle<RenderScene::SceneObject> ObjectId = {};
 
 			uint64 RebuildKey = 1;
 		};
@@ -113,7 +117,7 @@ namespace shz
 
 		bool RebuildMainMeshRenderData(); // CreateStaticMesh(key++) and patch scene object
 
-		RenderScene::RenderObject* GetMainRenderObjectOrNull();
+		RenderScene::SceneObject* GetMainRenderObjectOrNull();
 
 		SlotUiState& GetOrCreateSlotUi(uint32 SlotIndex);
 		void SyncSlotUiFromMaterial(SlotUiState& Ui, const Material& Mat);
@@ -149,6 +153,10 @@ namespace shz
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
 
+		std::unique_ptr<DeferredSystem> m_pDeferredSystem;
+		std::unique_ptr<ShadowSystem> m_pShadowSystem;
+		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
+
 		ViewportPanelState m_Viewport = {};
 		ViewFamily        m_ViewFamily = {};
 		FirstPersonCamera m_Camera = {};
@@ -165,7 +173,7 @@ namespace shz
 		std::string m_MainMeshSavePath = "C:/Dev/ShizenEngine/Assets/Exported/Main.shzmesh.json";
 
 		// Floor mesh
-		Handle<RenderScene::RenderObject> m_Floor = {};
+		Handle<RenderScene::SceneObject> m_Floor = {};
 		std::string m_FloorMeshPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/floor/FbxFloor.fbx";
 
 		// Material selection

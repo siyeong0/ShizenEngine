@@ -396,6 +396,25 @@ namespace shz
 			m_pShadowSystem = std::make_unique<ShadowSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
 
+			// ------------------------------------------------------------
+			// Grass model
+			// ------------------------------------------------------------
+			{
+				// AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
+				AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic.shzmesh.json");
+				// AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.shzmesh.json");
+				AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
+				ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
+
+				grassPtr->RecomputeBounds();
+				const Box& b = grassPtr->GetBounds();
+				float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+				grassPtr->ApplyUniformScale(yScale01);
+				grassPtr->MoveBottomToOrigin(true);
+
+				m_pGrassSystem->SetGrassModel(&m_pRenderer->CreateStaticMeshRenderData(*grassPtr));
+			}
+
 			m_pTerrainSystem->InstallPasses(*m_pRenderer);
 			m_pDeferredSystem->InstallPasses(*m_pRenderer);
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
@@ -619,16 +638,18 @@ namespace shz
 			// --- Chunk placement ---
 			gen.ChunkSize = 4.0f;
 			gen.ChunkHalfExtent = 32;
-			gen.SamplesPerChunk = 2048;
+			gen.SamplesPerChunk = 256;
 			gen.Jitter = 0.95f;
 
-			gen.MinScale = 5.7f;
-			gen.MaxScale = 11.1f;
-			gen.SpawnProb = 0.75f;
+			gen.MinPitch = -0.2f;
+			gen.MinPitch = 0.2f;
+			gen.MinScale = 7.7f;
+			gen.MaxScale = 13.1f;
+			gen.SpawnProb = 0.85f;
 			gen.SpawnRadius = 1000.0f;
 
-			gen.BendStrengthMin = 0.95f;
-			gen.BendStrengthMax = 1.55f;
+			gen.BendStrengthMin = 0.65f;
+			gen.BendStrengthMax = 0.75f;
 			gen.SeedSalt = 0xA53A9E37u;
 
 			gen.DensityTiling = 0.02f;
@@ -657,12 +678,12 @@ namespace shz
 			ren.DirectLightStrength = 0.22f;
 
 			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
-			ren.WindStrength = 1.15f;
-			ren.WindSpeed = 1.75f;
+			ren.WindStrength = 0.25f;
+			ren.WindSpeed = 0.75f;
 
 			ren.WindFreq = 0.155f;
 			ren.WindGust = 0.42f;
-			ren.MaxBendAngle = 1.50f;
+			ren.MaxBendAngle = 0.80f;
 			ren._pad1 = 0.0f;
 
 			ren.InteractionBendAngle = 1.0f;
@@ -917,29 +938,6 @@ namespace shz
 				rb.bStartActive = true;
 				e.set<CRigidbody>(rb);
 			}
-		}
-
-		// ------------------------------------------------------------
-		// Grass model
-		// ------------------------------------------------------------
-		{
-			AssetRef<StaticMesh> grassRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/GrassBlade.shzmesh.json");
-			AssetPtr<StaticMesh> grassPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassRef);
-			ASSERT(grassPtr && grassPtr->IsValid(), "Failed to load grass mesh.");
-
-			grassPtr->RecomputeBounds();
-			const Box& b = grassPtr->GetBounds();
-			float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-			grassPtr->ApplyUniformScale(yScale01);
-			grassPtr->MoveBottomToOrigin(true);
-
-			RenderScene::IndirectObjectDesc indirectDesc = {};
-			indirectDesc.pMesh = &m_pRenderer->CreateStaticMeshRenderData(*grassPtr);
-			indirectDesc.bCastShadow = true;
-			indirectDesc.PassKey = STRING_HASH("GrassForward");
-			indirectDesc.IndirectSlot = m_pGrassSystem->GetIndirectSlot();
-
-			m_pRenderScene->AddIndirect(indirectDesc);
 		}
 	}
 

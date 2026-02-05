@@ -28,7 +28,7 @@ namespace shz
 
 		void InstallPasses(Renderer& renderer);
 
-		uint32 AllocateSlot(const char* debugName);
+		uint32 AllocateSlot(const std::string& debugName);
 		void ResetAllSlots();
 
 		void SetTemplate(uint32 slot, const hlsl::IndirectArgsTemplate& t);

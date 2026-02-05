@@ -1,30 +1,30 @@
 {
-  "Bin": "GrassPatch.shzmesh.bin",
+  "Bin": "GrassBasic.shzmesh.bin",
   "Bounds": {
     "Max": [
-      13.26789665222168,
-      19.920753479003906,
-      12.206338882446289
+      43.99717712402344,
+      68.34222412109375,
+      42.84308624267578
     ],
     "Min": [
-      -12.974446296691895,
-      0.0,
-      -12.198491096496582
+      -44.055267333984375,
+      -0.8376693725585938,
+      -42.302764892578125
     ]
   },
   "Format": "shzmesh",
-  "IndexCount": 13344,
+  "IndexCount": 972,
   "IndexType": "u16",
   "Indices": {
-    "Count": 13344,
-    "Offset": 129536
+    "Count": 972,
+    "Offset": 19008
   },
   "MaterialSlots": [
     {
-      "Name": "DefaultMaterial",
+      "Name": "lambert1",
       "Options": {
-        "BlendMode": 0,
-        "CullMode": 3,
+        "BlendMode": 1,
+        "CullMode": 1,
         "DepthEnable": true,
         "DepthFunc": 4,
         "DepthWriteEnable": true,
@@ -51,15 +51,14 @@
         "LinearWrapSamplerName": "g_LinearWrapSampler",
         "TextureBindingMode": 1
       },
-      "RenderPassName": "GBuffer",
       "Resources": [
         {
           "HasSamplerOverride": false,
           "Name": "g_BaseColorTex",
-          "SourcePath": "C:/Dev/ShizenEngine/Assets/Assimp/Grass/grass/textures/gras.RGB.png",
+          "SourcePath": "C:/Dev/ShizenEngine/Assets/Grass/basic/textures/diffuse.png",
           "TextureAssetID": {
-            "Hi": 3965246287990100922,
-            "Lo": 7874346294952477271
+            "Hi": 4827752848601061925,
+            "Lo": 12112103636209472472
           },
           "Type": 1
         },
@@ -108,17 +107,17 @@
       "Values": [
         {
           "Data": [
-            205,
-            204,
-            76,
+            0,
+            0,
+            0,
             63,
-            205,
-            204,
-            76,
+            0,
+            0,
+            0,
             63,
-            205,
-            204,
-            76,
+            0,
+            0,
+            0,
             63,
             0,
             0,
@@ -160,7 +159,7 @@
           "Data": [
             0,
             0,
-            128,
+            0,
             63
           ],
           "Name": "g_RoughnessFactor",
@@ -237,17 +236,17 @@
     {
       "BaseVertex": 0,
       "FirstIndex": 0,
-      "IndexCount": 13344,
+      "IndexCount": 972,
       "LocalBounds": {
         "Max": [
-          13.26789665222168,
-          19.920753479003906,
-          12.206338882446289
+          43.99717712402344,
+          68.34222412109375,
+          42.84308624267578
         ],
         "Min": [
-          -12.974446296691895,
-          0.0,
-          -12.198491096496582
+          -44.055267333984375,
+          -0.8376693725585938,
+          -42.302764892578125
         ]
       },
       "MaterialSlot": 0
@@ -255,26 +254,26 @@
   ],
   "Streams": {
     "Normals": {
-      "Count": 2944,
-      "Offset": 35328,
+      "Count": 432,
+      "Offset": 5184,
       "Stride": 12
     },
     "Positions": {
-      "Count": 2944,
+      "Count": 432,
       "Offset": 0,
       "Stride": 12
     },
     "Tangents": {
-      "Count": 2944,
-      "Offset": 70656,
+      "Count": 432,
+      "Offset": 10368,
       "Stride": 12
     },
     "TexCoord0": {
-      "Count": 2944,
-      "Offset": 105984,
+      "Count": 432,
+      "Offset": 15552,
       "Stride": 8
     }
   },
   "Version": 1,
-  "VertexCount": 2944
+  "VertexCount": 432
 }

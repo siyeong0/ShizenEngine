@@ -125,7 +125,7 @@ namespace shz
 			});
 	}
 
-	uint32 IndirectArgsSystem::AllocateSlot(const char* /*debugName*/)
+	uint32 IndirectArgsSystem::AllocateSlot(const std::string& debugName)
 	{
 		for (uint32 i = 0; i < MAX_NUM_INDIRECTS; ++i)
 		{

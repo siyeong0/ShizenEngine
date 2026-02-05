@@ -34,6 +34,12 @@
     <ProjectReference Include="..\..\Engine\Core\Engine-Core.vcxproj">
       <Project>{c901be66-8350-4df9-8576-50ce5f052836}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Engine\ECSIntegration\Engine-ECSIntegration.vcxproj">
+      <Project>{84341448-36d1-4e36-851e-58e1de3f57f5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\ECS\Engine-ECS.vcxproj">
+      <Project>{530b7f9f-ffe6-413e-a672-018b84b8f262}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Engine\Framework\Engine-Framework.vcxproj">
       <Project>{a7b8ef1b-d2d8-4c3e-acc8-fe57f22df41f}</Project>
     </ProjectReference>
@@ -52,8 +58,14 @@
     <ProjectReference Include="..\..\Engine\ImGui\Engine-ImGui.vcxproj">
       <Project>{7f85a29a-8214-48e6-9531-db5a4d102df5}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Engine\Physics\Engine-Physics.vcxproj">
+      <Project>{3644ea8f-a325-4b1c-9062-9102b4722eb7}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Engine\Renderer\Engine-Renderer.vcxproj">
       <Project>{434146a2-c1af-4d85-8e9b-2faf1727b469}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Engine\RenderSystem\Engine-RenderSystem.vcxproj">
+      <Project>{575b95e9-809e-428a-80af-e3548231d6f2}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\Engine\RHI\Engine-RHI.vcxproj">
       <Project>{945ab006-8bd2-442f-822d-2b72abf5ed6c}</Project>

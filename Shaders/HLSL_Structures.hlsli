@@ -155,8 +155,8 @@ struct GrassGenConstants
 {
     // Optional extra vertical offset for grass placement (meters)
     float YOffset;
-    float _padG0;
-    float _padG1;
+    float MinPitch;
+    float MaxPitch;
     float _padG2;
 
     // Chunk placement

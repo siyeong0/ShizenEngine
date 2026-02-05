@@ -13,6 +13,31 @@ cbuffer GRASS_RENDER_CONSTANTS
     GrassRenderConstants g_GrassCB;
 };
 
+cbuffer MATERIAL_CONSTANTS
+{
+    // BaseColor/Opacity
+    float4 g_BaseColorFactor; // rgb = base color, a = opacity
+
+    // Emissive
+    float3 g_EmissiveFactor; // emissive rgb
+    float g_EmissiveIntensity; // scalar
+
+    // PBR factors
+    float g_RoughnessFactor; // scalar
+    float g_NormalScale; // scalar
+    float g_OcclusionStrength; // scalar
+    float g_AlphaCutoff; // scalar (for MASK)
+
+    float g_MetallicFactor; // scalar
+    uint g_MaterialFlags; // bitmask HAS_*
+    uint2 _pad0; // 16-byte align
+}
+
+// Resources
+Texture2D g_BaseColorTex;
+
+SamplerState g_LinearWrapSampler;
+
 // Shadow Map
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
@@ -46,12 +71,20 @@ static const float EXTRA_SPECULAR_POW = 32.0; // 8..128
 // ----------------------------------------------------------------------------
 float4 main(PSInput IN) : SV_TARGET0
 {
+    float2 uv = IN.UV;
+    
 	// Base color
     float4 baseColor4 = g_GrassCB.BaseColorFactor * g_GrassCB.Tint;
+    if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
+    {
+        baseColor4 *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
+    }
+    
     if (g_GrassCB.AlphaCut > 0.0 && baseColor4.a < g_GrassCB.AlphaCut)
     {
         discard;
     }
+    
     float3 baseColor = baseColor4.rgb;
 
 	// Normal (two-sided grass)
