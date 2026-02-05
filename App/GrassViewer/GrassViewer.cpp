@@ -157,7 +157,7 @@ namespace shz
 			// Lighting
 			{
 				TextureDesc td = {};
-				td.Name = "Lighting";
+				td.Name = "LightingScene";
 				td.Type = RESOURCE_DIM_TEX_2D;
 				td.Width = m_Viewport.Width;
 				td.Height = m_Viewport.Height;
@@ -167,10 +167,57 @@ namespace shz
 				td.Usage = USAGE_DEFAULT;
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-				m_pRenderer->AddTexture(STRING_HASH("Lighting"), td);
+				m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
+				m_pRenderer->AddTexture(STRING_HASH("LightingFinal"), td);
 			}
 
-			// Grass
+			// Grass (MSAA)
+			{
+				// 4x MSAA Color
+				TextureDesc td = {};
+				td.Name = "GrassColorMSAA";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
+				td.SampleCount = 4; 
+				td.Usage = USAGE_DEFAULT;
+				td.BindFlags = BIND_RENDER_TARGET;
+				m_pRenderer->AddTexture(STRING_HASH("GrassColorMSAA"), td);
+
+				// 4x MSAA Depth
+				td = {};
+				td.Name = "GrassDepthMSAA";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.SampleCount = 4;
+				td.Usage = USAGE_DEFAULT;
+				td.Format = TEX_FORMAT_R32_TYPELESS;
+				td.BindFlags = BIND_DEPTH_STENCIL;
+				m_pRenderer->AddTexture(STRING_HASH("GrassDepthMSAA"), td);
+
+				TextureViewDesc vd = {};
+				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+				vd.Format = TEX_FORMAT_D32_FLOAT;
+				m_pRenderer->AddTextureView(STRING_HASH("GrassDepthMSAA"), vd);
+
+				td = {};
+				td.Name = "GrassColor";
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+				m_pRenderer->AddTexture(STRING_HASH("GrassColor"), td);
+			}
+
+			// Grass buffers
 			{
 				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
 				constexpr uint32 INTERACTION_FIELD_SIZE = 1025;
@@ -821,7 +868,7 @@ namespace shz
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 10000;
+			constexpr uint  NUM_TREES = 0;
 
 			std::mt19937 rng(1337);
 			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);

@@ -52,12 +52,18 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         m_pGrassShadowPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pGrassShadowSRB;
 
+		// Copy Lighting(1x) -> GrassColorMSAA(4x)
+		RefCntAutoPtr<IPipelineState>         m_pCopyToMSAAPSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pCopyToMSAASRB;
+
 		// Mesh
 		const StaticMeshRenderData* m_pGrassMesh = nullptr;
 
 		// Shaders
 		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
 		std::string m_InteractionCS = "InteractionFieldUpdate.hlsl";
+		std::string m_CopyVS = "Fullscreen.vsh";
+		std::string m_CopyPS = "CopyTexture.psh";
 		std::string m_GrassVS = "GrassForward.vsh";
 		std::string m_GrassPS = "GrassForward.psh";
 		std::string m_GrassShadowVS = "GrassShadow.vsh";		

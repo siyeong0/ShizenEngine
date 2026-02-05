@@ -91,13 +91,16 @@ namespace shz
 			RefCntAutoPtr<IFramebuffer> pRHIFramebuffer;
 			std::vector<ITextureView*> StaticFBAttachments;
 			bool bUseSwapChainBackBuffer = false;
+
+			EPassExecutionDomain eDomain = EPassExecutionDomain::RenderPass;
 		};
 
 		void AddPass(
 			const std::string& name, 
 			std::function<void(RenderPassBuilder&)> buildLambda, 
 			std::function<void(RenderPassContext&)> executeLambda,
-			std::function<void()> onCreated = {});
+			std::function<void()> onCreated = {},
+			EPassExecutionDomain domain = EPassExecutionDomain::RenderPass);
 
 		// 
 		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);

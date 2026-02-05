@@ -117,7 +117,7 @@ namespace shz
 		// Pass: Lighting
 		// ------------------------------------------------------------
 		renderer.AddPass(
-			"Lighting",
+			"LightingScene",
 			[](RenderPassBuilder& b)
 			{
 				const uint64 kG0 = STRING_HASH("GBuffer0_Albedo");
@@ -126,7 +126,7 @@ namespace shz
 				const uint64 kG3 = STRING_HASH("GBuffer3_Emissive");
 				const uint64 kGD = STRING_HASH("GBufferDepth");
 				const uint64 kShadow = STRING_HASH("ShadowMap");
-				const uint64 kLighting = STRING_HASH("Lighting");
+				const uint64 kLighting = STRING_HASH("LightingScene");
 
 				// Inputs
 				b.DeclareTextureSRVRead(kG0);
@@ -244,8 +244,8 @@ namespace shz
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-				m_pLightingPSO = renderer.AcquirePipelineState(STRING_HASH("Lighting"), psoCi);
-				ASSERT(m_pLightingPSO, "AcquirePipelineState(Lighting) failed.");
+				m_pLightingPSO = renderer.AcquirePipelineState(STRING_HASH("LightingScene"), psoCi);
+				ASSERT(m_pLightingPSO, "AcquirePipelineState(LightingScene) failed.");
 
 				m_pLightingPSO->CreateShaderResourceBinding(&m_pLightingSRB, true);
 				ASSERT(m_pLightingSRB, "Lighting SRB create failed.");

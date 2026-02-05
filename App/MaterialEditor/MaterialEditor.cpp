@@ -830,7 +830,7 @@ namespace shz
 		// Lighting
 		{
 			TextureDesc td = {};
-			td.Name = "Lighting";
+			td.Name = "LightingScene";
 			td.Type = RESOURCE_DIM_TEX_2D;
 			td.Width = m_Viewport.Width;
 			td.Height = m_Viewport.Height;
@@ -840,7 +840,7 @@ namespace shz
 			td.Usage = USAGE_DEFAULT;
 			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-			m_pRenderer->AddTexture(STRING_HASH("Lighting"), td);
+			m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
 		}
 
 		// Render systems
@@ -1133,7 +1133,7 @@ namespace shz
 				m_pRenderer->OnResize(newW, newH);
 		}
 
-		ITextureView* pColor = m_pRenderer ? m_pRenderer->GetTextureSRV(STRING_HASH("Lighting")) : nullptr;
+		ITextureView* pColor = m_pRenderer ? m_pRenderer->GetTextureSRV(STRING_HASH("LightingScene")) : nullptr;
 		if (pColor)
 		{
 			ImTextureID tid = reinterpret_cast<ImTextureID>(pColor);

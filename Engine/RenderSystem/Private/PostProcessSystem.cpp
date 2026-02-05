@@ -15,7 +15,7 @@ namespace shz
 			"Post",
 			[](RenderPassBuilder& b)
 			{
-				const uint64 kLighting = STRING_HASH("Lighting");
+				const uint64 kLighting = STRING_HASH("LightingFinal");
 
 				// Read final lighting result
 				b.DeclareTextureSRVRead(kLighting);
@@ -56,7 +56,7 @@ namespace shz
 					if (auto* v = m_pPostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
 					{
 						v->Set(
-							ctx.pRegistry->GetTextureSRV(STRING_HASH("Lighting")),
+							ctx.pRegistry->GetTextureSRV(STRING_HASH("LightingFinal")),
 							SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 				}

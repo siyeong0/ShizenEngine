@@ -35,8 +35,10 @@ cbuffer MATERIAL_CONSTANTS
 }
 
 // Resources
-Texture2D g_BaseColorTex;
+Texture2D<float> g_SceneDepth;
+SamplerState g_PointClampSampler;
 
+Texture2D g_BaseColorTex;
 SamplerState g_LinearWrapSampler;
 
 // Shadow Map
@@ -72,6 +74,14 @@ static const float EXTRA_SPECULAR_POW = 32.0; // 8..128
 // ----------------------------------------------------------------------------
 float4 main(PSInput IN) : SV_TARGET0
 {
+    float2 sceneUV = IN.Pos.xy * g_FrameCB.InvViewportSize;
+    float sceneDepth = g_SceneDepth.SampleLevel(g_PointClampSampler, sceneUV, 0);
+    
+    if (IN.Pos.z > sceneDepth + 1e-4)
+    {
+        discard;
+    }
+    
     float2 uv = IN.UV;
     
 	// Base color
@@ -81,10 +91,9 @@ float4 main(PSInput IN) : SV_TARGET0
         baseColor4 *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
     }
     
-    AlphaDitherTest(baseColor4.a * g_BaseColorFactor.a, IN.Pos);
-    
     float3 baseColor = baseColor4.rgb;
-
+    float alpha = baseColor4.a;
+    
 	// Normal (two-sided grass)
     float3 N = normalize(IN.NormalWS);
     if (!IN.bFrontFace) // Flip normal for back faces to keep lighting consistent
@@ -150,5 +159,5 @@ float4 main(PSInput IN) : SV_TARGET0
 	// Grass specular is usually close to white
     lit += directLight * spec;
 
-    return float4(lit, 1.0);
+    return float4(lit, alpha);
 }

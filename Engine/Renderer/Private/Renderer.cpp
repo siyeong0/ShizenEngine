@@ -778,7 +778,7 @@ namespace shz
 				ctx->TransitionResourceStates(static_cast<uint32>(barriers.size()), barriers.data());
 			}
 
-			if (pass.pRHIRenderpass)
+			if (pass.eDomain == EPassExecutionDomain::RenderPass && pass.pRHIRenderpass)
 			{
 				m_PassCtx.pRHIRenderPass = pass.pRHIRenderpass;
 
@@ -826,7 +826,8 @@ namespace shz
 		const std::string& name,
 		std::function<void(RenderPassBuilder&)> buildLambda,
 		std::function<void(RenderPassContext&)> executeLambda,
-		std::function<void()> onCreated)
+		std::function<void()> onCreated,
+		EPassExecutionDomain domain)
 	{
 		ASSERT(!name.empty(), "Pass name is empty.");
 		ASSERT(buildLambda, "buildLambda is null.");
@@ -839,6 +840,7 @@ namespace shz
 
 		RenderPassItem rpItem = {};
 		rpItem.Name = name;
+		rpItem.eDomain = domain;
 		rpItem.ExecuteLambda = std::move(executeLambda);
 
 		RenderPassBuilder builder = {};

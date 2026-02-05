@@ -73,7 +73,9 @@ namespace shz
 			indirect.SetTemplate(m_IndirectSlot, t);
 		}
 
-		// Resource IDs (centralized)
+		// -----------------------------------------------------------------
+	   // Resource IDs
+	   // -----------------------------------------------------------------
 		const uint64 kInteractionField = STRING_HASH("InteractionField");
 		const uint64 kInteractionStamps = STRING_HASH("InteractionStampBuffer");
 		const uint64 kInteractionConstantsCB = STRING_HASH("InteractionConstantsCB");
@@ -84,13 +86,15 @@ namespace shz
 		const uint64 kGrassDensityField = STRING_HASH("GrassDensityField");
 		const uint64 kGrassInstanceBuffer = STRING_HASH("GrassInstanceBuffer");
 
-		// Shared indirect resources (Renderer created)
 		const uint64 kIndirectArgsBuffer = STRING_HASH("IndirectArgsBuffer");
 		const uint64 kIndirectCountBuffer = STRING_HASH("IndirectCountBuffer");
 
-		const uint64 kLightingTex = STRING_HASH("Lighting");
 		const uint64 kDepthTex = STRING_HASH("GBufferDepth");
 		const uint64 kShadowMap = STRING_HASH("ShadowMap");
+
+		// MSAA resources you added
+		const uint64 kGrassColorMSAA = STRING_HASH("GrassColorMSAA");
+		const uint64 kGrassDepthMSAA = STRING_HASH("GrassDepthMSAA");
 
 		// =====================================================================
 		// Pass 1) GrassInteraction (compute: decay + apply stamps)
@@ -465,25 +469,123 @@ namespace shz
 					var->Set(renderer.GetBuffer(kGrassGenCB));
 				}
 			});
-
 		// =====================================================================
-		// Pass 3) GrassForward (graphics, DrawIndexedIndirect)
+		// Pass 3) CopyLightingToGrassMSAA (graphics fullscreen)
+		//   Lighting(1x) -> GrassColorMSAA(4x)
 		// =====================================================================
 		renderer.AddPass(
-			"GrassForward",
+			"CopyLightingToGrassMSAA",
 			[&](RenderPassBuilder& b)
 			{
-				b.DeclareTextureRTVReadWrite(kLightingTex);
-				b.DeclareTextureDSVRead(kDepthTex);
+				b.DeclareTextureRTVWrite(kGrassColorMSAA);
+				b.DeclareTextureSRVRead(STRING_HASH("LightingScene"));
+			},
+			[this, &renderer, kGrassColorMSAA](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(m_pCopyToMSAAPSO && m_pCopyToMSAASRB, "CopyToMSAA PSO/SRB not ready.");
 
+				IDeviceContext* pContext = ctx.pImmediateContext;
+
+				// Bind src texture (Lighting SRV)
+				if (auto* var = m_pCopyToMSAASRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_SrcTex"))
+				{
+					var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("LightingScene")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+
+				pContext->SetPipelineState(m_pCopyToMSAAPSO);
+				pContext->CommitShaderResources(m_pCopyToMSAASRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				DrawAttribs da = {};
+				da.NumVertices = 3;
+				da.Flags = DRAW_FLAG_VERIFY_ALL;
+				pContext->Draw(da);
+			},
+				[this, &renderer]()
+			{
+				GraphicsPipelineStateCreateInfo psoCI = {};
+				psoCI.PSODesc.Name = "PSO_CopyLightingToGrassMSAA";
+				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+
+				auto& gp = psoCI.GraphicsPipeline;
+				gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+				gp.SmplDesc.Count = 4;
+				gp.SmplDesc.Quality = 0;
+
+				gp.DepthStencilDesc.DepthEnable = false;
+				gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
+
+				ShaderCreateInfo vsCI = {};
+				vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				vsCI.EntryPoint = "main";
+				vsCI.Desc.Name = "FullscreenTriVS";
+				vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+				vsCI.Desc.UseCombinedTextureSamplers = false;
+				vsCI.FilePath = m_CopyVS.c_str();
+
+				ShaderCreateInfo psCI = {};
+				psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				psCI.EntryPoint = "main";
+				psCI.Desc.Name = "CopyTexturePS";
+				psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+				psCI.Desc.UseCombinedTextureSamplers = false;
+				psCI.FilePath = m_CopyPS.c_str();
+
+				renderer.CreateShader(vsCI, &psoCI.pVS);
+				renderer.CreateShader(psCI, &psoCI.pPS);
+				ASSERT(psoCI.pVS && psoCI.pPS, "Copy shaders compile failed.");
+
+				psoCI.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+				ShaderResourceVariableDesc vars[] =
+				{
+					{ SHADER_TYPE_PIXEL, "g_SrcTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				};
+				psoCI.PSODesc.ResourceLayout.Variables = vars;
+				psoCI.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+
+				SamplerDesc linearClamp =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
+				ImmutableSamplerDesc samplers[] =
+				{
+					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+				};
+				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
+				psoCI.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+
+				m_pCopyToMSAAPSO = renderer.AcquirePipelineState(STRING_HASH("CopyLightingToGrassMSAA"), psoCI, true);
+				ASSERT(m_pCopyToMSAAPSO, "AcquirePipelineState(CopyLightingToGrassMSAA) failed.");
+
+				m_pCopyToMSAAPSO->CreateShaderResourceBinding(&m_pCopyToMSAASRB, true);
+				ASSERT(m_pCopyToMSAASRB, "CopyToMSAA SRB create failed.");
+			});
+		// =====================================================================
+		// Pass 4) GrassForwardMSAA (graphics, DrawIndexedIndirect)
+		//   Draw into GrassColorMSAA(4x) + GrassDepthMSAA(4x)
+		//   Read scene depth from GBufferDepth as SRV (manual occlusion)
+		// =====================================================================
+		renderer.AddPass(
+			"GrassForwardMSAA",
+			[&](RenderPassBuilder& b)
+			{
+				// MSAA targets
+				b.DeclareTextureRTVReadWrite(kGrassColorMSAA);
+				b.DeclareTextureDSVWrite(kGrassDepthMSAA);
+
+				// Inputs
 				b.DeclareTextureSRVRead(kShadowMap);
+				b.DeclareTextureSRVRead(kDepthTex); // Scene depth SRV (R32_FLOAT)
 
 				b.DeclareBufferSRVRead(kGrassInstanceBuffer);
-
-				// Indirect args read (shared buffer)
 				b.DeclareBufferIndirectArgsRead(kIndirectArgsBuffer);
-
 				b.DeclareBufferCBVRead(kGrassRenderCB);
+
+				b.SetClearDepthStencil(kGrassDepthMSAA, 1.f, 0);
 			},
 			[this, &renderer, kIndirectArgsBuffer](RenderPassContext& ctx)
 			{
@@ -500,21 +602,17 @@ namespace shz
 				uint64 offsets[] = { 0 };
 
 				pContext->SetVertexBuffers(
-					0,
-					1,
-					ppVertexBuffers,
-					offsets,
+					0, 1, ppVertexBuffers, offsets,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 					SET_VERTEX_BUFFERS_FLAG_RESET);
 
 				pContext->SetIndexBuffer(
-					m_pGrassMesh->IndexBuffer,
-					0,
+					m_pGrassMesh->IndexBuffer, 0,
 					RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				DrawIndexedIndirectAttribs dia;
+				DrawIndexedIndirectAttribs dia = {};
 				dia.IndexType = m_pGrassMesh->IndexType;
-			
+
 				dia.DrawArgsOffset = m_IndirectSlot * 20u;
 				dia.DrawCount = 1;
 				dia.DrawArgsStride = 20;
@@ -522,16 +620,12 @@ namespace shz
 				dia.pAttribsBuffer = renderer.GetBuffer(STRING_HASH("IndirectArgsBuffer"));
 				dia.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
-				dia.pCounterBuffer = nullptr;
-				dia.CounterOffset = 0;
-				dia.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
-
 				pContext->DrawIndexedIndirect(dia);
 			},
-				[this, &renderer]()
+				[this, &renderer, kDepthTex]()
 			{
 				GraphicsPipelineStateCreateInfo psoCI = {};
-				psoCI.PSODesc.Name = "PSO_Grass";
+				psoCI.PSODesc.Name = "PSO_GrassMSAA_A2C";
 				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
 				auto& gp = psoCI.GraphicsPipeline;
@@ -540,10 +634,19 @@ namespace shz
 				gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 				gp.RasterizerDesc.FrontCounterClockwise = true;
 
+				// MSAA must match attachment sample count (4x)
+				gp.SmplDesc.Count = 4;
+				gp.SmplDesc.Quality = 0;
+
+				// Fixed depth for grass self-occlusion
 				gp.DepthStencilDesc.DepthEnable = true;
 				gp.DepthStencilDesc.DepthWriteEnable = true;
 				gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
+				// A2C ON
+				gp.BlendDesc.AlphaToCoverageEnable = true;
+
+				// Shaders
 				ShaderCreateInfo vsCI = {};
 				vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 				vsCI.EntryPoint = "main";
@@ -568,7 +671,7 @@ namespace shz
 
 				ShaderResourceVariableDesc vars[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_PIXEL, "g_BaseColorTex",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				psoCI.PSODesc.ResourceLayout.Variables = vars;
@@ -584,6 +687,11 @@ namespace shz
 					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 				};
+				SamplerDesc pointClamp =
+				{
+					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
 
 				SamplerDesc shadowClamp = {};
 				shadowClamp.MinFilter = FILTER_TYPE_COMPARISON_LINEAR;
@@ -596,8 +704,9 @@ namespace shz
 
 				ImmutableSamplerDesc samplers[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
+					{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler",  linearWrap },
 					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+					{ SHADER_TYPE_PIXEL, "g_PointClampSampler",  pointClamp },
 					{ SHADER_TYPE_PIXEL, "g_ShadowCmpSampler",   shadowClamp },
 				};
 				psoCI.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
@@ -613,25 +722,57 @@ namespace shz
 				gp.InputLayout.LayoutElements = layoutElems;
 				gp.InputLayout.NumElements = _countof(layoutElems);
 
-				m_pGrassPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForward"), psoCI, true);
-				ASSERT(m_pGrassPSO, "AcquirePipelineState(GrassForward) failed.");
+				m_pGrassPSO = renderer.AcquirePipelineState(STRING_HASH("GrassForwardMSAA"), psoCI, true);
+				ASSERT(m_pGrassPSO, "AcquirePipelineState(GrassForwardMSAA) failed.");
 
+				// Static bindings
 				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "g_GrassInstances"))
-				{
 					var->Set(renderer.GetBufferSRV(STRING_HASH("GrassInstanceBuffer")));
-				}
+
 				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "GRASS_RENDER_CONSTANTS"))
-				{
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
-				}
+
 				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "GRASS_RENDER_CONSTANTS"))
-				{
 					var->Set(renderer.GetBuffer(STRING_HASH("GrassRenderConstantsCB")));
-				}
+
+				if (auto* var = m_pGrassPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_SceneDepth"))
+					var->Set(renderer.GetTextureSRV(kDepthTex));
 
 				m_pGrassSRB = renderer.AcquireShaderResourceBindingFromMaterial(m_pGrassMesh->Sections[0].MaterialId, m_pGrassPSO);
 				ASSERT(m_pGrassSRB, "Grass SRB create failed.");
 			});
+
+		// =====================================================================
+		// Pass 5) ResolveGrassToLighting
+		//   Resolve GrassColorMSAA(4x) -> Lighting(1x)
+		// =====================================================================
+		renderer.AddPass(
+			"ResolveGrassToLighting",
+			[&](RenderPassBuilder& b)
+			{
+				b.DeclareTextureRTVWrite(STRING_HASH("LightingFinal"));
+				b.DeclareTextureSRVRead(kGrassColorMSAA);
+			},
+			[this, &renderer, kGrassColorMSAA](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+
+				IDeviceContext* pContext = ctx.pImmediateContext;
+
+				ITexture* pSrc = ctx.pRegistry->GetTexture(kGrassColorMSAA);
+				ITexture* pDst = ctx.pRegistry->GetTexture(STRING_HASH("LightingFinal"));
+				ASSERT(pSrc && pDst, "Resolve textures are null.");
+
+				ResolveTextureSubresourceAttribs r = {};
+				r.SrcMipLevel = 0;
+				r.DstMipLevel = 0;
+				r.SrcSlice = 0;
+				r.DstSlice = 0;
+
+				pContext->ResolveTextureSubresource(pSrc, pDst, r);
+			}, {}, EPassExecutionDomain::OutsideRenderPass);
+
 		// =====================================================================
 		// Pass X) GrassShadow (graphics, DrawIndexedIndirect into ShadowMap)
 		// =====================================================================

@@ -26,6 +26,12 @@ namespace shz
 		RENDER_ACCESS_READWRITE = 2,
 	};
 
+	enum class EPassExecutionDomain : uint8
+	{
+		RenderPass,   // inside render pass (RT/DS attachments)
+		OutsideRenderPass, // no render pass begin/end
+	};
+
 	// ---------------------------------------------------------------------
 	// What view/state the access implies (minimal set)
 	// - Renderer가 이걸 보고 RESOURCE_STATE로 매핑해 Transition 자동화
