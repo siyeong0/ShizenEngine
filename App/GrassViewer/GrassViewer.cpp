@@ -116,8 +116,8 @@ namespace shz
 		const Shader& shader = m_pRenderer->GetShader(pbr);
 
 		Material2 mat("test_mat");
-		mat.SetTexture("BaseColorTex", m_pAssetManager->RegisterAsset<Texture>("C:\Dev\ShizenEngine\Assets\Assimp\Basic\MetalRoughSpheres\glTF\Spheres_BaseColor.png"));
-		mat.SetTexture("g_MetallicRoughnessTex", m_pAssetManager->RegisterAsset<Texture>("C:\Dev\ShizenEngine\Assets\Assimp\Basic\MetalRoughSpheres\glTF\Spheres_MetalRough.png"));
+		mat.SetTexture("BaseColorTex", m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Assimp/Basic/MetalRoughSpheres/glTF/Spheres_BaseColor.png"));
+		mat.SetTexture("g_MetallicRoughnessTex", m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Assimp/Basic/MetalRoughSpheres/glTF/Spheres_MetalRough.png"));
 		mat.SetFloat4("g_BaseColorFactor", {1.0f, 1.0f, 1.0f, 1.0f});
 		mat.SetFloat3("g_EmissiveFactor", {1.0f, 1.0f, 1.0f});
 		mat.SetFloat("g_EmissiveIntensity", 1.0f);
