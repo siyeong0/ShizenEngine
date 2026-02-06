@@ -65,6 +65,7 @@
 			<!-- Recommended build settings -->
 			<MultiProcessorCompilation>true</MultiProcessorCompilation>
 			<ConformanceMode>true</ConformanceMode>
+			<DisableSpecificWarnings>26812;%(DisableSpecificWarnings)</DisableSpecificWarnings>
 		</ClCompile>
 
 		<!-- Linker settings -->
