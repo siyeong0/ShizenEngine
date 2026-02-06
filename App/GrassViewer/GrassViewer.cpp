@@ -108,22 +108,29 @@ namespace shz
 
 		Shader::RegisterRenderer(m_pRenderer.get());
 
-		std::vector<Shader::StageDesc> stages;
-		Shader::StageDesc vs = {};
-		vs.ShaderType = SHADER_TYPE_VERTEX;
-		vs.FilePath = "GBuffer.vsh";
-		vs.EntryPoint = "main";
-		stages.push_back(vs);
+		ShaderId pbr = m_pRenderer->CreateShader({
+			{SHADER_TYPE_VERTEX, "GBuffer.vsh", "main"},
+			{SHADER_TYPE_PIXEL, "GBuffer.psh", "main"},
+			});
 
-		Shader::StageDesc ps = {};
-		ps.ShaderType = SHADER_TYPE_PIXEL;
-		ps.FilePath = "GBuffer.psh";
-		ps.EntryPoint = "main";
-		stages.push_back(ps);
-
-		Shader gbufferShader(stages);
+		const Shader& shader = m_pRenderer->GetShader(pbr);
 
 		Material2 mat("test_mat");
+		mat.SetTexture("BaseColorTex", m_pAssetManager->RegisterAsset<Texture>("C:\Dev\ShizenEngine\Assets\Assimp\Basic\MetalRoughSpheres\glTF\Spheres_BaseColor.png"));
+		mat.SetTexture("g_MetallicRoughnessTex", m_pAssetManager->RegisterAsset<Texture>("C:\Dev\ShizenEngine\Assets\Assimp\Basic\MetalRoughSpheres\glTF\Spheres_MetalRough.png"));
+		mat.SetFloat4("g_BaseColorFactor", {1.0f, 1.0f, 1.0f, 1.0f});
+		mat.SetFloat3("g_EmissiveFactor", {1.0f, 1.0f, 1.0f});
+		mat.SetFloat("g_EmissiveIntensity", 1.0f);
+		mat.SetFloat("g_RoughnessFactor", 0.5f);
+		mat.SetFloat("g_NormalScale", 1.0f);
+		mat.SetFloat("g_OcclusionStrength", 0.5f);
+		mat.SetFloat("g_AlphaCutoff", 0.5f);
+		mat.SetFloat("g_MetallicFactor", 0.8f);
+		mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_MR);
+
+		AssetRef<StaticMesh> meshRef = m_pAssetManager->RegisterAsset<StaticMesh>("");
+		AssetPtr<StaticMesh> meshPtr = m_pAssetManager->LoadBlocking(meshRef);
+		StaticMesh& mesh = *meshPtr.Get();
 
 		// -----------------------------------------------------------------
 		// Create common resources for passes
@@ -382,7 +389,7 @@ namespace shz
 				// LOD1 : Cross-plane
 				AssetRef<StaticMesh> grassCrossRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.shzmesh.json");
 				AssetPtr<StaticMesh> grassCrossPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassCrossRef);
-				ASSERT(grassCrossPtr&& grassCrossPtr->IsValid(), "Failed to load grass mesh.");
+				ASSERT(grassCrossPtr && grassCrossPtr->IsValid(), "Failed to load grass mesh.");
 				uniform01(*grassCrossPtr);
 				gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(*grassCrossPtr);
 

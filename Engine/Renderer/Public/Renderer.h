@@ -27,6 +27,7 @@
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
+#include "Engine/Renderer/Public/Shader.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
@@ -97,8 +98,8 @@ namespace shz
 		};
 
 		void AddPass(
-			const std::string& name, 
-			std::function<void(RenderPassBuilder&)> buildLambda, 
+			const std::string& name,
+			std::function<void(RenderPassBuilder&)> buildLambda,
 			std::function<void(RenderPassContext&)> executeLambda,
 			std::function<void()> onCreated = {},
 			EPassExecutionDomain domain = EPassExecutionDomain::RenderPass);
@@ -165,13 +166,18 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 
 		const BillboardRenderData& CreateBillboardRenderData(
-			const AssetRef<Texture>& colorTexRef, 
-			MATERIAL_BLEND_MODE blendMode, 
-			float2 scale = { 1.0f, 1.0f }, 
+			const AssetRef<Texture>& colorTexRef,
+			MATERIAL_BLEND_MODE blendMode,
+			float2 scale = { 1.0f, 1.0f },
 			float2 pivot01 = { 0.5f, 0.5f });
 
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);
+
+		struct ShaderSpec { SHADER_TYPE Type; const char* FilePath; const char* EntryPoint; };
+		ShaderId CreateShader(std::initializer_list<ShaderSpec> shaders);
+
+		const Shader& GetShader(ShaderId id) const;
 
 		// PipelineState
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(const GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
@@ -200,7 +206,7 @@ namespace shz
 		IDeviceObject* resolveDeviceObject(const RenderPassResourceAccess& a) const;
 
 	private:
-		RefCntAutoPtr<IFramebuffer> m_pSwapChainFramebuffer; 
+		RefCntAutoPtr<IFramebuffer> m_pSwapChainFramebuffer;
 		RefCntAutoPtr<IRenderPass> m_pPresentRenderPass;
 
 		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
@@ -218,6 +224,7 @@ namespace shz
 		uint32 m_Height = 0;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+		std::unordered_map<ShaderId, Shader> m_ShaderLibrary;
 
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 

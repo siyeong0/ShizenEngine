@@ -283,6 +283,7 @@ namespace shz
 			m_pPipelineStateManager.reset();
 		}
 
+		m_ShaderLibrary.clear();
 		m_pShaderSourceFactory.Release();
 		m_pAssetManager = nullptr;
 
@@ -1586,6 +1587,43 @@ namespace shz
 
 		m_pDevice->CreateShader(sci, ppOutShader);
 		ASSERT(*ppOutShader, "Failed to create shader.");
+	}
+
+	ShaderId Renderer::CreateShader(std::initializer_list<ShaderSpec> shaders)
+	{
+		std::string shaderKeyString = "";
+		for (const ShaderSpec& spec : shaders)
+		{
+			shaderKeyString += std::to_string(spec.Type);
+			shaderKeyString += spec.FilePath;
+			shaderKeyString += spec.EntryPoint;
+		}
+		ShaderId id = STRING_HASH(shaderKeyString);
+
+		auto it = m_ShaderLibrary.find(id);
+		if (it != m_ShaderLibrary.end())
+		{
+			return id;
+		}
+
+		std::vector<Shader::StageDesc> stages;
+		for (const ShaderSpec& spec : shaders)
+		{
+			Shader::StageDesc desc = {};
+			desc.ShaderType = spec.Type;
+			desc.FilePath = spec.FilePath;
+			desc.EntryPoint = spec.EntryPoint;
+			stages.push_back(desc);
+		}
+
+		m_ShaderLibrary.emplace(id, stages);
+		return id;
+	}
+
+	const Shader& Renderer::GetShader(ShaderId id) const
+	{
+		ASSERT(m_ShaderLibrary.find(id) != m_ShaderLibrary.end(), "Shader not exists.");
+		return m_ShaderLibrary.at(id);
 	}
 
 	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineState(const GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources)
