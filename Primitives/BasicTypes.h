@@ -74,6 +74,16 @@ namespace shz
 		int operator[](size_t idx) const { return (&x)[idx]; }
 	};
 
+	struct int4
+	{
+		int x;
+		int y;
+		int z;
+		int w;
+
+		int operator[](size_t idx) const { return (&x)[idx]; }
+	};
+
 	struct uint2
 	{
 		uint x;

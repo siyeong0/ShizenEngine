@@ -146,6 +146,8 @@ namespace shz
 		void RegisterStaticBufferSRV(const std::string& name, RenderResourceId id); // Structured/Typed/ByteAddress SRV
 		void RegisterStaticBufferUAV(const std::string& name, RenderResourceId id); // RWStructured/RWByteAddress UAV 
 
+		bool IsCommonStaticResource(const std::string& name) const { return m_pPipelineStateManager->IsCommonStaticResource(name); }
+
 		template<typename T>
 		void UpdateBuffer(uint64 id, const T& data)
 		{

@@ -18,6 +18,9 @@
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
 
+#include "Engine/Renderer/Public/Shader.h"
+#include "Engine/RuntimeData/Public/Material2.h"
+
 namespace shz
 {
 	namespace hlsl
@@ -102,6 +105,25 @@ namespace shz
 
 			m_pRenderer->Initialize(rendererCI);
 		}
+
+		Shader::RegisterRenderer(m_pRenderer.get());
+
+		std::vector<Shader::StageDesc> stages;
+		Shader::StageDesc vs = {};
+		vs.ShaderType = SHADER_TYPE_VERTEX;
+		vs.FilePath = "GBuffer.vsh";
+		vs.EntryPoint = "main";
+		stages.push_back(vs);
+
+		Shader::StageDesc ps = {};
+		ps.ShaderType = SHADER_TYPE_PIXEL;
+		ps.FilePath = "GBuffer.psh";
+		ps.EntryPoint = "main";
+		stages.push_back(ps);
+
+		Shader gbufferShader(stages);
+
+		Material2 mat("test_mat");
 
 		// -----------------------------------------------------------------
 		// Create common resources for passes

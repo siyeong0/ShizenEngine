@@ -67,7 +67,7 @@ namespace shz
 	{
 		ASSERT(!name.empty(), "name is empty.");
 		ASSERT(m_pResourceRegistry->GetTexture(id) != nullptr, "Texture resource with ID %llu not found in registry", id);
-		m_CommonStaticTextureResources.emplace_back(name, id);
+		m_CommonStaticTextureResources[name] = id;
 	}
 
 	void PipelineStateManager::RegisterStaticBufferCBV(const std::string& name, RenderResourceId id)
@@ -89,6 +89,18 @@ namespace shz
 		ASSERT(!name.empty(), "name is empty.");
 		ASSERT(m_pResourceRegistry->GetBuffer(id) != nullptr, "Buffer resource with ID %llu not found in registry", id);
 		m_CommonStaticBufferUAVs[name] = id;
+	}
+
+	bool PipelineStateManager::IsCommonStaticResource(const std::string& name) const
+	{
+		if (m_CommonStaticTextureResources.find(name) != m_CommonStaticTextureResources.end() ||
+			m_CommonStaticBufferCBVs.find(name) != m_CommonStaticBufferCBVs.end() ||
+			m_CommonStaticBufferSRVs.find(name) != m_CommonStaticBufferSRVs.end() ||
+			m_CommonStaticBufferUAVs.find(name) != m_CommonStaticBufferUAVs.end())
+		{
+			return true;
+		}
+		return false;
 	}
 
 	void PipelineStateManager::bindCommonStaticResources(IPipelineState* pPSO)

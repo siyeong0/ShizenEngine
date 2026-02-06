@@ -160,6 +160,7 @@
     <ClInclude Include="Public\RenderGraphTypes.h" />
     <ClInclude Include="Public\RenderPassBuilder.h" />
     <ClInclude Include="Public\RenderPassContext.h" />
+    <ClInclude Include="Public\Shader.h" />
     <ClInclude Include="Public\StaticMeshRenderData.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />
     <ClInclude Include="Public\Renderer.h" />
@@ -178,6 +179,7 @@
     <ClCompile Include="Private\Renderer.cpp" />
     <ClCompile Include="Private\RenderResourceRegistry.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
+    <ClCompile Include="Private\Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
