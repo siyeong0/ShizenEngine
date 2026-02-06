@@ -131,10 +131,4 @@ namespace shz
 		const Material2ParamId id = STRING_HASH(name);
 		MaterialTexture& matTex = m_Textures[id];
 	}
-
-	void Material2::Clear()
-	{
-		m_Textures.clear();
-		m_Values.clear();
-	}
 } // namespace shz

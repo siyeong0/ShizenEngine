@@ -39,6 +39,14 @@ namespace shz
 
 		const std::string& GetName() const noexcept { return m_Name; }
 
+		// Options
+		void SetBlendMode(MATERIAL_BLEND_MODE blendMode) { m_BlendMode = blendMode; }
+		void SetCullMode(CULL_MODE cullMode) { m_CullMode = cullMode; }
+		void SetCCW(bool bCCW) { m_bFrontCounterClockWise = bCCW; }
+		void SetDepthTestEnable(bool bDepthTestEnable) { m_bDepthEnalbe = bDepthTestEnable; }
+		void SetDepthWriteEnable(bool bDepthWriteEnable) { m_bDepthWriteEnable = bDepthWriteEnable; }
+		void SetDepthComparisonFunc(COMPARISON_FUNCTION func) { m_DepthFunc = func; }
+
 		// Scalars (float)
 		void SetRawValue(const std::string& name, MATERIAL_VALUE_TYPE type, const void* data, uint32 byteSize);
 
@@ -69,10 +77,17 @@ namespace shz
 		// Textures
 		void SetTexture(const std::string& name, const AssetRef<Texture>& tex);
 
-		void Clear();
-
 	private:
 		std::string  m_Name = {};
+
+		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
+		CULL_MODE m_CullMode = CULL_MODE_BACK;
+		bool m_bFrontCounterClockWise = true;
+
+		bool m_bDepthEnalbe = true;
+		bool m_bDepthWriteEnable = true;
+		COMPARISON_FUNCTION m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
 		std::unordered_map<Material2ParamId, MaterialValueBlob> m_Values = {};
 		std::unordered_map<Material2ParamId, MaterialTexture> m_Textures = {};
 	};
