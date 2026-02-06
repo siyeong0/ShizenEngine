@@ -18,13 +18,12 @@ cbuffer GRASS_GEN_CONSTANTS
 };
 
 // Outputs
-RWStructuredBuffer<GrassInstance> g_OutInstances;
+RWStructuredBuffer<GrassInstance> g_OutInstancesLOD0;
+RWStructuredBuffer<GrassInstance> g_OutInstancesLOD1;
+RWStructuredBuffer<GrassInstance> g_OutInstancesLOD2;
 
 // uint Counter (4 bytes) at byte offset 0
-RWByteAddressBuffer g_Counter;
-
-// Instance cap (must match buffer capacity on CPU side)
-static const uint MAX_INSTANCES = 1u << 24;
+RWByteAddressBuffer g_CounterBuffer;
 
 // HeightField (R16_UNORM sampled as normalized float 0..1)
 Texture2D<float> g_HeightField;
@@ -237,6 +236,9 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
     int2 chunkGrid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
 
     float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+    
+    // camXZ = float2(0, 0);
+    
     float chunkSize = g_GrassGenCB.ChunkSize;
 
     // Heightfield-aligned chunk coord around camera
@@ -276,7 +278,8 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 
         // Spawn radius (camera-local)
         float2 dc = posXZ - camXZ;
-        if (dot(dc, dc) > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
+        float distanceCameraSqr = dot(dc, dc);
+        if (distanceCameraSqr > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
             continue;
 
         // Base density (tiled)
@@ -306,12 +309,6 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         if (Rand01(seed ^ 0x4444u) > effectiveProb)
             continue;
 
-        uint idx;
-        g_Counter.InterlockedAdd(0, 1, idx);
-
-        if (idx >= MAX_INSTANCES)
-            return;
-
         float y = SampleWorldHeight(posXZ);
 
         GrassInstance inst;
@@ -335,6 +332,23 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 
         inst.Press = press;
 
-        g_OutInstances[idx] = inst;
+        if (distanceCameraSqr < g_GrassGenCB.LOD0Distance * g_GrassGenCB.LOD0Distance)
+        {
+            uint idx;
+            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD0 * 4, 1, idx);
+            g_OutInstancesLOD0[idx] = inst;
+        }
+        else if (distanceCameraSqr < g_GrassGenCB.LOD1Distance * g_GrassGenCB.LOD1Distance)
+        {
+            uint idx;
+            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD1 * 4, 1, idx);
+            g_OutInstancesLOD1[idx] = inst;
+        }
+        else
+        {
+            uint idx;
+            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD2 * 4, 1, idx);
+            g_OutInstancesLOD2[idx] = inst;
+        }
     }
 }

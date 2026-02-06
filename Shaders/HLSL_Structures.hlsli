@@ -153,11 +153,21 @@ struct GrassInstance
 // NOTE: Height decode is shared via HeightFieldConstants HF.
 struct GrassGenConstants
 {
+    uint IndirectSlotLOD0;
+    uint IndirectSlotLOD1;
+    uint IndirectSlotLOD2;
+    uint _pad0;
+    
+    float LOD0Distance;
+    float LOD1Distance;
+    float LodHysteresis;
+    float _pad1;
+    
     // Optional extra vertical offset for grass placement (meters)
     float YOffset;
     float MinPitch;
     float MaxPitch;
-    float _padG2;
+    float _pad2;
 
     // Chunk placement
     float ChunkSize; // meters
@@ -173,13 +183,13 @@ struct GrassGenConstants
     float BendStrengthMin;
     float BendStrengthMax;
     uint SeedSalt;
-    uint _padG3;
+    uint _pad3;
 
     // Density field (world tiled) tuning
     float DensityTiling; // meters -> uv
     float DensityContrast; // 0..0.49
     float DensityPow; // curve
-    float _padD0;
+    float _pad4;
 
     // Slope/Height masks
     float SlopeToDensity; // slope -> 0..1

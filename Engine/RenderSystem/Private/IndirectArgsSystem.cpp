@@ -19,6 +19,42 @@ namespace shz
 
 	void IndirectArgsSystem::InstallPasses(Renderer& renderer)
 	{
+		// Indirect args (RAW 20 bytes)
+		{
+			BufferDesc bd = {};
+			bd.Name = "IndirectArgsBuffer";
+			bd.Usage = USAGE_DEFAULT;
+			bd.BindFlags = BIND_UNORDERED_ACCESS | BIND_INDIRECT_DRAW_ARGS;
+			bd.Mode = BUFFER_MODE_RAW;
+			bd.Size = 20 * MAX_NUM_INDIRECTS;
+
+			renderer.AddBuffer(STRING_HASH("IndirectArgsBuffer"), bd);
+		}
+
+		// Indirect counts (RAW 4 bytes * slots)
+		{
+			BufferDesc bd = {};
+			bd.Name = "IndirectCountBuffer";
+			bd.Usage = USAGE_DEFAULT;
+			bd.BindFlags = BIND_UNORDERED_ACCESS; // UAV¸¸
+			bd.Mode = BUFFER_MODE_RAW;
+			bd.Size = 4u * MAX_NUM_INDIRECTS;
+
+			renderer.AddBuffer(STRING_HASH("IndirectCountBuffer"), bd);
+		}
+
+		// IndirectArgsWriter CB (contains templates array)
+		{
+			BufferDesc bd = {};
+			bd.Name = "IndirectArgsWriterCB";
+			bd.Usage = USAGE_DYNAMIC;
+			bd.BindFlags = BIND_UNIFORM_BUFFER;
+			bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+
+			bd.Size = sizeof(hlsl::IndirectConstants);
+			renderer.AddBuffer(STRING_HASH("IndirectArgsWriterCB"), bd);
+		}
+
 		renderer.AddPass(
 			"IndirectWriteArgs",
 			[&](RenderPassBuilder& b)

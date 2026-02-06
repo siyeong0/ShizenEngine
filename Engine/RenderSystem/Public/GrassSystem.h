@@ -1,4 +1,5 @@
 #pragma once
+#pragma once
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
@@ -35,14 +36,19 @@ namespace shz
 
 		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, TerrainSystem& terrain);
 
-		uint32 GetIndirectSlot() const { return m_IndirectSlot; }
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
 	private:
+		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 12;
+		static constexpr uint32 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
+		static constexpr uint32 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 20;
+
 		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 256;
 
 		// Indirect slot for this system
-		uint32 m_IndirectSlot = 0;
+		uint32 m_IndirectSlotLOD0 = 0;
+		uint32 m_IndirectSlotLOD1 = 0;
+		uint32 m_IndirectSlotLOD2 = 0;
 
 		// Generate instances
 		RefCntAutoPtr<IPipelineState>         m_pGenCSO;
@@ -68,6 +74,34 @@ namespace shz
 
 		// Mesh
 		GrassDesc m_GrassDesc = {};
+
+		// Settings
+		float m_YOffset = -0.05f;
+
+		float m_ChunkSize = 4.0f;
+		uint m_ChunkHalfExtent = 64;
+		uint m_SamplesPerChunk = 364;
+		float m_Jitter = 0.95f;
+
+		float m_MinPitch = -0.2f;
+		float m_MaxPitch = 0.2f;
+		float m_MinScale = 7.7f;
+		float m_MaxScale = 13.1f;
+		float m_SpawnProb = 0.85f;
+		float m_SpawnRadius = 1000.0f;
+
+		float m_BendStrengthMin = 0.65f;
+		float m_BendStrengthMax = 0.75f;
+		uint m_SeedSalt = 0xA53A9E37u;
+
+		float m_DensityTiling = 0.02f;
+		float m_DensityContrast = 0.28f;
+		float m_DensityPow = 0.70f;
+		float m_SlopeToDensity = 0.15f;
+
+		float m_HeightMinN = 0.00f;
+		float m_HeightMaxN = 1.00f;
+		float m_HeightFadeN = 0.03f;
 
 		// Shaders
 		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";

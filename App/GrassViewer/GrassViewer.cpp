@@ -219,44 +219,6 @@ namespace shz
 
 			// Grass buffers
 			{
-				constexpr uint32 MAX_NUM_GRASS_INSTANCES = 1u << 24;
-				// GrassInstanceBuffer
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassInstanceBuffer";
-					bd.Usage = USAGE_DEFAULT;
-					bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-					bd.Mode = BUFFER_MODE_STRUCTURED;
-					bd.ElementByteStride = sizeof(hlsl::GrassInstance);
-					bd.Size = uint64{ MAX_NUM_GRASS_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
-
-					m_pRenderer->AddBuffer(STRING_HASH("GrassInstanceBuffer"), bd);
-				}
-
-				// GrassGenConstantsCB (CS)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassGenConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = sizeof(hlsl::GrassGenConstants);
-
-					m_pRenderer->AddBuffer(STRING_HASH("GrassGenConstantsCB"), bd);
-				}
-
-				// GrassRenderConstantsCB (VS/PS)
-				{
-					BufferDesc bd = {};
-					bd.Name = "GrassRenderConstantsCB";
-					bd.Usage = USAGE_DYNAMIC;
-					bd.BindFlags = BIND_UNIFORM_BUFFER;
-					bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-					bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-					m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
-				}
-
 				// Density texture for grass placement
 				{
 					AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
@@ -629,57 +591,7 @@ namespace shz
 		}
 
 
-		// Update TERRAIN_CONSTANTS
-		{
-			hlsl::HeightFieldConstants hfc = {};
-			hfc.WorldOriginXZ = float2{ m_pTerrainSystem->GetWorldOriginX(), m_pTerrainSystem->GetWorldOriginZ() };
-			hfc.WorldSizeXZ = float2{ m_pTerrainSystem->GetWorldSizeX(), m_pTerrainSystem->GetWorldSizeZ() };
-			hfc.WorldSpacingXZ = float2{ m_pTerrainSystem->GetWorldSpacingX(), m_pTerrainSystem->GetWorldSpacingZ() };
-			hfc.HeightScale = m_pTerrainSystem->GetHeightScale();
-			hfc.HeightOffset = m_pTerrainSystem->GetHeightOffset();
-			hfc.NormalUpBias = 2.0f;
-
-			const uint32 w = m_pTerrainSystem->GetWidth();
-			const uint32 h = m_pTerrainSystem->GetHeight();
-			hfc.HeightTexelSize = float2{ 1.0f / float(w) , 1.0f / float(h) };
-
-			m_pRenderer->UpdateBuffer<hlsl::HeightFieldConstants>(STRING_HASH("HeightFieldCB"), hfc);
-		}
-
-		{
-			hlsl::GrassGenConstants gen = {};
-			gen.YOffset = -0.05f;
-
-			gen.ChunkSize = 4.0f;
-			gen.ChunkHalfExtent = 32;
-			gen.SamplesPerChunk = 256;
-			gen.Jitter = 0.95f;
-
-			gen.MinPitch = -0.2f;
-			gen.MinPitch = 0.2f;
-			gen.MinScale = 7.7f;
-			gen.MaxScale = 13.1f;
-			gen.SpawnProb = 0.85f;
-			gen.SpawnRadius = 1000.0f;
-
-			gen.BendStrengthMin = 0.65f;
-			gen.BendStrengthMax = 0.75f;
-			gen.SeedSalt = 0xA53A9E37u;
-
-			gen.DensityTiling = 0.02f;
-			gen.DensityContrast = 0.28f;
-			gen.DensityPow = 0.70f;
-			gen._padD0 = 0.0f;
-
-			gen.SlopeToDensity = 0.15f;
-
-			gen.HeightMinN = 0.00f;
-			gen.HeightMaxN = 1.00f;
-			gen.HeightFadeN = 0.03f;
-
-			m_pRenderer->UpdateBuffer<hlsl::GrassGenConstants>(STRING_HASH("GrassGenConstantsCB"), gen);
-		}
-
+		// Update grass render constants
 		{
 			hlsl::GrassRenderConstants ren = {};
 			ren.BaseColorFactor = float4(150.f, 200.f, 100.f, 255.f) / 255.f;
@@ -705,6 +617,23 @@ namespace shz
 			ren.InteractionWindFade = 0.95f;
 
 			m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), ren);
+		}
+
+		// Update TERRAIN_CONSTANTS
+		{
+			hlsl::HeightFieldConstants hfc = {};
+			hfc.WorldOriginXZ = float2{ m_pTerrainSystem->GetWorldOriginX(), m_pTerrainSystem->GetWorldOriginZ() };
+			hfc.WorldSizeXZ = float2{ m_pTerrainSystem->GetWorldSizeX(), m_pTerrainSystem->GetWorldSizeZ() };
+			hfc.WorldSpacingXZ = float2{ m_pTerrainSystem->GetWorldSpacingX(), m_pTerrainSystem->GetWorldSpacingZ() };
+			hfc.HeightScale = m_pTerrainSystem->GetHeightScale();
+			hfc.HeightOffset = m_pTerrainSystem->GetHeightOffset();
+			hfc.NormalUpBias = 2.0f;
+
+			const uint32 w = m_pTerrainSystem->GetWidth();
+			const uint32 h = m_pTerrainSystem->GetHeight();
+			hfc.HeightTexelSize = float2{ 1.0f / float(w) , 1.0f / float(h) };
+
+			m_pRenderer->UpdateBuffer<hlsl::HeightFieldConstants>(STRING_HASH("HeightFieldCB"), hfc);
 		}
 	}
 
