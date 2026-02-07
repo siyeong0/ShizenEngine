@@ -32,8 +32,6 @@ namespace shz
 		MATERIAL_VALUE_TYPE_UINT2,
 		MATERIAL_VALUE_TYPE_UINT3,
 		MATERIAL_VALUE_TYPE_UINT4,
-
-		MATERIAL_VALUE_TYPE_FLOAT4X4,
 	};
 
 	enum MATERIAL_RESOURCE_TYPE : uint8
@@ -106,41 +104,9 @@ namespace shz
 		case MATERIAL_VALUE_TYPE_UINT3:    return 12;
 		case MATERIAL_VALUE_TYPE_UINT4:    return 16;
 
-		case MATERIAL_VALUE_TYPE_FLOAT4X4: return 64;
-
 		default:
 			return 0;
 		}
 	}
-
-	// ------------------------------------------------------------
-	// Shared options (Asset/Instance)
-	// - Asset: persistent authoring values
-	// - Instance: runtime knobs driving PSO/layout dirty
-	// ------------------------------------------------------------
-	struct MaterialOptions
-	{
-		MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
-
-		// Raster
-		CULL_MODE CullMode = CULL_MODE_BACK;
-		bool FrontCounterClockwise = true;
-
-		// Depth
-		bool DepthEnable = true;
-		bool DepthWriteEnable = true;
-		COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-		// Texture resource variable type policy
-		MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
-
-		// Fixed immutable sampler
-		std::string LinearWrapSamplerName = "g_LinearWrapSampler";
-		SamplerDesc LinearWrapSamplerDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
-	};
 
 } // namespace shz

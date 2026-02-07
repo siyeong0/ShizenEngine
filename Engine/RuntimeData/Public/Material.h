@@ -1,201 +1,109 @@
 #pragma once
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <optional>
 #include <cstdint>
 #include <cstring>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <optional>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
-#include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 #include "Engine/Core/Common/Public/HashUtils.hpp"
-
 #include "Engine/AssetManager/Public/AssetRef.hpp"
-
-#include "Engine/RHI/Interface/IShader.h"
-#include "Engine/RHI/Interface/IPipelineState.h"
-#include "Engine/RHI/Interface/ISampler.h"
-#include "Engine/RHI/Interface/IRenderPass.h"
-#include "Engine/RHI/Interface/ITextureView.h"
-#include "Engine/RHI/Interface/IShaderResourceVariable.h"
-#include "Engine/RHI/Interface/GraphicsTypes.h"
-
-#include "Engine/RuntimeData/Public/MaterialTypes.h"
-#include "Engine/RuntimeData/Public/MaterialTemplate.h"
 #include "Engine/RuntimeData/Public/Texture.h"
+#include "Engine/RuntimeData/Public/MaterialTypes.h"
 
 namespace shz
 {
-	using MaterialId = uint64;
-
-	struct MaterialTextureBinding final
+	struct MaterialTexture final
 	{
-		std::string Name = {};
-
-		// Authoring/runtime: store texture reference
-		std::optional<AssetRef<Texture>> TextureRef = {};
-
-		// Authoring: store sampler override desc (persistent)
-		bool bHasSamplerOverride = false;
-		SamplerDesc SamplerOverrideDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
-
-		ISampler* pSamplerOverride = nullptr;
+		AssetRef<Texture> Texture;
 	};
 
-	struct MaterialSerializedValue final
+	struct MaterialValueBlob final
 	{
-		std::string Name = {};
 		MATERIAL_VALUE_TYPE Type = MATERIAL_VALUE_TYPE_UNKNOWN;
 		std::vector<uint8> Data = {};
 	};
 
-	struct MaterialSerializedResource final
-	{
-		std::string Name = {};
-		MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
-
-		AssetRef<Texture> TextureRef = {};
-
-		bool bHasSamplerOverride = false;
-		SamplerDesc SamplerOverrideDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
-	};
-
+	// ---------------------------------------------------------------------
 	class Material final
 	{
 	public:
-		Material(const std::string& name, const std::string& templateName);
-		Material(const Material&) = default;
-		Material(Material&&) noexcept = default;
-		Material& operator=(const Material&) = default;
-		Material& operator=(Material&&) noexcept = default;
-		~Material() = default;
+		Material() = default;
 
-		static void RegisterTemplateLibrary(const std::unordered_map<std::string, MaterialTemplate>* pLibrary) { m_sTemplateLibrary = pLibrary; }
+		explicit Material(const std::string& name) : m_Name(name) {}
 
 		const std::string& GetName() const noexcept { return m_Name; }
-		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
 
-		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
-		MATERIAL_PIPELINE_TYPE GetPipelineType() const noexcept { return m_Template.GetPipelineType(); }
+		// Options
+		void SetBlendMode(MATERIAL_BLEND_MODE blendMode) { m_BlendMode = blendMode; }
+		void SetCullMode(CULL_MODE cullMode) { m_CullMode = cullMode; }
+		void SetCCW(bool bCCW) { m_bFrontCounterClockWise = bCCW; }
+		void SetDepthTestEnable(bool bDepthTestEnable) { m_bDepthEnable = bDepthTestEnable; }
+		void SetDepthWriteEnable(bool bDepthWriteEnable) { m_bDepthWriteEnable = bDepthWriteEnable; }
+		void SetDepthComparisonFunc(COMPARISON_FUNCTION func) { m_DepthFunc = func; }
 
-		void SetBlendMode(MATERIAL_BLEND_MODE mode);
-		void SetCullMode(CULL_MODE mode);
-		void SetFrontCounterClockwise(bool v);
-		void SetDepthEnable(bool v);
-		void SetDepthWriteEnable(bool v);
-		void SetDepthFunc(COMPARISON_FUNCTION f);
-		void SetTextureBindingMode(MATERIAL_TEXTURE_BINDING_MODE mode);
-		void SetLinearWrapSamplerName(const std::string& name);
-		void SetLinearWrapSamplerDesc(const SamplerDesc& desc);
+		// Scalars (float)
+		void SetRawValue(const std::string& name, MATERIAL_VALUE_TYPE type, const void* data, uint32 byteSize);
 
-		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_Options.BlendMode; }
-		CULL_MODE GetCullMode() const noexcept { return m_Options.CullMode; }
-		bool GetFrontCounterClockwise() const noexcept { return m_Options.FrontCounterClockwise; }
-		bool GetDepthEnable() const noexcept { return m_Options.DepthEnable; }
-		bool GetDepthWriteEnable() const noexcept { return m_Options.DepthWriteEnable; }
-		COMPARISON_FUNCTION GetDepthFunc() const noexcept { return m_Options.DepthFunc; }
-		MATERIAL_TEXTURE_BINDING_MODE GetTextureBindingMode() const noexcept { return m_Options.TextureBindingMode; }
-		const std::string& GetLinearWrapSamplerName() const noexcept { return m_Options.LinearWrapSamplerName; }
-		const SamplerDesc& GetLinearWrapSamplerDesc() const noexcept { return m_Options.LinearWrapSamplerDesc; }
+		void SetFloat(const std::string& name, float v);
+		void SetFloat2(const std::string& name, const float2& v);
+		void SetFloat2(const std::string& name, const float v[2]);
+		void SetFloat3(const std::string& name, const float3& v);
+		void SetFloat3(const std::string& name, const float v[3]);
+		void SetFloat4(const std::string& name, const float4& v);
+		void SetFloat4(const std::string& name, const float v[4]);
 
-		SHADER_RESOURCE_VARIABLE_TYPE GetDefaultVariableType() const noexcept { return m_DefaultVariableType; }
+		void SetInt(const std::string& name, int v);
+		void SetInt2(const std::string& name, const int2& v);
+		void SetInt2(const std::string& name, const int v[2]);
+		void SetInt3(const std::string& name, const int3& v);
+		void SetInt3(const std::string& name, const int v[3]);
+		void SetInt4(const std::string& name, const int4& v);
+		void SetInt4(const std::string& name, const int v[4]);
 
-		uint32 GetLayoutVarCount() const noexcept { return static_cast<uint32>(m_Variables.size()); }
-		const ShaderResourceVariableDesc* GetLayoutVars() const noexcept { return m_Variables.empty() ? nullptr : m_Variables.data(); }
+		void SetUint(const std::string& name, uint v);
+		void SetUint2(const std::string& name, const uint2& v);
+		void SetUint2(const std::string& name, const uint v[2]);
+		void SetUint3(const std::string& name, const uint3& v);
+		void SetUint3(const std::string& name, const uint v[3]);
+		void SetUint4(const std::string& name, const uint4& v);
+		void SetUint4(const std::string& name, const uint v[4]);
 
-		uint32 GetValueOverrideCount() const;
-		const MaterialSerializedValue& GetValueOverride(uint32 index) const;
-		uint32 GetResourceBindingCount() const;
-		const MaterialSerializedResource& GetResourceBinding(uint32 index) const;
-		uint32 GetCBufferBlobCount() const noexcept { return static_cast<uint32>(m_CBufferBlobs.size()); }
-		const uint8* GetCBufferBlobData(uint32 cbufferIndex) const;
-		uint32 GetCBufferBlobSize(uint32 cbufferIndex) const;
-		uint32 GetTextureBindingCount() const noexcept { return static_cast<uint32>(m_TextureBindings.size()); }
-		const MaterialTextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
-		MaterialTextureBinding& GetTextureBindingMutable(uint32 index) { return m_TextureBindings[index]; }
+		// Textures
+		void SetTexture(const std::string& name, const AssetRef<Texture>& tex);
 
-		void BuildSerializedSnapshot(std::vector<MaterialSerializedValue>* outValues, std::vector<MaterialSerializedResource>* outResources) const;
+		// Getters
+		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_BlendMode; }
+		CULL_MODE GetCullMode() const noexcept { return m_CullMode; }
+		bool GetFrontCounterClockwise() const noexcept { return m_bFrontCounterClockWise; }
+		bool GetDepthEnable() const noexcept { return m_bDepthEnable; }
+		bool GetDepthWriteEnable() const noexcept { return m_bDepthWriteEnable; }
+		COMPARISON_FUNCTION GetDepthFunc() const noexcept { return m_DepthFunc; }
 
-		bool SetFloat(const char* name, float v);
-		bool SetFloat2(const char* name, const float v[2]);
-		bool SetFloat2(const char* name, const float2& v);
-		bool SetFloat3(const char* name, const float v[3]);
-		bool SetFloat3(const char* name, const float3& v);
-		bool SetFloat4(const char* name, const float v[4]);
-		bool SetFloat4(const char* name, const float4& v);
+		const MaterialValueBlob& GetValue(const std::string& name) const;
+		const MaterialValueBlob* GetValueOrNull(const std::string& name) const noexcept;
+		uint32 GetValueCount() const noexcept { return static_cast<uint32>(m_Values.size()); }
+		const std::unordered_map<std::string, MaterialValueBlob>& GetAllValues() const noexcept { return m_Values; }
 
-		bool SetInt(const char* name, int32 v);
-		bool SetInt2(const char* name, const int32 v[2]);
-		bool SetInt3(const char* name, const int32 v[3]);
-		bool SetInt4(const char* name, const int32 v[4]);
-
-		bool SetUint(const char* name, uint32 v);
-		bool SetUint2(const char* name, const uint32 v[2]);
-		bool SetUint3(const char* name, const uint32 v[3]);
-		bool SetUint4(const char* name, const uint32 v[4]);
-
-		bool SetFloat4x4(const char* name, const float m16[16]);
-
-		bool SetRaw(const char* name, MATERIAL_VALUE_TYPE type, const void* pData, uint32 byteSize);
-
-		bool SetTextureAssetRef(const char* resourceName, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& textureRef);
-		bool SetSamplerOverridePtr(const char* resourceName, ISampler* pSampler);
-		bool SetSamplerOverrideDesc(const char* resourceName, const SamplerDesc& desc);
-		bool ClearSamplerOverride(const char* resourceName);
-
-		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
-		ComputePipelineStateCreateInfo BuildComputePipelineStateCreateInfo() const;
-
-		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const noexcept { return m_Template.GetShaders(); }
-
-		void Clear();
-
+		const MaterialTexture& GetTexture(const std::string& name) const;
+		const MaterialTexture* GetTextureOrNull(const std::string& name) const noexcept;
+		uint32 GetTextureCount() const noexcept { return static_cast<uint32>(m_Textures.size()); }
+		const std::unordered_map<std::string, MaterialTexture>& GetAllTextures() const noexcept { return m_Textures; }
+		
 	private:
-		bool writeValueImmediate(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedType);
-		bool setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef);
-
-		void rebuildAutoResourceLayout();
-		void syncDescFromOptions();
-
-		void ensureSnapshotCache() const;
-
-	private:
-		inline static const std::unordered_map<std::string, MaterialTemplate>* m_sTemplateLibrary = nullptr;
-
-		// Metadata
 		std::string m_Name = {};
-		std::string m_TemplateName = {};
 
-		MaterialOptions m_Options = {};
+		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
+		CULL_MODE m_CullMode = CULL_MODE_BACK;
+		bool m_bFrontCounterClockWise = true;
 
-		// Runtime template binding
-		const MaterialTemplate& m_Template;
+		bool m_bDepthEnable = true;
+		bool m_bDepthWriteEnable = true;
+		COMPARISON_FUNCTION m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-		// Stored descs (plain types)
-		PipelineStateDesc m_PipelineStateDesc = {};
-		GraphicsPipelineDesc m_GraphicsPipelineDesc = {};
-		std::vector<ImmutableSamplerDesc> m_ImmutableSamplersStorage = {};
-
-		// Auto layout 
-		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-		std::vector<ShaderResourceVariableDesc> m_Variables = {};
-
-		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
-		std::vector<MaterialTextureBinding> m_TextureBindings = {};
-
-		// Snapshot cache // TODO : REMOVE
-		mutable uint8 m_bSnapshotDirty = 1;
-		mutable std::vector<MaterialSerializedValue> m_SnapshotValues = {};
-		mutable std::vector<MaterialSerializedResource> m_SnapshotResources = {};
+		std::unordered_map<std::string, MaterialValueBlob> m_Values = {};
+		std::unordered_map<std::string, MaterialTexture> m_Textures = {};
 	};
-
 } // namespace shz

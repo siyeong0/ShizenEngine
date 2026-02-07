@@ -1,4 +1,10 @@
 #pragma once
+#include <unordered_map>
+#include <vector>
+#include <string>
+#include <memory>
+#include <initializer_list>
+
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
 
@@ -30,6 +36,8 @@
 #include "Engine/Renderer/Public/Shader.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
+
+#include "Engine/Renderer/Public/MaterialRenderData.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/BillboardRenderData.h"
 
@@ -45,7 +53,7 @@ namespace shz
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
 
 		ImGuiImplShizen* pImGui = nullptr;
-		AssetManager* pAssetManager = nullptr; // not owned
+		class AssetManager* pAssetManager = nullptr; // not owned
 
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
@@ -56,9 +64,10 @@ namespace shz
 		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sky/skyBrdf.dds";
 	};
 
-	struct MaterialPipelineBinding
+	// RenderScene가 resolver로 쓰는 타입
+	struct MaterialPipelineBinding final
 	{
-		RefCntAutoPtr<IPipelineState> pPSO;
+		RefCntAutoPtr<IPipelineState>         pPSO;
 		RefCntAutoPtr<IShaderResourceBinding> pSRB;
 	};
 
@@ -80,7 +89,9 @@ namespace shz
 		void ReleaseSwapChainBuffers();
 		void OnResize(uint32 width, uint32 height);
 
+		// ------------------------------------------------------------
 		// Render pass management
+		// ------------------------------------------------------------
 		struct RenderPassItem
 		{
 			std::string Name;
@@ -104,7 +115,9 @@ namespace shz
 			std::function<void()> onCreated = {},
 			EPassExecutionDomain domain = EPassExecutionDomain::RenderPass);
 
-		// 
+		// ------------------------------------------------------------
+		// Resource creation and update
+		// ------------------------------------------------------------
 		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		RefCntAutoPtr<ITexture> CreateTexture(const AssetRef<Texture>& assetRef);
 		RefCntAutoPtr<ITexture> CreateTexture(const std::string& name, const Texture& texture);
@@ -115,7 +128,7 @@ namespace shz
 		RefCntAutoPtr<IBuffer> CreateVertexBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
 		RefCntAutoPtr<IBuffer> CreateIndexBuffer(const BufferDesc& desc, const BufferData* pInitData = nullptr);
 
-		// Resource registry wrappers
+		// Registry wrappers
 		RefCntAutoPtr<ITexture> GetTexture(uint64 id) const;
 		RefCntAutoPtr<ITextureView> GetTextureSRV(uint64 id) const;
 		RefCntAutoPtr<ITextureView> GetTextureRTV(uint64 id) const;
@@ -143,9 +156,9 @@ namespace shz
 		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
 
 		void RegisterStaticTextureResource(const std::string& name, RenderResourceId id);
-		void RegisterStaticBufferCBV(const std::string& name, RenderResourceId id); // ConstantBuffer
-		void RegisterStaticBufferSRV(const std::string& name, RenderResourceId id); // Structured/Typed/ByteAddress SRV
-		void RegisterStaticBufferUAV(const std::string& name, RenderResourceId id); // RWStructured/RWByteAddress UAV 
+		void RegisterStaticBufferCBV(const std::string& name, RenderResourceId id);
+		void RegisterStaticBufferSRV(const std::string& name, RenderResourceId id);
+		void RegisterStaticBufferUAV(const std::string& name, RenderResourceId id);
 
 		bool IsCommonStaticResource(const std::string& name) const { return m_pPipelineStateManager->IsCommonStaticResource(name); }
 
@@ -161,7 +174,9 @@ namespace shz
 			m_PendingBufferUpdates.emplace_back(bud);
 		}
 
-		// RenderData 
+		// ------------------------------------------------------------
+		// RenderData (시그니처를 CPP와 통일: ref 반환)
+		// ------------------------------------------------------------
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 
@@ -176,7 +191,6 @@ namespace shz
 
 		struct ShaderSpec { SHADER_TYPE Type; const char* FilePath; const char* EntryPoint; };
 		ShaderId CreateShader(std::initializer_list<ShaderSpec> shaders);
-
 		const Shader& GetShader(ShaderId id) const;
 
 		// PipelineState
@@ -185,16 +199,22 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 
-		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 passKey);
-		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey) const;
-		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
-
-		// Material
-		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
-		std::vector<std::string> GetAllMaterialTemplateNames() const;
+		// ------------------------------------------------------------
+		// Material: RenderScene의 resolver가 호출하는 진입점
+		// ------------------------------------------------------------
+		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 renderPassKey);
 
 		// Shadow pso, srb
 		void SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO);
+
+		// (옵션) template 접근이 필요하면 그대로 유지
+		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
+		std::vector<std::string> GetAllMaterialTemplateNames() const;
+
+	private:
+		// Material 내부 빌드 로직 호출부
+		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId materialId, uint64 renderPassKey) const;
+		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId materialId, IPipelineState* pso);
 
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
@@ -206,32 +226,38 @@ namespace shz
 		IDeviceObject* resolveDeviceObject(const RenderPassResourceAccess& a) const;
 
 	private:
-		RefCntAutoPtr<IFramebuffer> m_pSwapChainFramebuffer;
-		RefCntAutoPtr<IRenderPass> m_pPresentRenderPass;
-
-		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
-
 		RendererCreateInfo m_CreateInfo = {};
+
 		RefCntAutoPtr<IRenderDevice> m_pDevice;
 		RefCntAutoPtr<IDeviceContext> m_pImmediateContext;
 		std::vector<RefCntAutoPtr<IDeviceContext>> m_pDeferredContexts;
 		RefCntAutoPtr<ISwapChain> m_pSwapChain;
-
-		AssetManager* m_pAssetManager = nullptr;
-		std::unordered_map<std::string, MaterialTemplate> m_TemplateLibrary = {};
+		RefCntAutoPtr<IFramebuffer> m_pSwapChainFramebuffer;
+		RefCntAutoPtr<IRenderPass> m_pPresentRenderPass;
 
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;
 
+		static constexpr uint64 DEFAULT_MAX_OBJECT_COUNT = 1ull << 20;
+
+		class AssetManager* m_pAssetManager = nullptr;
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
+
 		std::unordered_map<ShaderId, Shader> m_ShaderLibrary;
-
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
+		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
+		RenderResourceCache<MaterialRenderData>  m_MaterialCache;
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
-		RenderResourceCache<BillboardRenderData> m_BillboardCache;
+		RenderResourceCache<BillboardRenderData>  m_BillboardCache;
 
-		std::unordered_map<uint64, MaterialPipelineBinding> m_PipelineBindingCache;
+		RenderPassContext m_PassCtx = {};
+		std::unordered_map<uint64, RenderPassItem> m_PassTable;
+		std::unordered_map<uint64, std::string> m_PassNameTable;
+		bool m_bRenderGraphDirty = true;
+		std::vector<uint64> m_CompiledPassOrder = {};
+		std::unordered_map<uint64, RESOURCE_STATE> m_ResourceStates = {};
+		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
 
 		struct PendingBarrier final
 		{
@@ -247,17 +273,10 @@ namespace shz
 		};
 		std::vector<BufferUpdateDesc> m_PendingBufferUpdates;
 
-		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
-
-		RenderPassContext m_PassCtx = {};
-		std::unordered_map<uint64, RenderPassItem> m_PassTable;
-		std::unordered_map<uint64, std::string> m_PassNameTable;
-		bool m_bRenderGraphDirty = true;
-		std::vector<uint64> m_CompiledPassOrder = {};
-		std::unordered_map<uint64, RESOURCE_STATE> m_ResourceStates = {};
-		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
-
+		// Shadow PSO
 		RefCntAutoPtr<IPipelineState> m_pShadowOpaquePSO;
 		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
+
+		std::unordered_map<uint64, MaterialPipelineBinding> m_PipelineBindingCache;
 	};
 } // namespace shz
