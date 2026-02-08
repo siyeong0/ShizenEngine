@@ -494,7 +494,7 @@ namespace shz
 				const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
 				ASSERT(texRef, "RegisterAsset<TextureAsset> returned null AssetRef.");
 
-				material.SetTextureAssetRef(shaderVar, MATERIAL_RESOURCE_TYPE_TEXTURE2D, texRef);
+				material.SetTextureAssetRef(shaderVar, texRef);
 			};
 
 		{

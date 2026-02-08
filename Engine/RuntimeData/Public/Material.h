@@ -45,13 +45,57 @@ namespace shz
 
 	// ---------------------------------------------------------------------
 	// MaterialTextureBinding: runtime binding
+	// - AssetRef<Texture> OR ResourceId (mutually exclusive)
 	// ---------------------------------------------------------------------
+	enum class MATERIAL_TEXTURE_SOURCE : uint8
+	{
+		None = 0,
+		AssetRef,
+		ResourceId,
+	};
+
 	struct MaterialTextureBinding final
 	{
 		std::string Name = {};
 
-		// Authoring/runtime: store texture reference
+		MATERIAL_TEXTURE_SOURCE Source = MATERIAL_TEXTURE_SOURCE::None;
+
+		// Asset-backed binding
 		std::optional<AssetRef<Texture>> TextureRef = {};
+
+		// RenderResourceRegistry-backed binding (0 = invalid)
+		uint64 TextureResourceId = 0;
+
+		void ClearBinding()
+		{
+			Source = MATERIAL_TEXTURE_SOURCE::None;
+			TextureRef.reset();
+			TextureResourceId = 0;
+		}
+
+		void SetAssetRef(const AssetRef<Texture>& ref)
+		{
+			Source = MATERIAL_TEXTURE_SOURCE::AssetRef;
+			TextureRef = ref;
+			TextureResourceId = 0;
+		}
+
+		void SetResourceId(uint64 id)
+		{
+			Source = MATERIAL_TEXTURE_SOURCE::ResourceId;
+			TextureRef.reset();
+			TextureResourceId = id;
+		}
+
+		bool HasAssetRef() const
+		{
+			return Source == MATERIAL_TEXTURE_SOURCE::AssetRef && TextureRef.has_value();
+		}
+
+		bool HasResourceId() const
+		{
+			return Source == MATERIAL_TEXTURE_SOURCE::ResourceId && TextureResourceId != 0;
+		}
 	};
 
 	// Optional snapshot structs (kept as-is)
@@ -130,7 +174,7 @@ namespace shz
 		const MaterialTextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
 		MaterialTextureBinding& GetTextureBindingMutable(uint32 index) { return m_TextureBindings[index]; }
 
-		// Simplified authoring mirrors (optional)
+		// Simplified authoring mirrors
 		const MaterialValueBlob* GetValueOrNull(const std::string& name) const noexcept;
 		const MaterialTexture* GetTextureOrNull(const std::string& name) const noexcept;
 
@@ -157,10 +201,9 @@ namespace shz
 
 		bool SetRaw(const char* name, MATERIAL_VALUE_TYPE type, const void* pData, uint32 byteSize);
 
-		bool SetTextureAssetRef(const char* resourceName, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& textureRef);
-		bool SetSamplerOverridePtr(const char* resourceName, ISampler* pSampler);
-		bool SetSamplerOverrideDesc(const char* resourceName, const SamplerDesc& desc);
-		bool ClearSamplerOverride(const char* resourceName);
+		// Texture binding (mutually exclusive)
+		bool SetTextureAssetRef(const char* resourceName, const AssetRef<Texture>& textureRef);
+		bool SetTextureResource(const char* resourceName, uint64 resourceId);
 
 		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
 
@@ -172,7 +215,6 @@ namespace shz
 
 	private:
 		bool writeValueImmediate(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedType);
-		bool setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef);
 
 	private:
 		inline static const std::unordered_map<std::string, MaterialTemplate>* m_sTemplateLibrary = nullptr;
@@ -184,9 +226,7 @@ namespace shz
 		// Runtime template binding
 		const MaterialTemplate& m_Template;
 
-		// -----------------------------------------------------------------
-		// Minimal options (only what Material should know)
-		// -----------------------------------------------------------------
+		// Minimal options
 		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
 		// Raster
@@ -198,9 +238,7 @@ namespace shz
 		bool m_bDepthWriteEnable = true;
 		COMPARISON_FUNCTION m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-		// -----------------------------------------------------------------
 		// Auto layout cache (built once)
-		// -----------------------------------------------------------------
 		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		std::vector<ShaderResourceVariableDesc> m_Variables = {};
 		std::vector<ImmutableSamplerDesc> m_ImmutableSamplersStorage = {};

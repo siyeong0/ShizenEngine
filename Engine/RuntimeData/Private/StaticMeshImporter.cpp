@@ -235,13 +235,7 @@ namespace shz
 
 						if (!rname.empty() && !sourcePath.empty())
 						{
-							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<Texture>(sourcePath));
-						}
-
-						const bool hasS = rj.value("HasSamplerOverride", false);
-						if (hasS && rj.contains("SamplerOverrideDesc"))
-						{
-							m.SetSamplerOverrideDesc(rname.c_str(), jsonToSamplerDesc(rj["SamplerOverrideDesc"]));
+							m.SetTextureAssetRef(rname.c_str(), assetManager.RegisterAsset<Texture>(sourcePath));
 						}
 					}
 				}

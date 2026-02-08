@@ -132,15 +132,7 @@ namespace shz
 				}
 
 				if (!rname.empty() && texId)
-					m.SetTextureAssetRef(rname.c_str(), rtype, AssetRef<Texture>(texId));
-
-				const bool hasS = rj.value("HasSamplerOverride", false);
-				if (hasS && rj.contains("SamplerOverrideDesc"))
-				{
-					m.SetSamplerOverrideDesc(
-						rname.c_str(),
-						jsonToSampler(rj["SamplerOverrideDesc"]));
-				}
+					m.SetTextureAssetRef(rname.c_str(), AssetRef<Texture>(texId));
 			}
 		}
 

@@ -799,7 +799,7 @@ namespace shz
 					mat.SetFloat("g_MetallicFactor", 0.0f);
 					if (m_DiffuseTexRef.IsValid())
 					{
-						mat.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D, m_DiffuseTexRef);
+						mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
 						mat.SetUint("g_MaterialFlags", 1);
 					}
 					else

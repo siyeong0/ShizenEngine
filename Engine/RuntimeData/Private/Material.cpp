@@ -17,7 +17,6 @@ namespace shz
 			for (uint32 i = 0; i < cbCount; ++i)
 			{
 				const MaterialCBufferDesc& CB = m_Template.GetCBuffer(i);
-
 				m_CBufferBlobs[i].resize(CB.ByteSize);
 				std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
 			}
@@ -25,19 +24,22 @@ namespace shz
 			// Resources
 			const uint32 resCount = m_Template.GetResourceCount();
 			m_TextureBindings.resize(resCount);
+
 			for (uint32 i = 0; i < resCount; ++i)
 			{
 				m_TextureBindings[i] = {};
+				m_TextureBindings[i].ClearBinding();
 			}
 		}
 
+		// Build resource layout caches once
 		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
 		m_Variables.clear();
 		m_ImmutableSamplersStorage.clear();
 
 		m_Variables.reserve(32);
-		m_ImmutableSamplersStorage.reserve(4);
+		m_ImmutableSamplersStorage.reserve(8);
 
 		// Constant buffers (ALL)
 		{
@@ -55,18 +57,20 @@ namespace shz
 		}
 
 		// Textures
-		const uint32 resCount = m_Template.GetResourceCount();
-		for (uint32 i = 0; i < resCount; ++i)
 		{
-			const MaterialResourceDesc& r = m_Template.GetResource(i);
-
-			if (IsTextureType(r.Type))
+			const uint32 resCount = m_Template.GetResourceCount();
+			for (uint32 i = 0; i < resCount; ++i)
 			{
-				ShaderResourceVariableDesc v = {};
-				v.ShaderStages = r.ShaderStages;
-				v.Name = r.Name.c_str();
-				v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
-				m_Variables.push_back(v);
+				const MaterialResourceDesc& r = m_Template.GetResource(i);
+
+				if (IsTextureType(r.Type))
+				{
+					ShaderResourceVariableDesc v = {};
+					v.ShaderStages = r.ShaderStages;
+					v.Name = r.Name.c_str();
+					v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+					m_Variables.push_back(v);
+				}
 			}
 		}
 
@@ -84,13 +88,13 @@ namespace shz
 				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 			};
 
-			SamplerDesc linearWrapSamplerDesc =
+			SamplerDesc LinearWrapSampler =
 			{
 				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
 			};
 
-			SamplerDesc linearClampSamplerDesc =
+			SamplerDesc LinearClampSampler =
 			{
 				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
@@ -107,10 +111,12 @@ namespace shz
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_PointWrapSampler", PointWrapSampler));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_PointClampSampler", PointClampSampler));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_PointClampSampler", PointClampSampler));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrapSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearWrapSampler", linearWrapSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClampSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClampSamplerDesc));
+
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearWrapSampler", LinearWrapSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearWrapSampler", LinearWrapSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearClampSampler", LinearClampSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearClampSampler", LinearClampSampler));
+
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_ShadowCmpSampler", ShadowCmpSampler));
 		}
 	}
@@ -171,7 +177,7 @@ namespace shz
 
 		std::memcpy(blob.data() + desc.ByteOffset, pData, byteSize);
 
-		// minimal authoring mirror (optional)
+		// minimal authoring mirror
 		{
 			MaterialValueBlob& v = m_Values[name];
 			v.Type = desc.Type;
@@ -209,46 +215,11 @@ namespace shz
 	}
 
 	// ---------------------------------------------------------------------
-	// Textures
+	// Textures (mutually exclusive binding)
 	// ---------------------------------------------------------------------
-	bool Material::setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef)
+	bool Material::SetTextureAssetRef(const char* resourceName, const AssetRef<Texture>& textureRef)
 	{
-		ASSERT(name && name[0] != '\0', "Invalid name.");
-		ASSERT(IsTextureType(expectedType), "Expected type must be a texture type.");
-
-		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(name, &resIndex))
-		{
-			return false;
-		}
-
-		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
-		if (!IsTextureType(rd.Type))
-		{
-			return false;
-		}
-
-		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
-		tb.Name = name;
-		tb.TextureRef = texRef;
-
-		// minimal authoring mirror
-		{
-			MaterialTexture& mt = m_Textures[name];
-			mt.Texture = texRef;
-		}
-
-		return true;
-	}
-
-	bool Material::SetTextureAssetRef(const char* resourceName, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& textureRef)
-	{
-		return setTextureImmediate(resourceName, expectedType, textureRef);
-	}
-
-	bool Material::SetSamplerOverridePtr(const char* resourceName, ISampler* pSampler)
-	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name.");
 
 		uint32 resIndex = 0;
 		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
@@ -264,13 +235,23 @@ namespace shz
 
 		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
 		tb.Name = resourceName;
+		tb.SetAssetRef(textureRef);
 
+		// minimal authoring mirror (AssetRef path only)
+		{
+			MaterialTexture& mt = m_Textures[resourceName];
+			mt.Texture = textureRef;
+		}
+
+		// Sanity: exclusive
+		ASSERT(!(tb.HasAssetRef() && tb.HasResourceId()), "Texture binding has both AssetRef and ResourceId.");
 		return true;
 	}
 
-	bool Material::SetSamplerOverrideDesc(const char* resourceName, const SamplerDesc& desc)
+	bool Material::SetTextureResource(const char* resourceName, uint64 resourceId)
 	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name.");
+		ASSERT(resourceId != 0, "Invalid resourceId (0).");
 
 		uint32 resIndex = 0;
 		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
@@ -286,28 +267,14 @@ namespace shz
 
 		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
 		tb.Name = resourceName;
+		tb.SetResourceId(resourceId);
 
-		return true;
-	}
+		// ResourceId는 런타임 바인딩 경로이므로 authoring mirror는 갱신하지 않는 것을 권장
+		// (원하면 지워서 "AssetRef 설정이 아님"을 명확히 할 수 있음)
+		// m_Textures.erase(resourceName);
 
-	bool Material::ClearSamplerOverride(const char* resourceName)
-	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name string.");
-
-		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
-		{
-			return false;
-		}
-
-		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
-		if (!IsTextureType(rd.Type))
-		{
-			return false;
-		}
-
-		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
-
+		// Sanity: exclusive
+		ASSERT(!(tb.HasAssetRef() && tb.HasResourceId()), "Texture binding has both AssetRef and ResourceId.");
 		return true;
 	}
 
@@ -353,8 +320,7 @@ namespace shz
 		gpDesc.pRenderPass = pRenderPass;
 		gpDesc.SubpassIndex = 0;
 
-		// NOTE: RTV/DSV formats are typically derived from render pass in RP-compatible pipelines.
-		// Keep them unknown here to avoid material owning pass formats.
+		// NOTE: derived from RenderPass
 		gpDesc.NumRenderTargets = 0;
 		for (uint32 i = 0; i < _countof(gpDesc.RTVFormats); ++i)
 		{
@@ -378,7 +344,7 @@ namespace shz
 			gpDesc.DepthStencilDesc.DepthFunc = GetDepthFunc();
 		}
 
-		// Input layout (keep as you had it)
+		// Input layout (fixed)
 		{
 			static LayoutElement FIXED_LAYOUT_ELEMENTS[] =
 			{
