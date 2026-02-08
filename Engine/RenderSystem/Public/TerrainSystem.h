@@ -17,10 +17,10 @@
 #include "Engine/RHI/Interface/IPipelineState.h"
 #include "Engine/RHI/Interface/IShaderResourceBinding.h"
 
+#include "Engine/Renderer/Public/Renderer.h"
+
 namespace shz
 {
-	class Renderer;
-
 	class TerrainSystem final
 	{
 	public:
@@ -128,8 +128,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// GPU render state (feature-owned)
 		// ------------------------------------------------------------
-		RefCntAutoPtr<IPipelineState>         m_pTerrainGBufferPSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pTerrainGBufferSRB;
+		MaterialPipelineBinding m_TerrainBinding;
 
 		RefCntAutoPtr<IBuffer> m_pGridVB;
 

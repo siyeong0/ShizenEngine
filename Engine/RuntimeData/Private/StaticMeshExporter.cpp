@@ -40,6 +40,29 @@ namespace shz
 		};
 	}
 
+	static inline json samplerToJson(const SamplerDesc& sd)
+	{
+		return json{
+			{"MinFilter",(int)sd.MinFilter},
+			{"MagFilter",(int)sd.MagFilter},
+			{"MipFilter",(int)sd.MipFilter},
+			{"AddressU",(int)sd.AddressU},
+			{"AddressV",(int)sd.AddressV},
+			{"AddressW",(int)sd.AddressW},
+			{"MipLODBias",sd.MipLODBias},
+			{"MaxAnisotropy",sd.MaxAnisotropy},
+			{"ComparisonFunc",(int)sd.ComparisonFunc},
+			{"BorderColor", {
+				sd.BorderColor[0],
+				sd.BorderColor[1],
+				sd.BorderColor[2],
+				sd.BorderColor[3],
+			}},
+			{"MinLOD",sd.MinLOD},
+			{"MaxLOD",sd.MaxLOD},
+		};
+	}
+
 	bool StaticMeshExporter::operator()(
 		AssetManager& /*assetManager*/,
 		const AssetMeta& /*meta*/,
@@ -93,7 +116,7 @@ namespace shz
 		const uint64 uv0Off = writeBlob(bin, mesh->GetTexCoords());
 
 		uint64 idxOff = 0;
-		std::string idxType = (mesh->GetIndexType() == VT_UINT16) ? "u16" : "u32";
+		const std::string idxType = (mesh->GetIndexType() == VT_UINT16) ? "u16" : "u32";
 
 		if (mesh->GetIndexType() == VT_UINT16)
 			idxOff = writeBlob(bin, mesh->GetIndicesU16());
@@ -103,7 +126,7 @@ namespace shz
 		// JSON header
 		json j;
 		j["Format"] = "shzmesh";
-		j["Version"] = 1;
+		j["Version"] = 2; // updated (material schema updated)
 		j["Bin"] = binPath.filename().string();
 
 		j["VertexCount"] = mesh->GetVertexCount();
@@ -133,7 +156,7 @@ namespace shz
 				});
 		}
 
-		// Material slots (inline: 현재 포맷 유지)
+		// Material slots (inline: keep format, but update to new Material storage)
 		j["MaterialSlots"] = json::array();
 		for (const MaterialId& id : mesh->GetMaterialSlots())
 		{
@@ -143,7 +166,7 @@ namespace shz
 			mj["Name"] = m.GetName();
 			mj["TemplateName"] = m.GetTemplateName();
 
-			// Options (MaterialCommonOptions + extra)
+			// Options
 			mj["Options"] = json{
 				{"BlendMode", (int)m.GetBlendMode()},
 				{"CullMode", (int)m.GetCullMode()},
@@ -152,74 +175,73 @@ namespace shz
 				{"DepthEnable", m.GetDepthEnable()},
 				{"DepthWriteEnable", m.GetDepthWriteEnable()},
 				{"DepthFunc", (int)m.GetDepthFunc()},
-
-				{"TextureBindingMode", (int)m.GetTextureBindingMode()},
-				{"LinearWrapSamplerName", m.GetLinearWrapSamplerName()},
-				{"LinearWrapSamplerDesc", json{
-					{"MinFilter",      (int)m.GetLinearWrapSamplerDesc().MinFilter},
-					{"MagFilter",      (int)m.GetLinearWrapSamplerDesc().MagFilter},
-					{"MipFilter",      (int)m.GetLinearWrapSamplerDesc().MipFilter},
-					{"AddressU",       (int)m.GetLinearWrapSamplerDesc().AddressU},
-					{"AddressV",       (int)m.GetLinearWrapSamplerDesc().AddressV},
-					{"AddressW",       (int)m.GetLinearWrapSamplerDesc().AddressW},
-					{"MipLODBias",      m.GetLinearWrapSamplerDesc().MipLODBias},
-					{"MaxAnisotropy",   m.GetLinearWrapSamplerDesc().MaxAnisotropy},
-					{"ComparisonFunc",(int)m.GetLinearWrapSamplerDesc().ComparisonFunc},
-					{"BorderColor", {
-						m.GetLinearWrapSamplerDesc().BorderColor[0],
-						m.GetLinearWrapSamplerDesc().BorderColor[1],
-						m.GetLinearWrapSamplerDesc().BorderColor[2],
-						m.GetLinearWrapSamplerDesc().BorderColor[3],
-					}},
-					{"MinLOD", m.GetLinearWrapSamplerDesc().MinLOD},
-					{"MaxLOD", m.GetLinearWrapSamplerDesc().MaxLOD},
-				}},
 			};
 
-
-			// Values
+			// Values (new: iterate simplified value map)
 			mj["Values"] = json::array();
-			for (uint32 i = 0; i < m.GetValueOverrideCount(); ++i)
+			for (const auto& kv : m.GetAllValues())
 			{
-				const auto& v = m.GetValueOverride(i);
+				const std::string& name = kv.first;
+				const MaterialValueBlob& v = kv.second;
+
 				mj["Values"].push_back(json{
-					{"Name", v.Name},
+					{"Name", name},
 					{"Type", (int)v.Type},
 					{"Data", v.Data},
 					});
 			}
 
-			// Resources
+			// Resources (new: iterate template resources, pull from simplified texture map + sampler overrides from bindings)
 			mj["Resources"] = json::array();
-			for (uint32 i = 0; i < m.GetResourceBindingCount(); ++i)
+
+			const uint32 resCount = m.GetTemplate().GetResourceCount();
+			for (uint32 ri = 0; ri < resCount; ++ri)
 			{
-				const auto& r = m.GetResourceBinding(i);
-				json rj;
-				rj["Name"] = r.Name;
-				rj["Type"] = (int)r.Type;
-				rj["SourcePath"] = r.TextureRef.GetID().SourcePath;
-
-				const AssetID tid = r.TextureRef.GetID();
-				rj["TextureAssetID"] = json{ {"Hi", tid.Hi}, {"Lo", tid.Lo} };
-
-				rj["HasSamplerOverride"] = r.bHasSamplerOverride;
-				if (r.bHasSamplerOverride)
+				const MaterialResourceDesc& rr = m.GetTemplate().GetResource(ri);
+				if (!IsTextureType(rr.Type))
 				{
-					const auto& sd = r.SamplerOverrideDesc;
-					rj["SamplerOverrideDesc"] = json{
-						{"MinFilter",(int)sd.MinFilter},
-						{"MagFilter",(int)sd.MagFilter},
-						{"MipFilter",(int)sd.MipFilter},
-						{"AddressU",(int)sd.AddressU},
-						{"AddressV",(int)sd.AddressV},
-						{"AddressW",(int)sd.AddressW},
-						{"MipLODBias",sd.MipLODBias},
-						{"MaxAnisotropy",sd.MaxAnisotropy},
-						{"ComparisonFunc",(int)sd.ComparisonFunc},
-						{"BorderColor", json::array({ sd.BorderColor[0], sd.BorderColor[1], sd.BorderColor[2], sd.BorderColor[3] })},
-						{"MinLOD",sd.MinLOD},
-						{"MaxLOD",sd.MaxLOD},
-					};
+					continue;
+				}
+
+				json rj;
+				rj["Name"] = rr.Name;
+				rj["Type"] = (int)rr.Type;
+
+				// Texture (optional)
+				AssetID tid = {};
+				bool bHasTexture = false;
+
+				if (const MaterialTexture* mt = m.GetTextureOrNull(rr.Name))
+				{
+					if (mt->Texture.IsValid())
+					{
+						tid = mt->Texture.GetID();
+						bHasTexture = true;
+						rj["SourcePath"] = tid.SourcePath;
+					}
+				}
+
+				if (!bHasTexture)
+				{
+					rj["SourcePath"] = "";
+				}
+
+				// Preserve TextureAssetID field for backward tooling (only if valid)
+				if (bHasTexture)
+				{
+					rj["TextureAssetID"] = json{ {"Hi", tid.Hi}, {"Lo", tid.Lo} };
+				}
+
+				// Sampler override (optional, from template-indexed binding array)
+				rj["HasSamplerOverride"] = false;
+				if (ri < m.GetTextureBindingCount())
+				{
+					const MaterialTextureBinding& tb = m.GetTextureBinding(ri);
+					rj["HasSamplerOverride"] = tb.bHasSamplerOverride;
+					if (tb.bHasSamplerOverride)
+					{
+						rj["SamplerOverrideDesc"] = samplerToJson(tb.SamplerOverrideDesc);
+					}
 				}
 
 				mj["Resources"].push_back(std::move(rj));
@@ -238,4 +260,4 @@ namespace shz
 		out << j.dump(2);
 		return true;
 	}
-}
+} // namespace shz

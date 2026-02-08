@@ -14,6 +14,8 @@
 
 namespace shz
 {
+	class Renderer;
+
 	struct MaterialShaderStageDesc final
 	{
 		SHADER_TYPE ShaderType = SHADER_TYPE_UNKNOWN;
@@ -44,13 +46,16 @@ namespace shz
 		uint32 ByteSize = 0;
 
 		MaterialParamFlags Flags = MaterialParamFlags_None;
+
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
 	};
 
 	struct MaterialCBufferDesc final
 	{
 		std::string Name = {};
 		uint32 ByteSize = 0;
-		bool IsDynamic = true;
+		bool IsDynamic = false;
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
 	};
 
 	struct MaterialResourceDesc final
@@ -58,7 +63,8 @@ namespace shz
 		std::string Name = {};
 		MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
 		uint16 ArraySize = 1;
-		bool IsDynamic = true;
+		bool IsDynamic = false;
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
 	};
 
 	class MaterialTemplate final
@@ -74,7 +80,7 @@ namespace shz
 		MaterialTemplate& operator=(MaterialTemplate&&) noexcept = default;
 
 		// Creates shaders, builds reflection template.
-		bool Initialize(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const MaterialTemplateCreateInfo& ci);
+		bool Initialize(Renderer& renderer, const MaterialTemplateCreateInfo& ci);
 
 		const std::string& GetName() const { return m_Name; }
 
@@ -91,6 +97,7 @@ namespace shz
 		// Constant buffers
 		uint32 GetCBufferCount() const { return static_cast<uint32>(m_CBuffers.size()); }
 		const MaterialCBufferDesc& GetCBuffer(uint32 index) const { return m_CBuffers[index]; }
+		void SetBufferDynamic(const std::string& name, bool bDynamic);
 
 		// Resources
 		uint32 GetResourceCount() const { return static_cast<uint32>(m_Resources.size()); }
@@ -101,25 +108,19 @@ namespace shz
 		bool ValidateSetValue(const char* name, MATERIAL_VALUE_TYPE expectedType, MaterialValueParamDesc* pOutDesc = nullptr) const;
 		bool ValidateSetResource(const char* name, MATERIAL_RESOURCE_TYPE expectedType, MaterialResourceDesc* pOutDesc = nullptr) const;
 
-		bool Load(
-			IRenderDevice* pDevice,
-			IShaderSourceInputStreamFactory* pShaderSourceFactory,
-			const char* TemplateName,
-			std::string* outError = nullptr);
-
+		bool Load(Renderer& renderer, const std::string& TemplateName, std::string* outError = nullptr);
 		bool Save(std::string* outError = nullptr) const;
-
-	public:
-		static constexpr const char* MATERIAL_CBUFFER_NAME = "MATERIAL_CONSTANTS";
 
 	private:
 		MaterialTemplateCreateInfo m_CreateInfo = {};
 
 		std::string m_Name = {};
 
+		Renderer* m_pRenderer = nullptr;
 		std::vector<RefCntAutoPtr<IShader>> m_Shaders = {};
 
 		std::unordered_map<std::string, uint32> m_ValueParamLut = {};
+		std::unordered_map<std::string, uint32> m_CBufferLut = {};
 		std::unordered_map<std::string, uint32> m_ResourceLut = {};
 
 		std::vector<MaterialCBufferDesc> m_CBuffers = {};

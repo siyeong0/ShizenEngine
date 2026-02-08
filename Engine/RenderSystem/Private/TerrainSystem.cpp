@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/Framework/Public/TerrainSystem.h"
+#include "Engine/RenderSystem/Public/TerrainSystem.h"
 
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
@@ -21,7 +21,9 @@ namespace shz
 	struct TerrainVertex final
 	{
 		float3 Pos; // x,z in [0..16]
-		float2 UV;  // [0..1]
+		float2 UV;
+		float3 Normal;
+		float3 Tangent;
 	};
 
 	enum ETerrainStitchMask : uint8
@@ -64,6 +66,8 @@ namespace shz
 				TerrainVertex vtx = {};
 				vtx.Pos = float3{ float(x), 0.0f, float(z) };
 				vtx.UV = float2{ u, v };
+				vtx.Normal = float3{ 0.0f, 1.0f, 0.0f }; // Not used
+				vtx.Tangent = float3{ 1.0f, 0.0f, 0.0f }; // Not used
 				outVerts.emplace_back(vtx);
 			}
 		}
@@ -413,9 +417,6 @@ namespace shz
 		m_HeightU16.clear();
 		m_HeightU16.shrink_to_fit();
 
-		m_pTerrainGBufferPSO.Release();
-		m_pTerrainGBufferSRB.Release();
-
 		m_pGridVB.Release();
 
 		for (uint32 lod = 0; lod < 5; ++lod)
@@ -470,7 +471,6 @@ namespace shz
 			{
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pTerrainGBufferPSO && m_pTerrainGBufferSRB, "Terrain PSO/SRB not initialized.");
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -484,8 +484,8 @@ namespace shz
 				if (numChunksX == 0 || numChunksZ == 0)
 					return;
 
-				pCtx->SetPipelineState(m_pTerrainGBufferPSO);
-				pCtx->CommitShaderResources(m_pTerrainGBufferSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pCtx->SetPipelineState(m_TerrainBinding.pPSO);
+				pCtx->CommitShaderResources(m_TerrainBinding.pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 				{
 					IBuffer* vbs[] = { m_pGridVB };
@@ -723,7 +723,7 @@ namespace shz
 
 						MapHelper<hlsl::TerrainDrawConstants> map(
 							pCtx,
-							ctx.pRenderer->GetBuffer(STRING_HASH("TerrainDrawConstants")),
+							m_TerrainBinding.Buffers["TERRAIN_DRAW_CONSTANTS"].pBuffer,
 							MAP_WRITE,
 							MAP_FLAG_DISCARD);
 
@@ -784,127 +784,30 @@ namespace shz
 				}
 
 				{
-					BufferDesc cb = {};
-					cb.Name = "TERRAIN_DRAW_CONSTANTS";
-					cb.Usage = USAGE_DYNAMIC;
-					cb.BindFlags = BIND_UNIFORM_BUFFER;
-					cb.CPUAccessFlags = CPU_ACCESS_WRITE;
-					cb.Size = sizeof(hlsl::TerrainDrawConstants);
-					renderer.AddBuffer("TerrainDrawConstants", cb);
-				}
+					MaterialTemplate& matTmpl = renderer.CreateMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS);
+					matTmpl.SetBufferDynamic("TERRAIN_DRAW_CONSTANTS", true);
+					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
 
-				{
-					GraphicsPipelineStateCreateInfo psoCi = {};
-					psoCi.PSODesc.Name = "TerrainGBuffer PSO";
-					psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-					GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-					gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-					gp.RasterizerDesc.CullMode = CULL_MODE_BACK;
-					gp.RasterizerDesc.FrontCounterClockwise = true;
-
-					// TEST
-					//gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-					//gp.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
-
-					gp.DepthStencilDesc.DepthEnable = true;
-					gp.DepthStencilDesc.DepthWriteEnable = true;
-					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-					LayoutElement elems[] =
-					{
-						LayoutElement{ 0, 0, 3, VT_FLOAT32, false }, // ATTRIB0 Pos
-						LayoutElement{ 1, 0, 2, VT_FLOAT32, false }, // ATTRIB1 UV
-					};
-					gp.InputLayout.LayoutElements = elems;
-					gp.InputLayout.NumElements = _countof(elems);
-
-					ShaderCreateInfo vsCI = {};
-					vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					vsCI.EntryPoint = "main";
-					vsCI.Desc.Name = "Terrain VS";
-					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-					vsCI.FilePath = m_TerrainVS.c_str();
-
-					ShaderCreateInfo psCI = {};
-					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-					psCI.EntryPoint = "main";
-					psCI.Desc.Name = "Terrain PS (reuse GBuffer)";
-					psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-					psCI.FilePath = m_TerrainPS.c_str();
-
-					renderer.CreateShader(vsCI, &psoCi.pVS);
-					renderer.CreateShader(psCI, &psoCi.pPS);
-
-					psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-					ShaderResourceVariableDesc vars[] =
-					{
-						// VS
-						{ SHADER_TYPE_VERTEX, "TERRAIN_DRAW_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-
-						{ SHADER_TYPE_PIXEL, "MATERIAL_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_BaseColorTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_NormalTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_MetallicRoughnessTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_AOTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_EmissiveTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-						{ SHADER_TYPE_PIXEL, "g_HeightTex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					};
-
-					psoCi.PSODesc.ResourceLayout.Variables = vars;
-					psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
-
-					SamplerDesc linearClamp =
-					{
-						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-						TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-					};
-
-					SamplerDesc linearWrap =
-					{
-						FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-						TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-					};
-
-					ImmutableSamplerDesc samplers[] =
-					{
-						{ SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClamp },
-						{ SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrap },
-					};
-					psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-					psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
-
-					m_pTerrainGBufferPSO = renderer.AcquirePipelineState(STRING_HASH("TerrainGBuffer"), psoCi);
-					ASSERT(m_pTerrainGBufferPSO, "AcquirePipelineState(TerrainGBuffer) failed.");
-
-					MaterialId tmId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "DefaultLit");
-					Material& tm = MaterialManager::GetInstance()->GetMaterial(tmId);
-					//tm.SetFloat4("g_BaseColorFactor", float4(150.f, 200.f, 100.f, 255.f) / 255.f);
-					tm.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
-					tm.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-					tm.SetFloat("g_EmissiveIntensity", 0.0f);
-					tm.SetFloat("g_RoughnessFactor", 0.85f);
-					tm.SetFloat("g_NormalScale", 1.0f);
-					tm.SetFloat("g_OcclusionStrength", 1.0f);
-					tm.SetFloat("g_AlphaCutoff", 0.5f);
-					tm.SetFloat("g_MetallicFactor", 0.0f);
+					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+					mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
+					mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+					mat.SetFloat("g_EmissiveIntensity", 0.0f);
+					mat.SetFloat("g_RoughnessFactor", 0.85f);
+					mat.SetFloat("g_NormalScale", 1.0f);
+					mat.SetFloat("g_OcclusionStrength", 1.0f);
+					mat.SetFloat("g_AlphaCutoff", 0.5f);
+					mat.SetFloat("g_MetallicFactor", 0.0f);
 					if (m_DiffuseTexRef.IsValid())
 					{
-						tm.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D, m_DiffuseTexRef);
-						tm.SetUint("g_MaterialFlags", 1);
+						mat.SetTextureAssetRef("g_BaseColorTex", MATERIAL_RESOURCE_TYPE_TEXTURE2D, m_DiffuseTexRef);
+						mat.SetUint("g_MaterialFlags", 1);
 					}
 					else
 					{
-						tm.SetUint("g_MaterialFlags", 0);
+						mat.SetUint("g_MaterialFlags", 0);
 					}
 
-					m_pTerrainGBufferSRB = renderer.AcquireShaderResourceBindingFromMaterial(tmId, m_pTerrainGBufferPSO);
-
-					if (auto* v = m_pTerrainGBufferSRB->GetVariableByName(SHADER_TYPE_VERTEX, "TERRAIN_DRAW_CONSTANTS"))
-					{
-						v->Set(renderer.GetBuffer(STRING_HASH("TerrainDrawConstants")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
+					m_TerrainBinding = renderer.AcquireMaterialPipelineBinding(matId, STRING_HASH("TerrainGBuffer"));
 				}
 			});
 	}

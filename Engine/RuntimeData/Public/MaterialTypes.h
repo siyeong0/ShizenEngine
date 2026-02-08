@@ -57,12 +57,6 @@ namespace shz
 	};
 	DEFINE_FLAG_ENUM_OPERATORS(MaterialParamFlags);
 
-	enum MATERIAL_TEXTURE_BINDING_MODE : uint8
-	{
-		MATERIAL_TEXTURE_BINDING_MODE_DYNAMIC = 0,
-		MATERIAL_TEXTURE_BINDING_MODE_MUTABLE,
-	};
-
 	enum MATERIAL_BLEND_MODE : uint8
 	{
 		MATERIAL_BLEND_MODE_OPAQUE = 0,        // default
@@ -123,17 +117,6 @@ namespace shz
 		bool DepthEnable = true;
 		bool DepthWriteEnable = true;
 		COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-
-		// Texture resource variable type policy
-		MATERIAL_TEXTURE_BINDING_MODE TextureBindingMode = MATERIAL_TEXTURE_BINDING_MODE_MUTABLE;
-
-		// Fixed immutable sampler
-		std::string LinearWrapSamplerName = "g_LinearWrapSampler";
-		SamplerDesc LinearWrapSamplerDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
 	};
 
 } // namespace shz

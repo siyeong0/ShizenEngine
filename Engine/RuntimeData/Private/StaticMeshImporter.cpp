@@ -199,21 +199,6 @@ namespace shz
 					m.SetDepthEnable(oj.value("DepthEnable", m.GetDepthEnable()));
 					m.SetDepthWriteEnable(oj.value("DepthWriteEnable", m.GetDepthWriteEnable()));
 					m.SetDepthFunc((COMPARISON_FUNCTION)oj.value("DepthFunc", (int)m.GetDepthFunc()));
-
-					// Texture binding
-					m.SetTextureBindingMode((MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)m.GetTextureBindingMode()));
-
-					// LinearWrap sampler
-					{
-						const std::string samplerName = oj.value("LinearWrapSamplerName", m.GetLinearWrapSamplerName());
-
-						m.SetLinearWrapSamplerName(samplerName);
-
-						if (oj.contains("LinearWrapSamplerDesc"))
-						{
-							m.SetLinearWrapSamplerDesc(jsonToSamplerDesc(oj["LinearWrapSamplerDesc"]));
-						}
-					}
 				}
 
 

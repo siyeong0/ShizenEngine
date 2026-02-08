@@ -55,10 +55,32 @@ namespace shz
 		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sky/skyBrdf.dds";
 	};
 
+	struct BoundCBuffer final
+	{
+		RefCntAutoPtr<IBuffer> pBuffer;
+
+		uint32 CBufferIndex = 0;
+		uint32 ByteSize = 0;
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
+	};
+
+	struct BoundTexture final
+	{
+		RefCntAutoPtr<ITexture> pTexture;   // keep alive (optional but useful)
+		ITextureView* pSRV = nullptr;       // view set to SRB (usually default SRV)
+
+		uint32 ResourceIndex = 0;           // template resource index
+		MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
+	};
+
 	struct MaterialPipelineBinding
 	{
-		RefCntAutoPtr<IPipelineState> pPSO;
+		RefCntAutoPtr<IPipelineState>         pPSO;
 		RefCntAutoPtr<IShaderResourceBinding> pSRB;
+
+		std::unordered_map<std::string, BoundCBuffer> Buffers;
+		std::unordered_map<std::string, BoundTexture> Textures;
 	};
 
 	class Renderer final
@@ -184,9 +206,9 @@ namespace shz
 		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Material
-		const MaterialTemplate& CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
-		const MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
-		const MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
+		MaterialTemplate& CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
+		MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
+		MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 

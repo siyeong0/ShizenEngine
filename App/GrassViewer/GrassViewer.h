@@ -14,7 +14,6 @@
 #include "Engine/AssetManager/Public/AssetTypeTraits.h"
 
 #include "Engine/Framework/Public/FirstPersonCamera.h"
-#include "Engine/Framework/Public/TerrainSystem.h"
 
 #include "Engine/ECS/Public/EcsWorld.h"
 #include "Engine/ECS/Public/Components.h"
@@ -25,6 +24,7 @@
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
+#include "Engine/RenderSystem/Public/TerrainSystem.h"
 #include "Engine/RenderSystem/Public/InteractionSystem.h"
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 

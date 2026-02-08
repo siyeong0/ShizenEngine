@@ -98,24 +98,6 @@ namespace shz
 				const COMPARISON_FUNCTION depthFunc = (COMPARISON_FUNCTION)oj.value("DepthFunc", (int)m.GetDepthFunc());
 				m.SetDepthFunc(depthFunc);
 			}
-
-			// Texture binding mode 
-			{
-				const MATERIAL_TEXTURE_BINDING_MODE bindMode = (MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)m.GetTextureBindingMode());
-				m.SetTextureBindingMode(bindMode);
-			}
-
-			// LinearWrap sampler (layout ¿µÇâ)
-			{
-				const std::string samplerName = oj.value("LinearWrapSamplerName", m.GetLinearWrapSamplerName());
-				m.SetLinearWrapSamplerName(samplerName);
-
-				if (oj.contains("LinearWrapSamplerDesc"))
-				{
-					const SamplerDesc desc = jsonToSampler(oj["LinearWrapSamplerDesc"]);
-					m.SetLinearWrapSamplerDesc(desc);
-				}
-			}
 		}
 
 

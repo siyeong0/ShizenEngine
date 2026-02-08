@@ -9,7 +9,7 @@
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 #include "Engine/Renderer/Public/RenderScene.h"
 
-#include "Engine/Framework/Public/TerrainSystem.h"
+#include "Engine/RenderSystem/Public/TerrainSystem.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
 
 namespace shz

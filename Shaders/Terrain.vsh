@@ -21,8 +21,10 @@ SamplerState g_LinearClampSampler;
 
 struct VSInput
 {
-    float3 Pos : ATTRIB0; // grid pos: x,z in [0..16]
-    float2 UV : ATTRIB1; // local [0..1] (not used for height; kept for debug/optional)
+    float3 Pos : ATTRIB0;
+    float2 UV : ATTRIB1;
+    float3 Normal : ATTRIB2;
+    float3 Tangent : ATTRIB3;
 };
 
 struct VSOutput

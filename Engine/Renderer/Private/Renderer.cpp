@@ -39,9 +39,6 @@ namespace shz
 		m_pRegistry = std::make_unique<RenderResourceRegistry>();
 		m_pRegistry->Initialize();
 
-		CreateMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh");
-		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
-
 		const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
 		m_Height = (m_CreateInfo.BackBufferHeight != 0) ? m_CreateInfo.BackBufferHeight : scDesc.Height;
@@ -221,6 +218,9 @@ namespace shz
 
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_ShadowMap", STRING_HASH("ShadowMap"));
 		}
+
+		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
+		CreateMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh");
 
 		return true;
 	}
@@ -1597,8 +1597,254 @@ namespace shz
 		}
 
 		MaterialPipelineBinding out;
-		out.pPSO = AcquirePipelineStateFromMaterial(materialId, renderPassKey);
-		out.pSRB = AcquireShaderResourceBindingFromMaterial(materialId, out.pPSO);
+
+		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
+		ASSERT(pMaterialManager->HasMaterial(materialId), "Material is not found.");
+
+		const Material& material = pMaterialManager->GetMaterial(materialId);
+
+		// TODO: Replace
+		if (renderPassKey == STRING_HASH("Shadow"))
+		{
+			if (material.GetBlendMode() == MATERIAL_BLEND_MODE_OPAQUE)
+			{
+				out.pPSO = m_pShadowOpaquePSO;
+			}
+			else if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
+			{
+				out.pPSO = m_pShadowMaskedPSO;
+			}
+			else
+			{
+				ASSERT(false, "Not supported");
+			}
+		}
+
+		ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
+		ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
+		GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
+		out.pPSO = m_pPipelineStateManager->AcquireGraphics(psoCI);
+
+		// Create SRB
+		out.pPSO->CreateShaderResourceBinding(&out.pSRB, true);
+		ASSERT(out.pSRB, "Failed to create SRB.");
+
+		// ---------------------------------------------------------------------
+		// Constant Buffers (bind ALL reflected CBs + store them)
+		// ---------------------------------------------------------------------
+		const uint32 cbCount = material.GetTemplate().GetCBufferCount();
+		for (uint32 cbIndex = 0; cbIndex < cbCount; ++cbIndex)
+		{
+			const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(cbIndex);
+
+			BufferDesc desc = {};
+			desc.Name = cb.Name.c_str();
+			desc.Usage = cb.IsDynamic ? USAGE_DYNAMIC : USAGE_DEFAULT;
+			desc.BindFlags = BIND_UNIFORM_BUFFER;
+			desc.CPUAccessFlags = cb.IsDynamic ? CPU_ACCESS_WRITE : CPU_ACCESS_NONE;
+			desc.Size = cb.ByteSize;
+
+			RefCntAutoPtr<IBuffer> pConstantBuffer;
+			m_pDevice->CreateBuffer(desc, nullptr, &pConstantBuffer);
+			ASSERT(pConstantBuffer, "Failed to create constant buffer: %s", cb.Name.c_str());
+
+			// Bind by name for stages that expose it.
+			// (If you already store cb.ShaderStages in template, prefer it)
+			SHADER_TYPE boundStages = SHADER_TYPE_UNKNOWN;
+
+			// Option A: use reflected stage mask stored in template (recommended)
+			boundStages = cb.ShaderStages;
+
+			// Bind only to stages in mask
+			auto bindStage = [&](SHADER_TYPE st)
+				{
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, cb.Name.c_str());
+					if (var)
+					{
+						var->Set(pConstantBuffer);
+						return true;
+					}
+					return false;
+				};
+
+			// stage mask iteration (common set)
+			const SHADER_TYPE kStages[] =
+			{
+				SHADER_TYPE_VERTEX,
+				SHADER_TYPE_PIXEL,
+				SHADER_TYPE_GEOMETRY,
+				SHADER_TYPE_HULL,
+				SHADER_TYPE_DOMAIN,
+				SHADER_TYPE_AMPLIFICATION,
+				SHADER_TYPE_MESH,
+				SHADER_TYPE_COMPUTE
+			};
+
+			bool anyBound = false;
+			for (SHADER_TYPE st : kStages)
+			{
+				if ((boundStages & st) != 0)
+				{
+					anyBound |= bindStage(st);
+				}
+			}
+
+			// Fallback: if template didn't store stages (or mask unknown), try all shaders (your old behavior)
+			if (!anyBound && boundStages == SHADER_TYPE_UNKNOWN)
+			{
+				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
+				{
+					ASSERT(shader, "Shader in source instance is null.");
+					const SHADER_TYPE st = shader->GetDesc().ShaderType;
+					if (bindStage(st))
+					{
+						anyBound = true;
+						boundStages = (SHADER_TYPE)(boundStages | st);
+					}
+				}
+			}
+
+			// Upload initial blob
+			const uint8* pBlob = material.GetCBufferBlobData(cbIndex);
+			const uint32 blobSize = material.GetCBufferBlobSize(cbIndex);
+
+			ASSERT(pBlob, "Invalid blob pointer. cb=%s", cb.Name.c_str());
+			ASSERT(blobSize == cb.ByteSize, "Blob size mismatch. cb=%s blob=%u expected=%u", cb.Name.c_str(), blobSize, cb.ByteSize);
+
+			if (desc.Usage == USAGE_DYNAMIC)
+			{
+				// Dynamic -> Map/Unmap
+				void* pMapped = nullptr;
+				m_pImmediateContext->MapBuffer(
+					pConstantBuffer,
+					MAP_WRITE,
+					MAP_FLAG_DISCARD,
+					pMapped);
+
+				ASSERT(pMapped, "Failed to map dynamic CB: %s", cb.Name.c_str());
+				std::memcpy(pMapped, pBlob, blobSize);
+
+				m_pImmediateContext->UnmapBuffer(pConstantBuffer, MAP_WRITE);
+			}
+			else
+			{
+				// Default -> UpdateBuffer OK
+				m_pImmediateContext->UpdateBuffer(
+					pConstantBuffer,
+					0,
+					blobSize,
+					pBlob,
+					RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+			}
+
+			pushBarrier(pConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+
+			// Store for later updates
+			BoundCBuffer bc = {};
+			bc.pBuffer = pConstantBuffer;
+			bc.CBufferIndex = cbIndex;
+			bc.ByteSize = cb.ByteSize;
+			bc.ShaderStages = boundStages;
+
+			out.Buffers[cb.Name] = std::move(bc);
+		}
+
+		// ---------------------------------------------------------------------
+		// Textures (bind reflected resources + store them)
+		// ---------------------------------------------------------------------
+		const uint32 resCount = material.GetTemplate().GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
+		{
+			const MaterialResourceDesc& resDesc = material.GetTemplate().GetResource(i);
+
+			if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
+				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
+				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
+			{
+				continue;
+			}
+
+			RefCntAutoPtr<ITexture> pTexture;
+			ITextureView* pView = nullptr;
+
+			// Prefer runtime binding list (template-indexed) if you want:
+			// const MaterialTextureBinding& tb = material.GetTextureBinding(i);
+			// but your current binding uses GetTextureOrNull(name). I'll keep that.
+
+			if (const MaterialTexture* mt = material.GetTextureOrNull(resDesc.Name))
+			{
+				ASSERT(mt->Texture.IsValid(), "Material texture ref invalid: %s", resDesc.Name.c_str());
+				pTexture = CreateTexture(mt->Texture);
+				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			}
+			else
+			{
+				pTexture = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"));
+				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+			}
+
+			ASSERT(pView, "Texture SRV is null: %s", resDesc.Name.c_str());
+
+			SHADER_TYPE boundStages = resDesc.ShaderStages;
+
+			auto bindStageTex = [&](SHADER_TYPE st)
+				{
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, resDesc.Name.c_str());
+					if (var)
+					{
+						var->Set(pView);
+						return true;
+					}
+					return false;
+				};
+
+			const SHADER_TYPE kStages[] =
+			{
+				SHADER_TYPE_VERTEX,
+				SHADER_TYPE_PIXEL,
+				SHADER_TYPE_GEOMETRY,
+				SHADER_TYPE_HULL,
+				SHADER_TYPE_DOMAIN,
+				SHADER_TYPE_AMPLIFICATION,
+				SHADER_TYPE_MESH,
+				SHADER_TYPE_COMPUTE
+			};
+
+			bool anyBound = false;
+			for (SHADER_TYPE st : kStages)
+			{
+				if ((boundStages & st) != 0)
+				{
+					anyBound |= bindStageTex(st);
+				}
+			}
+
+			// Fallback if stages unknown
+			if (!anyBound && boundStages == SHADER_TYPE_UNKNOWN)
+			{
+				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
+				{
+					ASSERT(shader, "Shader in source instance is null.");
+					const SHADER_TYPE st = shader->GetDesc().ShaderType;
+					if (bindStageTex(st))
+					{
+						anyBound = true;
+						boundStages = (SHADER_TYPE)(boundStages | st);
+					}
+				}
+			}
+
+			pushBarrier(pTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+
+			BoundTexture bt = {};
+			bt.pTexture = pTexture;
+			bt.pSRV = pView;
+			bt.ResourceIndex = i;
+			bt.Type = resDesc.Type;
+			bt.ShaderStages = boundStages;
+
+			out.Textures[resDesc.Name] = std::move(bt);
+		}
 
 		m_PipelineBindingCache[hash] = out;
 		return m_PipelineBindingCache[hash];
@@ -1635,13 +1881,6 @@ namespace shz
 		GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
 		pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
 
-		SHADER_TYPE supportedShaderTypes[] =
-		{
-			SHADER_TYPE_VERTEX,
-			SHADER_TYPE_PIXEL,
-			SHADER_TYPE_COMPUTE,
-		};
-
 		return pOutPipelineState;
 	}
 
@@ -1658,24 +1897,16 @@ namespace shz
 		pso->CreateShaderResourceBinding(&pOutSRB, true);
 		ASSERT(pOutSRB, "Failed to create SRB.");
 
-		// Initialize and bind resources
-		uint32 cbIndex = 0;
-		uint32 cbCount = material.GetTemplate().GetCBufferCount();
-		for (; cbIndex < cbCount; ++cbIndex)
-		{
-			const auto& cb = material.GetTemplate().GetCBuffer(cbIndex);
-			if (cb.Name == MaterialTemplate::MATERIAL_CBUFFER_NAME)
-			{
-				break;
-			}
-		}
-
-		if (cbIndex < cbCount)
+		// ---------------------------------------------------------------------
+		// Constant Buffers (bind ALL reflected CBs)
+		// ---------------------------------------------------------------------
+		const uint32 cbCount = material.GetTemplate().GetCBufferCount();
+		for (uint32 cbIndex = 0; cbIndex < cbCount; ++cbIndex)
 		{
 			const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(cbIndex);
 
 			BufferDesc desc = {};
-			desc.Name = "MaterialConstants";
+			desc.Name = cb.Name.c_str();
 			desc.Usage = USAGE_DEFAULT;
 			desc.BindFlags = BIND_UNIFORM_BUFFER;
 			desc.CPUAccessFlags = CPU_ACCESS_NONE;
@@ -1683,25 +1914,28 @@ namespace shz
 
 			RefCntAutoPtr<IBuffer> pConstantBuffer;
 			m_pDevice->CreateBuffer(desc, nullptr, &pConstantBuffer);
+			ASSERT(pConstantBuffer, "Failed to create constant buffer: %s", cb.Name.c_str());
 
-			// Bind by name for first stage that exposes it.
+			// Bind by name for stages that expose it.
 			for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
 			{
 				ASSERT(shader, "Shader in source instance is null.");
 
 				const SHADER_TYPE st = shader->GetDesc().ShaderType;
-				IShaderResourceVariable* var = pOutSRB->GetVariableByName(st, MaterialTemplate::MATERIAL_CBUFFER_NAME);
+				IShaderResourceVariable* var = pOutSRB->GetVariableByName(st, cb.Name.c_str());
 				if (var)
 				{
 					var->Set(pConstantBuffer);
 				}
 			}
 
-			// Immediate initial binding
+			// Upload initial blob
 			const uint8* pBlob = material.GetCBufferBlobData(cbIndex);
 			const uint32 blobSize = material.GetCBufferBlobSize(cbIndex);
-			ASSERT(pBlob && blobSize > 0, "Invalid blob data.");
-			ASSERT(blobSize <= pConstantBuffer->GetDesc().Size, "Blob size exceeds CB size.");
+
+			ASSERT(pBlob, "Invalid blob pointer. cb=%s", cb.Name.c_str());
+			ASSERT(blobSize == cb.ByteSize, "Blob size mismatch. cb=%s blob=%u expected=%u", cb.Name.c_str(), blobSize, cb.ByteSize);
+			ASSERT(blobSize <= pConstantBuffer->GetDesc().Size, "Blob size exceeds CB size. cb=%s", cb.Name.c_str());
 
 			m_pImmediateContext->UpdateBuffer(
 				pConstantBuffer,
@@ -1714,7 +1948,9 @@ namespace shz
 			pushBarrier(pConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		}
 
-		// Textures
+		// ---------------------------------------------------------------------
+		// Textures (bind by reflected resource list)
+		// ---------------------------------------------------------------------
 		const uint32 resCount = material.GetTemplate().GetResourceCount();
 		for (uint32 i = 0; i < resCount; ++i)
 		{
@@ -1727,18 +1963,19 @@ namespace shz
 				continue;
 			}
 
-			const MaterialTextureBinding& b = material.GetTextureBinding(i);
-
 			RefCntAutoPtr<ITexture> pTexture;
 			ITextureView* pView = nullptr;
 
-			if (b.TextureRef.has_value())
+			// Prefer simplified map lookup (MaterialTexture)
+			if (const MaterialTexture* mt = material.GetTextureOrNull(resDesc.Name))
 			{
-				pTexture = CreateTexture(b.TextureRef.value());
+				ASSERT(mt->Texture.IsValid(), "Material texture ref invalid: %s", resDesc.Name.c_str());
+				pTexture = CreateTexture(mt->Texture);
 				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 			}
 			else
 			{
+				// fallback error
 				pTexture = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"));
 				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 			}
@@ -1769,7 +2006,7 @@ namespace shz
 	// Material templates
 	// ---------------------------------------------------------------------
 
-	const MaterialTemplate& Renderer::CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo)
+	MaterialTemplate& Renderer::CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo)
 	{
 		ASSERT(createInfo.ShaderStages.size() >= 1, "At least one shader stage must be specified.");
 		ASSERT(createInfo.TemplateName != "", "Material template name is empty.");
@@ -1779,14 +2016,14 @@ namespace shz
 		ASSERT(it == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
 
 		MaterialTemplate matTemplate;
-		bool bResult = matTemplate.Initialize(m_pDevice, m_pShaderSourceFactory, createInfo);
+		bool bResult = matTemplate.Initialize(*this, createInfo);
 		ASSERT(bResult, "Failed to create material template: %s", name.c_str());
 
 		m_TemplateLibrary[name] = std::move(matTemplate);
 		return m_TemplateLibrary[name];
 	}
 
-	const MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath)
+	MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -1804,10 +2041,9 @@ namespace shz
 		createInfo.ShaderStages.push_back(psDesc);
 
 		return CreateMaterialTemplate(createInfo);
-
 	}
 
-	const MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry)
+	MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -1830,7 +2066,7 @@ namespace shz
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const
 	{
 		auto it = m_TemplateLibrary.find(name);
-		ASSERT(it != m_TemplateLibrary.end(), "Material template not found: %s", name.c_str());
+		ASSERT(m_TemplateLibrary.find(name) != m_TemplateLibrary.end(), "Material template not found: %s", name.c_str());
 		return it->second;
 	}
 

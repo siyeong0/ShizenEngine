@@ -70,7 +70,7 @@ namespace shz
 
 		json j;
 		j["Format"] = "shzmat";
-		j["Version"] = 1;
+		j["Version"] = 2; // updated
 
 		j["Name"] = mat->GetName();
 		j["TemplateName"] = mat->GetTemplateName();
@@ -82,35 +82,75 @@ namespace shz
 			{"DepthEnable", mat->GetDepthEnable()},
 			{"DepthWriteEnable", mat->GetDepthWriteEnable()},
 			{"DepthFunc", (int)mat->GetDepthFunc()},
-			{"TextureBindingMode", (int)mat->GetTextureBindingMode()},
-			{"LinearWrapSamplerName", mat->GetLinearWrapSamplerName()},
-			{"LinearWrapSamplerDesc", samplerToJson(mat->GetLinearWrapSamplerDesc())},
 		};
 
+		// ---------------------------------------------------------------------
+		// Values: now rely on simplified MaterialValueBlob map (no snapshot cache)
+		// ---------------------------------------------------------------------
 		j["Values"] = json::array();
-		for (uint32 i = 0; i < mat->GetValueOverrideCount(); ++i)
+		for (const auto& kv : mat->GetAllValues())
 		{
-			const auto& v = mat->GetValueOverride(i);
+			const std::string& name = kv.first;
+			const MaterialValueBlob& v = kv.second;
+
 			j["Values"].push_back(json{
-				{"Name", v.Name},
+				{"Name", name},
 				{"Type", (int)v.Type},
 				{"Data", v.Data},
 				});
 		}
 
+		// ---------------------------------------------------------------------
+		// Resources: now rely on simplified MaterialTexture map + sampler overrides
+		// - Texture ref is stored in MaterialTexture::Texture
+		// - Sampler overrides are stored per-template-resource in MaterialTextureBinding
+		// ---------------------------------------------------------------------
 		j["Resources"] = json::array();
-		for (uint32 i = 0; i < mat->GetResourceBindingCount(); ++i)
+
+		const uint32 resCount = mat->GetTemplate().GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
 		{
-			const auto& r = mat->GetResourceBinding(i);
-			const AssetID tid = r.TextureRef.GetID();
+			const MaterialResourceDesc& rr = mat->GetTemplate().GetResource(i);
+			if (!IsTextureType(rr.Type))
+			{
+				continue;
+			}
 
 			json rj;
-			rj["Name"] = r.Name;
-			rj["Type"] = (int)r.Type;
-			rj["SourcePath"] = r.TextureRef.GetID().SourcePath;
-			rj["HasSamplerOverride"] = r.bHasSamplerOverride;
-			if (r.bHasSamplerOverride)
-				rj["SamplerOverrideDesc"] = samplerToJson(r.SamplerOverrideDesc);
+			rj["Name"] = rr.Name;
+			rj["Type"] = (int)rr.Type;
+
+			// Texture (optional)
+			if (const MaterialTexture* mt = mat->GetTextureOrNull(rr.Name))
+			{
+				if (mt->Texture.IsValid())
+				{
+					rj["SourcePath"] = mt->Texture.GetID().SourcePath;
+				}
+				else
+				{
+					rj["SourcePath"] = "";
+				}
+			}
+			else
+			{
+				rj["SourcePath"] = "";
+			}
+
+			// Sampler override (optional)
+			if (i < mat->GetTextureBindingCount())
+			{
+				const MaterialTextureBinding& tb = mat->GetTextureBinding(i);
+				rj["HasSamplerOverride"] = tb.bHasSamplerOverride;
+				if (tb.bHasSamplerOverride)
+				{
+					rj["SamplerOverrideDesc"] = samplerToJson(tb.SamplerOverrideDesc);
+				}
+			}
+			else
+			{
+				rj["HasSamplerOverride"] = false;
+			}
 
 			j["Resources"].push_back(std::move(rj));
 		}
@@ -125,4 +165,4 @@ namespace shz
 		out << j.dump(2);
 		return true;
 	}
-}
+} // namespace shz

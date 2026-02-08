@@ -159,6 +159,7 @@
     <ClInclude Include="Public\InteractionSystem.h" />
     <ClInclude Include="Public\PostProcessSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
+    <ClInclude Include="Public\TerrainSystem.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -174,6 +175,7 @@
     <ClCompile Include="Private\InteractionSystem.cpp" />
     <ClCompile Include="Private\PostProcessSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
+    <ClCompile Include="Private\TerrainSystem.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

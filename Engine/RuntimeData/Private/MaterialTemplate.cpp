@@ -1,8 +1,11 @@
+// Engine/RuntimeData/Private/MaterialTemplate.cpp
 #include "pch.h"
 #include "Engine/RuntimeData/Public/MaterialTemplate.h"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
+
+#include "Engine/Renderer/Public/Renderer.h" // for IsCommonStaticResource()
 
 namespace shz
 {
@@ -136,39 +139,13 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Policy:
-	// - If the shader declares a constant buffer named MATERIAL_CONSTANTS,
-	//   we assume its reflection buffer desc is index 0.
-	// - This matches your template policy: "Only one constant buffer is reflected".
-	// - If you later support multiple CBs, you must extend reflection API.
-	// ------------------------------------------------------------
-
-	static inline const ShaderCodeBufferDesc* getMaterialCBufferDesc_PolicySingleCB(const IShader* pShader, uint32* pOutGlobalIndex)
-	{
-		ASSERT(pShader, "Shader is null.");
-		ASSERT(pOutGlobalIndex, "pOutGlobalIndex is null.");
-		*pOutGlobalIndex = 0;
-
-		if (!shaderHasResource(pShader, MaterialTemplate::MATERIAL_CBUFFER_NAME, SHADER_RESOURCE_TYPE_CONSTANT_BUFFER))
-		{
-			return nullptr;
-		}
-
-		// By policy, the only reflected constant buffer is MATERIAL_CONSTANTS and is index 0.
-		const ShaderCodeBufferDesc* pCB = pShader->GetConstantBufferDesc(0);
-		return pCB;
-	}
-
-	// ------------------------------------------------------------
 	// MaterialTemplate
 	// ------------------------------------------------------------
 
-	bool MaterialTemplate::Initialize(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const MaterialTemplateCreateInfo& ci)
+	bool MaterialTemplate::Initialize(Renderer& renderer, const MaterialTemplateCreateInfo& ci)
 	{
-		ASSERT(pDevice, "Device is null.");
-		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
-
 		m_CreateInfo = ci;
+		m_pRenderer = &renderer;
 
 		ASSERT(!ci.TemplateName.empty(), "Empty template name.");
 		m_Name = ci.TemplateName;
@@ -184,14 +161,10 @@ namespace shz
 
 		// Build shaders
 		{
-			ASSERT(pDevice, "Device is null.");
-			ASSERT(pShaderSourceFactory, "Shader source factory is null.");
-
 			m_Shaders.clear();
 			m_Shaders.reserve(ci.ShaderStages.size());
 
 			ShaderCreateInfo sci = {};
-			sci.pShaderSourceStreamFactory = pShaderSourceFactory;
 
 			for (const MaterialShaderStageDesc& s : ci.ShaderStages)
 			{
@@ -210,7 +183,7 @@ namespace shz
 				sci.FilePath = s.FilePath.c_str();
 
 				RefCntAutoPtr<IShader> pShader;
-				pDevice->CreateShader(sci, &pShader);
+				renderer.CreateShader(sci, &pShader);
 
 				if (!pShader)
 				{
@@ -232,17 +205,18 @@ namespace shz
 
 			ASSERT(!m_Shaders.empty(), "No shaders in template.");
 
-			bool bFoundMaterialCB = false;
-			const uint32 matCbGlobalIndex = 0;
+			// CBName -> global index in m_CBuffers
+			std::unordered_map<std::string, uint32> cbufferLut;
 
-			std::function<void(const ShaderCodeVariableDesc*, uint32, uint32, uint32, uint32, const std::string&)> flattenVars;
+			std::function<void(const ShaderCodeVariableDesc*, uint32, uint32, uint32, uint32, const std::string&, SHADER_TYPE)> flattenVars;
 			flattenVars = [&](
 				const ShaderCodeVariableDesc* pVars,
 				uint32 varCount,
 				uint32 globalCBufferIndex,
 				uint32 baseOffset,
 				uint32 parentEndOffset,
-				const std::string& prefix)
+				const std::string& prefix,
+				SHADER_TYPE stageMask)
 				{
 					ASSERT(pVars && varCount > 0, "Invalid arguments.");
 
@@ -269,13 +243,14 @@ namespace shz
 								globalCBufferIndex,
 								absOffset,
 								structEnd,
-								fullName);
+								fullName,
+								stageMask);
 
 							continue;
 						}
 
 						const MATERIAL_VALUE_TYPE valueType = convertValueType(var);
-						ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Unsupported variable type in MATERIAL_CONSTANTS.");
+						ASSERT(valueType != MATERIAL_VALUE_TYPE_UNKNOWN, "Unsupported variable type in constant buffer.");
 
 						uint32 leafSize = computeSiblingSize(pVars, varCount, i, parentEndOffset);
 						if (leafSize == 0 && parentEndOffset > absOffset)
@@ -283,9 +258,19 @@ namespace shz
 
 						ASSERT(leafSize > 0, "Invalid leaf size.");
 
-						if (m_ValueParamLut.find(fullName) != m_ValueParamLut.end())
+						auto it = m_ValueParamLut.find(fullName);
+						if (it != m_ValueParamLut.end())
 						{
-							ASSERT(false, "Duplicate material value param name: %s", fullName.c_str());
+							// Already exists from another shader stage: merge stage mask.
+							MaterialValueParamDesc& existing = m_ValueParams[it->second];
+
+							// Optional sanity checks (keep them, but don't hard fail unless you want)
+							ASSERT(existing.Type == valueType, "Value type mismatch for %s", fullName.c_str());
+							ASSERT(existing.CBufferIndex == globalCBufferIndex, "CBufferIndex mismatch for %s", fullName.c_str());
+							ASSERT(existing.ByteOffset == absOffset, "ByteOffset mismatch for %s", fullName.c_str());
+							ASSERT(existing.ByteSize == leafSize, "ByteSize mismatch for %s", fullName.c_str());
+
+							existing.ShaderStages = (SHADER_TYPE)(existing.ShaderStages | stageMask);
 							continue;
 						}
 
@@ -296,6 +281,7 @@ namespace shz
 						P.ByteOffset = absOffset;
 						P.ByteSize = leafSize;
 						P.Flags = MaterialParamFlags_None;
+						P.ShaderStages = stageMask;
 
 						const uint32 newIndex = static_cast<uint32>(m_ValueParams.size());
 						m_ValueParams.push_back(P);
@@ -308,44 +294,8 @@ namespace shz
 				const IShader* pShader = shaderRef.RawPtr();
 				ASSERT(pShader, "Shader is null.");
 
-				// ------------------------------------------------------------
-				// MATERIAL_CONSTANTS: policy single CB at reflection index 0
-				// ------------------------------------------------------------
-				{
-					uint32 dummyGlobal = 0;
-					const ShaderCodeBufferDesc* pCBDesc = getMaterialCBufferDesc_PolicySingleCB(pShader, &dummyGlobal);
-					if (pCBDesc)
-					{
-						if (!bFoundMaterialCB)
-						{
-							bFoundMaterialCB = true;
+				const SHADER_TYPE stageMask = pShader->GetDesc().ShaderType; // ex) SHADER_TYPE_VERTEX / PIXEL / COMPUTE ...
 
-							MaterialCBufferDesc CB = {};
-							CB.Name = MATERIAL_CBUFFER_NAME;
-							CB.ByteSize = 0;
-							CB.IsDynamic = true;
-							m_CBuffers.push_back(CB);
-						}
-
-						m_CBuffers[matCbGlobalIndex].ByteSize =
-							std::max<uint32>(m_CBuffers[matCbGlobalIndex].ByteSize, pCBDesc->Size);
-
-						if (pCBDesc->NumVariables > 0 && pCBDesc->pVariables)
-						{
-							flattenVars(
-								pCBDesc->pVariables,
-								pCBDesc->NumVariables,
-								matCbGlobalIndex,
-								0,
-								pCBDesc->Size,
-								"");
-						}
-					}
-				}
-
-				// ------------------------------------------------------------
-				// Resources (SRV/UAV), dedup by name across stages
-				// ------------------------------------------------------------
 				const uint32 resCount = pShader->GetResourceCount();
 				for (uint32 r = 0; r < resCount; ++r)
 				{
@@ -355,33 +305,95 @@ namespace shz
 					if (!resDesc.Name || resDesc.Name[0] == '\0')
 						continue;
 
-					// Skip CB + samplers
-					if (resDesc.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER)
-						continue;
-
 					if (resDesc.Type == SHADER_RESOURCE_TYPE_SAMPLER)
 						continue;
 
-					const std::string resourceName = resDesc.Name;
-					if (m_ResourceLut.find(resourceName) != m_ResourceLut.end())
-						continue;
-
-					const MATERIAL_RESOURCE_TYPE matType = convertResourceType(resDesc);
-					if (matType == MATERIAL_RESOURCE_TYPE_UNKNOWN)
+					// ------------------------------------------------------------
+					// Constant Buffer
+					// ------------------------------------------------------------
+					if (resDesc.Type == SHADER_RESOURCE_TYPE_CONSTANT_BUFFER)
 					{
-						// Ignore unsupported resource types safely.
+						const char* cbName = resDesc.Name;
+
+						if (m_pRenderer->IsCommonStaticResource(cbName))
+							continue;
+
+						uint32 globalIndex = 0;
+						{
+							auto it = cbufferLut.find(cbName);
+							if (it == cbufferLut.end())
+							{
+								MaterialCBufferDesc CB = {};
+								CB.Name = cbName;
+								CB.ByteSize = 0;
+								CB.IsDynamic = false;
+								CB.ShaderStages = stageMask;
+
+								globalIndex = static_cast<uint32>(m_CBuffers.size());
+								m_CBuffers.push_back(CB);
+								cbufferLut.emplace(cbName, globalIndex);
+							}
+							else
+							{
+								globalIndex = it->second;
+								m_CBuffers[globalIndex].ShaderStages = (SHADER_TYPE)(m_CBuffers[globalIndex].ShaderStages | stageMask);
+							}
+						}
+
+						const ShaderCodeBufferDesc* pCBDesc = pShader->GetConstantBufferDesc(r);
+						ASSERT(pCBDesc, "Constant buffer reflection desc is null. cb=%s (resourceIndex=%u)", cbName, r);
+
+						m_CBuffers[globalIndex].ByteSize = std::max<uint32>(m_CBuffers[globalIndex].ByteSize, pCBDesc->Size);
+
+						if (pCBDesc->NumVariables > 0 && pCBDesc->pVariables)
+						{
+							flattenVars(
+								pCBDesc->pVariables,
+								pCBDesc->NumVariables,
+								globalIndex,
+								0,
+								pCBDesc->Size,
+								"",
+								stageMask);
+						}
+
+						m_CBufferLut.emplace(cbName, globalIndex);
 						continue;
 					}
 
-					MaterialResourceDesc MR = {};
-					MR.Name = resourceName;
-					MR.Type = matType;
-					MR.ArraySize = static_cast<uint16>(std::max<uint32>(resDesc.ArraySize, 1u));
-					MR.IsDynamic = true;
+					// ------------------------------------------------------------
+					// Other Resources (SRV/UAV), dedup by name across stages
+					// ------------------------------------------------------------
+					{
+						const std::string resourceName = resDesc.Name;
 
-					const uint32 newIndex = static_cast<uint32>(m_Resources.size());
-					m_Resources.push_back(MR);
-					m_ResourceLut.emplace(resourceName, newIndex);
+						if (m_pRenderer->IsCommonStaticResource(resourceName))
+							continue;
+
+						auto itR = m_ResourceLut.find(resourceName);
+						if (itR != m_ResourceLut.end())
+						{
+							// merge stage mask
+							MaterialResourceDesc& existing = m_Resources[itR->second];
+							existing.ShaderStages = (SHADER_TYPE)(existing.ShaderStages | stageMask);
+							continue;
+						}
+
+						const MATERIAL_RESOURCE_TYPE matType = convertResourceType(resDesc);
+						if (matType == MATERIAL_RESOURCE_TYPE_UNKNOWN)
+							continue;
+
+						MaterialResourceDesc MR = {};
+						MR.Name = resourceName;
+						MR.Type = matType;
+						MR.ArraySize = static_cast<uint16>(std::max<uint32>(resDesc.ArraySize, 1u));
+						MR.IsDynamic = false;
+						MR.ShaderStages = stageMask;
+
+						const uint32 newIndex = static_cast<uint32>(m_Resources.size());
+						m_Resources.push_back(MR);
+						m_ResourceLut.emplace(resourceName, newIndex);
+					}
 				}
 			}
 		}
@@ -417,6 +429,15 @@ namespace shz
 
 		*pOutIndex = it->second;
 		return true;
+	}
+
+	void MaterialTemplate::SetBufferDynamic(const std::string& name, bool bDynamic)
+	{
+		auto it = m_CBufferLut.find(name);
+		if (it != m_CBufferLut.end())
+		{
+			m_CBuffers[it->second].IsDynamic = bDynamic;
+		}
 	}
 
 	const MaterialResourceDesc* MaterialTemplate::FindResource(const char* name) const
@@ -491,11 +512,7 @@ namespace shz
 		return true;
 	}
 
-	bool MaterialTemplate::Load(
-		IRenderDevice* pDevice,
-		IShaderSourceInputStreamFactory* pShaderSourceFactory,
-		const char* templateName,
-		std::string* outError)
+	bool MaterialTemplate::Load(Renderer& renderer, const std::string& templateName, std::string* outError)
 	{
 		if (outError) outError->clear();
 
@@ -565,7 +582,7 @@ namespace shz
 			ci.ShaderStages.push_back(sd);
 		}
 
-		return Initialize(pDevice, pShaderSourceFactory, m_CreateInfo);
+		return Initialize(renderer, ci);
 	}
 
 	bool MaterialTemplate::Save(std::string* outError) const
@@ -574,7 +591,7 @@ namespace shz
 
 		ASSERT(!m_CreateInfo.TemplateName.empty(), "Template name is empty.");
 
-		const std::string path =std::string("C:/Dev/ShizenEngine/Assets/Materials/Template/")+ m_CreateInfo.TemplateName + ".json";
+		const std::string path = std::string("C:/Dev/ShizenEngine/Assets/Materials/Template/") + m_CreateInfo.TemplateName + ".json";
 
 		std::filesystem::create_directories(std::filesystem::path(path).parent_path());
 

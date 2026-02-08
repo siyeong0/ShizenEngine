@@ -10,7 +10,7 @@
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
-#include "Engine/Framework/Public/TerrainSystem.h"
+#include "Engine/RenderSystem/Public/TerrainSystem.h"
 
 namespace shz
 {
