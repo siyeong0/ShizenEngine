@@ -39,8 +39,8 @@ namespace shz
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
 	private:
-		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 16;
-		static constexpr uint32 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
+		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 14;
+		static constexpr uint32 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
 		static constexpr uint32 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 26;
 
 		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 800;

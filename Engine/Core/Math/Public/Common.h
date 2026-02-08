@@ -75,7 +75,17 @@ namespace shz
 		return (a < b) ? a : b;
 	}
 
+	inline uint32 Min(uint32 a, uint32 b)
+	{
+		return (a < b) ? a : b;
+	}
+
 	inline float32 Max(float32 a, float32 b)
+	{
+		return (a > b) ? a : b;
+	}
+
+	inline uint32 Max(uint32 a, uint32 b)
 	{
 		return (a > b) ? a : b;
 	}

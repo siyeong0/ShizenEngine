@@ -21,14 +21,20 @@ namespace shz
 				std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
 			}
 
-			// Resources
+			// Resources -> one binding per template resource
 			const uint32 resCount = m_Template.GetResourceCount();
-			m_TextureBindings.resize(resCount);
+			m_ResourceBindings.resize(resCount);
 
 			for (uint32 i = 0; i < resCount; ++i)
 			{
-				m_TextureBindings[i] = {};
-				m_TextureBindings[i].ClearBinding();
+				const MaterialResourceDesc& rd = m_Template.GetResource(i);
+
+				MaterialResourceBinding& b = m_ResourceBindings[i];
+				b = {};
+				b.Name = rd.Name;
+				b.ExpectedType = rd.Type;
+				b.ArraySize = rd.ArraySize;
+				b.ClearBinding();
 			}
 		}
 
@@ -56,21 +62,21 @@ namespace shz
 			}
 		}
 
-		// Textures
+		// Resources (textures + buffers)
 		{
 			const uint32 resCount = m_Template.GetResourceCount();
 			for (uint32 i = 0; i < resCount; ++i)
 			{
 				const MaterialResourceDesc& r = m_Template.GetResource(i);
 
-				if (IsTextureType(r.Type))
-				{
-					ShaderResourceVariableDesc v = {};
-					v.ShaderStages = r.ShaderStages;
-					v.Name = r.Name.c_str();
-					v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
-					m_Variables.push_back(v);
-				}
+				ShaderResourceVariableDesc v = {};
+				v.ShaderStages = r.ShaderStages;
+				v.Name = r.Name.c_str();
+				v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+
+				// NOTE: We add layout variables for ANY bindable resource name (textures/buffers/uav),
+				// because renderer will set SRV/UAV/CB with the same name.
+				m_Variables.push_back(v);
 			}
 		}
 
@@ -215,6 +221,42 @@ namespace shz
 	}
 
 	// ---------------------------------------------------------------------
+	// ResourceId internal setter with type constraints
+	// ---------------------------------------------------------------------
+	bool Material::setResourceIdInternal(const char* resourceName, uint64 resourceId, bool bRequireTexture, bool bRequireBuffer)
+	{
+		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name.");
+		ASSERT(resourceId != 0, "Invalid resourceId (0).");
+
+		uint32 resIndex = 0;
+		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
+		{
+			return false;
+		}
+
+		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+
+		const bool bIsTex = IsTextureType(rd.Type);
+		const bool bIsBuf = (rd.Type == MATERIAL_RESOURCE_TYPE_STRUCTUREDBUFFER) || (rd.Type == MATERIAL_RESOURCE_TYPE_RWSTRUCTUREDBUFFER);
+
+		if (bRequireTexture && !bIsTex)
+			return false;
+
+		if (bRequireBuffer && !bIsBuf)
+			return false;
+
+		MaterialResourceBinding& b = m_ResourceBindings[resIndex];
+		b.Name = resourceName;
+		b.ExpectedType = rd.Type;
+		b.ArraySize = rd.ArraySize;
+		b.SetResourceId(resourceId);
+
+		// Sanity (exclusive: either AssetRef or ResourceId)
+		ASSERT(!(b.HasAssetRef() && b.HasResourceId()), "Resource binding has both AssetRef and ResourceId.");
+		return true;
+	}
+
+	// ---------------------------------------------------------------------
 	// Textures (mutually exclusive binding)
 	// ---------------------------------------------------------------------
 	bool Material::SetTextureAssetRef(const char* resourceName, const AssetRef<Texture>& textureRef)
@@ -233,9 +275,11 @@ namespace shz
 			return false;
 		}
 
-		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
-		tb.Name = resourceName;
-		tb.SetAssetRef(textureRef);
+		MaterialResourceBinding& b = m_ResourceBindings[resIndex];
+		b.Name = resourceName;
+		b.ExpectedType = rd.Type;
+		b.ArraySize = rd.ArraySize;
+		b.SetTextureAssetRef(textureRef);
 
 		// minimal authoring mirror (AssetRef path only)
 		{
@@ -243,39 +287,23 @@ namespace shz
 			mt.Texture = textureRef;
 		}
 
-		// Sanity: exclusive
-		ASSERT(!(tb.HasAssetRef() && tb.HasResourceId()), "Texture binding has both AssetRef and ResourceId.");
+		ASSERT(!(b.HasAssetRef() && b.HasResourceId()), "Resource binding has both AssetRef and ResourceId.");
 		return true;
 	}
 
 	bool Material::SetTextureResource(const char* resourceName, uint64 resourceId)
 	{
-		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name.");
-		ASSERT(resourceId != 0, "Invalid resourceId (0).");
+		// require texture
+		return setResourceIdInternal(resourceName, resourceId, /*bRequireTexture*/true, /*bRequireBuffer*/false);
+	}
 
-		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
-		{
-			return false;
-		}
-
-		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
-		if (!IsTextureType(rd.Type))
-		{
-			return false;
-		}
-
-		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
-		tb.Name = resourceName;
-		tb.SetResourceId(resourceId);
-
-		// ResourceId는 런타임 바인딩 경로이므로 authoring mirror는 갱신하지 않는 것을 권장
-		// (원하면 지워서 "AssetRef 설정이 아님"을 명확히 할 수 있음)
-		// m_Textures.erase(resourceName);
-
-		// Sanity: exclusive
-		ASSERT(!(tb.HasAssetRef() && tb.HasResourceId()), "Texture binding has both AssetRef and ResourceId.");
-		return true;
+	// ---------------------------------------------------------------------
+	// Buffers (StructuredBuffer / RWStructuredBuffer) by ResourceId
+	// ---------------------------------------------------------------------
+	bool Material::SetBufferResource(const char* resourceName, uint64 resourceId)
+	{
+		// require buffer
+		return setResourceIdInternal(resourceName, resourceId, /*bRequireTexture*/false, /*bRequireBuffer*/true);
 	}
 
 	// ---------------------------------------------------------------------
@@ -320,7 +348,6 @@ namespace shz
 		gpDesc.pRenderPass = pRenderPass;
 		gpDesc.SubpassIndex = 0;
 
-		// NOTE: derived from RenderPass
 		gpDesc.NumRenderTargets = 0;
 		for (uint32 i = 0; i < _countof(gpDesc.RTVFormats); ++i)
 		{
@@ -416,7 +443,7 @@ namespace shz
 		m_ImmutableSamplersStorage.clear();
 
 		m_CBufferBlobs.clear();
-		m_TextureBindings.clear();
+		m_ResourceBindings.clear();
 
 		m_Values.clear();
 		m_Textures.clear();

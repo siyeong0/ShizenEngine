@@ -55,12 +55,21 @@ namespace shz
 		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sky/skyBrdf.dds";
 	};
 
-	struct BoundCBuffer final
+	struct BoundConstantBuffer final
 	{
 		RefCntAutoPtr<IBuffer> pBuffer;
 
 		uint32 CBufferIndex = 0;
 		uint32 ByteSize = 0;
+		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
+	};
+
+	struct BoundBuffer
+	{
+		RefCntAutoPtr<IBuffer> pBuffer;
+		RefCntAutoPtr<IBufferView> pView;
+		uint32 ResourceIndex = 0;
+		MATERIAL_RESOURCE_TYPE Type = MATERIAL_RESOURCE_TYPE_UNKNOWN;
 		SHADER_TYPE ShaderStages = SHADER_TYPE_UNKNOWN;
 	};
 
@@ -79,7 +88,8 @@ namespace shz
 		RefCntAutoPtr<IPipelineState>         pPSO;
 		RefCntAutoPtr<IShaderResourceBinding> pSRB;
 
-		std::unordered_map<std::string, BoundCBuffer> Buffers;
+		std::unordered_map<std::string, BoundConstantBuffer> ConstantBuffers;
+		std::unordered_map<std::string, BoundBuffer> Buffers;
 		std::unordered_map<std::string, BoundTexture> Textures;
 	};
 

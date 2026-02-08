@@ -302,10 +302,14 @@ namespace shz
 					pShader->GetResourceDesc(r, resDesc);
 
 					if (!resDesc.Name || resDesc.Name[0] == '\0')
+					{
 						continue;
+					}
 
 					if (resDesc.Type == SHADER_RESOURCE_TYPE_SAMPLER)
+					{
 						continue;
+					}
 
 					// ------------------------------------------------------------
 					// Constant Buffer
@@ -367,7 +371,9 @@ namespace shz
 						const std::string resourceName = resDesc.Name;
 
 						if (m_pRenderer->IsCommonStaticResource(resourceName))
+						{
 							continue;
+						}
 
 						auto itR = m_ResourceLut.find(resourceName);
 						if (itR != m_ResourceLut.end())
@@ -380,7 +386,9 @@ namespace shz
 
 						const MATERIAL_RESOURCE_TYPE matType = convertResourceType(resDesc);
 						if (matType == MATERIAL_RESOURCE_TYPE_UNKNOWN)
+						{
 							continue;
+						}
 
 						MaterialResourceDesc MR = {};
 						MR.Name = resourceName;

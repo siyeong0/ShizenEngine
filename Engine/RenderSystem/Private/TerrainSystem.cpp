@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "Engine/RenderSystem/Public/TerrainSystem.h"
 
+#include <cmath>
+#include <cfloat>
+
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 
@@ -84,52 +87,50 @@ namespace shz
 		const uint32 quadsPerSide = 16 / step;
 
 		auto vid = [&](uint32 gx, uint32 gz) -> uint16
-		{
-			ASSERT(gx <= 16 && gz <= 16, "Grid index out of range.");
-			return uint16(gz * vertsPerSide + gx);
-		};
+			{
+				ASSERT(gx <= 16 && gz <= 16, "Grid index out of range.");
+				return uint16(gz * vertsPerSide + gx);
+			};
 
-		// ------------------------------------------------------------
 		// Winding stabilizer: enforce same winding as (0,0)->(s,0)->(0,s)
-		// ------------------------------------------------------------
 		const int32 refSign = +1;
 
 		auto cross2XZSign = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz) -> int32
-		{
-			const int32 x1 = int32(bx) - int32(ax);
-			const int32 z1 = int32(bz) - int32(az);
-			const int32 x2 = int32(cx) - int32(ax);
-			const int32 z2 = int32(cz) - int32(az);
+			{
+				const int32 x1 = int32(bx) - int32(ax);
+				const int32 z1 = int32(bz) - int32(az);
+				const int32 x2 = int32(cx) - int32(ax);
+				const int32 z2 = int32(cz) - int32(az);
 
-			const int32 c = x1 * z2 - z1 * x2;
-			return (c > 0) ? +1 : (c < 0 ? -1 : 0);
-		};
+				const int32 c = x1 * z2 - z1 * x2;
+				return (c > 0) ? +1 : (c < 0 ? -1 : 0);
+			};
 
 		auto pushTriGrid = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz)
-		{
-			uint16 a = vid(ax, az);
-			uint16 b = vid(bx, bz);
-			uint16 c = vid(cx, cz);
-
-			const int32 sgn = cross2XZSign(ax, az, bx, bz, cx, cz);
-			if (sgn != 0 && sgn != refSign)
 			{
-				std::swap(b, c);
-			}
+				uint16 a = vid(ax, az);
+				uint16 b = vid(bx, bz);
+				uint16 c = vid(cx, cz);
 
-			outIdxU16.push_back(a);
-			outIdxU16.push_back(b);
-			outIdxU16.push_back(c);
-		};
+				const int32 sgn = cross2XZSign(ax, az, bx, bz, cx, cz);
+				if (sgn != 0 && sgn != refSign)
+				{
+					std::swap(b, c);
+				}
+
+				outIdxU16.push_back(a);
+				outIdxU16.push_back(b);
+				outIdxU16.push_back(c);
+			};
 
 		auto pushQuadStd = [&](uint32 x0, uint32 z0)
-		{
-			const uint32 x1 = x0 + step;
-			const uint32 z1 = z0 + step;
+			{
+				const uint32 x1 = x0 + step;
+				const uint32 z1 = z0 + step;
 
-			pushTriGrid(x0, z0, x1, z0, x0, z1);
-			pushTriGrid(x1, z0, x1, z1, x0, z1);
-		};
+				pushTriGrid(x0, z0, x1, z0, x0, z1);
+				pushTriGrid(x1, z0, x1, z1, x0, z1);
+			};
 
 		// step==16 (LOD4): single quad only
 		if (step == 16)
@@ -148,12 +149,9 @@ namespace shz
 		const uint32 s = step;
 		const uint32 s2 = step * 2;
 
-		// rough upper bound
 		outIdxU16.reserve(quadsPerSide * quadsPerSide * 6 + quadsPerSide * 12);
 
-		// ------------------------------------------------------------
-		// A) Interior (exclude outer ring; edges handled separately)
-		// ------------------------------------------------------------
+		// Interior (exclude outer ring; edges handled separately)
 		if (quadsPerSide > 2)
 		{
 			for (uint32 qz = 1; qz < quadsPerSide - 1; ++qz)
@@ -165,114 +163,86 @@ namespace shz
 			}
 		}
 
-		// ------------------------------------------------------------
-		// Stitch strip emitters (diff=1 assumed)
-		// IMPORTANT:
-		// - Boundary uses ONLY even vertices (0,2s,4s..)
-		// - Inner line uses (0,s,2s) to connect without T-junction
-		// ------------------------------------------------------------
 		auto emitStitchStripX = [&](uint32 zBoundary, uint32 zInner, uint32 xBegin, uint32 xEnd)
-		{
-			// xBegin/xEnd in grid space, must be multiples of 2s, inclusive range [xBegin .. xEnd] where xEnd<=16-2s
-			for (uint32 x = xBegin; (x + s2) <= xEnd; x += s2)
 			{
-				const uint32 x0 = x;
-				const uint32 x1 = x + s;
-				const uint32 x2 = x + s2;
+				for (uint32 x = xBegin; (x + s2) <= xEnd; x += s2)
+				{
+					const uint32 x0 = x;
+					const uint32 x1 = x + s;
+					const uint32 x2 = x + s2;
 
-				// Triangulate 2s segment with 3 tris:
-				// boundary edge uses (x0,zB) -> (x2,zB)
-				// inner row uses (x0,zI),(x1,zI),(x2,zI)
-				pushTriGrid(x0, zBoundary, x2, zBoundary, x1, zInner); // A C E
-				pushTriGrid(x0, zBoundary, x1, zInner, x0, zInner);  // A E D
-				pushTriGrid(x2, zBoundary, x2, zInner, x1, zInner);  // C F E
-			}
-		};
+					pushTriGrid(x0, zBoundary, x2, zBoundary, x1, zInner);
+					pushTriGrid(x0, zBoundary, x1, zInner, x0, zInner);
+					pushTriGrid(x2, zBoundary, x2, zInner, x1, zInner);
+				}
+			};
 
 		auto emitStitchStripZ = [&](uint32 xBoundary, uint32 xInner, uint32 zBegin, uint32 zEnd)
-		{
-			for (uint32 z = zBegin; (z + s2) <= zEnd; z += s2)
 			{
-				const uint32 z0 = z;
-				const uint32 z1 = z + s;
-				const uint32 z2 = z + s2;
+				for (uint32 z = zBegin; (z + s2) <= zEnd; z += s2)
+				{
+					const uint32 z0 = z;
+					const uint32 z1 = z + s;
+					const uint32 z2 = z + s2;
 
-				pushTriGrid(xBoundary, z0, xBoundary, z2, xInner, z1); // A C E
-				pushTriGrid(xBoundary, z0, xInner, z1, xInner, z0); // A E D
-				pushTriGrid(xBoundary, z2, xInner, z2, xInner, z1); // C F E
-			}
-		};
+					pushTriGrid(xBoundary, z0, xBoundary, z2, xInner, z1);
+					pushTriGrid(xBoundary, z0, xInner, z1, xInner, z0);
+					pushTriGrid(xBoundary, z2, xInner, z2, xInner, z1);
+				}
+			};
 
-		// ------------------------------------------------------------
-		// Corner patch:
-		// When two stitched edges meet, we draw ONE 2s¡¿2s quad using only even boundary verts.
-		// This avoids overlap / weird triangles / T-junction at the corner.
-		// ------------------------------------------------------------
 		const bool bCornerBL = bStitchB && bStitchL;
 		const bool bCornerBR = bStitchB && bStitchR;
 		const bool bCornerTL = bStitchT && bStitchL;
 		const bool bCornerTR = bStitchT && bStitchR;
 
-		// Emit corner patches first (purely deterministic)
+		// Corner patches first
 		if (bCornerBL)
 		{
 			uint32 x0 = 0; uint32 z0 = 0;
 			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
 			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			// big
 			pushTriGrid(x0, z0, x1, z1, x0, z2);
 			pushTriGrid(x0, z0, x1, z1, x2, z0);
-			// small
 			pushTriGrid(x2, z0, x1, z1, x2, z1);
 			pushTriGrid(x0, z2, x1, z1, x1, z2);
 		}
 		if (bCornerBR)
 		{
 			uint32 x0 = 16 - s2; uint32 z0 = 0;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x1 = x0 + s;  uint32 z1 = z0 + s;
 			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			// big
 			pushTriGrid(x0, z0, x1, z1, x2, z0);
 			pushTriGrid(x2, z2, x1, z1, x2, z0);
-			// small
 			pushTriGrid(x0, z0, x1, z1, x0, z1);
 			pushTriGrid(x1, z2, x1, z1, x2, z2);
 		}
 		if (bCornerTL)
 		{
 			uint32 x0 = 0; uint32 z0 = 16 - s2;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x1 = x0 + s;  uint32 z1 = z0 + s;
 			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			// big
 			pushTriGrid(x0, z0, x1, z1, x0, z2);
 			pushTriGrid(x2, z2, x1, z1, x0, z2);
-			// small
 			pushTriGrid(x0, z0, x1, z1, x1, z0);
 			pushTriGrid(x2, z1, x1, z1, x2, z2);
 		}
 		if (bCornerTR)
 		{
 			uint32 x0 = 16 - s2; uint32 z0 = 16 - s2;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x1 = x0 + s;  uint32 z1 = z0 + s;
 			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			// big
 			pushTriGrid(x2, z2, x1, z1, x0, z2);
 			pushTriGrid(x2, z2, x1, z1, x2, z0);
-			// small
 			pushTriGrid(x0, z1, x1, z1, x0, z2);
 			pushTriGrid(x1, z0, x1, z1, x2, z0);
 		}
 
-		// ------------------------------------------------------------
-		// B) Bottom edge
-		// ------------------------------------------------------------
+		// Bottom edge
 		if (!bStitchB)
 		{
-			// If left/right are stitched, bottom must NOT use odd boundary verts at that corner.
-			// So skip the corner quad and let left/right stitch handle it (or corner patch if both stitched).
 			const uint32 qxBegin = bStitchL ? 1u : 0u;
 			const uint32 qxEnd = bStitchR ? (quadsPerSide - 1u) : quadsPerSide;
-
 			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
 			{
 				pushQuadStd(qx * step, 0);
@@ -280,20 +250,16 @@ namespace shz
 		}
 		else
 		{
-			// Skip corner spans if corner patch exists (2s region is owned by patch)
 			const uint32 xBegin = bCornerBL ? s2 : 0u;
 			const uint32 xEnd = bCornerBR ? (16 - s2) : 16u;
-			emitStitchStripX(/*zBoundary=*/0, /*zInner=*/s, xBegin, xEnd);
+			emitStitchStripX(0, s, xBegin, xEnd);
 		}
 
-		// ------------------------------------------------------------
-		// C) Top edge
-		// ------------------------------------------------------------
+		// Top edge
 		if (!bStitchT)
 		{
 			const uint32 qxBegin = bStitchL ? 1u : 0u;
 			const uint32 qxEnd = bStitchR ? (quadsPerSide - 1u) : quadsPerSide;
-
 			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
 			{
 				pushQuadStd(qx * step, 16 - step);
@@ -303,20 +269,16 @@ namespace shz
 		{
 			const uint32 xBegin = bCornerTL ? s2 : 0u;
 			const uint32 xEnd = bCornerTR ? (16 - s2) : 16u;
-			emitStitchStripX(/*zBoundary=*/16, /*zInner=*/16 - s, xBegin, xEnd);
+			emitStitchStripX(16, 16 - s, xBegin, xEnd);
 		}
 
-		// ------------------------------------------------------------
-		// D) Left edge
-		// ------------------------------------------------------------
+		// Left edge
 		if (quadsPerSide >= 2)
 		{
 			if (!bStitchL)
 			{
-				// Left non-stitch: ALWAYS exclude corners to avoid double-emission with Bottom/Top.
 				const uint32 qzBegin = 1u;
 				const uint32 qzEnd = (quadsPerSide > 1) ? (quadsPerSide - 1u) : 0u;
-
 				for (uint32 qz = qzBegin; qz < qzEnd; ++qz)
 				{
 					pushQuadStd(0, qz * step);
@@ -326,21 +288,17 @@ namespace shz
 			{
 				const uint32 zBegin = bCornerBL ? s2 : 0u;
 				const uint32 zEnd = bCornerTL ? (16 - s2) : 16u;
-				emitStitchStripZ(/*xBoundary=*/0, /*xInner=*/s, zBegin, zEnd);
+				emitStitchStripZ(0, s, zBegin, zEnd);
 			}
 		}
 
-		// ------------------------------------------------------------
-		// E) Right edge
-		// ------------------------------------------------------------
+		// Right edge
 		if (quadsPerSide >= 2)
 		{
 			if (!bStitchR)
 			{
-				// Right non-stitch: ALWAYS exclude corners to avoid double-emission with Bottom/Top.
 				const uint32 qzBegin = 1u;
 				const uint32 qzEnd = (quadsPerSide > 1) ? (quadsPerSide - 1u) : 0u;
-
 				for (uint32 qz = qzBegin; qz < qzEnd; ++qz)
 				{
 					pushQuadStd(16 - step, qz * step);
@@ -350,7 +308,7 @@ namespace shz
 			{
 				const uint32 zBegin = bCornerBR ? s2 : 0u;
 				const uint32 zEnd = bCornerTR ? (16 - s2) : 16u;
-				emitStitchStripZ(/*xBoundary=*/16, /*xInner=*/16 - s, zBegin, zEnd);
+				emitStitchStripZ(16, 16 - s, zBegin, zEnd);
 			}
 		}
 
@@ -444,6 +402,31 @@ namespace shz
 	// ------------------------------------------------------------
 	void TerrainSystem::InstallPasses(Renderer& renderer)
 	{
+		// -----------------------------------------------------------------
+		// TerrainDrawConstantsBuffer (StructuredBuffer SRV, updated once per frame)
+		// - Must be readable as: StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
+		// -----------------------------------------------------------------
+		{
+			const float worldSizeX = GetWorldSizeX();
+			const float worldSizeZ = GetWorldSizeZ();
+
+			const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
+			const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
+			const uint32 maxInstances = Max(1u, numChunksX * numChunksZ);
+
+			BufferDesc desc = {};
+			desc.Name = "TerrainDrawConstantsBuffer";
+			desc.Usage = USAGE_DYNAMIC; // CPU write every frame
+			desc.BindFlags = BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+			desc.Mode = BUFFER_MODE_STRUCTURED;
+			desc.ElementByteStride = sizeof(hlsl::TerrainDrawConstants);
+			desc.Size = uint64(desc.ElementByteStride) * uint64(maxInstances);
+
+			renderer.AddBuffer(STRING_HASH("TerrainDrawConstantsBuffer"), desc);
+		}
+
+		// Pass
 		renderer.AddPass(
 			"TerrainGBuffer",
 			[](RenderPassBuilder& b)
@@ -459,6 +442,7 @@ namespace shz
 				b.DeclareTextureRTVWrite(kMRAO);
 				b.DeclareTextureRTVWrite(kEmissive);
 				b.DeclareTextureDSVWrite(kDepth);
+
 				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
 
 				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
@@ -471,6 +455,7 @@ namespace shz
 			{
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(ctx.pViewFamily, "ViewFamily is null.");
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -479,24 +464,11 @@ namespace shz
 				const float worldSizeX = GetWorldSizeX();
 				const float worldSizeZ = GetWorldSizeZ();
 
-				const uint32 numChunksX = uint32(std::ceil(worldSizeX / m_ChunkSize));
-				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / m_ChunkSize));
+				const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
+				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
 				if (numChunksX == 0 || numChunksZ == 0)
 					return;
 
-				pCtx->SetPipelineState(m_TerrainBinding.pPSO);
-				pCtx->CommitShaderResources(m_TerrainBinding.pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-
-				{
-					IBuffer* vbs[] = { m_pGridVB };
-					uint64 offs[] = { 0 };
-					pCtx->SetVertexBuffers(
-						0, 1, vbs, offs,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
-				}
-
-				ASSERT(ctx.pViewFamily, "ViewFamily is null.");
 				const ViewFamily& viewFamily = *ctx.pViewFamily;
 				ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
 				const View& view = viewFamily.Views[0];
@@ -508,10 +480,11 @@ namespace shz
 				}
 
 				auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
-				{
-					return cz * numChunksX + cx;
-				};
+					{
+						return cz * numChunksX + cx;
+					};
 
+				// LOD ranges
 				struct LodRange final { float End; };
 				const LodRange lodRanges[5] =
 				{
@@ -523,33 +496,32 @@ namespace shz
 				};
 
 				auto selectLodOnly = [&](float dist) -> uint32
-				{
-					if (dist < lodRanges[0].End) return 0;
-					if (dist < lodRanges[1].End) return 1;
-					if (dist < lodRanges[2].End) return 2;
-					if (dist < lodRanges[3].End) return 3;
-					return 4;
-				};
+					{
+						if (dist < lodRanges[0].End) return 0;
+						if (dist < lodRanges[1].End) return 1;
+						if (dist < lodRanges[2].End) return 2;
+						if (dist < lodRanges[3].End) return 3;
+						return 4;
+					};
 
 				auto morphForClampedLod = [&](float dist, uint32 lod) -> float
-				{
-					if (lod >= 4)
-						return 0.0f;
+					{
+						if (lod >= 4) return 0.0f;
 
-					const float d1 = lodRanges[lod].End;
-					const float d0 = d1 * 0.85f;
+						const float d1 = lodRanges[lod].End;
+						const float d0 = d1 * 0.85f;
 
-					const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
-					const float s = t * t * (3.0f - 2.0f * t); // smoothstep
-					return s;
-				};
+						const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
+						const float s = t * t * (3.0f - 2.0f * t); // smoothstep
+						return s;
+					};
 
+				// Build LOD grid
 				std::vector<uint8> lodGrid;
 				lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), 4u);
 
 				{
-					// const float3 cam = view.CameraPosition;
-					const float3 cam = float3{0.0f, 300.0f, 0.0f};
+					const float3 cam = view.CameraPosition;
 
 					for (uint32 cz = 0; cz < numChunksZ; ++cz)
 					{
@@ -583,6 +555,7 @@ namespace shz
 					}
 				}
 
+				// Neighbor clamp (LOD diff <= 1)
 				{
 					bool changed = true;
 					uint32 iter = 0;
@@ -598,36 +571,88 @@ namespace shz
 								uint8& a = lodGrid[idx2D(cx, cz)];
 
 								auto clampPair = [&](uint32 nx, uint32 nz)
-								{
-									if (nx >= numChunksX || nz >= numChunksZ)
-										return;
+									{
+										if (nx >= numChunksX || nz >= numChunksZ)
+											return;
 
-									uint8& b = lodGrid[idx2D(nx, nz)];
+										uint8& b = lodGrid[idx2D(nx, nz)];
 
-									if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
-									if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
-								};
+										if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
+										if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
+									};
 
-								if (cx > 0) clampPair(cx - 1, cz);
+								if (cx > 0)             clampPair(cx - 1, cz);
 								if (cx + 1 < numChunksX) clampPair(cx + 1, cz);
-								if (cz > 0) clampPair(cx, cz - 1);
+								if (cz > 0)             clampPair(cx, cz - 1);
 								if (cz + 1 < numChunksZ) clampPair(cx, cz + 1);
 							}
 						}
 					}
 				}
 
-				DrawIndexedAttribs dia = {};
-				dia.IndexType = VT_UINT16;
-				dia.Flags = DRAW_FLAG_VERIFY_ALL;
+				// ------------------------------------------------------------
+				// Build visible instances + batch draw calls by (lod, stitchMask)
+				// ------------------------------------------------------------
+				struct BatchKey final
+				{
+					uint8 Lod = 0;
+					uint8 Mask = 0;
 
-				uint32 currentLod = 0xFFFFFFFFu;
-				uint32 currentMask = 0xFFFFFFFFu;
+					bool operator==(const BatchKey& o) const noexcept { return Lod == o.Lod && Mask == o.Mask; }
+				};
+
+				struct Batch final
+				{
+					uint8  Lod = 0;
+					uint8  Mask = 0;
+					uint32 StartInstance = 0;
+					uint32 InstanceCount = 0;
+				};
+
+				// Max possible is numChunksX*numChunksZ, reserve that once.
+				std::vector<hlsl::TerrainDrawConstants> instances;
+				instances.reserve(size_t(numChunksX) * size_t(numChunksZ));
+
+				std::vector<Batch> batches;
+				batches.reserve(64);
+
+				auto hash01 = [](uint32 v) -> float
+					{
+						v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16;
+						return float(v & 0x00FFFFFFu) / 16777216.0f;
+					};
 
 				const float yMin = m_HeightOffset;
 				const float yMax = m_HeightOffset + m_HeightScale;
 
 				const float3 cam = view.CameraPosition;
+
+				auto nLod = [&](int32 nx, int32 nz, uint32 lodHere) -> uint32
+					{
+						if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
+							return lodHere;
+						return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
+					};
+
+				BatchKey currentKey = { 255u, 255u };
+				uint32 currentBatchStart = 0;
+
+				auto flushBatch = [&](const BatchKey& key)
+					{
+						const uint32 end = uint32(instances.size());
+						const uint32 count = end - currentBatchStart;
+						if (count == 0)
+							return;
+
+						Batch b = {};
+						b.Lod = key.Lod;
+						b.Mask = key.Mask;
+						b.StartInstance = currentBatchStart;
+						b.InstanceCount = count;
+						batches.push_back(b);
+
+						currentBatchStart = end;
+					};
 
 				for (uint32 cz = 0; cz < numChunksZ; ++cz)
 				{
@@ -645,12 +670,12 @@ namespace shz
 						if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
 							continue;
 
+						// Frustum cull using conservative yMin/yMax
 						Box localBounds = {};
 						localBounds.Min = float3{ 0.f, yMin, 0.f };
 						localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
 
 						Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.f, chunkOriginZ });
-
 						if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 							continue;
 
@@ -658,39 +683,30 @@ namespace shz
 						ASSERT(lod < 5, "Invalid LOD.");
 
 						uint8 mask = Stitch_None;
+						if (nLod(int32(cx) - 1, int32(cz), lod) > lod) mask |= Stitch_Left;
+						if (nLod(int32(cx) + 1, int32(cz), lod) > lod) mask |= Stitch_Right;
+						if (nLod(int32(cx), int32(cz) - 1, lod) > lod) mask |= Stitch_Bottom;
+						if (nLod(int32(cx), int32(cz) + 1, lod) > lod) mask |= Stitch_Top;
 
-						auto nLod = [&](int32 nx, int32 nz) -> uint32
-						{
-							if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
-								return lod;
-							return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
-						};
-
-						if (nLod(int32(cx) - 1, int32(cz)) > lod) mask |= Stitch_Left;
-						if (nLod(int32(cx) + 1, int32(cz)) > lod) mask |= Stitch_Right;
-						if (nLod(int32(cx), int32(cz) - 1) > lod) mask |= Stitch_Bottom;
-						if (nLod(int32(cx), int32(cz) + 1) > lod) mask |= Stitch_Top;
-
-						if (lod != currentLod || uint32(mask) != currentMask)
-						{
-							currentLod = lod;
-							currentMask = uint32(mask);
-
-							RefCntAutoPtr<IBuffer>& ib = m_pLodIB[lod][mask];
-							ASSERT(ib, "Terrain IB is null (lod=%u mask=%u).", lod, uint32(mask));
-
-							pCtx->SetIndexBuffer(ib, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-							dia.NumIndices = m_LodIndexCount[lod][mask];
-						}
-
+						// Distance for morph
 						const float cxw = chunkOriginX + 0.5f * chunkSizeX;
 						const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
-
 						const float dx = cam.x - cxw;
 						const float dz = cam.z - czw;
 						const float dist = std::sqrt(dx * dx + dz * dz);
 
 						const float morph = morphForClampedLod(dist, lod);
+
+						// If batch key changed, flush previous
+						const BatchKey key = { uint8(lod), uint8(mask) };
+						if (!(key == currentKey))
+						{
+							if (currentKey.Lod != 255u)
+								flushBatch(currentKey);
+
+							currentKey = key;
+							currentBatchStart = uint32(instances.size());
+						}
 
 						hlsl::TerrainDrawConstants dc = {};
 						dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
@@ -707,30 +723,105 @@ namespace shz
 						dc.LodIndex = lod;
 						dc.LodMorphAlpha = morph;
 
-						// Debug
-						auto hash01 = [](uint32 v) -> float
-						{
-							v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16; return float(v & 0x00FFFFFFu) / 16777216.0f;
-						};
-
-						uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
-						//uint32 h = lod;
-						float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
-						float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
-						float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
+						// Debug chunk color
+						const uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
+						const float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
+						const float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
+						const float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
 						dc.DebugChunkColor = float4{ r, g, b, 1.0f };
 
+						instances.emplace_back(dc);
+					}
+				}
 
-						MapHelper<hlsl::TerrainDrawConstants> map(
+				// Flush last batch
+				if (currentKey.Lod != 255u)
+				{
+					flushBatch(currentKey);
+				}
+
+				if (instances.empty() || batches.empty())
+					return;
+
+				// ------------------------------------------------------------
+				// Upload structured buffer ONCE per frame
+				// ------------------------------------------------------------
+				{
+					IBuffer* pSBuf = ctx.pRegistry->GetBuffer(STRING_HASH("TerrainDrawConstantsBuffer"));
+					ASSERT(pSBuf, "TerrainDrawConstantsBuffer is null.");
+
+					// USAGE_DYNAMIC + MAP_WRITE(DISCARD)
+					MapHelper<hlsl::TerrainDrawConstants> map(
+						pCtx,
+						pSBuf,
+						MAP_WRITE,
+						MAP_FLAG_DISCARD);
+
+					hlsl::TerrainDrawConstants* dst = map;
+					ASSERT(dst, "Failed to map TerrainDrawConstantsBuffer.");
+
+					std::memcpy(dst, instances.data(), instances.size() * sizeof(hlsl::TerrainDrawConstants));
+				}
+
+				// ------------------------------------------------------------
+				// Bind pipeline, VB, SRB once, then draw batches
+				// ------------------------------------------------------------
+				pCtx->SetPipelineState(m_TerrainBinding.pPSO);
+				pCtx->CommitShaderResources(m_TerrainBinding.pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				{
+					IBuffer* vbs[] = { m_pGridVB };
+					uint64 offs[] = { 0 };
+					pCtx->SetVertexBuffers(
+						0, 1, vbs, offs,
+						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+						SET_VERTEX_BUFFERS_FLAG_RESET);
+				}
+
+				DrawIndexedAttribs dia = {};
+				dia.IndexType = VT_UINT16;
+				dia.Flags = DRAW_FLAG_VERIFY_ALL;
+
+				uint32 currentLod = 0xFFFFFFFFu;
+				uint32 currentMask = 0xFFFFFFFFu;
+
+				for (const Batch& b : batches)
+				{
+					const uint32 lod = uint32(b.Lod);
+					const uint32 mask = uint32(b.Mask);
+
+					if (lod != currentLod || mask != currentMask)
+					{
+						currentLod = lod;
+						currentMask = mask;
+
+						RefCntAutoPtr<IBuffer>& ib = m_pLodIB[lod][mask];
+						ASSERT(ib, "Terrain IB is null (lod=%u mask=%u).", lod, mask);
+
+						pCtx->SetIndexBuffer(ib, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						dia.NumIndices = m_LodIndexCount[lod][mask];
+					}
+
+					// Instance range
+					dia.NumInstances = b.InstanceCount;
+					dia.FirstInstanceLocation = b.StartInstance;
+
+					// ---------------------------------------------------------
+					// DRAW_CONSTANTS update (StartInstanceLocation)
+					// ---------------------------------------------------------
+					{
+						MapHelper<hlsl::DrawConstants> map(
 							pCtx,
-							m_TerrainBinding.Buffers["TERRAIN_DRAW_CONSTANTS"].pBuffer,
+							ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
 							MAP_WRITE,
 							MAP_FLAG_DISCARD);
 
-						*map = dc;
-
-						pCtx->DrawIndexed(dia);
+						hlsl::DrawConstants* dst = map;
+						ASSERT(dst, "Failed to map DRAW_CONSTANTS.");
+						dst->StartInstanceLocation = dia.FirstInstanceLocation;
 					}
+
+					pCtx->DrawIndexed(dia);
 				}
 			},
 			[this, &renderer]()
@@ -783,12 +874,13 @@ namespace shz
 					}
 				}
 
+				// Material (StructuredBuffer binding + instanced draw)
 				{
 					MaterialTemplate& matTmpl = renderer.CreateMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS);
-					matTmpl.SetBufferDynamic("TERRAIN_DRAW_CONSTANTS", true);
 
 					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
 					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+
 					mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
 					mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
 					mat.SetFloat("g_EmissiveIntensity", 0.0f);
@@ -797,6 +889,7 @@ namespace shz
 					mat.SetFloat("g_OcclusionStrength", 1.0f);
 					mat.SetFloat("g_AlphaCutoff", 0.5f);
 					mat.SetFloat("g_MetallicFactor", 0.0f);
+
 					if (m_DiffuseTexRef.IsValid())
 					{
 						mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
@@ -807,6 +900,10 @@ namespace shz
 						mat.SetUint("g_MaterialFlags", 0);
 					}
 
+					// StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
+					// IMPORTANT: this must bind as SRV buffer (not cbuffer).
+					mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
+
 					m_TerrainBinding = renderer.AcquireMaterialPipelineBinding(matId, STRING_HASH("TerrainGBuffer"));
 				}
 			});
@@ -815,9 +912,9 @@ namespace shz
 	// ------------------------------------------------------------
 	// CPU height build from Texture (base mip)
 	// ------------------------------------------------------------
-	static inline uint8  readR_U8(const uint8* p) noexcept { return p[0]; }
+	static inline uint8  readR_U8(const uint8* p)  noexcept { return p[0]; }
 	static inline uint16 readR_U16(const uint16* p) noexcept { return p[0]; }
-	static inline float  readR_F32(const float* p) noexcept { return p[0]; }
+	static inline float  readR_F32(const float* p)  noexcept { return p[0]; }
 
 	void TerrainSystem::buildHeightU16FromHeightTexture(const Texture& heightTex)
 	{

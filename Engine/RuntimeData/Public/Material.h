@@ -44,57 +44,68 @@ namespace shz
 	};
 
 	// ---------------------------------------------------------------------
-	// MaterialTextureBinding: runtime binding
-	// - AssetRef<Texture> OR ResourceId (mutually exclusive)
+	// Runtime resource binding
+	// - For textures: AssetRef<Texture> OR ResourceId (mutually exclusive)
+	// - For buffers (SRV/UAV): ResourceId only
 	// ---------------------------------------------------------------------
-	enum class MATERIAL_TEXTURE_SOURCE : uint8
+	enum class MATERIAL_BINDING_SOURCE : uint8
 	{
 		None = 0,
-		AssetRef,
+		AssetRef,   // only valid for textures
 		ResourceId,
 	};
 
-	struct MaterialTextureBinding final
+	struct MaterialResourceBinding final
 	{
 		std::string Name = {};
 
-		MATERIAL_TEXTURE_SOURCE Source = MATERIAL_TEXTURE_SOURCE::None;
+		MATERIAL_RESOURCE_TYPE ExpectedType = MATERIAL_RESOURCE_TYPE_UNKNOWN;
+		uint16 ArraySize = 1;
 
-		// Asset-backed binding
+		MATERIAL_BINDING_SOURCE Source = MATERIAL_BINDING_SOURCE::None;
+
+		// Texture authoring path (only if ExpectedType is texture)
 		std::optional<AssetRef<Texture>> TextureRef = {};
 
-		// RenderResourceRegistry-backed binding (0 = invalid)
-		uint64 TextureResourceId = 0;
+		// Registry path for any resource (texture/buffer/uav)
+		uint64 ResourceId = 0; // 0 = invalid
 
 		void ClearBinding()
 		{
-			Source = MATERIAL_TEXTURE_SOURCE::None;
+			Source = MATERIAL_BINDING_SOURCE::None;
 			TextureRef.reset();
-			TextureResourceId = 0;
+			ResourceId = 0;
 		}
 
-		void SetAssetRef(const AssetRef<Texture>& ref)
+		bool IsTextureBinding() const
 		{
-			Source = MATERIAL_TEXTURE_SOURCE::AssetRef;
-			TextureRef = ref;
-			TextureResourceId = 0;
-		}
-
-		void SetResourceId(uint64 id)
-		{
-			Source = MATERIAL_TEXTURE_SOURCE::ResourceId;
-			TextureRef.reset();
-			TextureResourceId = id;
+			return IsTextureType(ExpectedType);
 		}
 
 		bool HasAssetRef() const
 		{
-			return Source == MATERIAL_TEXTURE_SOURCE::AssetRef && TextureRef.has_value();
+			return Source == MATERIAL_BINDING_SOURCE::AssetRef && TextureRef.has_value();
 		}
 
 		bool HasResourceId() const
 		{
-			return Source == MATERIAL_TEXTURE_SOURCE::ResourceId && TextureResourceId != 0;
+			return Source == MATERIAL_BINDING_SOURCE::ResourceId && ResourceId != 0;
+		}
+
+		void SetTextureAssetRef(const AssetRef<Texture>& ref)
+		{
+			ASSERT(IsTextureBinding(), "SetTextureAssetRef is only valid for texture bindings.");
+			Source = MATERIAL_BINDING_SOURCE::AssetRef;
+			TextureRef = ref;
+			ResourceId = 0;
+		}
+
+		void SetResourceId(uint64 id)
+		{
+			ASSERT(id != 0, "Invalid resource id (0).");
+			Source = MATERIAL_BINDING_SOURCE::ResourceId;
+			TextureRef.reset();
+			ResourceId = id;
 		}
 	};
 
@@ -169,12 +180,12 @@ namespace shz
 		const uint8* GetCBufferBlobData(uint32 cbufferIndex) const;
 		uint32 GetCBufferBlobSize(uint32 cbufferIndex) const;
 
-		// Texture binding list (indexed by template resource index)
-		uint32 GetTextureBindingCount() const noexcept { return static_cast<uint32>(m_TextureBindings.size()); }
-		const MaterialTextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
-		MaterialTextureBinding& GetTextureBindingMutable(uint32 index) { return m_TextureBindings[index]; }
+		// Runtime resource bindings (indexed by template resource index)
+		uint32 GetResourceBindingCount() const noexcept { return static_cast<uint32>(m_ResourceBindings.size()); }
+		const MaterialResourceBinding& GetResourceBinding(uint32 index) const { return m_ResourceBindings[index]; }
+		MaterialResourceBinding& GetResourceBindingMutable(uint32 index) { return m_ResourceBindings[index]; }
 
-		// Simplified authoring mirrors
+		// Simplified authoring mirrors (texture only)
 		const MaterialValueBlob* GetValueOrNull(const std::string& name) const noexcept;
 		const MaterialTexture* GetTextureOrNull(const std::string& name) const noexcept;
 
@@ -201,9 +212,13 @@ namespace shz
 
 		bool SetRaw(const char* name, MATERIAL_VALUE_TYPE type, const void* pData, uint32 byteSize);
 
-		// Texture binding (mutually exclusive)
+		// Resource binding
+		// - For textures, you can bind by AssetRef or ResourceId
 		bool SetTextureAssetRef(const char* resourceName, const AssetRef<Texture>& textureRef);
 		bool SetTextureResource(const char* resourceName, uint64 resourceId);
+
+		// - For buffers (StructuredBuffer / RWStructuredBuffer), bind by ResourceId
+		bool SetBufferResource(const char* resourceName, uint64 resourceId);
 
 		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
 
@@ -215,6 +230,8 @@ namespace shz
 
 	private:
 		bool writeValueImmediate(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedType);
+
+		bool setResourceIdInternal(const char* resourceName, uint64 resourceId, bool bRequireTexture, bool bRequireBuffer);
 
 	private:
 		inline static const std::unordered_map<std::string, MaterialTemplate>* m_sTemplateLibrary = nullptr;
@@ -245,7 +262,9 @@ namespace shz
 
 		// Multi-CB support
 		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
-		std::vector<MaterialTextureBinding> m_TextureBindings = {};
+
+		// One binding per template resource (textures + buffers)
+		std::vector<MaterialResourceBinding> m_ResourceBindings = {};
 
 		// Minimal authoring mirrors
 		std::unordered_map<std::string, MaterialValueBlob> m_Values = {};
