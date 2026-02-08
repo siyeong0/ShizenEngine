@@ -1,8 +1,6 @@
 #include "pch.h"
 #include "Engine/RuntimeData/Public/StaticMeshImporter.h"
 
-#include "Engine/Core/Json/BasicTypesJsonAdaptor.hpp"
-
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -10,22 +8,62 @@
 #include <nlohmann/json.hpp>
 
 #include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/RuntimeData/Public/Texture.h"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/RuntimeData/Public/Material.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 namespace shz
 {
-	template<typename T>
-	bool readBlob(std::ifstream& bin, uint64 off, uint64 count, std::vector<T>& out)
+	using json = nlohmann::json;
+
+	static inline void setErr(std::string* out, const std::string& s)
 	{
-		ASSERT(bin.is_open(), "Binary stream is not open.");
-		ASSERT(out.empty(), "Output vector is not empty.");
-		ASSERT(count > 0 || off == 0, "Invalid parameters.");
+		if (out) *out = s;
+	}
+
+	template<typename T>
+	static inline bool readBlob(std::ifstream& bin, uint64 off, uint64 count, std::vector<T>& out)
+	{
+		out.clear();
+		if (count == 0)
+			return true;
 
 		out.resize((size_t)count);
 		bin.seekg((std::streamoff)off, std::ios::beg);
 		bin.read((char*)out.data(), (std::streamsize)(count * sizeof(T)));
 		return bin.good();
+	}
+
+	static inline Box jsonToBox(const json& j)
+	{
+		const auto& mn = j.at("Min");
+		const auto& mx = j.at("Max");
+		return Box(
+			float3(mn[0].get<float>(), mn[1].get<float>(), mn[2].get<float>()),
+			float3(mx[0].get<float>(), mx[1].get<float>(), mx[2].get<float>()));
+	}
+
+	static inline SamplerDesc jsonToSamplerDesc(const json& j)
+	{
+		SamplerDesc d = {};
+		d.MinFilter = (FILTER_TYPE)j.value("MinFilter", (int)d.MinFilter);
+		d.MagFilter = (FILTER_TYPE)j.value("MagFilter", (int)d.MagFilter);
+		d.MipFilter = (FILTER_TYPE)j.value("MipFilter", (int)d.MipFilter);
+		d.AddressU = (TEXTURE_ADDRESS_MODE)j.value("AddressU", (int)d.AddressU);
+		d.AddressV = (TEXTURE_ADDRESS_MODE)j.value("AddressV", (int)d.AddressV);
+		d.AddressW = (TEXTURE_ADDRESS_MODE)j.value("AddressW", (int)d.AddressW);
+		d.MipLODBias = j.value("MipLODBias", d.MipLODBias);
+		d.MaxAnisotropy = (uint32)j.value("MaxAnisotropy", (int)d.MaxAnisotropy);
+		d.ComparisonFunc = (COMPARISON_FUNCTION)j.value("ComparisonFunc", (int)d.ComparisonFunc);
+		const auto& bc = j["BorderColor"];
+		d.BorderColor[0] = bc[0].get<float>();
+		d.BorderColor[1] = bc[1].get<float>();
+		d.BorderColor[2] = bc[2].get<float>();
+		d.BorderColor[3] = bc[3].get<float>();
+		d.MinLOD = j.value("MinLOD", d.MinLOD);
+		d.MaxLOD = j.value("MaxLOD", d.MaxLOD);
+		return d;
 	}
 
 	std::unique_ptr<AssetObject> StaticMeshImporter::operator()(
@@ -34,37 +72,29 @@ namespace shz
 		uint64* pOutResidentBytes,
 		std::string* pOutError) const
 	{
-		using json = nlohmann::json;
-
-		auto setErr = [&](const char* msg)
-			{
-				if (pOutError) *pOutError = msg;
-			};
-
 		ASSERT(pOutResidentBytes != nullptr, "pOutResidentBytes is null.");
 		*pOutResidentBytes = 0;
 		if (pOutError) pOutError->clear();
 
 		if (meta.SourcePath.empty())
 		{
-			setErr("StaticMeshImporter: meta.SourcePath is empty.");
+			setErr(pOutError, "StaticMeshAssetImporter: meta.SourcePath is empty.");
 			return {};
 		}
 
-		std::ifstream in(meta.SourcePath, std::ios::binary);
+		std::ifstream in(meta.SourcePath);
 		if (!in.is_open())
 		{
-			setErr("StaticMeshImporter: failed to open json.");
+			setErr(pOutError, "StaticMeshAssetImporter: failed to open json.");
 			return {};
 		}
 
 		json j;
-		try { in >> j; }
-		catch (...) { setErr("StaticMeshImporter: json parse failed."); return {}; }
+		in >> j;
 
-		if (j.value("Format", "") != "shzmesh")
+		if (j.value("Format", "") != "shzmesh" || j.value("Version", 0) != 1)
 		{
-			setErr("StaticMeshImporter: invalid format.");
+			setErr(pOutError, "StaticMeshAssetImporter: invalid format/version.");
 			return {};
 		}
 
@@ -72,79 +102,66 @@ namespace shz
 		const std::string binName = j.value("Bin", "");
 		if (binName.empty())
 		{
-			setErr("StaticMeshImporter: missing Bin field.");
+			setErr(pOutError, "StaticMeshAssetImporter: missing Bin field.");
 			return {};
 		}
 
 		std::ifstream bin(baseDir / binName, std::ios::binary);
 		if (!bin.is_open())
 		{
-			setErr("StaticMeshImporter: failed to open bin.");
+			setErr(pOutError, "StaticMeshAssetImporter: failed to open bin.");
 			return {};
 		}
 
 		StaticMesh mesh;
 
-		// ------------------------------------------------------------
 		// Streams
-		// ------------------------------------------------------------
-		const json& streams = j.at("Streams");
+		const auto& streams = j.at("Streams");
 
 		std::vector<float3> pos, nrm, tan;
 		std::vector<float2> uv0;
 
 		auto loadStream = [&](const char* key, auto& outVec) -> bool
 			{
-				if (!streams.contains(key))
-				{
-					return true; // optional streams OK
-				}
-
-				const json& s = streams.at(key);
+				const auto& s = streams.at(key);
 				const uint64 off = s.at("Offset").get<uint64>();
 				const uint64 cnt = s.at("Count").get<uint64>();
 				return readBlob(bin, off, cnt, outVec);
 			};
 
-		if (!loadStream("Positions", pos)) { setErr("StaticMeshImporter: failed to read Positions."); return {}; }
-		if (!loadStream("Normals", nrm)) { setErr("StaticMeshImporter: failed to read Normals.");   return {}; }
-		if (!loadStream("Tangents", tan)) { setErr("StaticMeshImporter: failed to read Tangents.");  return {}; }
-		if (!loadStream("TexCoord0", uv0)) { setErr("StaticMeshImporter: failed to read TexCoord0."); return {}; }
+		if (!loadStream("Positions", pos)) { setErr(pOutError, "Failed to read Positions."); return {}; }
+		loadStream("Normals", nrm);
+		loadStream("Tangents", tan);
+		loadStream("TexCoord0", uv0);
 
 		mesh.SetPositions(std::move(pos));
 		mesh.SetNormals(std::move(nrm));
 		mesh.SetTangents(std::move(tan));
 		mesh.SetTexCoords(std::move(uv0));
 
-		// ------------------------------------------------------------
 		// Indices
-		// ------------------------------------------------------------
 		const std::string idxType = j.value("IndexType", "u32");
-		const json& ij = j.at("Indices");
+		const auto& ij = j.at("Indices");
 		const uint64 idxOff = ij.at("Offset").get<uint64>();
 		const uint64 idxCnt = ij.at("Count").get<uint64>();
 
 		if (idxType == "u16")
 		{
 			std::vector<uint16> indices;
-			if (!readBlob(bin, idxOff, idxCnt, indices)) { setErr("StaticMeshImporter: failed to read indices u16."); return {}; }
+			if (!readBlob(bin, idxOff, idxCnt, indices)) { setErr(pOutError, "Failed to read indices u16."); return {}; }
 			mesh.SetIndicesU16(std::move(indices));
 		}
 		else
 		{
 			std::vector<uint32> indices;
-			if (!readBlob(bin, idxOff, idxCnt, indices)) { setErr("StaticMeshImporter: failed to read indices u32."); return {}; }
+			if (!readBlob(bin, idxOff, idxCnt, indices)) { setErr(pOutError, "Failed to read indices u32."); return {}; }
 			mesh.SetIndicesU32(std::move(indices));
 		}
 
-		// ------------------------------------------------------------
 		// Sections
-		// ------------------------------------------------------------
-		if (j.contains("Sections") && j["Sections"].is_array())
+		if (j.contains("Sections"))
 		{
 			std::vector<StaticMesh::Section> secs;
-			secs.reserve((size_t)j["Sections"].size());
-
 			for (const auto& sj : j["Sections"])
 			{
 				StaticMesh::Section s;
@@ -152,47 +169,109 @@ namespace shz
 				s.IndexCount = sj.value("IndexCount", 0u);
 				s.BaseVertex = sj.value("BaseVertex", 0u);
 				s.MaterialSlot = sj.value("MaterialSlot", 0u);
-
 				if (sj.contains("LocalBounds"))
-					s.LocalBounds = sj["LocalBounds"].get<Box>();
-
+					s.LocalBounds = jsonToBox(sj["LocalBounds"]);
 				secs.push_back(std::move(s));
 			}
 			mesh.SetSections(std::move(secs));
 		}
 
-		// ------------------------------------------------------------
-		// MaterialSlots
-		// ------------------------------------------------------------
-		if (j.contains("MaterialSlots") && j["MaterialSlots"].is_array())
+		// Material slots (inline)
+		if (j.contains("MaterialSlots"))
 		{
-			std::vector<AssetRef<Material>> mats;
-			mats.reserve((size_t)j["MaterialSlots"].size());
-
+			std::vector<MaterialId> mats;
 			for (const auto& mj : j["MaterialSlots"])
 			{
-				const std::string srcPath =
-					mj.contains("Material") && mj["Material"].is_object()
-					? mj["Material"].value("SourcePath", std::string{})
-					: std::string{};
+				MaterialId matId = MaterialManager::GetInstance()->CreateMaterial(mj.value("Name", ""), mj.value("TemplateName", ""));
+				Material& m = MaterialManager::GetInstance()->GetMaterial(matId);
 
-				ASSERT(!srcPath.empty(), "Material source path missing in version 2.");
-				if (!srcPath.empty())
+				// Options
+				if (mj.contains("Options"))
 				{
-					AssetRef<Material> ref = assetManager.RegisterAsset<Material>(srcPath);
-					ASSERT(ref.IsValid(), "Failed to register material asset: %s", srcPath.c_str());
-					mats.push_back(std::move(ref));
-				}
-			}
+					const auto& oj = mj["Options"];
 
+					// Blend / Raster
+					m.SetBlendMode((MATERIAL_BLEND_MODE)oj.value("BlendMode", (int)m.GetBlendMode()));
+					m.SetCullMode((CULL_MODE)oj.value("CullMode", (int)m.GetCullMode()));
+					m.SetFrontCounterClockwise(oj.value("FrontCounterClockwise", m.GetFrontCounterClockwise()));
+
+					// Depth
+					m.SetDepthEnable(oj.value("DepthEnable", m.GetDepthEnable()));
+					m.SetDepthWriteEnable(oj.value("DepthWriteEnable", m.GetDepthWriteEnable()));
+					m.SetDepthFunc((COMPARISON_FUNCTION)oj.value("DepthFunc", (int)m.GetDepthFunc()));
+
+					// Texture binding
+					m.SetTextureBindingMode((MATERIAL_TEXTURE_BINDING_MODE)oj.value("TextureBindingMode", (int)m.GetTextureBindingMode()));
+
+					// LinearWrap sampler
+					{
+						const std::string samplerName = oj.value("LinearWrapSamplerName", m.GetLinearWrapSamplerName());
+
+						m.SetLinearWrapSamplerName(samplerName);
+
+						if (oj.contains("LinearWrapSamplerDesc"))
+						{
+							m.SetLinearWrapSamplerDesc(jsonToSamplerDesc(oj["LinearWrapSamplerDesc"]));
+						}
+					}
+				}
+
+
+				// Values
+				if (mj.contains("Values"))
+				{
+					for (const auto& vj : mj["Values"])
+					{
+						const std::string name = vj.value("Name", "");
+						const auto type = (MATERIAL_VALUE_TYPE)vj.value("Type", (int)MATERIAL_VALUE_TYPE_UNKNOWN);
+						const std::vector<uint8> data = vj.value("Data", std::vector<uint8>{});
+
+						if (!name.empty() && !data.empty() && type != MATERIAL_VALUE_TYPE_UNKNOWN)
+							m.SetRaw(name.c_str(), type, data.data(), (uint32)data.size());
+					}
+				}
+
+				// Resources
+				if (mj.contains("Resources"))
+				{
+					for (const auto& rj : mj["Resources"])
+					{
+						const std::string rname = rj.value("Name", "");
+						const auto rtype = (MATERIAL_RESOURCE_TYPE)rj.value("Type", (int)MATERIAL_RESOURCE_TYPE_UNKNOWN);
+						const std::string sourcePath = rj.value("SourcePath", "");
+
+						AssetID texId = {};
+						if (rj.contains("TextureAssetID"))
+						{
+							const auto& idj = rj["TextureAssetID"];
+							texId.Hi = idj.value("Hi", 0ull);
+							texId.Lo = idj.value("Lo", 0ull);
+						}
+
+						if (!rname.empty() && !sourcePath.empty())
+						{
+							m.SetTextureAssetRef(rname.c_str(), rtype, assetManager.RegisterAsset<Texture>(sourcePath));
+						}
+
+						const bool hasS = rj.value("HasSamplerOverride", false);
+						if (hasS && rj.contains("SamplerOverrideDesc"))
+						{
+							m.SetSamplerOverrideDesc(rname.c_str(), jsonToSamplerDesc(rj["SamplerOverrideDesc"]));
+						}
+					}
+				}
+
+				mats.push_back(matId);
+			}
 			mesh.SetMaterialSlots(std::move(mats));
 		}
 
+		// Bounds: 저장된 값은 참고만 하고, 안전하게 재계산
 		mesh.RecomputeBounds();
 
 		if (!mesh.IsValid())
 		{
-			setErr("StaticMeshImporter: mesh invalid after load.");
+			setErr(pOutError, "StaticMeshAssetImporter: mesh invalid after load.");
 			return {};
 		}
 
@@ -203,17 +282,13 @@ namespace shz
 			bytes += (uint64)mesh.GetNormals().size() * sizeof(float3);
 			bytes += (uint64)mesh.GetTangents().size() * sizeof(float3);
 			bytes += (uint64)mesh.GetTexCoords().size() * sizeof(float2);
-
 			bytes += (mesh.GetIndexType() == VT_UINT16)
 				? (uint64)mesh.GetIndicesU16().size() * sizeof(uint16)
 				: (uint64)mesh.GetIndicesU32().size() * sizeof(uint32);
-
-			bytes += (uint64)mesh.GetSections().size() * sizeof(StaticMesh::Section);
-			bytes += (uint64)mesh.GetMaterials().size() * sizeof(AssetRef<Material>);
 
 			*pOutResidentBytes = bytes;
 		}
 
 		return std::make_unique<TypedAssetObject<StaticMesh>>(static_cast<StaticMesh&&>(mesh));
 	}
-} // namespace shz
+}

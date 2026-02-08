@@ -5,6 +5,7 @@
 
 #include "Engine/Image/Public/TextureUtilities.h"
 #include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
@@ -37,6 +38,49 @@ namespace shz
 
 		m_pRegistry = std::make_unique<RenderResourceRegistry>();
 		m_pRegistry->Initialize();
+
+		// Build fixed templates + prepare cache map
+		{
+			auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
+			{
+				MaterialTemplateCreateInfo tci = {};
+				tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
+				tci.TemplateName = name;
+
+				tci.ShaderStages.clear();
+				tci.ShaderStages.reserve(2);
+
+				MaterialShaderStageDesc sVS = {};
+				sVS.ShaderType = SHADER_TYPE_VERTEX;
+				sVS.DebugName = "VS";
+				sVS.FilePath = vs;
+				sVS.EntryPoint = "main";
+				sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sVS.UseCombinedTextureSamplers = false;
+
+				MaterialShaderStageDesc sPS = {};
+				sPS.ShaderType = SHADER_TYPE_PIXEL;
+				sPS.DebugName = "PS";
+				sPS.FilePath = ps;
+				sPS.EntryPoint = "main";
+				sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+				sPS.UseCombinedTextureSamplers = false;
+
+				tci.ShaderStages.push_back(sVS);
+				tci.ShaderStages.push_back(sPS);
+
+				return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
+			};
+
+			MaterialTemplate gbufferTemplate;
+			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
+			ASSERT(ok0, "Build initial material templates failed.");
+
+			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
+			Material::RegisterTemplateLibrary(&m_TemplateLibrary);
+		}
 
 		const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
@@ -244,6 +288,8 @@ namespace shz
 		m_pAssetManager = nullptr;
 
 		m_pRegistry->Shutdown();
+
+		m_PipelineBindingCache.clear();
 
 		m_PendingBarriers.clear();
 

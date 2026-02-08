@@ -29,7 +29,7 @@ namespace shz
 
 	struct MaterialImportSettings final
 	{
-		// reserved
+		std::string TemplateKey = {};
 	};
 
 	struct AssimpImportSettings final
@@ -55,7 +55,12 @@ namespace shz
 		std::string OutputDirectory = {};
 	};
 
-	struct StaticMeshImportSettings final
+	struct StaticMeshLoadSettings final
+	{
+		// reserved
+	};
+
+	struct MaterialLoadSettings final
 	{
 		// reserved
 	};
@@ -65,7 +70,8 @@ namespace shz
 		TextureImportSettings,
 		MaterialImportSettings,
 		AssimpImportSettings,
-		StaticMeshImportSettings>;
+		StaticMeshLoadSettings,
+		MaterialLoadSettings>;
 
 	struct AssetMeta final
 	{
@@ -85,10 +91,10 @@ namespace shz
 		const AssimpImportSettings* TryGetAssimpMeta() const noexcept { return std::get_if<AssimpImportSettings>(&Payload); }
 		AssimpImportSettings* TryGetAssimpMeta() noexcept { return std::get_if<AssimpImportSettings>(&Payload); }
 
-		const StaticMeshImportSettings* TryGetStaticMeshLoadMeta() const noexcept { return std::get_if<StaticMeshImportSettings>(&Payload); }
-		StaticMeshImportSettings* TryGetStaticMeshLoadMeta() noexcept { return std::get_if<StaticMeshImportSettings>(&Payload); }
+		const StaticMeshLoadSettings* TryGetStaticMeshLoadMeta() const noexcept { return std::get_if<StaticMeshLoadSettings>(&Payload); }
+		StaticMeshLoadSettings* TryGetStaticMeshLoadMeta() noexcept { return std::get_if<StaticMeshLoadSettings>(&Payload); }
 
-		const MaterialImportSettings* TryGetMaterialLoadMeta() const noexcept { return std::get_if<MaterialImportSettings>(&Payload); }
-		MaterialImportSettings* TryGetMaterialLoadMeta() noexcept { return std::get_if<MaterialImportSettings>(&Payload); }
+		const MaterialLoadSettings* TryGetMaterialLoadMeta() const noexcept { return std::get_if<MaterialLoadSettings>(&Payload); }
+		MaterialLoadSettings* TryGetMaterialLoadMeta() noexcept { return std::get_if<MaterialLoadSettings>(&Payload); }
 	};
 } // namespace shz

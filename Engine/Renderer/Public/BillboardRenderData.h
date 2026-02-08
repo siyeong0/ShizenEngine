@@ -13,8 +13,6 @@
 
 namespace shz
 {
-	using BillboardRenderDataId = uint64;
-
 	struct BillboardRenderData final
 	{
 		RefCntAutoPtr<ITexture> BaseColorTex;

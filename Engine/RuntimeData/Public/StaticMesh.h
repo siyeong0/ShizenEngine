@@ -15,8 +15,8 @@ namespace shz
 		{
 			uint32 FirstIndex = 0;
 			uint32 IndexCount = 0;
-			uint32 BaseVertex = 0; // Optional for some pipelines
-			uint32 MaterialSlot = 0; // Index into material slots
+			uint32 BaseVertex = 0;     // Optional for some pipelines
+			uint32 MaterialSlot = 0;     // Index into material slots
 
 			Box LocalBounds = {};
 		};
@@ -56,16 +56,16 @@ namespace shz
 		// ------------------------------------------------------------
 		// Materials (slots)
 		// ------------------------------------------------------------
-		bool HasMaterial() const { return !m_Materials.empty(); }
-		void SetMaterialSlots(std::vector<AssetRef<Material>>&& materials) { m_Materials = std::move(materials); }
+		bool HasMaterial() const { return !m_MaterialSlots.empty(); }
+		void SetMaterialSlots(std::vector<MaterialId>&& materials) { m_MaterialSlots = std::move(materials); }
 
-		std::vector<AssetRef<Material>>& GetMaterials() noexcept { return m_Materials; }
-		const std::vector<AssetRef<Material>>& GetMaterials() const noexcept { return m_Materials; }
+		std::vector<MaterialId>& GetMaterialSlots() noexcept { return m_MaterialSlots; }
+		const std::vector<MaterialId>& GetMaterialSlots() const noexcept { return m_MaterialSlots; }
 
-		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_Materials.size()); }
+		uint32 GetMaterialSlotCount() const noexcept { return static_cast<uint32>(m_MaterialSlots.size()); }
 
-		AssetRef<Material>& GetMaterial(uint32 slot) noexcept;
-		const AssetRef<Material>& GetMaterial(uint32 slot) const noexcept;
+		MaterialId& GetMaterialSlot(uint32 slot) noexcept;
+		const MaterialId& GetMaterialSlot(uint32 slot) const noexcept;
 
 		// ------------------------------------------------------------
 		// Geometry getters (SoA)
@@ -118,7 +118,7 @@ namespace shz
 		std::vector<uint16> m_IndicesU16;
 
 		std::vector<Section> m_Sections;
-		std::vector<AssetRef<Material>> m_Materials;
+		std::vector<MaterialId> m_MaterialSlots;
 
 		Box m_Bounds = {};
 	};

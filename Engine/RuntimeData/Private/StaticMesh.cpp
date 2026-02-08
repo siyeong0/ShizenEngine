@@ -139,16 +139,16 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-	AssetRef<Material>& StaticMesh::GetMaterial(uint32 slot) noexcept
+	MaterialId& StaticMesh::GetMaterialSlot(uint32 slot) noexcept
 	{
-		ASSERT(slot < static_cast<uint32>(m_Materials.size()), "Material slot index out of range.");
-		return m_Materials[slot];
+		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
+		return m_MaterialSlots[slot];
 	}
 
-	const AssetRef<Material>& StaticMesh::GetMaterial(uint32 slot) const noexcept
+	const MaterialId& StaticMesh::GetMaterialSlot(uint32 slot) const noexcept
 	{
-		ASSERT(slot < static_cast<uint32>(m_Materials.size()), "Material slot index out of range.");
-		return m_Materials[slot];
+		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
+		return m_MaterialSlots[slot];
 	}
 
 	// ------------------------------------------------------------
@@ -211,9 +211,9 @@ namespace shz
 			}
 
 			// If materials exist, ensure section slot is within range.
-			if (!m_Materials.empty())
+			if (!m_MaterialSlots.empty())
 			{
-				if (sec.MaterialSlot >= static_cast<uint32>(m_Materials.size()))
+				if (sec.MaterialSlot >= static_cast<uint32>(m_MaterialSlots.size()))
 				{
 					return false;
 				}
@@ -363,7 +363,7 @@ namespace shz
 		m_IndicesU16.clear();
 
 		m_Sections.clear();
-		m_Materials.clear();
+		m_MaterialSlots.clear();
 
 		m_IndexType = VT_UINT32;
 		m_Bounds = Box{};
