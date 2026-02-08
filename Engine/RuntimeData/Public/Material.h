@@ -85,7 +85,6 @@ namespace shz
 		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
 
 		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
-		MATERIAL_PIPELINE_TYPE GetPipelineType() const noexcept { return m_Template.GetPipelineType(); }
 
 		void SetBlendMode(MATERIAL_BLEND_MODE mode);
 		void SetCullMode(CULL_MODE mode);

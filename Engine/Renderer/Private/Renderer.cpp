@@ -39,48 +39,8 @@ namespace shz
 		m_pRegistry = std::make_unique<RenderResourceRegistry>();
 		m_pRegistry->Initialize();
 
-		// Build fixed templates + prepare cache map
-		{
-			auto makeTemplate = [&](MaterialTemplate& outTmpl, const char* name, const char* vs, const char* ps) -> bool
-			{
-				MaterialTemplateCreateInfo tci = {};
-				tci.PipelineType = MATERIAL_PIPELINE_TYPE_GRAPHICS;
-				tci.TemplateName = name;
-
-				tci.ShaderStages.clear();
-				tci.ShaderStages.reserve(2);
-
-				MaterialShaderStageDesc sVS = {};
-				sVS.ShaderType = SHADER_TYPE_VERTEX;
-				sVS.DebugName = "VS";
-				sVS.FilePath = vs;
-				sVS.EntryPoint = "main";
-				sVS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				sVS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-				sVS.UseCombinedTextureSamplers = false;
-
-				MaterialShaderStageDesc sPS = {};
-				sPS.ShaderType = SHADER_TYPE_PIXEL;
-				sPS.DebugName = "PS";
-				sPS.FilePath = ps;
-				sPS.EntryPoint = "main";
-				sPS.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				sPS.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
-				sPS.UseCombinedTextureSamplers = false;
-
-				tci.ShaderStages.push_back(sVS);
-				tci.ShaderStages.push_back(sPS);
-
-				return outTmpl.Initialize(m_pDevice, m_pShaderSourceFactory, tci);
-			};
-
-			MaterialTemplate gbufferTemplate;
-			const bool ok0 = makeTemplate(gbufferTemplate, "DefaultLit", "GBuffer.vsh", "GBuffer.psh");
-			ASSERT(ok0, "Build initial material templates failed.");
-
-			m_TemplateLibrary[gbufferTemplate.GetName()] = gbufferTemplate;
-			Material::RegisterTemplateLibrary(&m_TemplateLibrary);
-		}
+		CreateMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh");
+		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 
 		const SwapChainDesc& scDesc = m_pSwapChain->GetDesc();
 		m_Width = (m_CreateInfo.BackBufferWidth != 0) ? m_CreateInfo.BackBufferWidth : scDesc.Width;
@@ -178,20 +138,20 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
-			{
-				BufferDesc desc = {};
-				desc.Name = name;
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Mode = BUFFER_MODE_STRUCTURED;
-				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+				{
+					BufferDesc desc = {};
+					desc.Name = name;
+					desc.Usage = USAGE_DYNAMIC;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+					desc.Mode = BUFFER_MODE_STRUCTURED;
+					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
-				ASSERT(sb, "Object table create failed.");
-				return sb;
-			};
+					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+					ASSERT(sb, "Object table create failed.");
+					return sb;
+				};
 
 			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
 			AddBuffer(STRING_HASH("ObjectTable.Forward"), std::move(createObjectTable("ObjectTableSB.Forward")));
@@ -443,9 +403,9 @@ namespace shz
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
 			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-			{
-				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-			};
+				{
+					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+				};
 
 			float3 shadowCornersWS[8] = {};
 			{
@@ -640,20 +600,20 @@ namespace shz
 		// Helper: pack object table using instanceRemap
 		// ------------------------------------------------------------
 		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
-		{
-			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-			hlsl::ObjectConstants* dst = map;
-
-			for (size_t i = 0; i < remap.size(); ++i)
 			{
-				const uint32 oc = remap[i];
-				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-				dst[i] = tableCPU[oc];
-			}
-		};
+				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::ObjectConstants* dst = map;
+
+				for (size_t i = 0; i < remap.size(); ++i)
+				{
+					const uint32 oc = remap[i];
+					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+					dst[i] = tableCPU[oc];
+				}
+			};
 
 		// ------------------------------------------------------------
 		// Build packets + pack object tables
@@ -661,9 +621,9 @@ namespace shz
 		std::vector<uint32> instanceRemap;
 
 		auto pipelineResolver = [this](MaterialId matId, uint64 rpKey) -> const MaterialPipelineBinding&
-		{
-			return this->AcquireMaterialPipelineBinding(matId, rpKey);
-		};
+			{
+				return this->AcquireMaterialPipelineBinding(matId, rpKey);
+			};
 
 		// GBuffer
 		scene.BuildDrawPackets(
@@ -703,12 +663,12 @@ namespace shz
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
 		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
-		{
-			for (DrawIndirectPacket& p : packets)
 			{
-				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
-			}
-		};
+				for (DrawIndirectPacket& p : packets)
+				{
+					p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+				}
+			};
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
@@ -816,42 +776,42 @@ namespace shz
 		// Helpers
 		// -----------------------------------------------------------------
 		auto isWriteAccess = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-			return false;
-		};
+			{
+				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+				return false;
+			};
 
 		auto hasClearValue = [&](uint64 resourceId) -> bool
-		{
-			return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
-		};
+			{
+				return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
+			};
 
 		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
-		{
-			OptimizedClearValue cv = {};
-			if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 			{
-				cv = it->second;
-			}
-			else
-			{
-				// default: black / depth=1
-				if (bDepth)
+				OptimizedClearValue cv = {};
+				if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 				{
-					cv.DepthStencil.Depth = 1.f;
-					cv.DepthStencil.Stencil = 0;
+					cv = it->second;
 				}
 				else
 				{
-					cv.Color[0] = 0.f;
-					cv.Color[1] = 0.f;
-					cv.Color[2] = 0.f;
-					cv.Color[3] = 0.f;
+					// default: black / depth=1
+					if (bDepth)
+					{
+						cv.DepthStencil.Depth = 1.f;
+						cv.DepthStencil.Stencil = 0;
+					}
+					else
+					{
+						cv.Color[0] = 0.f;
+						cv.Color[1] = 0.f;
+						cv.Color[2] = 0.f;
+						cv.Color[3] = 0.f;
+					}
 				}
-			}
-			return cv;
-		};
+				return cv;
+			};
 
 		// -----------------------------------------------------------------
 		// Build RHI RenderPass + Framebuffer attachments
@@ -1439,19 +1399,19 @@ namespace shz
 		}
 
 		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-		{
-			BufferDesc desc = {};
-			desc.Name = name;
-			desc.Size = dataSize;
-			desc.Usage = USAGE_IMMUTABLE;
-			desc.BindFlags = bindFlags;
-			BufferData initData = {};
-			initData.pData = pData;
-			initData.DataSize = dataSize;
-			RefCntAutoPtr<IBuffer> pBuffer;
-			device->CreateBuffer(desc, &initData, &pBuffer);
-			return pBuffer;
-		};
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Size = dataSize;
+				desc.Usage = USAGE_IMMUTABLE;
+				desc.BindFlags = bindFlags;
+				BufferData initData = {};
+				initData.pData = pData;
+				initData.DataSize = dataSize;
+				RefCntAutoPtr<IBuffer> pBuffer;
+				device->CreateBuffer(desc, &initData, &pBuffer);
+				return pBuffer;
+			};
 
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1552,10 +1512,10 @@ namespace shz
 		}
 		// Index buffer
 		{
-			std::vector<uint16> indices = 
+			std::vector<uint16> indices =
 			{
-				0, 1, 2, 
-				0, 2, 3 
+				0, 1, 2,
+				0, 2, 3
 			};
 
 			BufferDesc ib = {};
@@ -1625,9 +1585,9 @@ namespace shz
 	const MaterialPipelineBinding& Renderer::AcquireMaterialPipelineBinding(MaterialId materialId, uint64 renderPassKey)
 	{
 		auto hashCombine64 = [](uint64 h, uint64 v)
-		{
-			return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
-		};
+			{
+				return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+			};
 
 		uint64 hash = hashCombine64(materialId, renderPassKey);
 		auto it = m_PipelineBindingCache.find(hash);
@@ -1670,24 +1630,10 @@ namespace shz
 
 		RefCntAutoPtr<IPipelineState> pOutPipelineState;
 
-		const MATERIAL_PIPELINE_TYPE pipelineType = material.GetPipelineType();
-		if (pipelineType == MATERIAL_PIPELINE_TYPE_GRAPHICS)
-		{
-			ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
-			ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
-			GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
-			pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
-		}
-		else if (pipelineType == MATERIAL_PIPELINE_TYPE_COMPUTE)
-		{
-			ASSERT(renderPassKey == 0, "Render pass must be null in compute pipeline.");
-			ComputePipelineStateCreateInfo psoCI = material.BuildComputePipelineStateCreateInfo();
-			pOutPipelineState = m_pPipelineStateManager->AcquireCompute(psoCI);
-		}
-		else
-		{
-			ASSERT(false, "Unsupported pipeline type.");
-		}
+		ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
+		ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
+		GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
+		pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
 
 		SHADER_TYPE supportedShaderTypes[] =
 		{
@@ -1823,6 +1769,64 @@ namespace shz
 	// Material templates
 	// ---------------------------------------------------------------------
 
+	const MaterialTemplate& Renderer::CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo)
+	{
+		ASSERT(createInfo.ShaderStages.size() >= 1, "At least one shader stage must be specified.");
+		ASSERT(createInfo.TemplateName != "", "Material template name is empty.");
+
+		const std::string& name = createInfo.TemplateName;
+		auto it = m_TemplateLibrary.find(name);
+		ASSERT(it == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
+
+		MaterialTemplate matTemplate;
+		bool bResult = matTemplate.Initialize(m_pDevice, m_pShaderSourceFactory, createInfo);
+		ASSERT(bResult, "Failed to create material template: %s", name.c_str());
+
+		m_TemplateLibrary[name] = std::move(matTemplate);
+		return m_TemplateLibrary[name];
+	}
+
+	const MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath)
+	{
+		MaterialTemplateCreateInfo createInfo = {};
+		createInfo.TemplateName = name;
+
+		MaterialShaderStageDesc vsDesc = {};
+		vsDesc.ShaderType = SHADER_TYPE_VERTEX;
+		vsDesc.FilePath = vsPath;
+		vsDesc.EntryPoint = "main";
+		createInfo.ShaderStages.push_back(vsDesc);
+
+		MaterialShaderStageDesc psDesc = {};
+		psDesc.ShaderType = SHADER_TYPE_PIXEL;
+		psDesc.FilePath = psPath;
+		psDesc.EntryPoint = "main";
+		createInfo.ShaderStages.push_back(psDesc);
+
+		return CreateMaterialTemplate(createInfo);
+
+	}
+
+	const MaterialTemplate& Renderer::CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry)
+	{
+		MaterialTemplateCreateInfo createInfo = {};
+		createInfo.TemplateName = name;
+
+		MaterialShaderStageDesc vsDesc = {};
+		vsDesc.ShaderType = SHADER_TYPE_VERTEX;
+		vsDesc.FilePath = vsPath;
+		vsDesc.EntryPoint = vsEntry;
+		createInfo.ShaderStages.push_back(vsDesc);
+
+		MaterialShaderStageDesc psDesc = {};
+		psDesc.ShaderType = SHADER_TYPE_PIXEL;
+		psDesc.FilePath = psPath;
+		psDesc.EntryPoint = psEntry;
+		createInfo.ShaderStages.push_back(psDesc);
+
+		return CreateMaterialTemplate(createInfo);
+	}
+
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const
 	{
 		auto it = m_TemplateLibrary.find(name);
@@ -1939,43 +1943,43 @@ namespace shz
 
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_WRITE)     return true;
-			if (a.Access == RENDER_ACCESS_READ)      return false;
-			if (a.Access == RENDER_ACCESS_READWRITE) return true;
-
-			switch (a.Usage)
 			{
-			case RENDER_USAGE_RTV:
-			case RENDER_USAGE_DSV_WRITE:
-			case RENDER_USAGE_UAV:
-				return true;
-			default:
-				return false;
-			}
-		};
+				if (a.Access == RENDER_ACCESS_WRITE)     return true;
+				if (a.Access == RENDER_ACCESS_READ)      return false;
+				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+				switch (a.Usage)
+				{
+				case RENDER_USAGE_RTV:
+				case RENDER_USAGE_DSV_WRITE:
+				case RENDER_USAGE_UAV:
+					return true;
+				default:
+					return false;
+				}
+			};
 
 		auto isRead = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_READ)      return true;
-			if (a.Access == RENDER_ACCESS_WRITE)     return false;
-			if (a.Access == RENDER_ACCESS_READWRITE) return true;
-
-			switch (a.Usage)
 			{
-			case RENDER_USAGE_SRV:
-			case RENDER_USAGE_CBV:
-			case RENDER_USAGE_DSV_READ:
-			case RENDER_USAGE_INDIRECT_ARGUMENT:
-				return true;
+				if (a.Access == RENDER_ACCESS_READ)      return true;
+				if (a.Access == RENDER_ACCESS_WRITE)     return false;
+				if (a.Access == RENDER_ACCESS_READWRITE) return true;
 
-			case RENDER_USAGE_UAV:
-				return false;
+				switch (a.Usage)
+				{
+				case RENDER_USAGE_SRV:
+				case RENDER_USAGE_CBV:
+				case RENDER_USAGE_DSV_READ:
+				case RENDER_USAGE_INDIRECT_ARGUMENT:
+					return true;
 
-			default:
-				return false;
-			}
-		};
+				case RENDER_USAGE_UAV:
+					return false;
+
+				default:
+					return false;
+				}
+			};
 
 		// ------------------------------------------------------------
 		// Build per-resource use lists (deterministic key order via std::map)
@@ -2034,10 +2038,10 @@ namespace shz
 		adj.resize(n);
 
 		auto pushEdge = [&](uint32 u, uint32 v)
-		{
-			if (u == v) return;
-			adj[u].push_back(v);
-		};
+			{
+				if (u == v) return;
+				adj[u].push_back(v);
+			};
 
 		// ------------------------------------------------------------
 		// Dependency rules (simple RenderGraph-lite):
@@ -2096,18 +2100,18 @@ namespace shz
 		}
 
 		auto passName = [&](uint32 passIndex) -> const char*
-		{
-			return m_PassTable.at(passes[passIndex]).Name.c_str();
-		};
+			{
+				return m_PassTable.at(passes[passIndex]).Name.c_str();
+			};
 
 		auto dumpUse = [&](uint64 rid, const UseList& ul)
-		{
-			std::cout << "RID=" << rid << "\n  Writers:";
-			for (uint32 w : ul.Writers) std::cout << " " << passName(w);
-			std::cout << "\n  Readers:";
-			for (uint32 r : ul.Readers) std::cout << " " << passName(r);
-			std::cout << "\n\n";
-		};
+			{
+				std::cout << "RID=" << rid << "\n  Writers:";
+				for (uint32 w : ul.Writers) std::cout << " " << passName(w);
+				std::cout << "\n  Readers:";
+				for (uint32 r : ul.Readers) std::cout << " " << passName(r);
+				std::cout << "\n\n";
+			};
 
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
@@ -2226,11 +2230,11 @@ namespace shz
 		agg.reserve(accesses.size());
 
 		auto isWrite = [](const RenderPassResourceAccess& a)
-		{
-			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-			return false;
-		};
+			{
+				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+				return false;
+			};
 
 		for (const auto& a : accesses)
 		{

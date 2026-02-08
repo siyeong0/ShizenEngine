@@ -184,6 +184,9 @@ namespace shz
 		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Material
+		const MaterialTemplate& CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
+		const MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
+		const MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 

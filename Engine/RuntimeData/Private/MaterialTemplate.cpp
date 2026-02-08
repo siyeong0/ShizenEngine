@@ -169,7 +169,6 @@ namespace shz
 		ASSERT(pShaderSourceFactory, "Shader source factory is null.");
 
 		m_CreateInfo = ci;
-		m_PipelineType = ci.PipelineType;
 
 		ASSERT(!ci.TemplateName.empty(), "Empty template name.");
 		m_Name = ci.TemplateName;
@@ -181,7 +180,6 @@ namespace shz
 		m_ValueParams.clear();
 		m_Resources.clear();
 
-		ASSERT(m_PipelineType != MATERIAL_PIPELINE_TYPE_UNKNOWN, "Invalid pipeline type.");
 		ASSERT(!ci.ShaderStages.empty(), "No shader stages were provided.");
 
 		// Build shaders
@@ -525,7 +523,6 @@ namespace shz
 
 		MaterialTemplateCreateInfo ci = {};
 		ci.TemplateName = templateName;
-		ci.PipelineType = (MATERIAL_PIPELINE_TYPE)j.value("pipeline_type", (int)MATERIAL_PIPELINE_TYPE_GRAPHICS);
 
 		auto& stages = j["shader_stages"];
 		if (!stages.is_array() || stages.empty())
@@ -583,7 +580,6 @@ namespace shz
 
 		nlohmann::json j;
 		j["version"] = 1;
-		j["pipeline_type"] = (int)m_CreateInfo.PipelineType;
 
 		nlohmann::json stages = nlohmann::json::array();
 		for (const auto& s : m_CreateInfo.ShaderStages)

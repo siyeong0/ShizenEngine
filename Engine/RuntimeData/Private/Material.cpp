@@ -592,17 +592,8 @@ namespace shz
 	void Material::syncDescFromOptions()
 	{
 		// Pipeline type
-		{
-			const MATERIAL_PIPELINE_TYPE t = m_Template.GetPipelineType();
-			if (t == MATERIAL_PIPELINE_TYPE_COMPUTE)
-			{
-				m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_COMPUTE;
-			}
-			else
-			{
-				m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-			}
-		}
+		// (only graphics supported for now)
+		m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
 		// Name policy (debug)
 		{

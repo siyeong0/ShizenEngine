@@ -30,8 +30,6 @@ namespace shz
 
 	struct MaterialTemplateCreateInfo final
 	{
-		MATERIAL_PIPELINE_TYPE PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;
-
 		std::string TemplateName = {};
 		std::vector<MaterialShaderStageDesc> ShaderStages = {};
 	};
@@ -79,7 +77,6 @@ namespace shz
 		bool Initialize(IRenderDevice* pDevice, IShaderSourceInputStreamFactory* pShaderSourceFactory, const MaterialTemplateCreateInfo& ci);
 
 		const std::string& GetName() const { return m_Name; }
-		MATERIAL_PIPELINE_TYPE GetPipelineType() const { return m_PipelineType; }
 
 		uint32 GetShaderCount() const { return static_cast<uint32>(m_Shaders.size()); }
 		IShader* GetShader(uint32 index) const { return m_Shaders[index].RawPtr(); }
@@ -118,7 +115,6 @@ namespace shz
 	private:
 		MaterialTemplateCreateInfo m_CreateInfo = {};
 
-		MATERIAL_PIPELINE_TYPE m_PipelineType = MATERIAL_PIPELINE_TYPE_UNKNOWN;
 		std::string m_Name = {};
 
 		std::vector<RefCntAutoPtr<IShader>> m_Shaders = {};
