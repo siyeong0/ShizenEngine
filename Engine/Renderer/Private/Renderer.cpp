@@ -190,7 +190,7 @@ namespace shz
 		// -----------------------------------------------------------------
 		// Create shadow map
 		// -----------------------------------------------------------------
-		static constexpr uint32 SHADOW_MAP_SIZE = 4096 * 4;
+		static constexpr uint32 SHADOW_MAP_SIZE = 4096;
 		m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
 		{
 			TextureDesc td = {};
