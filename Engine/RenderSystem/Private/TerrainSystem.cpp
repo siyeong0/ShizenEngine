@@ -786,8 +786,8 @@ namespace shz
 				{
 					MaterialTemplate& matTmpl = renderer.CreateMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS);
 					matTmpl.SetBufferDynamic("TERRAIN_DRAW_CONSTANTS", true);
-					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
 
+					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
 					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 					mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
 					mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));

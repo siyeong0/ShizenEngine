@@ -137,21 +137,6 @@ namespace shz
 				rj["SourcePath"] = "";
 			}
 
-			// Sampler override (optional)
-			if (i < mat->GetTextureBindingCount())
-			{
-				const MaterialTextureBinding& tb = mat->GetTextureBinding(i);
-				rj["HasSamplerOverride"] = tb.bHasSamplerOverride;
-				if (tb.bHasSamplerOverride)
-				{
-					rj["SamplerOverrideDesc"] = samplerToJson(tb.SamplerOverrideDesc);
-				}
-			}
-			else
-			{
-				rj["HasSamplerOverride"] = false;
-			}
-
 			j["Resources"].push_back(std::move(rj));
 		}
 

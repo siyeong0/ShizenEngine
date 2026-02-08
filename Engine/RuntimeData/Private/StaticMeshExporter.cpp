@@ -232,18 +232,6 @@ namespace shz
 					rj["TextureAssetID"] = json{ {"Hi", tid.Hi}, {"Lo", tid.Lo} };
 				}
 
-				// Sampler override (optional, from template-indexed binding array)
-				rj["HasSamplerOverride"] = false;
-				if (ri < m.GetTextureBindingCount())
-				{
-					const MaterialTextureBinding& tb = m.GetTextureBinding(ri);
-					rj["HasSamplerOverride"] = tb.bHasSamplerOverride;
-					if (tb.bHasSamplerOverride)
-					{
-						rj["SamplerOverrideDesc"] = samplerToJson(tb.SamplerOverrideDesc);
-					}
-				}
-
 				mj["Resources"].push_back(std::move(rj));
 			}
 

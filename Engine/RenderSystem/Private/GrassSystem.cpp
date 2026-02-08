@@ -2,6 +2,7 @@
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
 #include "Engine/AssetManager/Public/AssetManager.h"
+#include "Engine/RuntimeData/Public/MaterialManager.h"
 
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
@@ -495,7 +496,7 @@ namespace shz
 					pContext->DrawIndexedIndirect(dia);
 				}
 			},
-				[this, &renderer]()
+			[this, &renderer]()
 			{
 				// Grass mesh
 				{

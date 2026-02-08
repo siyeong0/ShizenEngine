@@ -72,6 +72,18 @@ namespace shz
 
 		// Immutable samplers (fixed)
 		{
+			SamplerDesc PointWrapSampler =
+			{
+				FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			SamplerDesc PointClampSampler =
+			{
+				FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+			};
+
 			SamplerDesc linearWrapSamplerDesc =
 			{
 				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
@@ -84,10 +96,22 @@ namespace shz
 				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 			};
 
+			SamplerDesc ShadowCmpSampler =
+			{
+				FILTER_TYPE_COMPARISON_LINEAR, FILTER_TYPE_COMPARISON_LINEAR, FILTER_TYPE_COMPARISON_LINEAR,
+				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+			};
+			ShadowCmpSampler.ComparisonFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_PointWrapSampler", PointWrapSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_PointWrapSampler", PointWrapSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_PointClampSampler", PointClampSampler));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_PointClampSampler", PointClampSampler));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrapSamplerDesc));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearWrapSampler", linearWrapSamplerDesc));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClampSamplerDesc));
 			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClampSamplerDesc));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_ShadowCmpSampler", ShadowCmpSampler));
 		}
 	}
 
@@ -240,7 +264,6 @@ namespace shz
 
 		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
 		tb.Name = resourceName;
-		tb.pSamplerOverride = pSampler;
 
 		return true;
 	}
@@ -263,9 +286,6 @@ namespace shz
 
 		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
 		tb.Name = resourceName;
-		tb.bHasSamplerOverride = true;
-		tb.SamplerOverrideDesc = desc;
-		tb.pSamplerOverride = nullptr;
 
 		return true;
 	}
@@ -287,8 +307,6 @@ namespace shz
 		}
 
 		MaterialTextureBinding& tb = m_TextureBindings[resIndex];
-		tb.bHasSamplerOverride = false;
-		tb.pSamplerOverride = nullptr;
 
 		return true;
 	}

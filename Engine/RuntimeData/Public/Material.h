@@ -44,7 +44,7 @@ namespace shz
 	};
 
 	// ---------------------------------------------------------------------
-	// MaterialTextureBinding: runtime binding (sampler override etc.)
+	// MaterialTextureBinding: runtime binding
 	// ---------------------------------------------------------------------
 	struct MaterialTextureBinding final
 	{
@@ -52,17 +52,6 @@ namespace shz
 
 		// Authoring/runtime: store texture reference
 		std::optional<AssetRef<Texture>> TextureRef = {};
-
-		// Authoring: store sampler override desc (persistent)
-		bool bHasSamplerOverride = false;
-		SamplerDesc SamplerOverrideDesc =
-		{
-			FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-		};
-
-		// Runtime override (if user supplies a sampler ptr)
-		ISampler* pSamplerOverride = nullptr;
 	};
 
 	// Optional snapshot structs (kept as-is)
@@ -108,9 +97,6 @@ namespace shz
 
 		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
 
-		// -----------------------------------------------------------------
-		// Options (Material이 "알고 있어야 하는 최소 필드"만 유지)
-		// -----------------------------------------------------------------
 		void SetBlendMode(MATERIAL_BLEND_MODE mode) { m_BlendMode = mode; }
 		void SetCullMode(CULL_MODE mode) { m_CullMode = mode; }
 		void SetFrontCounterClockwise(bool v) { m_bFrontCounterClockwise = v; }
@@ -223,7 +209,7 @@ namespace shz
 		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
 		std::vector<MaterialTextureBinding> m_TextureBindings = {};
 
-		// Minimal authoring mirrors (optional)
+		// Minimal authoring mirrors
 		std::unordered_map<std::string, MaterialValueBlob> m_Values = {};
 		std::unordered_map<std::string, MaterialTexture> m_Textures = {};
 	};
