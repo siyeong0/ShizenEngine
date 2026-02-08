@@ -3674,7 +3674,7 @@ namespace shz
 		uint32 GPUDescriptorHeapDynamicSize[2]
 		{
 			8192,  // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-			2048   // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+			1024   // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
 		};
 
 		// The size of the chunk that dynamic descriptor allocations manager
