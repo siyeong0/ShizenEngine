@@ -8,8 +8,6 @@ namespace shz
 		, m_TemplateName(templateName)
 		, m_Template(m_sTemplateLibrary->at(templateName))
 	{
-		syncDescFromOptions();
-
 		// Ensure runtime template binding
 		{
 			// Constant buffers (multi-CB)
@@ -27,56 +25,70 @@ namespace shz
 			// Resources
 			const uint32 resCount = m_Template.GetResourceCount();
 			m_TextureBindings.resize(resCount);
-
 			for (uint32 i = 0; i < resCount; ++i)
 			{
 				m_TextureBindings[i] = {};
 			}
 		}
 
-		rebuildAutoResourceLayout();
-	}
+		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-	void Material::SetBlendMode(MATERIAL_BLEND_MODE mode)
-	{
-		if (m_Options.BlendMode == mode) return;
-		m_Options.BlendMode = mode;
-		syncDescFromOptions();
-	}
+		m_Variables.clear();
+		m_ImmutableSamplersStorage.clear();
 
-	void Material::SetCullMode(CULL_MODE mode)
-	{
-		if (m_Options.CullMode == mode) return;
-		m_Options.CullMode = mode;
-		syncDescFromOptions();
-	}
+		m_Variables.reserve(32);
+		m_ImmutableSamplersStorage.reserve(4);
 
-	void Material::SetFrontCounterClockwise(bool v)
-	{
-		if (m_Options.FrontCounterClockwise == v) return;
-		m_Options.FrontCounterClockwise = v;
-		syncDescFromOptions();
-	}
+		// Constant buffers (ALL)
+		{
+			const uint32 cbCount = m_Template.GetCBufferCount();
+			for (uint32 i = 0; i < cbCount; ++i)
+			{
+				const MaterialCBufferDesc& cb = m_Template.GetCBuffer(i);
 
-	void Material::SetDepthEnable(bool v)
-	{
-		if (m_Options.DepthEnable == v) return;
-		m_Options.DepthEnable = v;
-		syncDescFromOptions();
-	}
+				ShaderResourceVariableDesc v = {};
+				v.ShaderStages = cb.ShaderStages;
+				v.Name = cb.Name.c_str();
+				v.Type = cb.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+				m_Variables.push_back(v);
+			}
+		}
 
-	void Material::SetDepthWriteEnable(bool v)
-	{
-		if (m_Options.DepthWriteEnable == v) return;
-		m_Options.DepthWriteEnable = v;
-		syncDescFromOptions();
-	}
+		// Textures
+		const uint32 resCount = m_Template.GetResourceCount();
+		for (uint32 i = 0; i < resCount; ++i)
+		{
+			const MaterialResourceDesc& r = m_Template.GetResource(i);
 
-	void Material::SetDepthFunc(COMPARISON_FUNCTION f)
-	{
-		if (m_Options.DepthFunc == f) return;
-		m_Options.DepthFunc = f;
-		syncDescFromOptions();
+			if (IsTextureType(r.Type))
+			{
+				ShaderResourceVariableDesc v = {};
+				v.ShaderStages = r.ShaderStages;
+				v.Name = r.Name.c_str();
+				v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
+				m_Variables.push_back(v);
+			}
+		}
+
+		// Immutable samplers (fixed)
+		{
+			SamplerDesc linearWrapSamplerDesc =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+			};
+
+			SamplerDesc linearClampSamplerDesc =
+			{
+				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+			};
+
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrapSamplerDesc));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearWrapSampler", linearWrapSamplerDesc));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClampSamplerDesc));
+			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClampSamplerDesc));
+		}
 	}
 
 	const uint8* Material::GetCBufferBlobData(uint32 cbufferIndex) const
@@ -173,7 +185,7 @@ namespace shz
 	}
 
 	// ---------------------------------------------------------------------
-	// Textures: bind by template resource index, store simple map too.
+	// Textures
 	// ---------------------------------------------------------------------
 	bool Material::setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef)
 	{
@@ -281,44 +293,96 @@ namespace shz
 		return true;
 	}
 
+	// ---------------------------------------------------------------------
+	// Build graphics PSO create info (no persistent desc state)
+	// ---------------------------------------------------------------------
 	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const
 	{
 		ASSERT(pRenderPass, "RenderPass is null.");
 
-		GraphicsPipelineStateCreateInfo outGraphicsPipelineStateCI = {};
+		GraphicsPipelineStateCreateInfo outCI = {};
 
-		PipelineStateDesc& psDesc = outGraphicsPipelineStateCI.PSODesc;
-		psDesc = m_PipelineStateDesc;
+		// -----------------------------
+		// PSODesc
+		// -----------------------------
+		PipelineStateDesc& psDesc = outCI.PSODesc;
+		psDesc = {};
+		psDesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
-		GraphicsPipelineDesc& gpDesc = outGraphicsPipelineStateCI.GraphicsPipeline;
-		gpDesc = m_GraphicsPipelineDesc;
+		ASSERT(!m_Name.empty(), "Material name is empty.");
+		psDesc.Name = m_Name.c_str();
 
-		// Inject pRenderPass if graphics pipeline
-		if (psDesc.IsAnyGraphicsPipeline())
+		// Resource layout (from cached arrays)
 		{
-			GraphicsPipelineDesc* gp = &gpDesc;
-			ASSERT(gp, "Graphics pipeline desc is required for graphics PSO.");
+			PipelineResourceLayoutDesc& rl = psDesc.ResourceLayout;
+			rl = {};
+			rl.DefaultVariableType = GetDefaultVariableType();
 
-			gp->pRenderPass = nullptr;
-			gp->SubpassIndex = 0;
-			gp->pRenderPass = pRenderPass;
+			rl.Variables = GetLayoutVarCount() > 0 ? m_Variables.data() : nullptr;
+			rl.NumVariables = GetLayoutVarCount();
 
-			gp->NumRenderTargets = 0;
-			for (uint32 i = 0; i < _countof(gp->RTVFormats); ++i)
-			{
-				gp->RTVFormats[i] = TEX_FORMAT_UNKNOWN;
-			}
-			gp->DSVFormat = TEX_FORMAT_UNKNOWN;
-			gp->ReadOnlyDSV = false;
+			rl.ImmutableSamplers = GetImmutableSamplerCount() > 0 ? m_ImmutableSamplersStorage.data() : nullptr;
+			rl.NumImmutableSamplers = GetImmutableSamplerCount();
 		}
 
-		// Attach shaders from instance
+		// -----------------------------
+		// GraphicsPipeline
+		// -----------------------------
+		GraphicsPipelineDesc& gpDesc = outCI.GraphicsPipeline;
+		gpDesc = {};
+
+		// RenderPass injection
+		gpDesc.pRenderPass = pRenderPass;
+		gpDesc.SubpassIndex = 0;
+
+		// NOTE: RTV/DSV formats are typically derived from render pass in RP-compatible pipelines.
+		// Keep them unknown here to avoid material owning pass formats.
+		gpDesc.NumRenderTargets = 0;
+		for (uint32 i = 0; i < _countof(gpDesc.RTVFormats); ++i)
+		{
+			gpDesc.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
+		}
+		gpDesc.DSVFormat = TEX_FORMAT_UNKNOWN;
+		gpDesc.ReadOnlyDSV = false;
+
+		gpDesc.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+		// Raster options
+		{
+			gpDesc.RasterizerDesc.CullMode = GetCullMode();
+			gpDesc.RasterizerDesc.FrontCounterClockwise = GetFrontCounterClockwise();
+		}
+
+		// Depth options
+		{
+			gpDesc.DepthStencilDesc.DepthEnable = GetDepthEnable();
+			gpDesc.DepthStencilDesc.DepthWriteEnable = GetDepthWriteEnable();
+			gpDesc.DepthStencilDesc.DepthFunc = GetDepthFunc();
+		}
+
+		// Input layout (keep as you had it)
+		{
+			static LayoutElement FIXED_LAYOUT_ELEMENTS[] =
+			{
+				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
+				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
+				LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
+				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
+			};
+
+			gpDesc.InputLayout.LayoutElements = FIXED_LAYOUT_ELEMENTS;
+			gpDesc.InputLayout.NumElements = _countof(FIXED_LAYOUT_ELEMENTS);
+		}
+
+		// -----------------------------
+		// Attach shaders from template
+		// -----------------------------
 		bool bHasMeshStages = false;
 		bool bHasLegacyStages = false;
 
 		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
 		{
-			ASSERT(shader, "Shader in source instance is null.");
+			ASSERT(shader, "Shader in template is null.");
 
 			const SHADER_TYPE shaderType = shader->GetDesc().ShaderType;
 
@@ -335,37 +399,18 @@ namespace shz
 				bHasLegacyStages = true;
 			}
 
-			if (shaderType == SHADER_TYPE_VERTEX)             outGraphicsPipelineStateCI.pVS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_PIXEL)         outGraphicsPipelineStateCI.pPS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_GEOMETRY)      outGraphicsPipelineStateCI.pGS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_HULL)          outGraphicsPipelineStateCI.pHS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_DOMAIN)        outGraphicsPipelineStateCI.pDS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_AMPLIFICATION) outGraphicsPipelineStateCI.pAS = shader.RawPtr();
-			else if (shaderType == SHADER_TYPE_MESH)          outGraphicsPipelineStateCI.pMS = shader.RawPtr();
+			if (shaderType == SHADER_TYPE_VERTEX)             outCI.pVS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_PIXEL)         outCI.pPS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_GEOMETRY)      outCI.pGS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_HULL)          outCI.pHS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_DOMAIN)        outCI.pDS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_AMPLIFICATION) outCI.pAS = shader.RawPtr();
+			else if (shaderType == SHADER_TYPE_MESH)          outCI.pMS = shader.RawPtr();
 		}
 
 		ASSERT(!(bHasMeshStages && bHasLegacyStages), "Invalid shader stage mix: mesh stages can't be combined with VS/GS/HS/DS.");
 
-		return outGraphicsPipelineStateCI;
-	}
-
-	ComputePipelineStateCreateInfo Material::BuildComputePipelineStateCreateInfo() const
-	{
-		ComputePipelineStateCreateInfo outComputePipelineStateCI = {};
-		PipelineStateDesc& psDesc = outComputePipelineStateCI.PSODesc;
-		psDesc = m_PipelineStateDesc;
-
-		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
-		{
-			ASSERT(shader, "Shader in source instance is null.");
-			const SHADER_TYPE shaderType = shader->GetDesc().ShaderType;
-			if (shaderType == SHADER_TYPE_COMPUTE)
-			{
-				outComputePipelineStateCI.pCS = shader.RawPtr();
-			}
-		}
-
-		return outComputePipelineStateCI;
+		return outCI;
 	}
 
 	void Material::Clear()
@@ -373,11 +418,15 @@ namespace shz
 		m_Name.clear();
 		m_TemplateName.clear();
 
-		m_Options = {};
+		// options reset
+		m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
+		m_CullMode = CULL_MODE_BACK;
+		m_bFrontCounterClockwise = true;
+		m_bDepthEnable = true;
+		m_bDepthWriteEnable = true;
+		m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
-		m_PipelineStateDesc = {};
-		m_GraphicsPipelineDesc = {};
-
+		// layout cache
 		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		m_Variables.clear();
 		m_ImmutableSamplersStorage.clear();
@@ -387,144 +436,5 @@ namespace shz
 
 		m_Values.clear();
 		m_Textures.clear();
-	}
-
-	// ---------------------------------------------------------------------
-	// IMPORTANT: Multi-CB layout (this is what you asked)
-	// - add variable entries for ALL reflected CBs (not just MATERIAL_CONSTANTS)
-	// - keep the rest same as your original layout policy
-	// ---------------------------------------------------------------------
-	void Material::rebuildAutoResourceLayout()
-	{
-		m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-		m_Variables.clear();
-		m_ImmutableSamplersStorage.clear();
-
-		m_Variables.reserve(32);
-		m_ImmutableSamplersStorage.reserve(4);
-
-		// Constant buffers (ALL)
-		{
-			const uint32 cbCount = m_Template.GetCBufferCount();
-			for (uint32 i = 0; i < cbCount; ++i)
-			{
-				const MaterialCBufferDesc& cb = m_Template.GetCBuffer(i);
-
-				ShaderResourceVariableDesc v = {};
-				v.ShaderStages = cb.ShaderStages;
-				v.Name = cb.Name.c_str();
-				v.Type = cb.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
-				m_Variables.push_back(v);
-			}
-		}
-
-		// Textures
-		const uint32 resCount = m_Template.GetResourceCount();
-		for (uint32 i = 0; i < resCount; ++i)
-		{
-			const MaterialResourceDesc& r = m_Template.GetResource(i);
-
-			if (IsTextureType(r.Type))
-			{
-				ShaderResourceVariableDesc v = {};
-				v.ShaderStages = r.ShaderStages;
-				v.Name = r.Name.c_str();
-				v.Type = r.IsDynamic ? SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC : SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE;
-				m_Variables.push_back(v);
-			}
-		}
-
-		// Immutable sampler: LinearWrap
-		{
-			// Fixed immutable sampler
-			SamplerDesc linearWrapSamplerDesc =
-			{
-				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-			};
-
-			SamplerDesc linearClampSamplerDesc =
-			{
-				FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-				TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-			};
-
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearWrapSampler", linearWrapSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearWrapSampler", linearWrapSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClampSamplerDesc));
-			m_ImmutableSamplersStorage.push_back(ImmutableSamplerDesc(SHADER_TYPE_VERTEX, "g_LinearClampSampler", linearClampSamplerDesc));
-		}
-
-		// Write into PSODesc.ResourceLayout (plain struct)
-		{
-			PipelineResourceLayoutDesc& rl = m_PipelineStateDesc.ResourceLayout;
-			rl = {};
-
-			rl.DefaultVariableType = m_DefaultVariableType;
-
-			rl.Variables = m_Variables.empty() ? nullptr : m_Variables.data();
-			rl.NumVariables = static_cast<uint32>(m_Variables.size());
-
-			rl.ImmutableSamplers = m_ImmutableSamplersStorage.empty() ? nullptr : m_ImmutableSamplersStorage.data();
-			rl.NumImmutableSamplers = static_cast<uint32>(m_ImmutableSamplersStorage.size());
-		}
-	}
-
-	void Material::syncDescFromOptions()
-	{
-		m_PipelineStateDesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-
-		{
-			if (!m_Name.empty())
-			{
-				m_PipelineStateDesc.Name = m_Name.c_str();
-			}
-			else if (!m_Template.GetName().empty())
-			{
-				m_PipelineStateDesc.Name = GetName().c_str();
-			}
-			else
-			{
-				m_PipelineStateDesc.Name = "Material PSO";
-			}
-		}
-
-		if (m_PipelineStateDesc.IsAnyGraphicsPipeline())
-		{
-			m_GraphicsPipelineDesc.NumRenderTargets = 0;
-			for (uint32 i = 0; i < _countof(m_GraphicsPipelineDesc.RTVFormats); ++i)
-				m_GraphicsPipelineDesc.RTVFormats[i] = TEX_FORMAT_UNKNOWN;
-			m_GraphicsPipelineDesc.DSVFormat = TEX_FORMAT_UNKNOWN;
-
-			m_GraphicsPipelineDesc.pRenderPass = nullptr;
-			m_GraphicsPipelineDesc.SubpassIndex = 0;
-
-			m_GraphicsPipelineDesc.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-			// Raster
-			{
-				m_GraphicsPipelineDesc.RasterizerDesc.CullMode = m_Options.CullMode;
-				m_GraphicsPipelineDesc.RasterizerDesc.FrontCounterClockwise = m_Options.FrontCounterClockwise;
-			}
-
-			// Depth
-			{
-				m_GraphicsPipelineDesc.DepthStencilDesc.DepthEnable = m_Options.DepthEnable;
-				m_GraphicsPipelineDesc.DepthStencilDesc.DepthWriteEnable = m_Options.DepthWriteEnable;
-				m_GraphicsPipelineDesc.DepthStencilDesc.DepthFunc = m_Options.DepthFunc;
-			}
-
-			static LayoutElement kLayoutElems[] =
-			{
-				LayoutElement{0, 0, 3, VT_FLOAT32, false}, // Pos
-				LayoutElement{1, 0, 2, VT_FLOAT32, false}, // UV
-				LayoutElement{2, 0, 3, VT_FLOAT32, false}, // Normal
-				LayoutElement{3, 0, 3, VT_FLOAT32, false}, // Tangent
-			};
-
-			m_GraphicsPipelineDesc.InputLayout.LayoutElements = kLayoutElems;
-			m_GraphicsPipelineDesc.InputLayout.NumElements = _countof(kLayoutElems);
-		}
 	}
 } // namespace shz

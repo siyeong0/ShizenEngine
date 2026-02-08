@@ -12,8 +12,6 @@
 
 namespace shz
 {
-	// Core material enums (shared by Template/Instance/Asset)
-
 	enum MATERIAL_VALUE_TYPE : uint8
 	{
 		MATERIAL_VALUE_TYPE_UNKNOWN = 0,
@@ -99,24 +97,4 @@ namespace shz
 			return 0;
 		}
 	}
-
-	// ------------------------------------------------------------
-	// Shared options (Asset/Instance)
-	// - Asset: persistent authoring values
-	// - Instance: runtime knobs driving PSO/layout dirty
-	// ------------------------------------------------------------
-	struct MaterialOptions
-	{
-		MATERIAL_BLEND_MODE BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
-
-		// Raster
-		CULL_MODE CullMode = CULL_MODE_BACK;
-		bool FrontCounterClockwise = true;
-
-		// Depth
-		bool DepthEnable = true;
-		bool DepthWriteEnable = true;
-		COMPARISON_FUNCTION DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
-	};
-
 } // namespace shz

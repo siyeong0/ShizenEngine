@@ -1,11 +1,10 @@
-// Engine/RuntimeData/Private/MaterialTemplate.cpp
 #include "pch.h"
 #include "Engine/RuntimeData/Public/MaterialTemplate.h"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
 
-#include "Engine/Renderer/Public/Renderer.h" // for IsCommonStaticResource()
+#include "Engine/Renderer/Public/Renderer.h" 
 
 namespace shz
 {

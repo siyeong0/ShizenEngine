@@ -44,8 +44,7 @@ namespace shz
 	};
 
 	// ---------------------------------------------------------------------
-	// MaterialTextureBinding: keep for runtime binding (sampler override etc.)
-	// (same as your "big code" concept)
+	// MaterialTextureBinding: runtime binding (sampler override etc.)
 	// ---------------------------------------------------------------------
 	struct MaterialTextureBinding final
 	{
@@ -62,11 +61,11 @@ namespace shz
 			TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
 		};
 
+		// Runtime override (if user supplies a sampler ptr)
 		ISampler* pSamplerOverride = nullptr;
 	};
 
-	// Snapshot structs can remain as-is if you still need them,
-	// but you asked to keep MaterialTexture/MaterialValueBlob simple.
+	// Optional snapshot structs (kept as-is)
 	struct MaterialSerializedValue final
 	{
 		std::string Name = {};
@@ -99,34 +98,43 @@ namespace shz
 		Material& operator=(Material&&) noexcept = default;
 		~Material() = default;
 
-		static void RegisterTemplateLibrary(const std::unordered_map<std::string, MaterialTemplate>* pLibrary) { m_sTemplateLibrary = pLibrary; }
+		static void RegisterTemplateLibrary(const std::unordered_map<std::string, MaterialTemplate>* pLibrary)
+		{
+			m_sTemplateLibrary = pLibrary;
+		}
 
 		const std::string& GetName() const noexcept { return m_Name; }
 		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
 
 		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
 
-		// Options
-		void SetBlendMode(MATERIAL_BLEND_MODE mode);
-		void SetCullMode(CULL_MODE mode);
-		void SetFrontCounterClockwise(bool v);
-		void SetDepthEnable(bool v);
-		void SetDepthWriteEnable(bool v);
-		void SetDepthFunc(COMPARISON_FUNCTION f);
+		// -----------------------------------------------------------------
+		// Options (Material이 "알고 있어야 하는 최소 필드"만 유지)
+		// -----------------------------------------------------------------
+		void SetBlendMode(MATERIAL_BLEND_MODE mode) { m_BlendMode = mode; }
+		void SetCullMode(CULL_MODE mode) { m_CullMode = mode; }
+		void SetFrontCounterClockwise(bool v) { m_bFrontCounterClockwise = v; }
+		void SetDepthEnable(bool v) { m_bDepthEnable = v; }
+		void SetDepthWriteEnable(bool v) { m_bDepthWriteEnable = v; }
+		void SetDepthFunc(COMPARISON_FUNCTION f) { m_DepthFunc = f; }
 
-		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_Options.BlendMode; }
-		CULL_MODE GetCullMode() const noexcept { return m_Options.CullMode; }
-		bool GetFrontCounterClockwise() const noexcept { return m_Options.FrontCounterClockwise; }
-		bool GetDepthEnable() const noexcept { return m_Options.DepthEnable; }
-		bool GetDepthWriteEnable() const noexcept { return m_Options.DepthWriteEnable; }
-		COMPARISON_FUNCTION GetDepthFunc() const noexcept { return m_Options.DepthFunc; }
+		MATERIAL_BLEND_MODE GetBlendMode() const noexcept { return m_BlendMode; }
+		CULL_MODE GetCullMode() const noexcept { return m_CullMode; }
+		bool GetFrontCounterClockwise() const noexcept { return m_bFrontCounterClockwise; }
+		bool GetDepthEnable() const noexcept { return m_bDepthEnable; }
+		bool GetDepthWriteEnable() const noexcept { return m_bDepthWriteEnable; }
+		COMPARISON_FUNCTION GetDepthFunc() const noexcept { return m_DepthFunc; }
 
+		// Resource layout (auto-built once)
 		SHADER_RESOURCE_VARIABLE_TYPE GetDefaultVariableType() const noexcept { return m_DefaultVariableType; }
 
 		uint32 GetLayoutVarCount() const noexcept { return static_cast<uint32>(m_Variables.size()); }
 		const ShaderResourceVariableDesc* GetLayoutVars() const noexcept { return m_Variables.empty() ? nullptr : m_Variables.data(); }
 
-		// CBuffer blobs (used by Renderer binding)
+		uint32 GetImmutableSamplerCount() const noexcept { return static_cast<uint32>(m_ImmutableSamplersStorage.size()); }
+		const ImmutableSamplerDesc* GetImmutableSamplers() const noexcept { return m_ImmutableSamplersStorage.empty() ? nullptr : m_ImmutableSamplersStorage.data(); }
+
+		// CBuffer blobs
 		uint32 GetCBufferBlobCount() const noexcept { return static_cast<uint32>(m_CBufferBlobs.size()); }
 		const uint8* GetCBufferBlobData(uint32 cbufferIndex) const;
 		uint32 GetCBufferBlobSize(uint32 cbufferIndex) const;
@@ -136,7 +144,7 @@ namespace shz
 		const MaterialTextureBinding& GetTextureBinding(uint32 index) const { return m_TextureBindings[index]; }
 		MaterialTextureBinding& GetTextureBindingMutable(uint32 index) { return m_TextureBindings[index]; }
 
-		// Simplified authoring maps (optional; keep them minimal)
+		// Simplified authoring mirrors (optional)
 		const MaterialValueBlob* GetValueOrNull(const std::string& name) const noexcept;
 		const MaterialTexture* GetTextureOrNull(const std::string& name) const noexcept;
 
@@ -169,7 +177,6 @@ namespace shz
 		bool ClearSamplerOverride(const char* resourceName);
 
 		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
-		ComputePipelineStateCreateInfo BuildComputePipelineStateCreateInfo() const;
 
 		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const noexcept { return m_Template.GetShaders(); }
 		const std::unordered_map<std::string, MaterialValueBlob>& GetAllValues() const noexcept { return m_Values; }
@@ -181,9 +188,6 @@ namespace shz
 		bool writeValueImmediate(const char* name, const void* pData, uint32 byteSize, MATERIAL_VALUE_TYPE expectedType);
 		bool setTextureImmediate(const char* name, MATERIAL_RESOURCE_TYPE expectedType, const AssetRef<Texture>& texRef);
 
-		void rebuildAutoResourceLayout();
-		void syncDescFromOptions();
-
 	private:
 		inline static const std::unordered_map<std::string, MaterialTemplate>* m_sTemplateLibrary = nullptr;
 
@@ -191,25 +195,35 @@ namespace shz
 		std::string m_Name = {};
 		std::string m_TemplateName = {};
 
-		MaterialOptions m_Options = {};
-
 		// Runtime template binding
 		const MaterialTemplate& m_Template;
 
-		// Stored descs (plain types)
-		PipelineStateDesc m_PipelineStateDesc = {};
-		GraphicsPipelineDesc m_GraphicsPipelineDesc = {};
-		std::vector<ImmutableSamplerDesc> m_ImmutableSamplersStorage = {};
+		// -----------------------------------------------------------------
+		// Minimal options (only what Material should know)
+		// -----------------------------------------------------------------
+		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
-		// Auto layout
+		// Raster
+		CULL_MODE m_CullMode = CULL_MODE_BACK;
+		bool m_bFrontCounterClockwise = true;
+
+		// Depth
+		bool m_bDepthEnable = true;
+		bool m_bDepthWriteEnable = true;
+		COMPARISON_FUNCTION m_DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
+
+		// -----------------------------------------------------------------
+		// Auto layout cache (built once)
+		// -----------------------------------------------------------------
 		SHADER_RESOURCE_VARIABLE_TYPE m_DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 		std::vector<ShaderResourceVariableDesc> m_Variables = {};
+		std::vector<ImmutableSamplerDesc> m_ImmutableSamplersStorage = {};
 
 		// Multi-CB support
 		std::vector<std::vector<uint8>> m_CBufferBlobs = {};
 		std::vector<MaterialTextureBinding> m_TextureBindings = {};
 
-		// Minimal authoring mirrors (optional, but you asked to keep them simple)
+		// Minimal authoring mirrors (optional)
 		std::unordered_map<std::string, MaterialValueBlob> m_Values = {};
 		std::unordered_map<std::string, MaterialTexture> m_Textures = {};
 	};
