@@ -27,7 +27,6 @@
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
 
-#include "Engine/Renderer/Public/Shader.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
@@ -174,11 +173,6 @@ namespace shz
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);
 
-		struct ShaderSpec { SHADER_TYPE Type; const char* FilePath; const char* EntryPoint; };
-		ShaderId CreateShader(std::initializer_list<ShaderSpec> shaders);
-
-		const Shader& GetShader(ShaderId id) const;
-
 		// PipelineState
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(const GraphicsPipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(const ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
@@ -224,7 +218,6 @@ namespace shz
 		uint32 m_Height = 0;
 
 		RefCntAutoPtr<IShaderSourceInputStreamFactory> m_pShaderSourceFactory;
-		std::unordered_map<ShaderId, Shader> m_ShaderLibrary;
 
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 

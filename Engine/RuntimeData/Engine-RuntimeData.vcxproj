@@ -136,7 +136,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\Material2.h" />
     <ClInclude Include="Public\MaterialManager.h" />
     <ClInclude Include="Public\MaterialTemplate.h" />
     <ClInclude Include="Public\MaterialTypes.h" />
@@ -157,7 +156,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\Material.cpp" />
-    <ClCompile Include="Private\Material2.cpp" />
     <ClCompile Include="Private\MaterialExporter.cpp" />
     <ClCompile Include="Private\MaterialImporter.cpp" />
     <ClCompile Include="Private\MaterialManager.cpp" />

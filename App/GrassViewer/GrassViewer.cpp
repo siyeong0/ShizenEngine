@@ -18,9 +18,6 @@
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
 
-#include "Engine/Renderer/Public/Shader.h"
-#include "Engine/RuntimeData/Public/Material2.h"
-
 namespace shz
 {
 	namespace hlsl
@@ -105,32 +102,6 @@ namespace shz
 
 			m_pRenderer->Initialize(rendererCI);
 		}
-
-		Shader::RegisterRenderer(m_pRenderer.get());
-
-		ShaderId pbr = m_pRenderer->CreateShader({
-			{SHADER_TYPE_VERTEX, "GBuffer.vsh", "main"},
-			{SHADER_TYPE_PIXEL, "GBuffer.psh", "main"},
-			});
-
-		const Shader& shader = m_pRenderer->GetShader(pbr);
-
-		Material2 mat("test_mat");
-		mat.SetTexture("BaseColorTex", m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Assimp/Basic/MetalRoughSpheres/glTF/Spheres_BaseColor.png"));
-		mat.SetTexture("g_MetallicRoughnessTex", m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Assimp/Basic/MetalRoughSpheres/glTF/Spheres_MetalRough.png"));
-		mat.SetFloat4("g_BaseColorFactor", {1.0f, 1.0f, 1.0f, 1.0f});
-		mat.SetFloat3("g_EmissiveFactor", {1.0f, 1.0f, 1.0f});
-		mat.SetFloat("g_EmissiveIntensity", 1.0f);
-		mat.SetFloat("g_RoughnessFactor", 0.5f);
-		mat.SetFloat("g_NormalScale", 1.0f);
-		mat.SetFloat("g_OcclusionStrength", 0.5f);
-		mat.SetFloat("g_AlphaCutoff", 0.5f);
-		mat.SetFloat("g_MetallicFactor", 0.8f);
-		mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_MR);
-
-		AssetRef<StaticMesh> meshRef = m_pAssetManager->RegisterAsset<StaticMesh>("");
-		AssetPtr<StaticMesh> meshPtr = m_pAssetManager->LoadBlocking(meshRef);
-		StaticMesh& mesh = *meshPtr.Get();
 
 		// -----------------------------------------------------------------
 		// Create common resources for passes
