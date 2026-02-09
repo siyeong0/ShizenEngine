@@ -20,5 +20,10 @@ namespace shz
 
 		RefCntAutoPtr<IBuffer> VertexBuffer;
 		RefCntAutoPtr<IBuffer> IndexBuffer;
+
+		uint32 VertexStride = 0;
+		uint32 VertexCount = 0;
+		uint32 IndexCount = 0;
+		VALUE_TYPE IndexType = VT_UINT16;
 	};
 } // namespace std

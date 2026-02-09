@@ -61,7 +61,7 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
 	GetCameraBasisWS(camR, camU, camF);
 
     // Rotate billboard around camera up for per-instance variation.
-	camR = RotateAroundUp(camR, camU, yaw);
+	// camR = RotateAroundUp(camR, camU, yaw);
 
 	float x = IN.Pos.x * scale;
 	float y = IN.Pos.y * scale;

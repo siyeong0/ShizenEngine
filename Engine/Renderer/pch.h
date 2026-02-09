@@ -15,5 +15,6 @@
 #include <unordered_map>
 #include <string>
 #include <functional>
+#include <fstream>
 
 #endif //PCH_H

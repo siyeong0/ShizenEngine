@@ -62,7 +62,7 @@ namespace shz
 			indirect.SetTemplate(m_IndirectSlotLOD0, t);
 			t.IndexCountPerInstance = m_GrassDesc.pCrossMeshLod1->IndexCount; // Cross
 			indirect.SetTemplate(m_IndirectSlotLOD1, t);
-			t.IndexCountPerInstance = 6; // Billboard
+			t.IndexCountPerInstance = m_GrassDesc.pBillboardMeshLod2->IndexCount;
 			indirect.SetTemplate(m_IndirectSlotLOD2, t);
 		}
 
@@ -471,7 +471,7 @@ namespace shz
 						RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
 					DrawIndexedIndirectAttribs dia = {};
-					dia.IndexType = VT_UINT16;
+					dia.IndexType = m_GrassDesc.pBillboardMeshLod2->IndexType;
 
 					dia.DrawArgsOffset = static_cast<uint64>(m_IndirectSlotLOD2) * 20;
 					dia.DrawCount = 1;
@@ -496,6 +496,7 @@ namespace shz
 
 					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 					gp.RasterizerDesc.FrontCounterClockwise = true;
+					gp.RasterizerDesc.AntialiasedLineEnable = true;
 
 					// MSAA must match attachment sample count (4x)
 					gp.SmplDesc.Count = 4;
@@ -611,6 +612,7 @@ namespace shz
 
 					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 					gp.RasterizerDesc.FrontCounterClockwise = true;
+					gp.RasterizerDesc.AntialiasedLineEnable = true;
 
 					// MSAA must match attachment sample count (4x)
 					gp.SmplDesc.Count = 4;
@@ -726,6 +728,7 @@ namespace shz
 
 					gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
 					gp.RasterizerDesc.FrontCounterClockwise = true;
+					gp.RasterizerDesc.AntialiasedLineEnable = true;
 
 					// MSAA must match attachment sample count (4x)
 					gp.SmplDesc.Count = 4;
@@ -733,7 +736,7 @@ namespace shz
 
 					// Fixed depth for grass self-occlusion
 					gp.DepthStencilDesc.DepthEnable = true;
-					gp.DepthStencilDesc.DepthWriteEnable = false;
+					gp.DepthStencilDesc.DepthWriteEnable = true;
 					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
 					// A2C ON

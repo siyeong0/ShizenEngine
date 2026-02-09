@@ -195,7 +195,7 @@ namespace shz
 				td.MipLevels = 1;
 				td.SampleCount = 4;
 				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_R32_TYPELESS;
+				td.Format = TEX_FORMAT_D32_FLOAT;
 				td.BindFlags = BIND_DEPTH_STENCIL;
 				m_pRenderer->AddTexture(STRING_HASH("GrassDepthMSAA"), td);
 
