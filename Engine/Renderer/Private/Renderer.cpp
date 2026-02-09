@@ -1543,6 +1543,7 @@ namespace shz
 		// TODO: 중복 생성 제거
 		sci.pShaderSourceStreamFactory = m_pShaderSourceFactory;
 		sci.CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
+		sci.ShaderCompiler = SHADER_COMPILER_DXC;
 
 		m_pDevice->CreateShader(sci, ppOutShader);
 		ASSERT(*ppOutShader, "Failed to create shader.");

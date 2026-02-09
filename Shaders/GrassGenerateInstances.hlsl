@@ -1,3 +1,16 @@
+// ============================================================================
+// GrassGenerateInstances - Wave-coalesced atomics
+// per-instance atomic -> per-wave-per-LOD atomic
+//
+// Requirements:
+// - SM6 (DXC) for wave intrinsics (WaveActiveBallot, WavePrefixCountBits, etc.)
+// - Works with RWByteAddressBuffer counters to match your current pipeline
+//
+// Notes:
+// - This keeps your existing chunk/thread mapping and sampling logic.
+// - We only replace the 3 atomic+write blocks with wave-coalesced versions.
+// ============================================================================
+
 #include "HLSL_Structures.hlsli"
 #include "HeightField.hlsli"
 
@@ -22,7 +35,7 @@ RWStructuredBuffer<GrassInstance> g_OutInstancesLOD0;
 RWStructuredBuffer<GrassInstance> g_OutInstancesLOD1;
 RWStructuredBuffer<GrassInstance> g_OutInstancesLOD2;
 
-// uint Counter (4 bytes) at byte offset 0
+// uint Counter (4 bytes) at byte offset (slot * 4)
 RWByteAddressBuffer g_CounterBuffer;
 
 // HeightField (R16_UNORM sampled as normalized float 0..1)
@@ -183,15 +196,6 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 // ----------------------------------------------------------------------------
 // Chunk grid mapping (HeightField-space aligned)
 // ----------------------------------------------------------------------------
-// IMPORTANT:
-// We align grass chunks in the SAME world space as the terrain heightfield:
-//
-// - Heightfield world origin: g_HeightFieldCB.WorldOriginXZ
-// - Heightfield spacing:      g_HeightFieldCB.WorldSpacingXZ
-// - Heightfield extents:      [origin .. origin+WorldSize]
-//
-// Grass chunk origin is computed relative to WorldOriginXZ, not absolute 0,
-// so centerXZ terrain (negative origin) stays perfectly aligned.
 int2 WorldXZToChunkCoord(float2 worldXZ, float chunkSize)
 {
     float2 rel = worldXZ - g_HeightFieldCB.WorldOriginXZ;
@@ -205,29 +209,83 @@ float2 ChunkCoordToWorldOrigin(int2 chunkCoord, float chunkSize)
     return g_HeightFieldCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
 }
 
-// Clamp generated chunk origin so we don't spawn outside heightfield coverage.
-// (Optional but recommended; prevents ¡°edge smear¡± when camera near bounds)
 bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 {
     float2 hfMin = g_HeightFieldCB.WorldOriginXZ;
     float2 hfMax = g_HeightFieldCB.WorldOriginXZ + g_HeightFieldCB.WorldSizeXZ;
 
-    // we want [origin .. origin+chunkSize] to intersect hf bounds
     float2 o = chunkOriginXZ;
     float2 e = o + chunkSize.xx;
 
-    // if completely outside, reject
     if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
         return false;
 
-    // clamp origin so sampling stays within a reasonable range
-    // NOTE: we don't force full containment; just keep origin near bounds.
     chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
     return true;
 }
 
 // ----------------------------------------------------------------------------
-// Chunk-based generation
+// Wave helpers (ballot wrapper + per-LOD wave reserve/scatter)
+// ----------------------------------------------------------------------------
+struct BallotMask
+{
+    uint4 M; // supports up to 128 lanes
+};
+
+BallotMask WaveBallot(bool pred)
+{
+    BallotMask b;
+    b.M = WaveActiveBallot(pred);
+    return b;
+}
+
+uint BallotCountBits(BallotMask b)
+{
+    return countbits(b.M.x) + countbits(b.M.y) + countbits(b.M.z) + countbits(b.M.w);
+}
+
+// Count of set bits in ballot for lanes < current lane
+uint BallotPrefixCountBits(BallotMask b, uint lane)
+{
+    // lane in [0..WaveGetLaneCount-1]
+    // We treat mask as 4x32 chunks. This is correct for up to 128 lane waves.
+    uint word = lane >> 5; // /32
+    uint bit = lane & 31; // %32
+    uint prefix = 0;
+
+    if (word > 0)
+        prefix += countbits(b.M.x);
+    if (word > 1)
+        prefix += countbits(b.M.y);
+    if (word > 2)
+        prefix += countbits(b.M.z);
+
+    uint w = (word == 0) ? b.M.x : (word == 1) ? b.M.y : (word == 2) ? b.M.z : b.M.w;
+    uint mask = (bit == 0) ? 0u : ((1u << bit) - 1u);
+    prefix += countbits(w & mask);
+
+    return prefix;
+}
+
+// Reserve a contiguous range in a ByteAddress counter for this wave and broadcast base.
+// counterByteOffset must be 4-byte aligned.
+uint WaveReserveByteAddressCounter(uint counterByteOffset, BallotMask ballot)
+{
+    uint base = 0;
+    uint cnt = BallotCountBits(ballot);
+
+    if (cnt != 0 && WaveIsFirstLane())
+    {
+        // returns old value in base
+        g_CounterBuffer.InterlockedAdd(counterByteOffset, cnt, base);
+    }
+
+    // broadcast base to all lanes
+    return WaveReadLaneFirst(base);
+}
+
+// ----------------------------------------------------------------------------
+// Chunk-based generation (Wave-coalesced atomics)
 // ----------------------------------------------------------------------------
 [numthreads(8, 8, 1)]
 void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
@@ -236,22 +294,17 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
     int2 chunkGrid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
 
     float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-    
-    // camXZ = float2(0, 0);
-    
+
     float chunkSize = g_GrassGenCB.ChunkSize;
 
-    // Heightfield-aligned chunk coord around camera
     int2 camChunk = WorldXZToChunkCoord(camXZ, chunkSize);
     int2 worldChunk = camChunk + chunkGrid;
 
     float2 chunkOriginXZ = ChunkCoordToWorldOrigin(worldChunk, chunkSize);
 
-    // Optional clamp/reject outside bounds
     if (!ClampChunkToHeightfield(chunkOriginXZ, chunkSize))
         return;
 
-    // Conservative vertical bounds: sample one height and expand range
     float chunkOriginHeight = SampleWorldHeight(chunkOriginXZ);
 
     float3 chunkMin = float3(chunkOriginXZ.x, chunkOriginHeight - 20.0, chunkOriginXZ.y);
@@ -262,9 +315,20 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 
     uint chunkSeed = Hash2i(worldChunk, g_GrassGenCB.SeedSalt);
 
+    const float spawnRadiusSqr = g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius;
+    const float lod0Sqr = g_GrassGenCB.LOD0Distance * g_GrassGenCB.LOD0Distance;
+    const float lod1Sqr = g_GrassGenCB.LOD1Distance * g_GrassGenCB.LOD1Distance;
+
+    const uint counterOff0 = (g_GrassGenCB.IndirectSlotLOD0 << 2); // slot * 4
+    const uint counterOff1 = (g_GrassGenCB.IndirectSlotLOD1 << 2);
+    const uint counterOff2 = (g_GrassGenCB.IndirectSlotLOD2 << 2);
+
     [loop]
     for (uint s = 0; s < g_GrassGenCB.SamplesPerChunk; ++s)
     {
+        // ----------------------------
+        // Build candidate + instance
+        // ----------------------------
         uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
         float ux = Rand01(seed ^ 0x2222u);
@@ -276,79 +340,115 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
         float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * chunkSize;
         float2 posXZ = chunkOriginXZ + localXZ;
 
-        // Spawn radius (camera-local)
         float2 dc = posXZ - camXZ;
         float distanceCameraSqr = dot(dc, dc);
-        if (distanceCameraSqr > g_GrassGenCB.SpawnRadius * g_GrassGenCB.SpawnRadius)
-            continue;
 
-        // Base density (tiled)
-        float density = SampleWorldDensity(posXZ);
-        if (density <= 0.001f)
-            continue;
+        bool emit = true;
 
-        // Slope/height masks (height sampling is unified)
-        float hN = SampleHeightNormalized(posXZ);
-        float slope01 = ComputeSlope01(posXZ);
+        if (distanceCameraSqr > spawnRadiusSqr)
+            emit = false;
 
-        float slopeMask = 1.0f - slope01;
-        float heightMask = ComputeHeightMask(hN);
+        float density = 0.0f;
+        float hN = 0.0f;
+        float slope01 = 0.0f;
+        float press = 0.0f;
 
-        density *= saturate(slopeMask) * heightMask;
-        if (density <= 0.001f)
-            continue;
-
-        // Interaction (unified UV/sampler with height)
-        float press = saturate(SampleInteraction(posXZ));
-
-        // Density-gated attempts
-        if (Rand01(seed ^ 0x41A7u) > density)
-            continue;
-
-        float effectiveProb = saturate(g_GrassGenCB.SpawnProb * density);
-        if (Rand01(seed ^ 0x4444u) > effectiveProb)
-            continue;
-
-        float y = SampleWorldHeight(posXZ);
-
-        GrassInstance inst;
-        inst.PosWS = float3(posXZ.x, y, posXZ.y);
-
-        float scaleT = Rand01(seed ^ 0x5555u);
-        float densityScaleBias = lerp(1.2f, 0.8f, density);
-
-        inst.Scale =
-            lerp(g_GrassGenCB.MinScale, g_GrassGenCB.MaxScale, scaleT) *
-            0.04f *
-            densityScaleBias;
-
-        inst.Yaw = Rand01(seed ^ 0x6666u) * 6.2831853f;
-        inst.Pitch = lerp(g_GrassGenCB.MinPitch, g_GrassGenCB.MaxPitch, Rand01(seed ^ 0x7777u));
-
-        inst.BendStrength =
-            lerp(g_GrassGenCB.BendStrengthMin,
-                 g_GrassGenCB.BendStrengthMax,
-                 Rand01(seed ^ 0x8888u));
-
-        inst.Press = press;
-
-        if (distanceCameraSqr < g_GrassGenCB.LOD0Distance * g_GrassGenCB.LOD0Distance)
+        if (emit)
         {
-            uint idx;
-            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD0 * 4, 1, idx);
-            g_OutInstancesLOD0[idx] = inst;
+            density = SampleWorldDensity(posXZ);
+            if (density <= 0.001f)
+                emit = false;
         }
-        else if (distanceCameraSqr < g_GrassGenCB.LOD1Distance * g_GrassGenCB.LOD1Distance)
+
+        if (emit)
         {
-            uint idx;
-            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD1 * 4, 1, idx);
-            g_OutInstancesLOD1[idx] = inst;
+            hN = SampleHeightNormalized(posXZ);
+            slope01 = ComputeSlope01(posXZ);
+
+            float slopeMask = 1.0f - slope01;
+            float heightMask = ComputeHeightMask(hN);
+
+            density *= saturate(slopeMask) * heightMask;
+            if (density <= 0.001f)
+                emit = false;
         }
-        else
+
+        if (emit)
         {
-            uint idx;
-            g_CounterBuffer.InterlockedAdd(g_GrassGenCB.IndirectSlotLOD2 * 4, 1, idx);
-            g_OutInstancesLOD2[idx] = inst;
+            press = saturate(SampleInteraction(posXZ));
+
+            if (Rand01(seed ^ 0x41A7u) > density)
+                emit = false;
+        }
+
+        if (emit)
+        {
+            float effectiveProb = saturate(g_GrassGenCB.SpawnProb * density);
+            if (Rand01(seed ^ 0x4444u) > effectiveProb)
+                emit = false;
+        }
+
+        GrassInstance inst = (GrassInstance) 0;
+
+        if (emit)
+        {
+            float y = SampleWorldHeight(posXZ);
+
+            inst.PosWS = float3(posXZ.x, y, posXZ.y);
+
+            float scaleT = Rand01(seed ^ 0x5555u);
+            float densityScaleBias = lerp(1.2f, 0.8f, density);
+
+            inst.Scale =
+                lerp(g_GrassGenCB.MinScale, g_GrassGenCB.MaxScale, scaleT) *
+                0.04f *
+                densityScaleBias;
+
+            inst.Yaw = Rand01(seed ^ 0x6666u) * 6.2831853f;
+            inst.Pitch = lerp(g_GrassGenCB.MinPitch, g_GrassGenCB.MaxPitch, Rand01(seed ^ 0x7777u));
+
+            inst.BendStrength =
+                lerp(g_GrassGenCB.BendStrengthMin,
+                     g_GrassGenCB.BendStrengthMax,
+                     Rand01(seed ^ 0x8888u));
+
+            inst.Press = press;
+        }
+
+        // ----------------------------
+        // Decide LOD + wave-coalesced reserve
+        // ----------------------------
+        bool emit0 = emit && (distanceCameraSqr < lod0Sqr);
+        bool emit1 = emit && (!emit0) && (distanceCameraSqr < lod1Sqr);
+        bool emit2 = emit && (!emit0) && (!emit1);
+
+        // Ballots
+        BallotMask b0 = WaveBallot(emit0);
+        BallotMask b1 = WaveBallot(emit1);
+        BallotMask b2 = WaveBallot(emit2);
+
+        // Reserve contiguous ranges (1 atomic per wave per LOD)
+        uint base0 = WaveReserveByteAddressCounter(counterOff0, b0);
+        uint base1 = WaveReserveByteAddressCounter(counterOff1, b1);
+        uint base2 = WaveReserveByteAddressCounter(counterOff2, b2);
+
+        // Compute per-lane prefix within its LOD group and scatter
+        uint lane = WaveGetLaneIndex();
+
+        if (emit0)
+        {
+            uint p = BallotPrefixCountBits(b0, lane);
+            g_OutInstancesLOD0[base0 + p] = inst;
+        }
+        else if (emit1)
+        {
+            uint p = BallotPrefixCountBits(b1, lane);
+            g_OutInstancesLOD1[base1 + p] = inst;
+        }
+        else if (emit2)
+        {
+            uint p = BallotPrefixCountBits(b2, lane);
+            g_OutInstancesLOD2[base2 + p] = inst;
         }
     }
 }
