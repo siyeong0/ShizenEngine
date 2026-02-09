@@ -60,8 +60,8 @@ namespace shz
 			[&](RenderPassBuilder& b)
 			{
 				// read counts, write args
-				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_READ);
-				b.DeclareBufferUAV(STRING_HASH("IndirectArgsBuffer"), RENDER_ACCESS_WRITE);
+				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_READWRITE);
+				b.DeclareBufferIndirectArgsWrite(STRING_HASH("IndirectArgsBuffer"));
 
 				// constants
 				b.DeclareBufferCBVRead(STRING_HASH("IndirectArgsWriterCB"));

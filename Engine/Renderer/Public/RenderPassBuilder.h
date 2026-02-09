@@ -132,6 +132,16 @@ namespace shz
 			DeclaredAccesses.push_back(a);
 		}
 
+		void DeclareBufferIndirectArgsWrite(uint64 id)
+		{
+			RenderPassResourceAccess a = {};
+			a.ResourceId = id;
+			a.Kind = RENDER_RESOURCE_KIND_BUFFER;
+			a.Access = RENDER_ACCESS_WRITE;
+			a.Usage = RENDER_USAGE_INDIRECT_ARGUMENT;
+			DeclaredAccesses.push_back(a);
+		}
+
 		void DeclareExternal(uint64 id, ERenderAccess access, ERenderUsage usage)
 		{
 			RenderPassResourceAccess a = {};

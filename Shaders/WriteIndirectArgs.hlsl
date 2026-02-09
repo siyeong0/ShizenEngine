@@ -54,4 +54,7 @@ void WriteIndirectArgs(uint3 tid : SV_DispatchThreadID)
     g_IndirectArgs.Store(base + 8u, t.StartIndexLocation);
     g_IndirectArgs.Store(base + 12u, t.BaseVertexLocation);
     g_IndirectArgs.Store(base + 16u, t.StartInstanceLocation);
+    
+    // Reset counter
+    g_IndirectCounts.Store(slot * INDIRECT_COUNT_STRIDE_BYTES, 0);
 }

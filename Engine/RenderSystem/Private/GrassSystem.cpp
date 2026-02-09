@@ -101,11 +101,10 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD1"), RENDER_ACCESS_WRITE);
 				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD2"), RENDER_ACCESS_WRITE);
 
-				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE); // <-- shared counts
-
 				// Inputs
 				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
+				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE);
 
 				// Constants
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstantsCB"));
@@ -156,25 +155,6 @@ namespace shz
 					map->HeightMaxN = m_HeightMaxN;
 					map->HeightFadeN = m_HeightFadeN;
 
-				}
-
-				// (0) Reset counter for my slot (slot * 4 bytes)
-				{
-					const uint32 zero = 0;
-					pContext->UpdateBuffer(ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")), m_IndirectSlotLOD0 * 4, sizeof(uint32), &zero, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-					pContext->UpdateBuffer(ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")), m_IndirectSlotLOD1 * 4, sizeof(uint32), &zero, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-					pContext->UpdateBuffer(ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")), m_IndirectSlotLOD2 * 4, sizeof(uint32), &zero, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
-					StateTransitionDesc trBack[] =
-					{
-						{
-							ctx.pRegistry->GetBuffer(STRING_HASH("IndirectCountBuffer")),
-							RESOURCE_STATE_UNKNOWN,
-							RESOURCE_STATE_UNORDERED_ACCESS,
-							STATE_TRANSITION_FLAG_UPDATE_STATE
-						},
-					};
-					pContext->TransitionResourceStates(_countof(trBack), trBack);
 				}
 
 				// (1) Bind per-frame textures
