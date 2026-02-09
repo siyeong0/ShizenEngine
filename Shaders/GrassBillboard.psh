@@ -34,6 +34,11 @@ float4 main(PSInput IN) : SV_TARGET0
     alpha = saturate((alpha - 0.02f) / (1.0f - 0.02f));
     alpha = pow(alpha, 0.60f);
 
+    if (alpha < 0.25)
+    {
+        discard;
+    }
+
     float3 N = normalize(IN.NormalWS);
     float3 L = normalize(-g_FrameCB.LightDirWS);
 

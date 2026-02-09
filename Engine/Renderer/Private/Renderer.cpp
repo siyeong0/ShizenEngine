@@ -135,20 +135,20 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
-				{
-					BufferDesc desc = {};
-					desc.Name = name;
-					desc.Usage = USAGE_DYNAMIC;
-					desc.BindFlags = BIND_SHADER_RESOURCE;
-					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-					desc.Mode = BUFFER_MODE_STRUCTURED;
-					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Usage = USAGE_DYNAMIC;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+				desc.Mode = BUFFER_MODE_STRUCTURED;
+				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
-					ASSERT(sb, "Object table create failed.");
-					return sb;
-				};
+				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+				ASSERT(sb, "Object table create failed.");
+				return sb;
+			};
 
 			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
 			AddBuffer(STRING_HASH("ObjectTable.Forward"), std::move(createObjectTable("ObjectTableSB.Forward")));
@@ -403,9 +403,9 @@ namespace shz
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
 			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-				{
-					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-				};
+			{
+				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+			};
 
 			float3 shadowCornersWS[8] = {};
 			{
@@ -600,20 +600,20 @@ namespace shz
 		// Helper: pack object table using instanceRemap
 		// ------------------------------------------------------------
 		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
+		{
+			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+			hlsl::ObjectConstants* dst = map;
+
+			for (size_t i = 0; i < remap.size(); ++i)
 			{
-				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::ObjectConstants* dst = map;
-
-				for (size_t i = 0; i < remap.size(); ++i)
-				{
-					const uint32 oc = remap[i];
-					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-					dst[i] = tableCPU[oc];
-				}
-			};
+				const uint32 oc = remap[i];
+				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+				dst[i] = tableCPU[oc];
+			}
+		};
 
 		// ------------------------------------------------------------
 		// Build packets + pack object tables
@@ -621,9 +621,9 @@ namespace shz
 		std::vector<uint32> instanceRemap;
 
 		auto pipelineResolver = [this](MaterialId matId, uint64 rpKey) -> const MaterialPipelineBinding&
-			{
-				return this->AcquireMaterialPipelineBinding(matId, rpKey);
-			};
+		{
+			return this->AcquireMaterialPipelineBinding(matId, rpKey);
+		};
 
 		// GBuffer
 		scene.BuildDrawPackets(
@@ -663,12 +663,12 @@ namespace shz
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
 		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
+		{
+			for (DrawIndirectPacket& p : packets)
 			{
-				for (DrawIndirectPacket& p : packets)
-				{
-					p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
-				}
-			};
+				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+			}
+		};
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
@@ -776,42 +776,42 @@ namespace shz
 		// Helpers
 		// -----------------------------------------------------------------
 		auto isWriteAccess = [](const RenderPassResourceAccess& a) -> bool
-			{
-				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-				return false;
-			};
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
 
 		auto hasClearValue = [&](uint64 resourceId) -> bool
-			{
-				return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
-			};
+		{
+			return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
+		};
 
 		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
+		{
+			OptimizedClearValue cv = {};
+			if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 			{
-				OptimizedClearValue cv = {};
-				if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
+				cv = it->second;
+			}
+			else
+			{
+				// default: black / depth=1
+				if (bDepth)
 				{
-					cv = it->second;
+					cv.DepthStencil.Depth = 1.f;
+					cv.DepthStencil.Stencil = 0;
 				}
 				else
 				{
-					// default: black / depth=1
-					if (bDepth)
-					{
-						cv.DepthStencil.Depth = 1.f;
-						cv.DepthStencil.Stencil = 0;
-					}
-					else
-					{
-						cv.Color[0] = 0.f;
-						cv.Color[1] = 0.f;
-						cv.Color[2] = 0.f;
-						cv.Color[3] = 0.f;
-					}
+					cv.Color[0] = 0.f;
+					cv.Color[1] = 0.f;
+					cv.Color[2] = 0.f;
+					cv.Color[3] = 0.f;
 				}
-				return cv;
-			};
+			}
+			return cv;
+		};
 
 		// -----------------------------------------------------------------
 		// Build RHI RenderPass + Framebuffer attachments
@@ -1399,19 +1399,19 @@ namespace shz
 		}
 
 		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-			{
-				BufferDesc desc = {};
-				desc.Name = name;
-				desc.Size = dataSize;
-				desc.Usage = USAGE_IMMUTABLE;
-				desc.BindFlags = bindFlags;
-				BufferData initData = {};
-				initData.pData = pData;
-				initData.DataSize = dataSize;
-				RefCntAutoPtr<IBuffer> pBuffer;
-				device->CreateBuffer(desc, &initData, &pBuffer);
-				return pBuffer;
-			};
+		{
+			BufferDesc desc = {};
+			desc.Name = name;
+			desc.Size = dataSize;
+			desc.Usage = USAGE_IMMUTABLE;
+			desc.BindFlags = bindFlags;
+			BufferData initData = {};
+			initData.pData = pData;
+			initData.DataSize = dataSize;
+			RefCntAutoPtr<IBuffer> pBuffer;
+			device->CreateBuffer(desc, &initData, &pBuffer);
+			return pBuffer;
+		};
 
 		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1521,6 +1521,206 @@ namespace shz
 		return true;
 	}
 
+	static inline uint32 ClampU32(int32 v, uint32 lo, uint32 hi)
+	{
+		return static_cast<uint32>(std::min<int32>(static_cast<int32>(hi), std::max<int32>(static_cast<int32>(lo), v)));
+	}
+
+	struct RGBA8 final
+	{
+		uint8 R = 0;
+		uint8 G = 0;
+		uint8 B = 0;
+		uint8 A = 0;
+	};
+
+	static inline RGBA8 LoadRGBA8(const uint8* p)
+	{
+		RGBA8 c;
+		c.R = p[0];
+		c.G = p[1];
+		c.B = p[2];
+		c.A = p[3];
+		return c;
+	}
+
+	static inline void StoreRGBA8(uint8* p, const RGBA8& c)
+	{
+		p[0] = c.R;
+		p[1] = c.G;
+		p[2] = c.B;
+		p[3] = c.A;
+	}
+
+	//----------------------------------------------------------------------------
+	// Alpha bleed / dilate RGB into transparent area.
+	//
+	// 목적:
+	//  - 투명 영역(alpha=0)의 RGB가 흰/검 등 배경색으로 남아있으면,
+	//    linear filtering/mip에서 가장자리에 색 번짐(fringe)이 생긴다.
+	//  - 투명 영역 RGB를 주변의 "유효 색(opaque)"으로 채워 넣어서 fringe를 제거한다.
+	//
+	// 동작:
+	//  - seedAlpha 이상인 픽셀을 "유효"로 간주
+	//  - fillAlpha 이하인 픽셀에 대해서만 RGB를 채움(알파는 유지)
+	//  - radiusPixels 만큼 확장
+	//
+	// 주의:
+	//  - alpha는 건드리지 않는다. (마스크/블렌딩 의미가 바뀜)
+	//  - 텍스처가 straight alpha든 premultiplied든, "투명 영역 RGB"를 채워주는 건 유효하다.
+	//----------------------------------------------------------------------------
+	static void AlphaBleedRGBA8(
+		TextureMip& mip,
+		uint8 seedAlpha = 1,     // 유효 픽셀 기준(보통 1~16 권장)
+		uint8 fillAlpha = 0,     // 채울 대상 기준(보통 0)
+		uint32 radiusPixels = 16 // 패딩 폭(예: 8~32)
+	)
+	{
+		ASSERT(mip.Width > 0 && mip.Height > 0, "AlphaBleed: invalid mip size.");
+		ASSERT(!mip.Data.empty(), "AlphaBleed: mip data is empty.");
+		ASSERT((mip.Data.size() == size_t(mip.Width) * size_t(mip.Height) * 4u),
+			"AlphaBleed: expected tightly packed RGBA8.");
+
+		const uint32 W = mip.Width;
+		const uint32 H = mip.Height;
+		const uint32 Stride = W * 4u;
+
+		// Work buffers (double buffer)
+		std::vector<uint8> curr = mip.Data;
+		std::vector<uint8> next = mip.Data;
+
+		auto Index = [&](uint32 x, uint32 y) -> uint32
+		{
+			return y * Stride + x * 4u;
+		};
+
+		// "유효 픽셀" 마스크를 단계별로 갱신 (radius 확장)
+		// valid[x,y] == 1 이면 이 픽셀의 RGB는 신뢰할 수 있는(시드 또는 이미 채워진) 색이다.
+		std::vector<uint8> valid(size_t(W) * size_t(H), 0);
+
+		// 초기 valid 설정: seedAlpha 이상이면 유효
+		for (uint32 y = 0; y < H; ++y)
+		{
+			for (uint32 x = 0; x < W; ++x)
+			{
+				const uint32 i = Index(x, y);
+				const uint8 a = curr[i + 3];
+				valid[size_t(y) * size_t(W) + size_t(x)] = (a >= seedAlpha) ? 1 : 0;
+			}
+		}
+
+		// 8-neighborhood
+		static constexpr int32 kDx[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+		static constexpr int32 kDy[8] = { -1, -1, -1, 0, 0, 1, 1, 1 };
+
+		// radiusPixels 번 확장
+		for (uint32 step = 0; step < radiusPixels; ++step)
+		{
+			bool anyWrite = false;
+
+			// next는 curr에서 시작 (alpha는 그대로 유지)
+			next = curr;
+
+			// 이 step에서 새로 유효가 된 픽셀을 추적할 새 valid
+			std::vector<uint8> newValid = valid;
+
+			for (uint32 y = 0; y < H; ++y)
+			{
+				for (uint32 x = 0; x < W; ++x)
+				{
+					const size_t vidx = size_t(y) * size_t(W) + size_t(x);
+
+					// 이미 유효면 패스 (RGB가 이미 믿을만함)
+					if (valid[vidx] != 0)
+						continue;
+
+					const uint32 i = Index(x, y);
+					const uint8 a = curr[i + 3];
+
+					// "진짜 투명"만 채우기 (원하면 fillAlpha를 8~32 같은 값으로 올릴 수도 있음)
+					if (a > fillAlpha)
+						continue;
+
+					// 주변 유효 픽셀들의 RGB 평균(또는 가중)으로 채움
+					uint32 sumR = 0;
+					uint32 sumG = 0;
+					uint32 sumB = 0;
+					uint32 count = 0;
+
+					for (uint32 k = 0; k < 8; ++k)
+					{
+						const int32 nx = int32(x) + kDx[k];
+						const int32 ny = int32(y) + kDy[k];
+						if (nx < 0 || ny < 0 || nx >= int32(W) || ny >= int32(H))
+							continue;
+
+						const size_t nvidx = size_t(ny) * size_t(W) + size_t(nx);
+						if (valid[nvidx] == 0)
+							continue;
+
+						const uint32 ni = Index(uint32(nx), uint32(ny));
+						sumR += curr[ni + 0];
+						sumG += curr[ni + 1];
+						sumB += curr[ni + 2];
+						++count;
+					}
+
+					if (count > 0)
+					{
+						next[i + 0] = uint8(sumR / count);
+						next[i + 1] = uint8(sumG / count);
+						next[i + 2] = uint8(sumB / count);
+						// next[i + 3] (alpha) 는 유지
+
+						newValid[vidx] = 1; // 이제 이 픽셀도 "유효 색"으로 취급 가능
+						anyWrite = true;
+					}
+				}
+			}
+
+			curr.swap(next);
+			valid.swap(newValid);
+
+			// 더 이상 확장될 게 없으면 조기 종료
+			if (!anyWrite)
+				break;
+		}
+
+		mip.Data.swap(curr);
+	}
+
+	//----------------------------------------------------------------------------
+	// Texture 전체에 alpha bleed 적용 (모든 mip에 적용 가능)
+	//----------------------------------------------------------------------------
+	static void AlphaBleedTextureRGBA8(
+		Texture& tex,
+		uint8 seedAlpha = 1,
+		uint8 fillAlpha = 0,
+		uint32 radiusPixelsAtTopMip = 16,
+		bool bApplyToAllMips = true
+	)
+	{
+		ASSERT(tex.GetFormat() == TEX_FORMAT_RGBA8_UNORM, "AlphaBleedTextureRGBA8: only RGBA8 supported here.");
+
+		auto& mips = tex.GetMips();
+		ASSERT(!mips.empty(), "AlphaBleedTextureRGBA8: no mips.");
+
+		for (size_t mipIndex = 0; mipIndex < mips.size(); ++mipIndex)
+		{
+			if (!bApplyToAllMips && mipIndex != 0)
+				break;
+
+			// mip이 작아질수록 radius를 줄이는게 보통 유리 (너무 과도한 확장 방지)
+			// ex) 1024 mip 16px, 512 mip 8px, 256 mip 4px ...
+			uint32 radius = radiusPixelsAtTopMip;
+			{
+				const uint32 div = 1u << uint32(mipIndex);
+				radius = std::max<uint32>(1u, radiusPixelsAtTopMip / div);
+			}
+
+			AlphaBleedRGBA8(mips[mipIndex], seedAlpha, fillAlpha, radius);
+		}
+	}
 
 	const BillboardRenderData& Renderer::CreateBillboardRenderData(
 		const AssetRef<Texture>& colorTexRef,
@@ -1535,12 +1735,20 @@ namespace shz
 		BillboardRenderData billboard = {};
 		billboard.BlendMode = blendMode;
 
-		billboard.BaseColorTex = CreateTexture(colorTexRef);
-		ASSERT(billboard.BaseColorTex, "Create billboard base color texture failed.");
-
 		AssetPtr<Texture> colorTexPtr = m_pAssetManager->LoadBlocking<Texture>(colorTexRef);
 		ASSERT(colorTexPtr, "CreateBillboardRenderData: LoadBlocking<Texture> failed.");
-		const Texture& colorTex = *colorTexPtr;
+		Texture& colorTex = *colorTexPtr;
+
+		shz::AlphaBleedTextureRGBA8(
+			colorTex,
+			/*seedAlpha*/ 8,          // 1~16 사이 추천 (경계가 얇으면 1~4)
+			/*fillAlpha*/ 0,
+			/*radius*/    16,
+			/*allMips*/   true
+		);
+
+		billboard.BaseColorTex = CreateTexture(colorTexRef.GetSourcePath() + "_Bleed", colorTex);
+		ASSERT(billboard.BaseColorTex, "Create billboard base color texture failed.");
 
 		// ---------------------------------------------------------------------
 		// Cutout mesh build from alpha (CPU)
@@ -2111,7 +2319,7 @@ namespace shz
 					simp.pop_back();
 
 				// Keep reasonable vertex count (foliage cutout sweet spot: 16~64)
-				const int kMaxVerts = 8;
+				const int kMaxVerts = 12;
 				if ((int)simp.size() > kMaxVerts)
 				{
 					// crude additional thinning
@@ -2168,8 +2376,6 @@ namespace shz
 		std::vector<uint16> indices;
 
 		bool bBuiltCutout = BuildCutoutMeshFromAlpha(vertices, indices);
-
-		bBuiltCutout = false;
 
 		if (!bBuiltCutout)
 		{
@@ -2299,9 +2505,9 @@ namespace shz
 	const MaterialPipelineBinding& Renderer::AcquireMaterialPipelineBinding(MaterialId materialId, uint64 renderPassKey)
 	{
 		auto hashCombine64 = [](uint64 h, uint64 v)
-			{
-				return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
-			};
+		{
+			return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+		};
 
 		const uint64 hash = hashCombine64(materialId, renderPassKey);
 		auto it = m_PipelineBindingCache.find(hash);
@@ -2365,47 +2571,47 @@ namespace shz
 		};
 
 		auto bindVarByStages = [&](const char* name, SHADER_TYPE stageMask, auto&& setterFn) -> SHADER_TYPE
+		{
+			SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
+			bool anyBound = false;
+
+			// If mask is known, only try those stages.
+			if (stageMask != SHADER_TYPE_UNKNOWN)
 			{
-				SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
-				bool anyBound = false;
-
-				// If mask is known, only try those stages.
-				if (stageMask != SHADER_TYPE_UNKNOWN)
+				for (SHADER_TYPE st : kStages)
 				{
-					for (SHADER_TYPE st : kStages)
-					{
-						if ((stageMask & st) == 0)
-							continue;
+					if ((stageMask & st) == 0)
+						continue;
 
-						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-						if (var)
-						{
-							setterFn(var);
-							anyBound = true;
-							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
-						}
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+					if (var)
+					{
+						setterFn(var);
+						anyBound = true;
+						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
 					}
 				}
+			}
 
-				// Fallback: probe all shaders used by the material/template.
-				if (!anyBound)
+			// Fallback: probe all shaders used by the material/template.
+			if (!anyBound)
+			{
+				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
 				{
-					for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
-					{
-						ASSERT(shader, "Shader in source instance is null.");
-						const SHADER_TYPE st = shader->GetDesc().ShaderType;
+					ASSERT(shader, "Shader in source instance is null.");
+					const SHADER_TYPE st = shader->GetDesc().ShaderType;
 
-						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-						if (var)
-						{
-							setterFn(var);
-							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
-						}
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+					if (var)
+					{
+						setterFn(var);
+						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
 					}
 				}
+			}
 
-				return actuallyBound;
-			};
+			return actuallyBound;
+		};
 
 		// ---------------------------------------------------------------------
 		// Constant Buffers (bind ALL reflected CBs + store them)
@@ -2935,43 +3141,43 @@ namespace shz
 
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
-			{
-				if (a.Access == RENDER_ACCESS_WRITE)     return true;
-				if (a.Access == RENDER_ACCESS_READ)      return false;
-				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+		{
+			if (a.Access == RENDER_ACCESS_WRITE)     return true;
+			if (a.Access == RENDER_ACCESS_READ)      return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
 
-				switch (a.Usage)
-				{
-				case RENDER_USAGE_RTV:
-				case RENDER_USAGE_DSV_WRITE:
-				case RENDER_USAGE_UAV:
-					return true;
-				default:
-					return false;
-				}
-			};
+			switch (a.Usage)
+			{
+			case RENDER_USAGE_RTV:
+			case RENDER_USAGE_DSV_WRITE:
+			case RENDER_USAGE_UAV:
+				return true;
+			default:
+				return false;
+			}
+		};
 
 		auto isRead = [](const RenderPassResourceAccess& a) -> bool
+		{
+			if (a.Access == RENDER_ACCESS_READ)      return true;
+			if (a.Access == RENDER_ACCESS_WRITE)     return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+			switch (a.Usage)
 			{
-				if (a.Access == RENDER_ACCESS_READ)      return true;
-				if (a.Access == RENDER_ACCESS_WRITE)     return false;
-				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+			case RENDER_USAGE_SRV:
+			case RENDER_USAGE_CBV:
+			case RENDER_USAGE_DSV_READ:
+			case RENDER_USAGE_INDIRECT_ARGUMENT:
+				return true;
 
-				switch (a.Usage)
-				{
-				case RENDER_USAGE_SRV:
-				case RENDER_USAGE_CBV:
-				case RENDER_USAGE_DSV_READ:
-				case RENDER_USAGE_INDIRECT_ARGUMENT:
-					return true;
+			case RENDER_USAGE_UAV:
+				return false;
 
-				case RENDER_USAGE_UAV:
-					return false;
-
-				default:
-					return false;
-				}
-			};
+			default:
+				return false;
+			}
+		};
 
 		// ------------------------------------------------------------
 		// Build per-resource use lists (deterministic key order via std::map)
@@ -3030,10 +3236,10 @@ namespace shz
 		adj.resize(n);
 
 		auto pushEdge = [&](uint32 u, uint32 v)
-			{
-				if (u == v) return;
-				adj[u].push_back(v);
-			};
+		{
+			if (u == v) return;
+			adj[u].push_back(v);
+		};
 
 		// ------------------------------------------------------------
 		// Dependency rules (simple RenderGraph-lite):
@@ -3092,18 +3298,18 @@ namespace shz
 		}
 
 		auto passName = [&](uint32 passIndex) -> const char*
-			{
-				return m_PassTable.at(passes[passIndex]).Name.c_str();
-			};
+		{
+			return m_PassTable.at(passes[passIndex]).Name.c_str();
+		};
 
 		auto dumpUse = [&](uint64 rid, const UseList& ul)
-			{
-				std::cout << "RID=" << rid << "\n  Writers:";
-				for (uint32 w : ul.Writers) std::cout << " " << passName(w);
-				std::cout << "\n  Readers:";
-				for (uint32 r : ul.Readers) std::cout << " " << passName(r);
-				std::cout << "\n\n";
-			};
+		{
+			std::cout << "RID=" << rid << "\n  Writers:";
+			for (uint32 w : ul.Writers) std::cout << " " << passName(w);
+			std::cout << "\n  Readers:";
+			for (uint32 r : ul.Readers) std::cout << " " << passName(r);
+			std::cout << "\n\n";
+		};
 
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
@@ -3222,11 +3428,11 @@ namespace shz
 		agg.reserve(accesses.size());
 
 		auto isWrite = [](const RenderPassResourceAccess& a)
-			{
-				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-				return false;
-			};
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
 
 		for (const auto& a : accesses)
 		{

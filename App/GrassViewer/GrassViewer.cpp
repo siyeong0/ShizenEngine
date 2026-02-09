@@ -168,6 +168,7 @@ namespace shz
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
 				m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
+				m_pRenderer->AddTexture(STRING_HASH("LightingForward"), td);
 				m_pRenderer->AddTexture(STRING_HASH("LightingFinal"), td);
 			}
 
