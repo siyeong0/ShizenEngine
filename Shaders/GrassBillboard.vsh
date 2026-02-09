@@ -64,12 +64,6 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     float x = IN.Pos.x * inst.Scale;
     float y = IN.Pos.y * inst.Scale;
 
-    // Optional: rotate quad around its normal by inst.Yaw (adds variety)
-    float3 local = float3(x, y, 0.0);
-    local = ApplyYaw(local, inst.Yaw);
-    x = local.x;
-    y = local.y;
-
     // Build camera-facing billboard in world
     float3 worldPos = inst.PosWS + camR * x + camU * y;
 

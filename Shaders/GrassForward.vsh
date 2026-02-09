@@ -89,7 +89,7 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     float3 pitchAxis = ApplyYaw(float3(1, 0, 0), inst.Yaw);
     pitchAxis = NormalizeSafe3(pitchAxis, float3(1, 0, 0));
 
-    float pitchAngle = inst.Pitch * keepBase; // ¡Ú ÇÙ½É: Press=1ÀÌ¸é Pitch 0
+    float pitchAngle = inst.Pitch * keepBase;
     p = RotateAroundAxis(p, pitchAxis, pitchAngle);
     n = RotateAroundAxis(n, pitchAxis, pitchAngle);
 
