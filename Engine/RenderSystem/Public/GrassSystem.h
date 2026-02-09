@@ -40,11 +40,9 @@ namespace shz
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
 	private:
-		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 14;
+		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 12;
 		static constexpr uint32 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
-		static constexpr uint32 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 26;
-
-		static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 800;
+		static constexpr uint32 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
 		// Indirect slot for this system
 		uint32 m_IndirectSlotLOD0 = 0;
@@ -84,14 +82,14 @@ namespace shz
 
 		float m_ChunkSize = 4.0f;
 		uint m_ChunkHalfExtent = 64;
-		uint m_SamplesPerChunk = 364;
+		uint m_SamplesPerChunk = 256;
 		float m_Jitter = 0.95f;
 
 		float m_MinPitch = -0.2f;
 		float m_MaxPitch = 0.2f;
 		float m_MinScale = 7.7f;
 		float m_MaxScale = 13.1f;
-		float m_SpawnProb = 0.85f;
+		float m_SpawnProb = 1.0f;
 		float m_SpawnRadius = 1000.0f;
 
 		float m_BendStrengthMin = 0.65f;

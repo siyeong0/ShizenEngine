@@ -82,8 +82,8 @@ int WINAPI WinMain(
 	int desiredHeight = 0;
 	g_pEngine->GetDesiredInitialWindowSize(desiredWidth, desiredHeight);
 
-	LONG windowWidth = desiredWidth > 0 ? desiredWidth : 1280;
-	LONG windowHeight = desiredHeight > 0 ? desiredHeight : 720;
+	LONG windowWidth = desiredWidth > 0 ? desiredWidth : 1920;
+	LONG windowHeight = desiredHeight > 0 ? desiredHeight : 1080;
 	RECT rc = { 0, 0, windowWidth, windowHeight };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 

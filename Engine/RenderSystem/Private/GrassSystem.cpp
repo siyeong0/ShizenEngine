@@ -731,7 +731,7 @@ namespace shz
 
 					// Fixed depth for grass self-occlusion
 					gp.DepthStencilDesc.DepthEnable = true;
-					gp.DepthStencilDesc.DepthWriteEnable = true;
+					gp.DepthStencilDesc.DepthWriteEnable = false;
 					gp.DepthStencilDesc.DepthFunc = COMPARISON_FUNC_LESS_EQUAL;
 
 					// A2C ON
