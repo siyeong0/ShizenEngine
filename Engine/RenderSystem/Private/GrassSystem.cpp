@@ -30,18 +30,20 @@ namespace shz
 			bd.Usage = USAGE_DEFAULT;
 			bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
 			bd.Mode = BUFFER_MODE_STRUCTURED;
-			bd.ElementByteStride = sizeof(hlsl::GrassInstance);
 
 			bd.Name = "GrassInstanceBufferLOD0";
-			bd.Size = uint64{ MAX_NUM_GRASS_LOD0_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
+			bd.ElementByteStride = sizeof(hlsl::GrassMeshInstance);
+			bd.Size = MAX_NUM_GRASS_LOD0_INSTANCES * sizeof(hlsl::GrassMeshInstance);
 			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD0"), bd);
 
 			bd.Name = "GrassInstanceBufferLOD1";
-			bd.Size = uint64{ MAX_NUM_GRASS_LOD1_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
+			bd.ElementByteStride = sizeof(hlsl::GrassCrossPlaneInstance);
+			bd.Size = MAX_NUM_GRASS_LOD1_INSTANCES * sizeof(hlsl::GrassCrossPlaneInstance);
 			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD1"), bd);
 
 			bd.Name = "GrassInstanceBufferLOD2";
-			bd.Size = uint64{ MAX_NUM_GRASS_LOD2_INSTANCES } *uint64{ sizeof(hlsl::GrassInstance) };
+			bd.ElementByteStride = sizeof(hlsl::GrassBillboardInstance);
+			bd.Size = MAX_NUM_GRASS_LOD2_INSTANCES * sizeof(hlsl::GrassBillboardInstance);
 			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD2"), bd);
 		}
 		// Allocate indirect slot for grass
@@ -514,7 +516,7 @@ namespace shz
 					vsCI.Desc.Name = "GrassVS";
 					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
 					vsCI.Desc.UseCombinedTextureSamplers = false;
-					vsCI.FilePath = m_GrassVS.c_str();
+					vsCI.FilePath = m_GrassMeshVS.c_str();
 
 					ShaderCreateInfo psCI = {};
 					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -629,7 +631,7 @@ namespace shz
 					vsCI.Desc.Name = "GrassVS";
 					vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
 					vsCI.Desc.UseCombinedTextureSamplers = false;
-					vsCI.FilePath = m_GrassVS.c_str();
+					vsCI.FilePath = m_GrassCrossPlaneVS.c_str();
 
 					ShaderCreateInfo psCI = {};
 					psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;

@@ -40,9 +40,9 @@ namespace shz
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
 	private:
-		static constexpr uint32 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 14;
-		static constexpr uint32 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
-		static constexpr uint32 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
+		static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 14;
+		static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
+		static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
 		// Indirect slot for this system
 		uint32 m_IndirectSlotLOD0 = 0;
@@ -110,11 +110,14 @@ namespace shz
 		std::string m_InteractionCS = "InteractionFieldUpdate.hlsl";
 		std::string m_CopyVS = "Fullscreen.vsh";
 		std::string m_CopyPS = "CopyTexture.psh";
-		std::string m_GrassVS = "GrassForward.vsh";
+		std::string m_GrassMeshVS = "GrassMesh.vsh";
+		std::string m_GrassCrossPlaneVS = "GrassCrossPlane.vsh";
+		std::string m_GrassBillboardVS = "GrassBillboard.vsh";
+
 		std::string m_GrassPS = "GrassForward.psh";
+		std::string m_GrassBillboardPS = "GrassBillboard.psh";
+
 		std::string m_GrassShadowVS = "GrassShadow.vsh";		
 		std::string m_ShadowPS = "ShadowMasked.psh";
-		std::string m_GrassBillboardVS = "GrassBillboard.vsh";
-		std::string m_GrassBillboardPS = "GrassBillboard.psh";
 	};
 } // namespace shz

@@ -136,15 +136,53 @@ struct IndirectConstants
 // ----------------------------------------------
 // Grass instance (GPU generated)
 // ----------------------------------------------
-struct GrassInstance
+struct GrassMeshInstance
 {
-    float3 PosWS;
-    float Scale; // uniform scale
+	float3 PosWS; // world position (x,y,z)
+	float Scale; // uniform scale
 
-    float Yaw;
-    float Pitch;
-    float BendStrength; // base bend amount (0..1-ish)
-    float Press; // Interaction (0..1)
+    // Angles packed:
+    // [ 0..15]  Yaw   UNORM16 (0..2pi)
+    // [16..31]  Pitch UNORM16 (mapped from [-MaxPitch..+MaxPitch])
+	uint PackedAngles;
+
+    // PackedParams layout:
+    // [ 0.. 7]  BendStrength UNORM8
+    // [ 8..15]  Press        UNORM8
+    // [16..23]  VariantId    (0..255)  // mesh/texture variation index
+    // [24..31]  Seed8        (0..255)  // stable random for shading
+	uint PackedParams;
+};
+
+struct GrassCrossPlaneInstance
+{
+	float3 PosWS;
+	float Scale;
+
+    // Packed0 layout:
+    // [ 0..15]  Yaw UNORM16 (0..2pi)
+    // [16..23]  VariantId (0..255)   // choose texture/mesh variation
+    // [24..31]  Seed8     (0..255)   // stable random
+	uint Packed0;
+
+    // Packed1 layout:
+    // [ 0.. 7]  BendStrength UNORM8
+    // [ 8..15]  Press        UNORM8
+    // [16..23]  Reserved / AtlasFrame (0..255) optional
+    // [24..31]  Flags        (bitfield) optional
+	uint Packed1;
+};
+
+struct GrassBillboardInstance
+{
+	float3 PosWS;
+	float Scale;
+
+    // Packed layout:
+    // [ 0..15]  Yaw UNORM16 (0..2pi)
+    // [16..23]  Impostor/AtlasIndex (0..255)  // choose billboard frame set
+    // [24..31]  Seed8 (0..255)
+	uint Packed;
 };
 
 // ----------------------------------------------

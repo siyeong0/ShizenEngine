@@ -604,12 +604,12 @@ namespace shz
 			ren.DirectLightStrength = 0.22f;
 
 			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
-			ren.WindStrength = 0.25f;
-			ren.WindSpeed = 0.75f;
+			ren.WindStrength = 0.45f;
+			ren.WindSpeed = 1.75f;
 
 			ren.WindFreq = 0.155f;
 			ren.WindGust = 0.42f;
-			ren.MaxBendAngle = 0.80f;
+			ren.MaxBendAngle = 0.40f;
 			ren._pad1 = 0.0f;
 
 			ren.InteractionBendAngle = 1.0f;

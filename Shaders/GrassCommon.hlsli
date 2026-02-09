@@ -1,0 +1,270 @@
+#include "HLSL_Structures.hlsli"
+
+#ifndef GRASS_COMMON_HLSLI
+#define GRASS_COMMON_HLSLI
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+static const float GRASS_PI = 3.14159265f;
+static const float GRASS_TWO_PI = 6.28318530718f;
+static const float GRASS_EPS = 1e-8f;
+
+static const float DEFAULT_MAX_PITCH_RAD = 0.55f; // ~31.5 deg
+
+// ---------------------------------------------------------------------------
+// Math utilities
+// ---------------------------------------------------------------------------
+float3 NormalizeSafe3(float3 v, float3 fallback)
+{
+	float len2 = dot(v, v);
+	if (len2 < GRASS_EPS)
+	{
+		return fallback;
+	}
+	return v * rsqrt(len2);
+}
+
+float2 NormalizeSafe2(float2 v, float2 fallback)
+{
+	float len2 = dot(v, v);
+	if (len2 < GRASS_EPS)
+	{
+		return fallback;
+	}
+	return v * rsqrt(len2);
+}
+
+// Rotate vector around Y axis by yaw (radians)
+float3 ApplyYaw(float3 v, float yaw)
+{
+	float s = sin(yaw);
+	float c = cos(yaw);
+	return float3(c * v.x - s * v.z, v.y, s * v.x + c * v.z);
+}
+
+// Rodrigues rotation formula: rotate v around axisUnit by angle (radians)
+float3 RotateAroundAxis(float3 v, float3 axisUnit, float angle)
+{
+	float s = sin(angle);
+	float c = cos(angle);
+	return v * c + cross(axisUnit, v) * s + axisUnit * dot(axisUnit, v) * (1.0f - c);
+}
+
+// ---------------------------------------------------------------------------
+// Packing helpers
+// ---------------------------------------------------------------------------
+
+// Pack two UNORM16 into one uint: low16 = A, high16 = B
+uint PackUNorm2x16(float a01, float b01)
+{
+	uint A = (uint) round(saturate(a01) * 65535.0f);
+	uint B = (uint) round(saturate(b01) * 65535.0f);
+	return (B << 16) | (A & 0xFFFFu);
+}
+
+// Pack yaw [0..2pi) to UNORM16
+uint PackYaw16(float yawRad)
+{
+	float y01 = frac(yawRad * (1.0f / GRASS_TWO_PI));
+	return (uint) round(saturate(y01) * 65535.0f);
+}
+
+uint PackPitch16(float pitchRad)
+{
+	float p01 = (pitchRad / GRASS_PI) * 0.5f + 0.5f;
+	return (uint) round(saturate(p01) * 65535.0f);
+}
+
+// Pack [0..1] to UNORM8
+uint PackUNorm8(float v01)
+{
+	return (uint) round(saturate(v01) * 255.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Decode helpers
+// ---------------------------------------------------------------------------
+float DecodeUNorm16(uint u16)
+{
+	return (float) (u16 & 0xFFFFu) * (1.0f / 65535.0f);
+}
+
+float DecodeUNorm8(uint u8)
+{
+	return (float) (u8 & 0xFFu) * (1.0f / 255.0f);
+}
+
+// Decode yaw from UNORM16 -> radians [0..2pi)
+float DecodeYaw16(uint yaw16)
+{
+	float yaw01 = DecodeUNorm16(yaw16);
+	return yaw01 * GRASS_TWO_PI;
+}
+
+float DecodePitch16(uint pitch16)
+{
+	float p01 = DecodeUNorm16(pitch16);
+	float pSigned = p01 * 2.0f - 1.0f;
+	return pSigned * max(GRASS_PI, 1e-6f);
+}
+
+// ---------------------------------------------------------------------------
+// Make helpers (CS-friendly)
+// ---------------------------------------------------------------------------
+
+// LOD0: Mesh
+GrassMeshInstance MakeGrassMeshInstance(
+    float3 posWS,
+    float scale,
+    float yawRad,
+    float pitchRad,
+    float bend01,
+    float press01,
+    uint variantId,
+    uint seed8)
+{
+	GrassMeshInstance o;
+	o.PosWS = posWS;
+	o.Scale = scale;
+
+	uint yaw16 = PackYaw16(yawRad);
+	uint pitch16 = PackPitch16(pitchRad);
+	o.PackedAngles = (pitch16 << 16) | (yaw16 & 0xFFFFu);
+
+	o.PackedParams =
+        ((PackUNorm8(bend01) & 0xFFu) << 0) |
+        ((PackUNorm8(press01) & 0xFFu) << 8) |
+        ((variantId & 0xFFu) << 16) |
+        ((seed8 & 0xFFu) << 24);
+
+	return o;
+}
+
+// LOD1: Cross-plane
+GrassCrossPlaneInstance MakeGrassCrossPlaneInstance(
+    float3 posWS,
+    float scale,
+    float yawRad,
+    float bend01,
+    float press01,
+    uint variantId,
+    uint seed8,
+    uint atlasFrame,
+    uint flags)
+{
+	GrassCrossPlaneInstance o;
+	o.PosWS = posWS;
+	o.Scale = scale;
+
+	uint yaw16 = PackYaw16(yawRad);
+	o.Packed0 =
+        ((yaw16 & 0xFFFFu) << 0) |
+        ((variantId & 0xFFu) << 16) |
+        ((seed8 & 0xFFu) << 24);
+
+	o.Packed1 =
+        ((PackUNorm8(bend01) & 0xFFu) << 0) |
+        ((PackUNorm8(press01) & 0xFFu) << 8) |
+        ((atlasFrame & 0xFFu) << 16) |
+        ((flags & 0xFFu) << 24);
+
+	return o;
+}
+
+// LOD2: Billboard
+GrassBillboardInstance MakeGrassBillboardInstance(
+    float3 posWS,
+    float scale,
+    float yawRad,
+    uint atlasIndex,
+    uint seed8)
+{
+	GrassBillboardInstance o;
+	o.PosWS = posWS;
+	o.Scale = scale;
+
+	uint yaw16 = PackYaw16(yawRad);
+	o.Packed =
+        ((yaw16 & 0xFFFFu) << 0) |
+        ((atlasIndex & 0xFFu) << 16) |
+        ((seed8 & 0xFFu) << 24);
+
+	return o;
+}
+
+// ---------------------------------------------------------------------------
+// Decode helpers (VS/PS-friendly)
+// ---------------------------------------------------------------------------
+void DecodeGrassMeshInstance(
+    GrassMeshInstance inst,
+    out float3 posWS,
+    out float scale,
+    out float yawRad,
+    out float pitchRad,
+    out float bend01,
+    out float press01,
+    out uint variantId,
+    out uint seed8)
+{
+	posWS = inst.PosWS;
+	scale = inst.Scale;
+
+	uint yaw16 = (inst.PackedAngles & 0xFFFFu);
+	uint pitch16 = (inst.PackedAngles >> 16);
+
+	yawRad = DecodeYaw16(yaw16);
+	pitchRad = DecodePitch16(pitch16);
+
+	bend01 = DecodeUNorm8(inst.PackedParams >> 0);
+	press01 = DecodeUNorm8(inst.PackedParams >> 8);
+	variantId = (inst.PackedParams >> 16) & 0xFFu;
+	seed8 = (inst.PackedParams >> 24) & 0xFFu;
+}
+
+void DecodeGrassCrossPlaneInstance(
+    GrassCrossPlaneInstance inst,
+    out float3 posWS,
+    out float scale,
+    out float yawRad,
+    out float bend01,
+    out float press01,
+    out uint variantId,
+    out uint seed8,
+    out uint atlasFrame,
+    out uint flags)
+{
+	posWS = inst.PosWS;
+	scale = inst.Scale;
+
+	uint yaw16 = (inst.Packed0 & 0xFFFFu);
+	yawRad = DecodeYaw16(yaw16);
+
+	variantId = (inst.Packed0 >> 16) & 0xFFu;
+	seed8 = (inst.Packed0 >> 24) & 0xFFu;
+
+	bend01 = DecodeUNorm8(inst.Packed1 >> 0);
+	press01 = DecodeUNorm8(inst.Packed1 >> 8);
+	atlasFrame = (inst.Packed1 >> 16) & 0xFFu;
+	flags = (inst.Packed1 >> 24) & 0xFFu;
+}
+
+void DecodeGrassBillboardInstance(
+    GrassBillboardInstance inst,
+    out float3 posWS,
+    out float scale,
+    out float yawRad,
+    out uint atlasIndex,
+    out uint seed8)
+{
+	posWS = inst.PosWS;
+	scale = inst.Scale;
+
+	uint yaw16 = (inst.Packed & 0xFFFFu);
+	yawRad = DecodeYaw16(yaw16);
+
+	atlasIndex = (inst.Packed >> 16) & 0xFFu;
+	seed8 = (inst.Packed >> 24) & 0xFFu;
+}
+
+#endif // GRASS_COMMON_HLSLI
