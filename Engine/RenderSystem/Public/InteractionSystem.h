@@ -37,17 +37,28 @@ namespace shz
     private:
         static constexpr uint32 INTERACTION_FIELD_RESOLUTION = 4096;
         static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 1024;
+
         static constexpr uint32 THREAD_GROUP_SIZE_X = 8;
         static constexpr uint32 THREAD_GROUP_SIZE_Y = 8;
 
-        // World coverage of the interaction field (meters). (tweak)
+        // World coverage of the interaction field (meters).
         static constexpr float  INTERACTION_FIELD_WORLD_SIZE = 256.0f;
+
+        // ---------- Batch apply tuning ----------
+        // Local-space binning tile size (texels). (tweak)
+        static constexpr uint32 STAMP_BIN_TILE_SIZE = 32;
+
+        // Max stamps per batch. Dispatch count ~= numStamps / BATCH_SIZE (roughly).
+        static constexpr uint32 STAMP_BATCH_SIZE = 16;
+
+        // Worst-case safety. (You can lower if you want stricter upper bound)
+        static constexpr uint32 MAX_NUM_BATCHES = MAX_NUM_INTERACTION_STAMPS;
 
         // Shader file
         std::string m_InteractionCS = "InteractionCompute.hlsl";
         std::string m_DecayEntry = "DecayInteractionField";
         std::string m_ClearEntry = "ClearInteractionRect";
-        std::string m_ApplyEntry = "ApplyInteractionStampRect";
+        std::string m_ApplyEntry = "ApplyInteractionBatchRect"; // changed
 
         // Persistent sliding state
         bool   m_bHasPrevOrigin = false;
