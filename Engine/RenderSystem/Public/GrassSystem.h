@@ -10,6 +10,7 @@ namespace shz
 {
 	class Renderer;
 	class IndirectArgsSystem;
+	class InteractionSystem;
 	class TerrainSystem;
 	struct StaticMeshRenderData;
 	struct BillboardRenderData;
@@ -34,7 +35,7 @@ namespace shz
 		GrassSystem(const GrassSystem&) = delete;
 		GrassSystem& operator=(const GrassSystem&) = delete;
 
-		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, TerrainSystem& terrain);
+		void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, const InteractionSystem& interaction);
 
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
@@ -49,6 +50,9 @@ namespace shz
 		uint32 m_IndirectSlotLOD0 = 0;
 		uint32 m_IndirectSlotLOD1 = 0;
 		uint32 m_IndirectSlotLOD2 = 0;
+
+		// Interaction system reference
+		const InteractionSystem* m_pInteractionSystem = nullptr;
 
 		// Generate instances
 		RefCntAutoPtr<IPipelineState>         m_pGenCSO;

@@ -196,6 +196,13 @@ struct GrassGenConstants
     float HeightMinN; // normalized 0..1
     float HeightMaxN; // normalized 0..1
     float HeightFadeN; // normalized fade width
+    
+    // Interaction field mapping (world->interaction local uv)
+    float2 InteractionOriginXZ;
+    float2 InteractionInvWorldSizeXZ; // 1 / FieldWorldSizeXZ
+    
+    uint2 InteractionTexelOrigin; // ring buffer origin (0..FieldSize-1)
+    float2 InteractionInvFieldSize; // 1/FieldSize (e.g. 1/4096)
 };
 
 // ----------------------------------------------
@@ -240,6 +247,9 @@ struct ObjectIndexConstants
 // ----------------------------------------------
 // Interaction
 // ----------------------------------------------
+// ----------------------------------------------
+// Interaction
+// ----------------------------------------------
 static const uint INTERACTION_STAMP_NONE = 0;
 static const uint INTERACTION_STAMP_SUBTRACT = 1u << 0;
 static const uint INTERACTION_STAMP_MAX_BLEND = 1u << 1;
@@ -256,6 +266,7 @@ struct InteractionStamp
     float _Pad0;
 };
 
+// Global per-frame constants (mapped once per frame)
 struct InteractionConstants
 {
     uint FieldWidth;
@@ -267,6 +278,30 @@ struct InteractionConstants
     float ClampMax;
     float ClampMin;
     float _Pad0;
+
+    // Sliding field mapping
+    float2 FieldOriginXZ; // world-space origin (meters) of LOCAL field window
+    float2 FieldWorldSizeXZ; // world coverage size (meters)
+
+    // Ring mapping: which texel corresponds to FieldOriginXZ (0..W-1)
+    uint2 TexelOrigin; // ring offset in texels
+    uint _Pad1;
+    uint _Pad2;
 };
+
+// Per-dispatch constants (updated many times per frame)
+struct InteractionDispatch
+{
+    // Rect in "LOCAL texel space" [0..W), [0..H) (not ring-space)
+    // We convert local->ring inside shader using TexelOrigin.
+    uint2 RectOffset; // local offset in texels
+    uint2 RectSize; // local size in texels
+
+    // For stamp-based apply
+    uint StampIndex; // which stamp to apply
+    uint Mode; // 0 = ClearRect, 1 = ApplySingleStamp
+    uint2 _Pad;
+};
+
 
 #endif // HLSL_STRUCTURES_HLSLI

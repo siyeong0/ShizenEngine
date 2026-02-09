@@ -1,5 +1,4 @@
 #include "HLSL_Structures.hlsli"
-#include "HeightField.hlsli"
 
 // ------------------------------------------------------------
 // Constant buffers
@@ -9,20 +8,15 @@ cbuffer INTERACTION_CONSTANTS
     InteractionConstants g_InteractionCB;
 };
 
-cbuffer HEIGHT_FIELD_CONSTANTS
+cbuffer INTERACTION_DISPATCH
 {
-    HeightFieldConstants g_HeightFieldCB;
+    InteractionDispatch g_InterDisp;
 };
 
 // ------------------------------------------------------------
 // Resources
 // ------------------------------------------------------------
-// Interaction field is DOMAIN-sized texture (FieldWidth x FieldHeight).
-// Each pixel corresponds to a point on terrain domain.
-// We convert pixel -> domain uv -> worldXZ using HeightFieldConstants.
-RWTexture2D<float> g_RWInteractionField;
-
-// IMPORTANT: Stamps are in WORLD space (meters).
+RWTexture2D<float> g_RWInteractionField; // R16_FLOAT UAV as float read/write
 StructuredBuffer<InteractionStamp> g_Stamps;
 
 // ------------------------------------------------------------
@@ -34,19 +28,28 @@ float StampFalloff(float dist01, float falloffPower)
     return pow(t, max(falloffPower, 1e-3));
 }
 
-float2 InteractionPixelToUV(uint2 pix, uint2 fieldSize)
+uint2 WrapCoord(uint2 p, uint2 size)
 {
-    return (float2(pix) + 0.5f.xx) / float2(fieldSize);
+    return uint2(p.x % size.x, p.y % size.y);
 }
 
-// Interaction UV (0..1 domain) -> worldXZ on terrain domain.
-float2 InteractionUVToWorldXZ(float2 interUV, HeightFieldConstants hf)
+// local texel [0..W) -> ring texel coord applying TexelOrigin
+uint2 LocalToRing(uint2 local)
 {
-    return hf.WorldOriginXZ + interUV * hf.WorldSizeXZ;
+    uint2 size = uint2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
+    return WrapCoord(g_InteractionCB.TexelOrigin + local, size);
+}
+
+// local texel -> worldXZ (meters) within field window
+float2 LocalTexelToWorldXZ(uint2 local)
+{
+    float2 sizeF = float2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
+    float2 uv = (float2(local) + 0.5.xx) / sizeF; // 0..1 in local window
+    return g_InteractionCB.FieldOriginXZ + uv * g_InteractionCB.FieldWorldSizeXZ;
 }
 
 // ------------------------------------------------------------
-// Pass 1) Decay
+// Pass A) Decay (full field, ring-space direct)
 // ------------------------------------------------------------
 [numthreads(8, 8, 1)]
 void DecayInteractionField(uint3 tid : SV_DispatchThreadID)
@@ -55,45 +58,48 @@ void DecayInteractionField(uint3 tid : SV_DispatchThreadID)
         return;
 
     float v = g_RWInteractionField[int2(tid.xy)];
-
     v = max(v - g_InteractionCB.DecayPerSec * g_InteractionCB.DeltaTime, 0.0f);
     v = clamp(v, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
-
     g_RWInteractionField[int2(tid.xy)] = v;
 }
 
 // ------------------------------------------------------------
-// Pass 2) Apply Stamps (WORLD-space distance)
+// Pass B) Rect operation (Clear OR Apply single stamp)
+// - Dispatch domain is RectSize (local space), not whole field
 // ------------------------------------------------------------
 [numthreads(8, 8, 1)]
-void ApplyInteractionStamps(uint3 tid : SV_DispatchThreadID)
+void RectOp(uint3 tid : SV_DispatchThreadID)
 {
-    if (tid.x >= g_InteractionCB.FieldWidth || tid.y >= g_InteractionCB.FieldHeight)
+    uint2 localInRect = tid.xy;
+    if (localInRect.x >= g_InterDisp.RectSize.x || localInRect.y >= g_InterDisp.RectSize.y)
         return;
 
-    const uint2 fieldSize = uint2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
+    uint2 localTexel = g_InterDisp.RectOffset + localInRect; // local field texel
+    uint2 ringTexel = LocalToRing(localTexel);
 
-    // Pixel -> domain uv -> worldXZ
-    float2 interUV = InteractionPixelToUV(tid.xy, fieldSize);
-    float2 worldXZ = InteractionUVToWorldXZ(interUV, g_HeightFieldCB);
-
-    float outV = g_RWInteractionField[int2(tid.xy)];
-
-    [loop]
-    for (uint i = 0; i < g_InteractionCB.NumStamps; ++i)
+    if (g_InterDisp.Mode == 0u) // ClearRect
     {
-        InteractionStamp s = g_Stamps[i];
+        g_RWInteractionField[int2(ringTexel)] = 0.0f;
+        return;
+    }
 
-        // WORLD-space radius (meters)
-        float r = max(s.Radius, 1e-6f);
+    // ApplySingleStamp
+    uint si = g_InterDisp.StampIndex;
+    if (si >= g_InteractionCB.NumStamps)
+        return;
 
-        // WORLD-space delta
-        float2 d = (worldXZ - s.CenterXZ);
+    InteractionStamp s = g_Stamps[si];
 
-        float dist01 = length(d) / r;
-        if (dist01 >= 1.0f)
-            continue;
+    float2 worldXZ = LocalTexelToWorldXZ(localTexel);
 
+    float outV = g_RWInteractionField[int2(ringTexel)];
+
+    float r = max(s.Radius, 1e-6f);
+    float2 d = (worldXZ - s.CenterXZ);
+    float dist01 = length(d) / r;
+
+    if (dist01 < 1.0f)
+    {
         float f = StampFalloff(dist01, s.FalloffPower);
         float w = saturate(f * s.Strength);
 
@@ -107,11 +113,10 @@ void ApplyInteractionStamps(uint3 tid : SV_DispatchThreadID)
         }
         else
         {
-            // default: accumulate toward 1
             outV = lerp(outV, 1.0f, w);
         }
     }
 
     outV = clamp(outV, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
-    g_RWInteractionField[int2(tid.xy)] = outV;
+    g_RWInteractionField[int2(ringTexel)] = outV;
 }

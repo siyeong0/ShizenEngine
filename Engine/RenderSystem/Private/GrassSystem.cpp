@@ -11,7 +11,7 @@
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
-#include "Engine/RenderSystem/Public/TerrainSystem.h"
+#include "Engine/RenderSystem/Public/InteractionSystem.h"
 
 namespace shz
 {
@@ -23,8 +23,10 @@ namespace shz
 	// ---------------------------------------------------------------------
 	// InstallPasses
 	// ---------------------------------------------------------------------
-	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, TerrainSystem& terrain)
+	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, const InteractionSystem& interaction)
 	{
+		m_pInteractionSystem = &interaction;
+
 		// GrassInstanceBuffers
 		{
 			BufferDesc bd = {};
@@ -154,7 +156,13 @@ namespace shz
 					map->HeightMinN = m_HeightMinN;
 					map->HeightMaxN = m_HeightMaxN;
 					map->HeightFadeN = m_HeightFadeN;
+					map->InteractionInvWorldSizeXZ = float2{ 1.0f, 1.0f } / m_pInteractionSystem->GetWorldSizeXZ();
+					map->InteractionOriginXZ = m_pInteractionSystem->GetWorldOriginXZ();
 
+					const uint interactionResolution = m_pInteractionSystem->GetInteractionFieldResolution();
+					const uint2 interactionTexelOrigin = m_pInteractionSystem->GetTexelOrigin();
+					map->InteractionTexelOrigin = interactionTexelOrigin;
+					map->InteractionInvFieldSize = float2{ 1.0f / interactionResolution, 1.0f / interactionResolution };
 				}
 
 				// (1) Bind per-frame textures
@@ -476,7 +484,7 @@ namespace shz
 					pContext->DrawIndexedIndirect(dia);
 				}
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				// Grass mesh
 				{

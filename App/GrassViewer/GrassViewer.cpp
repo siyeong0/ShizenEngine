@@ -376,7 +376,7 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem, *m_pTerrainSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem, *m_pInteractionSystem);
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
 		}
 

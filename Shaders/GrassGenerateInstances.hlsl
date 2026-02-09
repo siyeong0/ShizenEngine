@@ -125,7 +125,15 @@ float SampleWorldHeight(float2 worldXZ)
 
 float SampleInteraction(float2 worldXZ)
 {
-    float2 uv = WorldXZToHeightUV(worldXZ);
+    // local window uv (0..1)
+    float2 uvLocal = (worldXZ - g_GrassGenCB.InteractionOriginXZ) * g_GrassGenCB.InteractionInvWorldSizeXZ;
+
+    // convert TexelOrigin to normalized uv offset
+    float2 uvRingOffset = float2(g_GrassGenCB.InteractionTexelOrigin) * g_GrassGenCB.InteractionInvFieldSize;
+
+    // ring-space uv
+    float2 uv = frac(uvLocal + uvRingOffset);
+
     return g_InteractionField.SampleLevel(g_LinearClampSampler, uv, 0.0).r;
 }
 
