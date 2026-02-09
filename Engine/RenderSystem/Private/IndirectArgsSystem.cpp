@@ -61,7 +61,7 @@ namespace shz
 			{
 				// read counts, write args
 				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_READWRITE);
-				b.DeclareBufferIndirectArgsWrite(STRING_HASH("IndirectArgsBuffer"));
+				b.DeclareBufferUAV(STRING_HASH("IndirectArgsBuffer"), RENDER_ACCESS_WRITE);
 
 				// constants
 				b.DeclareBufferCBVRead(STRING_HASH("IndirectArgsWriterCB"));

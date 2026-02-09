@@ -20,9 +20,6 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	// ---------------------------------------------------------------------
-	// InstallPasses
-	// ---------------------------------------------------------------------
 	void GrassSystem::InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, const InteractionSystem& interaction)
 	{
 		m_pInteractionSystem = &interaction;
@@ -416,7 +413,7 @@ namespace shz
 					DrawIndexedIndirectAttribs dia = {};
 					dia.IndexType = m_GrassDesc.pMeshLod0->IndexType;
 
-					dia.DrawArgsOffset = m_IndirectSlotLOD0 * 20;
+					dia.DrawArgsOffset = static_cast<uint64>(m_IndirectSlotLOD0) * 20;
 					dia.DrawCount = 1;
 					dia.DrawArgsStride = 20;
 
@@ -445,7 +442,7 @@ namespace shz
 					DrawIndexedIndirectAttribs dia = {};
 					dia.IndexType = m_GrassDesc.pCrossMeshLod1->IndexType;
 
-					dia.DrawArgsOffset = m_IndirectSlotLOD1 * 20;
+					dia.DrawArgsOffset = static_cast<uint64>(m_IndirectSlotLOD1) * 20;
 					dia.DrawCount = 1;
 					dia.DrawArgsStride = 20;
 
@@ -474,7 +471,7 @@ namespace shz
 					DrawIndexedIndirectAttribs dia = {};
 					dia.IndexType = VT_UINT16;
 
-					dia.DrawArgsOffset = m_IndirectSlotLOD2 * 20;
+					dia.DrawArgsOffset = static_cast<uint64>(m_IndirectSlotLOD2) * 20;
 					dia.DrawCount = 1;
 					dia.DrawArgsStride = 20;
 
@@ -907,7 +904,7 @@ namespace shz
 				DrawIndexedIndirectAttribs dia;
 				dia.IndexType = m_GrassDesc.pMeshLod0->IndexType;
 
-				dia.DrawArgsOffset = m_IndirectSlotLOD0 * 20u;
+				dia.DrawArgsOffset = static_cast<uint64>(m_IndirectSlotLOD0) * 20u;
 				dia.DrawCount = 1;
 				dia.DrawArgsStride = 20;
 

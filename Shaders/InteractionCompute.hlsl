@@ -5,12 +5,12 @@
 // ------------------------------------------------------------
 cbuffer INTERACTION_CONSTANTS
 {
-    InteractionConstants g_InteractionCB;
+	InteractionConstants g_InteractionCB;
 };
 
 cbuffer INTERACTION_DISPATCH
 {
-    InteractionDispatch g_InterDisp;
+	InteractionDispatch g_InterDisp;
 };
 
 // ------------------------------------------------------------
@@ -22,30 +22,30 @@ StructuredBuffer<InteractionStamp> g_Stamps;
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-float StampFalloff(float dist01, float falloffPower)
-{
-    float t = saturate(1.0f - dist01);
-    return pow(t, max(falloffPower, 1e-3));
-}
-
 uint2 WrapCoord(uint2 p, uint2 size)
 {
-    return uint2(p.x % size.x, p.y % size.y);
+	return uint2(p.x % size.x, p.y % size.y);
 }
 
 // local texel [0..W) -> ring texel coord applying TexelOrigin
 uint2 LocalToRing(uint2 local)
 {
-    uint2 size = uint2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
-    return WrapCoord(g_InteractionCB.TexelOrigin + local, size);
+	uint2 size = uint2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
+	return WrapCoord(g_InteractionCB.TexelOrigin + local, size);
 }
 
 // local texel -> worldXZ (meters) within field window
 float2 LocalTexelToWorldXZ(uint2 local)
 {
-    float2 sizeF = float2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
-    float2 uv = (float2(local) + 0.5.xx) / sizeF; // 0..1 in local window
-    return g_InteractionCB.FieldOriginXZ + uv * g_InteractionCB.FieldWorldSizeXZ;
+	float2 sizeF = float2(g_InteractionCB.FieldWidth, g_InteractionCB.FieldHeight);
+	float2 uv = (float2(local) + 0.5.xx) / sizeF; // 0..1 in local window
+	return g_InteractionCB.FieldOriginXZ + uv * g_InteractionCB.FieldWorldSizeXZ;
+}
+
+float StampFalloff01(float dist01, float falloffPower)
+{
+	float t = saturate(1.0f - dist01);
+	return pow(t, max(falloffPower, 1e-3));
 }
 
 // ------------------------------------------------------------
@@ -54,69 +54,87 @@ float2 LocalTexelToWorldXZ(uint2 local)
 [numthreads(8, 8, 1)]
 void DecayInteractionField(uint3 tid : SV_DispatchThreadID)
 {
-    if (tid.x >= g_InteractionCB.FieldWidth || tid.y >= g_InteractionCB.FieldHeight)
-        return;
+	if (tid.x >= g_InteractionCB.FieldWidth || tid.y >= g_InteractionCB.FieldHeight)
+	{
+		return;
+	}
 
-    float v = g_RWInteractionField[int2(tid.xy)];
-    v = max(v - g_InteractionCB.DecayPerSec * g_InteractionCB.DeltaTime, 0.0f);
-    v = clamp(v, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
-    g_RWInteractionField[int2(tid.xy)] = v;
+	float v = g_RWInteractionField[int2(tid.xy)];
+	v = max(v - g_InteractionCB.DecayPerSec * g_InteractionCB.DeltaTime, 0.0f);
+	v = clamp(v, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
+	g_RWInteractionField[int2(tid.xy)] = v;
 }
 
 // ------------------------------------------------------------
-// Pass B) Rect operation (Clear OR Apply single stamp)
-// - Dispatch domain is RectSize (local space), not whole field
+// Pass B1) ClearRect (dispatch domain = RectSize, LOCAL space)
 // ------------------------------------------------------------
 [numthreads(8, 8, 1)]
-void RectOp(uint3 tid : SV_DispatchThreadID)
+void ClearInteractionRect(uint3 tid : SV_DispatchThreadID)
 {
-    uint2 localInRect = tid.xy;
-    if (localInRect.x >= g_InterDisp.RectSize.x || localInRect.y >= g_InterDisp.RectSize.y)
-        return;
+	uint2 localInRect = tid.xy;
+	if (localInRect.x >= g_InterDisp.RectSize.x || localInRect.y >= g_InterDisp.RectSize.y)
+	{
+		return;
+	}
 
-    uint2 localTexel = g_InterDisp.RectOffset + localInRect; // local field texel
-    uint2 ringTexel = LocalToRing(localTexel);
+	uint2 localTexel = g_InterDisp.RectOffset + localInRect; // local field texel
+	uint2 ringTexel = LocalToRing(localTexel);
 
-    if (g_InterDisp.Mode == 0u) // ClearRect
-    {
-        g_RWInteractionField[int2(ringTexel)] = 0.0f;
-        return;
-    }
+	g_RWInteractionField[int2(ringTexel)] = 0.0f;
+}
 
-    // ApplySingleStamp
-    uint si = g_InterDisp.StampIndex;
-    if (si >= g_InteractionCB.NumStamps)
-        return;
+// ------------------------------------------------------------
+// Pass B2) ApplySingleStamp (dispatch domain = RectSize, LOCAL)
+// ------------------------------------------------------------
+[numthreads(8, 8, 1)]
+void ApplyInteractionStampRect(uint3 tid : SV_DispatchThreadID)
+{
+	uint2 localInRect = tid.xy;
+	if (localInRect.x >= g_InterDisp.RectSize.x || localInRect.y >= g_InterDisp.RectSize.y)
+	{
+		return;
+	}
 
-    InteractionStamp s = g_Stamps[si];
+	// ApplySingleStamp
+	uint si = g_InterDisp.StampIndex;
+	if (si >= g_InteractionCB.NumStamps)
+	{
+		return;
+	}
 
-    float2 worldXZ = LocalTexelToWorldXZ(localTexel);
+	uint2 localTexel = g_InterDisp.RectOffset + localInRect; // local field texel
+	uint2 ringTexel = LocalToRing(localTexel);
 
-    float outV = g_RWInteractionField[int2(ringTexel)];
+	InteractionStamp s = g_Stamps[si];
 
-    float r = max(s.Radius, 1e-6f);
-    float2 d = (worldXZ - s.CenterXZ);
-    float dist01 = length(d) / r;
+	float2 worldXZ = LocalTexelToWorldXZ(localTexel);
 
-    if (dist01 < 1.0f)
-    {
-        float f = StampFalloff(dist01, s.FalloffPower);
-        float w = saturate(f * s.Strength);
+	float outV = g_RWInteractionField[int2(ringTexel)];
 
-        if ((s.Flags & INTERACTION_STAMP_SUBTRACT) != 0)
-        {
-            outV = max(outV - w, 0.0f);
-        }
-        else if ((s.Flags & INTERACTION_STAMP_MAX_BLEND) != 0)
-        {
-            outV = lerp(outV, 1.0f, w);
-        }
-        else
-        {
-            outV = lerp(outV, 1.0f, w);
-        }
-    }
+	float r = max(s.Radius, 1e-6f);
+	float2 d = (worldXZ - s.CenterXZ);
+	float dist01 = length(d) / r;
 
-    outV = clamp(outV, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
-    g_RWInteractionField[int2(ringTexel)] = outV;
+	if (dist01 < 1.0f)
+	{
+		float f = StampFalloff01(dist01, s.FalloffPower);
+		float w = saturate(f * s.Strength);
+
+		if ((s.Flags & INTERACTION_STAMP_SUBTRACT) != 0)
+		{
+			outV = max(outV - w, 0.0f);
+		}
+		else if ((s.Flags & INTERACTION_STAMP_MAX_BLEND) != 0)
+		{
+			// outV = max(outV, w);
+			outV = lerp(outV, 1.0f, w);
+		}
+		else
+		{
+			outV = lerp(outV, 1.0f, w);
+		}
+	}
+
+	outV = clamp(outV, g_InteractionCB.ClampMin, g_InteractionCB.ClampMax);
+	g_RWInteractionField[int2(ringTexel)] = outV;
 }

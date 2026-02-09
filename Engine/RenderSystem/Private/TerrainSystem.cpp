@@ -149,7 +149,8 @@ namespace shz
 		const uint32 s = step;
 		const uint32 s2 = step * 2;
 
-		outIdxU16.reserve(quadsPerSide * quadsPerSide * 6 + quadsPerSide * 12);
+		size_t quadPerSize64 = static_cast<size_t>(quadsPerSide);
+		outIdxU16.reserve(quadPerSize64 * quadPerSize64 * 6 + quadPerSize64 * 12);
 
 		// Interior (exclude outer ring; edges handled separately)
 		if (quadsPerSide > 2)
@@ -799,6 +800,7 @@ namespace shz
 						ASSERT(ib, "Terrain IB is null (lod=%u mask=%u).", lod, mask);
 
 						pCtx->SetIndexBuffer(ib, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						ASSERT(lod < 5, "LOD out of range.");
 						dia.NumIndices = m_LodIndexCount[lod][mask];
 					}
 
