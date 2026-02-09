@@ -40,8 +40,8 @@ namespace shz
 		void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
 	private:
-		static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 14;
-		static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 16;
+		static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 16;
+		static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 18;
 		static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
 		// Indirect slot for this system
@@ -82,7 +82,7 @@ namespace shz
 
 		float m_ChunkSize = 4.0f;
 		uint m_ChunkHalfExtent = 64;
-		uint m_SamplesPerChunk = 256;
+		uint m_SamplesPerChunk = 1024;
 		float m_Jitter = 0.95f;
 
 		float m_MinPitch = -0.2f;

@@ -12,7 +12,7 @@
 #include "Engine/RenderSystem/Public/DeferredSystem.h"
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/PostProcessSystem.h"
-#include "Engine/Framework/Public/TerrainSystem.h"
+#include "Engine/RenderSystem/Public/TerrainSystem.h"
 
 #include "Engine/AssetManager/Public/AssetManager.h"
 #include "Engine/AssetManager/Public/AssetRef.hpp"
