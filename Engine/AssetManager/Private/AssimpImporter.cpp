@@ -1028,6 +1028,7 @@ namespace shz
 		const AssimpAsset& assimpAsset,
 		StaticMesh* pOutMesh,
 		const AssimpImportSettings& setting,
+		const std::string& materialTemplateName,
 		std::string* outError,
 		AssetManager* pAssetManager)
 	{
@@ -1076,7 +1077,7 @@ namespace shz
 			MaterialId fallbackId = 0;
 			{
 				MaterialManager* pMM = MaterialManager::GetInstance();
-				fallbackId = pMM->CreateMaterial("DefaultMaterial", "DefaultLit");
+				fallbackId = pMM->CreateMaterial(assimpAsset.SourcePath, materialTemplateName);
 				Material& m = pMM->GetMaterial(fallbackId);
 				const float base[4] = { 1,1,1,1 };
 				m.SetFloat4("g_BaseColorFactor", base);

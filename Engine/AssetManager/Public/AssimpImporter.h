@@ -32,6 +32,7 @@ namespace shz
 		const AssimpAsset& assimpAsset,
 		StaticMesh* pOutMesh,
 		const AssimpImportSettings& settings,
+		const std::string& materialTemplateName,
 		std::string* outError = nullptr,
 		AssetManager* pAssetManager = nullptr);
 } // namespace shz

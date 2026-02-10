@@ -760,7 +760,7 @@ namespace shz
 			AssetRef<AssimpAsset> treeAssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf");
 			const AssimpAsset& treeAssimp = *m_pAssetManager->LoadBlocking(treeAssimpRef);
 			StaticMesh treeStaticMesh;
-			BuildStaticMeshAsset(treeAssimp, &treeStaticMesh, {}, nullptr, m_pAssetManager.get());
+			BuildStaticMeshAsset(treeAssimp, &treeStaticMesh, {}, "DefaultLit", nullptr, m_pAssetManager.get());
 
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
