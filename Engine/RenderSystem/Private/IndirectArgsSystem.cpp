@@ -57,6 +57,7 @@ namespace shz
 
 		renderer.AddPass(
 			"IndirectWriteArgs",
+			EPassExecutionDomain::OutsideRenderPass,
 			[&](RenderPassBuilder& b)
 			{
 				// read counts, write args

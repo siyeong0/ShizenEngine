@@ -1,15 +1,4 @@
-#include "HLSL_Structures.hlsli"
-
-// Constant Buffers
-cbuffer FRAME_CONSTANTS
-{
-    FrameConstants g_FrameCB;
-};
-
-cbuffer DRAW_CONSTANTS
-{
-    DrawConstants g_DrawCB;
-};
+#include "Common.hlsli"
 
 // Resources
 StructuredBuffer<ObjectConstants> g_ObjectTable;
@@ -25,11 +14,13 @@ struct VSInput
 
 struct VSOutput
 {
-    float4 Pos      : SV_POSITION;
-    float2 UV       : TEXCOORD0;
-    float3 WorldPos : TEXCOORD1;
-    float3 WorldN   : TEXCOORD2;
-    float3 WorldT   : TEXCOORD3;
+	float4 SVPosition : SV_POSITION;
+	float4 CurrClip : TEXCOORD0;
+	float4 PrevClip : TEXCOORD1;
+	float2 UV : TEXCOORD2;
+	float3 WorldPos : TEXCOORD3;
+	float3 WorldN : TEXCOORD4;
+	float3 WorldT : TEXCOORD5;
 };
 
 // ----------------------------------------------------------------------------
@@ -44,8 +35,14 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     OUT.WorldPos = worldPos4.xyz;
 
     // Clip position
-    OUT.Pos = mul(worldPos4, g_FrameCB.ViewProj);
-
+	OUT.SVPosition = mul(worldPos4, g_FrameCB.ViewProj);
+	// OUT.CurrClip = mul(worldPos4, g_FrameCB.ViewProjNoJitter);
+	OUT.CurrClip = ApplyTAAJittering(mul(worldPos4, g_FrameCB.ViewProj));
+    
+	float4 prevWorldPos4 = mul(float4(IN.Pos, 1.0), oc.PrevWorld);
+	// OUT.PrevClip = mul(prevWorldPos4, g_FrameCB.PrevViewProjNoJitter);
+	OUT.PrevClip = mul(prevWorldPos4, g_FrameCB.PrevViewProj);
+    
     // Texcoord
     OUT.UV = IN.UV;
 

@@ -334,31 +334,101 @@ namespace shz
 		m_PassCtx.pScene = &scene;
 		m_PassCtx.pViewFamily = &viewFamily;
 		m_PassCtx.DeltaTime = viewFamily.DeltaTime;
+		m_PassCtx.FrameIndex = viewFamily.FrameIndex;
 
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------
-		// Build frustums: Main / Shadow
+		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
-		ViewFrustumExt frustumMain = {};
+		auto halton = [](int index, int base) -> float
 		{
-			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-			ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
-		}
+			float f = 1.0f;
+			float r = 0.0f;
+			while (index > 0)
+			{
+				f /= (float)base;
+				r += f * (float)(index % base);
+				index /= base;
+			}
+			return r;
+		};
+
+		// [-0.5, 0.5] jitter
+		auto getJitterPixels = [&halton](uint32 frameIndex, uint32 sampleCount) -> float2
+		{
+			uint32 i = frameIndex % sampleCount;
+			// Halton은 1부터 시작하는 게 보통
+			float jx = halton((int)i + 1, 2) - 0.5f;
+			float jy = halton((int)i + 1, 3) - 0.5f;
+			return float2(jx, jy);
+		};
+
+		auto jitterProjection = [](const Matrix4x4& proj, float2 jitterPixels, float2 viewportSize) -> Matrix4x4
+		{
+			Matrix4x4 p = proj;
+
+			const float ndcX = (2.0f * jitterPixels.x) / viewportSize.x;
+			const float ndcY = (2.0f * jitterPixels.y) / viewportSize.y;
+
+			p._m20 += ndcX;
+			p._m21 += ndcY;
+
+			return p;
+		};
+
+		float2 viewportSize =
+		{
+			static_cast<float>(view.Viewport.right - view.Viewport.left),
+			static_cast<float>(view.Viewport.bottom - view.Viewport.top)
+		};
+
+		// 2) Halton jitter (pixel 단위, -0.5..0.5)
+		const uint32 kJitterSampleCount = 8;     // 8 또는 16
+		const float  kJitterScalePixels = 1.0f;  // 1.0부터 시작(필요하면 0.75/0.5)
+
+		float2 jitterPix = getJitterPixels((uint32)viewFamily.FrameIndex, kJitterSampleCount) * kJitterScalePixels;
+
+		// 3) Proj 분리
+		const Matrix4x4 projNoJitter = view.ProjMatrix;
+		const Matrix4x4 projJittered = jitterProjection(projNoJitter, jitterPix, viewportSize);
+
+		// 4) ViewProj도 분리
+		const Matrix4x4 viewProjNoJitter = view.ViewMatrix * projNoJitter;
+		const Matrix4x4 viewProjJittered = view.ViewMatrix * projJittered;
+
+		// 5) Frustum은 보통 no-jitter로 (culling 안정)
+		ViewFrustumExt frustumMain = {};
+		ExtractViewFrustumPlanesFromMatrix(viewProjNoJitter, frustumMain);
 
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
+		static Matrix4x4 s_PrevViewProjJittered = Matrix4x4::Identity();
+		static Matrix4x4 s_PrevViewProjNoJitter = Matrix4x4::Identity();
+
+		static float2 s_PrevJitterPix = { 0,0 };
+		static float2 s_PrevJitterNdc = { 0,0 };
+
 		Matrix4x4 lightViewProj = {};
 		{
 			MapHelper<hlsl::FrameConstants> cb(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
 			cb->View = view.ViewMatrix;
-			cb->Proj = view.ProjMatrix;
-			cb->ViewProj = view.ViewMatrix * view.ProjMatrix;
+
+			cb->Proj = projJittered;
+			cb->ViewProj = viewProjJittered;
 			cb->InvViewProj = cb->ViewProj.Inversed();
+			cb->PrevViewProj = s_PrevViewProjJittered;
+
+			cb->ViewProjNoJitter = viewProjNoJitter;
+			cb->PrevViewProjNoJitter = s_PrevViewProjNoJitter;
+
+			s_PrevViewProjJittered = viewProjJittered;
+			s_PrevViewProjNoJitter = viewProjNoJitter;
 
 			cb->CameraPosition = view.CameraPosition;
+			cb->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
 
 			cb->FrustumPlanesWS[0] = frustumMain.NearPlane;
 			cb->FrustumPlanesWS[1] = frustumMain.FarPlane;
@@ -367,16 +437,17 @@ namespace shz
 			cb->FrustumPlanesWS[4] = frustumMain.LeftPlane;
 			cb->FrustumPlanesWS[5] = frustumMain.RightPlane;
 
-			cb->ViewportSize =
-			{
-				static_cast<float>(view.Viewport.right - view.Viewport.left),
-				static_cast<float>(view.Viewport.bottom - view.Viewport.top)
-			};
-			cb->InvViewportSize =
-			{
-				1.f / cb->ViewportSize.x,
-				1.f / cb->ViewportSize.y
-			};
+			cb->ViewportSize = viewportSize;
+			cb->InvViewportSize = { 1.f / viewportSize.x, 1.f / viewportSize.y };
+
+			cb->JitterPixels = jitterPix;
+			cb->JitterNDC = { (2.0f * jitterPix.x) / viewportSize.x, (2.0f * jitterPix.y) / viewportSize.y };
+
+			cb->PrevJitterPixels = s_PrevJitterPix;
+			cb->PrevJitterNDC = s_PrevJitterNdc;
+
+			s_PrevJitterPix = cb->JitterPixels;
+			s_PrevJitterNdc = cb->JitterNDC;
 
 			cb->NearPlane = view.NearPlane;
 			cb->FarPlane = view.FarPlane;
@@ -713,13 +784,33 @@ namespace shz
 				rp.ClearValueCount = static_cast<uint32>(pass.ClearValues.size());
 				rp.pClearValues = pass.ClearValues.empty() ? nullptr : pass.ClearValues.data();
 
+				if (pass.BeginLambda)
+				{
+					pass.BeginLambda(m_PassCtx);
+				}
+
 				ctx->BeginRenderPass(rp);
 				pass.ExecuteLambda(m_PassCtx);
 				ctx->EndRenderPass();
+
+				if (pass.EndLambda)
+				{
+					pass.EndLambda(m_PassCtx);
+				}
 			}
 			else
 			{
+				if (pass.BeginLambda)
+				{
+					pass.BeginLambda(m_PassCtx);
+				}
+
 				pass.ExecuteLambda(m_PassCtx);
+
+				if (pass.EndLambda)
+				{
+					pass.EndLambda(m_PassCtx);
+				}
 			}
 		}
 	}
@@ -749,10 +840,22 @@ namespace shz
 
 	void Renderer::AddPass(
 		const std::string& name,
+		EPassExecutionDomain domain,
 		std::function<void(RenderPassBuilder&)> buildLambda,
 		std::function<void(RenderPassContext&)> executeLambda,
-		std::function<void()> onCreated,
-		EPassExecutionDomain domain)
+		std::function<void()> onCreated)
+	{
+		AddPass(name, domain, buildLambda, executeLambda, {}, {}, onCreated);
+	}
+
+	void Renderer::AddPass(
+		const std::string& name,
+		EPassExecutionDomain domain,
+		std::function<void(RenderPassBuilder&)> buildLambda,
+		std::function<void(RenderPassContext&)> executeLambda,
+		std::function<void(RenderPassContext&)> beginLambda,
+		std::function<void(RenderPassContext&)> endLambda,
+		std::function<void()> onCreated)
 	{
 		ASSERT(!name.empty(), "Pass name is empty.");
 		ASSERT(buildLambda, "buildLambda is null.");
@@ -767,6 +870,9 @@ namespace shz
 		rpItem.Name = name;
 		rpItem.eDomain = domain;
 		rpItem.ExecuteLambda = std::move(executeLambda);
+
+		rpItem.BeginLambda = beginLambda;
+		rpItem.EndLambda = endLambda;
 
 		RenderPassBuilder builder = {};
 		buildLambda(builder);
@@ -1306,6 +1412,16 @@ namespace shz
 
 		m_pRegistry->RegisterBuffer(id, std::move(buf));
 		return id;
+	}
+
+	void Renderer::AddResourceAlias(uint64 src, uint64 alias)
+	{
+		m_pRegistry->AddAlias(src, alias);
+	}
+
+	void Renderer::RemoveResourceAlias(uint64 alias)
+	{
+		m_pRegistry->RemoveAlias(alias);
 	}
 
 	void Renderer::RegisterStaticTextureResource(const std::string& name, RenderResourceId id)

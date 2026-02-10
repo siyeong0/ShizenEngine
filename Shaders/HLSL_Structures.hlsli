@@ -10,15 +10,24 @@ struct FrameConstants
     float4x4 Proj;
     float4x4 ViewProj;
     float4x4 InvViewProj;
-
+	float4x4 PrevViewProj;
+    
+	float4x4 ViewProjNoJitter;
+	float4x4 PrevViewProjNoJitter;
+    
     float3 CameraPosition;
-    float _pad0;
+	uint FrameIndex;
 
     float4 FrustumPlanesWS[6];
 
     float2 ViewportSize;
     float2 InvViewportSize;
 
+	float2 JitterPixels;
+	float2 JitterNDC;
+	float2 PrevJitterPixels;
+	float2 PrevJitterNDC;
+    
     float NearPlane;
     float FarPlane;
     float DeltaTime;
@@ -26,7 +35,8 @@ struct FrameConstants
 
     float4x4 LightViewProj;
     float3 LightDirWS;
-    float _pad1;
+    float _pad0;
+    
     float3 LightColor;
     float LightIntensity;
 };
@@ -58,6 +68,7 @@ struct ObjectConstants
 {
     float4x4 World;
     float4x4 WorldInvTranspose;
+	float4x4 PrevWorld;
 };
 
 // ----------------------------------------------

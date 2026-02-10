@@ -72,6 +72,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\Shadow.vsh = Shaders\Shadow.vsh
 		Shaders\ShadowMasked.psh = Shaders\ShadowMasked.psh
 		Shaders\ShadowMasked.vsh = Shaders\ShadowMasked.vsh
+		Shaders\TemporalAA.psh = Shaders\TemporalAA.psh
 		Shaders\Terrain.vsh = Shaders\Terrain.vsh
 		Shaders\WriteIndirectArgs.hlsl = Shaders\WriteIndirectArgs.hlsl
 	EndProjectSection

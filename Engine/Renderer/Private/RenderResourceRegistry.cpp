@@ -123,71 +123,153 @@ namespace shz
 		}
 	}
 
+	void RenderResourceRegistry::AddAlias(uint64 src, uint64 alias)
+	{
+		ASSERT(m_Aliases.find(alias) == m_Aliases.end(), "Alias already exists.");
+		ASSERT(m_Textures.find(src) != m_Textures.end() || m_Buffers.find(src) != m_Buffers.end(), "Source resource not exists.");
+
+		m_Aliases[alias] = src;
+	}
+
+	void RenderResourceRegistry::RemoveAlias(uint64 alias)
+	{
+		ASSERT(m_Aliases.find(alias) != m_Aliases.end(), "Alias not exists.");
+
+		m_Aliases.erase(alias);
+	}
+
 	bool RenderResourceRegistry::HasTexture(RenderResourceId id) const
 	{
 		auto it = m_Textures.find(id);
-		return it != m_Textures.end();
+		if (it != m_Textures.end())
+		{
+			return true;
+		}
+
+		auto aliasIter = m_Aliases.find(id);
+		if (aliasIter != m_Aliases.end())
+		{
+			ASSERT(m_Textures.find(aliasIter->second) != m_Textures.end(), "Invalid alias.");
+			return true;
+		}
+
+		return false;
 	}
 
 	bool RenderResourceRegistry::HasBuffer(RenderResourceId id) const
 	{
 		auto it = m_Buffers.find(id);
-		return it != m_Buffers.end();
+		if (it != m_Buffers.end())
+		{
+			return true;
+		}
+
+		auto aliasIter = m_Aliases.find(id);
+		if (aliasIter != m_Aliases.end())
+		{
+			ASSERT(m_Buffers.find(aliasIter->second) != m_Buffers.end(), "Invalid alias.");
+			return true;
+		}
+
+		return false;
 	}
 
 	RefCntAutoPtr<ITexture> RenderResourceRegistry::GetTexture(RenderResourceId id) const
 	{
 		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = m_Textures.at(id);
-		return e.Texture;
+
+		return getTextureEntryOrNull(id)->Texture;
 	}
 
 	RefCntAutoPtr<IBuffer> RenderResourceRegistry::GetBuffer(RenderResourceId id) const
 	{
 		ASSERT(HasBuffer(id), "Buffer id not found.");
-		const BufferEntry& e = m_Buffers.at(id);
-		return e.Buffer;
+
+		return getBufferEntryOrNull(id)->Buffer;
 	}
 
 	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureSRV(RenderResourceId id) const
 	{
 		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = m_Textures.at(id);
+		const TextureEntry& e = *getTextureEntryOrNull(id);
 		return e.SRV;
 	}
 
 	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureRTV(RenderResourceId id) const
 	{
 		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = m_Textures.at(id);
+		const TextureEntry& e = *getTextureEntryOrNull(id);
 		return e.RTV;
 	}
 
 	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureDSV(RenderResourceId id) const
 	{
 		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = m_Textures.at(id);
+		const TextureEntry& e = *getTextureEntryOrNull(id);
 		return e.DSV;
 	}
 
 	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureUAV(RenderResourceId id) const
 	{
 		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = m_Textures.at(id);
+		const TextureEntry& e = *getTextureEntryOrNull(id);
 		return e.UAV;
 	}
 
 	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferSRV(RenderResourceId id) const
 	{
 		ASSERT(HasBuffer(id), "Buffer id not found.");
-		const BufferEntry& e = m_Buffers.at(id);
+		const BufferEntry& e = *getBufferEntryOrNull(id);
 		return e.SRV;
 	}
 
 	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferUAV(RenderResourceId id) const
 	{
 		ASSERT(HasBuffer(id), "Buffer id not found.");
-		const BufferEntry& e = m_Buffers.at(id);
+		const BufferEntry& e = *getBufferEntryOrNull(id);
 		return e.UAV;
+	}
+
+	const RenderResourceRegistry::TextureEntry* RenderResourceRegistry::getTextureEntryOrNull(RenderResourceId id) const
+	{
+		ASSERT(HasTexture(id), "Texture id not found.");
+
+		auto it = m_Textures.find(id);
+		if (it != m_Textures.end())
+		{
+			return &m_Textures.at(id);
+		}
+
+		auto aliasIter = m_Aliases.find(id);
+		if (aliasIter != m_Aliases.end())
+		{
+			ASSERT(m_Textures.find(aliasIter->second) != m_Textures.end(), "Invalid alias.");
+			return &m_Textures.at(aliasIter->second);
+		}
+
+		ASSERT(false, "Invalid id");
+		return nullptr;
+	}
+
+	const RenderResourceRegistry::BufferEntry* RenderResourceRegistry::getBufferEntryOrNull(RenderResourceId id) const
+	{
+		ASSERT(HasBuffer(id), "Buffer id not found.");
+
+		auto it = m_Buffers.find(id);
+		if (it != m_Buffers.end())
+		{
+			return &m_Buffers.at(id);
+		}
+
+		auto aliasIter = m_Aliases.find(id);
+		if (aliasIter != m_Aliases.end())
+		{
+			ASSERT(m_Buffers.find(aliasIter->second) != m_Buffers.end(), "Invalid alias.");
+			return &m_Buffers.at(aliasIter->second);
+		}
+
+		ASSERT(false, "Invalid id");
+
+		return nullptr;
 	}
 } // namespace shz

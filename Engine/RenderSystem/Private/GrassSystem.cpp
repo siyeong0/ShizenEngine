@@ -122,6 +122,7 @@ namespace shz
 		// =====================================================================
 		renderer.AddPass(
 			"GrassGenerateInstances",
+			EPassExecutionDomain::OutsideRenderPass,
 			[&](RenderPassBuilder& b)
 			{
 				// Outputs

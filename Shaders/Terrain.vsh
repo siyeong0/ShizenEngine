@@ -1,10 +1,5 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 #include "HeightField.hlsli"
-
-cbuffer FRAME_CONSTANTS
-{
-    FrameConstants g_FrameCB;
-};
 
 cbuffer HEIGHT_FIELD_CONSTANTS
 {
@@ -12,11 +7,6 @@ cbuffer HEIGHT_FIELD_CONSTANTS
 };
 
 StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
-
-cbuffer DRAW_CONSTANTS
-{
-    DrawConstants g_DrawCB;
-};
 
 Texture2D<float> g_HeightField;
 SamplerState g_LinearClampSampler;
@@ -31,11 +21,13 @@ struct VSInput
 
 struct VSOutput
 {
-    float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0; // surface uv (world 0..1 over entire terrain, then scale/bias)
-    float3 WorldPos : TEXCOORD1;
-    float3 WorldN : TEXCOORD2;
-    float3 WorldT : TEXCOORD3;
+	float4 SVPosition : SV_POSITION;
+	float4 CurrClip : TEXCOORD0;
+	float4 PrevClip : TEXCOORD1;
+	float2 UV : TEXCOORD2;
+	float3 WorldPos : TEXCOORD3;
+	float3 WorldN : TEXCOORD4;
+	float3 WorldT : TEXCOORD5;
 };
 
 static float2 snapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
@@ -105,8 +97,12 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     float3 worldPos = float3(worldXZ.x, wy, worldXZ.y);
     OUT.WorldPos = worldPos;
 
-    OUT.Pos = mul(float4(worldPos, 1.0), g_FrameCB.ViewProj);
-
+	OUT.SVPosition = mul(float4(worldPos, 1.0), g_FrameCB.ViewProj);
+	//OUT.CurrClip = mul(float4(worldPos, 1.0), g_FrameCB.ViewProjNoJitter);
+	//OUT.PrevClip = mul(float4(worldPos, 1.0), g_FrameCB.PrevViewProjNoJitter);
+	OUT.CurrClip = ApplyTAAJittering(mul(float4(worldPos, 1.0), g_FrameCB.ViewProj));
+	OUT.PrevClip = mul(float4(worldPos, 1.0), g_FrameCB.PrevViewProj);
+    
     // Surface UV: entire terrain mapped to [0..1] then optional tiling
     float2 uvWorld01 = (worldXZ - g_HeightFieldCB.WorldOriginXZ) / max(g_HeightFieldCB.WorldSizeXZ, 1e-6.xx);
     OUT.UV = uvWorld01 * terrainDrawCB.SurfaceUVScale + terrainDrawCB.SurfaceUVBias;

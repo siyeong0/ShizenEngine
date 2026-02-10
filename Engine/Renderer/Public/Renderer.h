@@ -118,6 +118,9 @@ namespace shz
 			std::vector<RenderPassResourceAccess> ResourceAccess;
 			std::function<void(RenderPassContext&)> ExecuteLambda;
 
+			std::function<void(RenderPassContext&)> BeginLambda;
+			std::function<void(RenderPassContext&)> EndLambda;
+
 			std::vector<OptimizedClearValue> ClearValues;
 
 			RefCntAutoPtr<IRenderPass> pRHIRenderpass;
@@ -130,10 +133,19 @@ namespace shz
 
 		void AddPass(
 			const std::string& name,
+			EPassExecutionDomain domain,
 			std::function<void(RenderPassBuilder&)> buildLambda,
 			std::function<void(RenderPassContext&)> executeLambda,
-			std::function<void()> onCreated = {},
-			EPassExecutionDomain domain = EPassExecutionDomain::RenderPass);
+			std::function<void()> onCreated = {});
+
+		void AddPass(
+			const std::string& name,
+			EPassExecutionDomain domain,
+			std::function<void(RenderPassBuilder&)> buildLambda,
+			std::function<void(RenderPassContext&)> executeLambda,
+			std::function<void(RenderPassContext&)> beginLambda,
+			std::function<void(RenderPassContext&)> endLambda,
+			std::function<void()> onCreated = {});
 
 		// 
 		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
@@ -172,6 +184,9 @@ namespace shz
 
 		uint64 AddUniformBuffer(const std::string& name, uint64 sizeBytes);
 		uint64 AddUniformBuffer(uint64 id, uint64 sizeBytes);
+
+		void AddResourceAlias(uint64 src, uint64 alias);
+		void RemoveResourceAlias(uint64 alias);
 
 		void RegisterStaticTextureResource(const std::string& name, RenderResourceId id);
 		void RegisterStaticBufferCBV(const std::string& name, RenderResourceId id); // ConstantBuffer

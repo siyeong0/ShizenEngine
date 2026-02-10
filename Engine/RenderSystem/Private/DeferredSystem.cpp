@@ -22,18 +22,21 @@ namespace shz
 		// ------------------------------------------------------------
 		renderer.AddPass(
 			"GBuffer",
+			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
 				const uint64 kAlbedo = STRING_HASH("GBuffer0_Albedo");
 				const uint64 kNormal = STRING_HASH("GBuffer1_Normal");
 				const uint64 kMRAO = STRING_HASH("GBuffer2_MRAO");
 				const uint64 kEmissive = STRING_HASH("GBuffer3_Emissive");
+				const uint64 kVelocity = STRING_HASH("Velocity");
 				const uint64 kDepth = STRING_HASH("GBufferDepth");
 
 				b.DeclareTextureRTVWrite(kAlbedo);
 				b.DeclareTextureRTVWrite(kNormal);
 				b.DeclareTextureRTVWrite(kMRAO);
 				b.DeclareTextureRTVWrite(kEmissive);
+				b.DeclareTextureRTVWrite(kVelocity);
 				b.DeclareTextureDSVWrite(kDepth);
 
 				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
@@ -166,6 +169,7 @@ namespace shz
 		// ------------------------------------------------------------
 		renderer.AddPass(
 			"LightingScene",
+			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
 				const uint64 kG0 = STRING_HASH("GBuffer0_Albedo");

@@ -333,8 +333,8 @@ void GenerateGrassInstances(uint3 tid : SV_DispatchThreadID)
 	int halfExt = g_GrassGenCB.ChunkHalfExtent;
 	int2 chunkGrid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
 
-	// float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	float2 camXZ = float2(0,0);
+	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	// float2 camXZ = float2(0,0);
 
 	float chunkSize = g_GrassGenCB.ChunkSize;
 

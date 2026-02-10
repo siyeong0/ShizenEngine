@@ -1,11 +1,6 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 #include "PBRLighting.hlsli"
 #include "Shadow.hlsli"
-
-cbuffer FRAME_CONSTANTS
-{
-    FrameConstants g_FrameCB;
-};
 
 // GBuffer inputs
 Texture2D<float4> g_GBuffer0; // Albedo.rgb, Opacity.a

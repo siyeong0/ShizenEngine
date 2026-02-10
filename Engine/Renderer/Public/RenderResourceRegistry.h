@@ -42,6 +42,9 @@ namespace shz
 		void CreateTextureView(RenderResourceId id, const TextureViewDesc& desc);
 		void CreateBufferView(RenderResourceId id, const BufferViewDesc& desc);
 
+		void AddAlias(uint64 src, uint64 alias);
+		void RemoveAlias(uint64 alias);
+
 		// -----------------------------------------------------------------
 		// Query
 		// - Prefer owned resource if present; otherwise use external.
@@ -78,8 +81,13 @@ namespace shz
 			RefCntAutoPtr<IBufferView> UAV = {};
 		};
 
+		const TextureEntry* getTextureEntryOrNull(RenderResourceId id) const;
+		const BufferEntry* getBufferEntryOrNull(RenderResourceId id) const;
+
 	private:
 		std::unordered_map<RenderResourceId, TextureEntry> m_Textures;
-		std::unordered_map<RenderResourceId, BufferEntry>  m_Buffers;
+		std::unordered_map<RenderResourceId, BufferEntry> m_Buffers;
+
+		std::unordered_map<RenderResourceId, RenderResourceId> m_Aliases;
 	};
 } // namespace shz

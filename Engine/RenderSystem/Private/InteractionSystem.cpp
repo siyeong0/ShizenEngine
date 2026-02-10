@@ -134,6 +134,7 @@ namespace shz
 
         renderer.AddPass(
             "GrassInteraction",
+            EPassExecutionDomain::OutsideRenderPass,
             [&](RenderPassBuilder& b)
             {
                 // UAV (read/write)

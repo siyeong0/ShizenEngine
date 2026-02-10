@@ -19,6 +19,7 @@ namespace shz
 	{
 		renderer.AddPass(
 			"Shadow",
+			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
 				const uint64 kShadowMap = STRING_HASH("ShadowMap");

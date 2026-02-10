@@ -241,6 +241,7 @@ namespace shz
 		rec.Obj.WorldInvTranspose = world.Inversed().Transposed();
 
 		ASSERT(rec.OcIndex != INVALID_INDEX, "Object has no OcIndex.");
+		m_ObjectTableCPU[rec.OcIndex].PrevWorld = m_ObjectTableCPU[rec.OcIndex].World;
 		m_ObjectTableCPU[rec.OcIndex].World = rec.Obj.World;
 		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = rec.Obj.WorldInvTranspose;
 		markOcDirty(rec.OcIndex);
@@ -746,6 +747,7 @@ namespace shz
 		// ObjectConstants CPU mirror update (√÷√  1»∏)
 		m_ObjectTableCPU[rec.OcIndex].World = obj.World;
 		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = obj.WorldInvTranspose;
+		m_ObjectTableCPU[rec.OcIndex].PrevWorld = Matrix4x4::Identity();
 		markOcDirty(rec.OcIndex);
 
 		const uint32 sectionCount = static_cast<uint32>(obj.pMesh->Sections.size());

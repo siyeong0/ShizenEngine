@@ -135,29 +135,48 @@ namespace shz
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
 
-				TextureDesc td = {};
-				td.Name = "GBufferDepth";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_R32_TYPELESS;
-				td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
+				// Velocity
+				{
+					TextureDesc td = {};
+					td.Name = "Velocity";
+					td.Type = RESOURCE_DIM_TEX_2D;
+					td.Width = m_Viewport.Width;
+					td.Height = m_Viewport.Height;
+					td.MipLevels = 1;
+					td.Format = TEX_FORMAT_RG16_FLOAT;
+					td.SampleCount = 1;
+					td.Usage = USAGE_DEFAULT;
+					td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-				m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), td);
+					m_pRenderer->AddTexture(STRING_HASH("Velocity"), td);
+				}
 
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				vd.Format = TEX_FORMAT_D32_FLOAT;
+				// Depth
+				{
+					TextureDesc td = {};
+					td.Name = "GBufferDepth";
+					td.Type = RESOURCE_DIM_TEX_2D;
+					td.Width = m_Viewport.Width;
+					td.Height = m_Viewport.Height;
+					td.MipLevels = 1;
+					td.SampleCount = 1;
+					td.Usage = USAGE_DEFAULT;
+					td.Format = TEX_FORMAT_R32_TYPELESS;
+					td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
-				m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+					m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), td);
 
-				vd = {};
-				vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-				vd.Format = TEX_FORMAT_R32_FLOAT;
-				m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+					TextureViewDesc vd = {};
+					vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
+					vd.Format = TEX_FORMAT_D32_FLOAT;
+
+					m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+
+					vd = {};
+					vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+					vd.Format = TEX_FORMAT_R32_FLOAT;
+					m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
+				}
 			}
 
 			// Lighting
@@ -219,6 +238,25 @@ namespace shz
 
 					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), desc, &initData);
 				}
+			}
+
+			// TAA History Ping-Pong
+			{
+				TextureDesc td = {};
+				td.Type = RESOURCE_DIM_TEX_2D;
+				td.Width = m_Viewport.Width;
+				td.Height = m_Viewport.Height;
+				td.MipLevels = 1;
+				td.SampleCount = 1;
+				td.Usage = USAGE_DEFAULT;
+				td.Format = TEX_FORMAT_RGBA16_FLOAT;
+				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+				td.Name = "TAA_History0";
+				m_pRenderer->AddTexture(STRING_HASH("TAA_History0"), td);
+
+				td.Name = "TAA_History1";
+				m_pRenderer->AddTexture(STRING_HASH("TAA_History1"), td);
 			}
 		}
 
@@ -583,7 +621,6 @@ namespace shz
 		{
 			m_pEcs->Tick(dt);
 		}
-
 
 		// Update grass render constants
 		{
