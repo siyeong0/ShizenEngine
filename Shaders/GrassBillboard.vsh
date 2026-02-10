@@ -3,14 +3,6 @@
 
 StructuredBuffer<GrassBillboardInstance> g_GrassInstances;
 
-struct VSInput
-{
-    float3 Pos     : ATTRIB0; // local quad corner: x [-0.5..0.5], y [0..1], z 0
-    float2 UV      : ATTRIB1;
-    float3 Normal  : ATTRIB2;
-    float3 Tangent : ATTRIB3;
-};
-
 void GetCameraBasisWS(out float3 rightWS, out float3 upWS, out float3 forwardWS)
 {
     rightWS = float3(g_FrameCB.View._11, g_FrameCB.View._21, g_FrameCB.View._31);
@@ -30,16 +22,18 @@ float3 RotateAroundUp(float3 v, float3 upWS, float yaw)
     return v * c + cross(a, v) * s + a * dot(a, v) * (1.0f - c);
 }
 
-void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+void main(BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
     GrassBillboardInstance rawInst = g_GrassInstances[instanceID];
 
+	float3 vertexPosition = GET_VERTEX_POS();
+	float2 vertexUV = GET_VERTEX_UV();
+    
     float3 posWS;
     float  scale;
     float  yaw;
     uint   atlasIndex;
     uint   seed8;
-
     DecodeGrassBillboardInstance(rawInst, posWS, scale, yaw, atlasIndex, seed8);
 
     float3 camR, camU, camF;
@@ -48,23 +42,20 @@ void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
     // Optional: per-instance yaw around camera up
     // camR = RotateAroundUp(camR, camU, yaw);
 
-    float x = IN.Pos.x * scale;
-    float y = IN.Pos.y * scale;
+	float x = vertexPosition.x * scale;
+	float y = vertexPosition.y * scale;
 
     float3 worldPos = posWS + camR * x + camU * y;
 
     // Billboard normal: face camera (or -camF depending on convention)
-    float3 Nw = NormalizeSafe3(-camF, float3(0.0f, 0.0f, 1.0f));
+    float3 worldNormal = NormalizeSafe3(-camF, float3(0.0f, 0.0f, 1.0f));
 
     // Tangent for normal mapping / GBuffer input completeness:
     // Choose camera right as stable tangent.
-    float3 Tw = NormalizeSafe3(camR, float3(1.0f, 0.0f, 0.0f));
+    float3 worldTangent = NormalizeSafe3(camR, float3(1.0f, 0.0f, 0.0f));
 
-    OUT.UV = IN.UV;
-    OUT.WorldPosition = worldPos;
-    OUT.WorldNormal = Nw;
-    OUT.WorldTangent = Tw;
-	OUT.CurrClip = mul(float4(worldPos, 1.0f), g_FrameCB.ViewProj);
-	OUT.PrevClip = mul(float4(worldPos, 1.0f), g_FrameCB.PrevViewProj);
-    OUT.SVPosition = ApplyTAAJittering(mul(float4(worldPos, 1.0f), g_FrameCB.ViewProj));
+	SET_VSOUT_WORLD_POS_STATIC(float4(worldPos, 1.0f));
+    SET_VSOUT_UV(vertexUV);
+    SET_VSOUT_WORLD_NORMAL(worldNormal);
+    SET_VSOUT_WORLD_TANGENT(worldTangent);
 }

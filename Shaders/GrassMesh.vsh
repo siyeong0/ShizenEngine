@@ -8,18 +8,15 @@ cbuffer GRASS_RENDER_CONSTANTS
 
 StructuredBuffer<GrassMeshInstance> g_GrassInstances;
 
-struct VSInput
-{
-    float3 Pos     : ATTRIB0;
-    float2 UV      : ATTRIB1;
-    float3 Normal  : ATTRIB2;
-    float3 Tangent : ATTRIB3;
-};
-
-void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+void main(BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
     GrassMeshInstance rawInst = g_GrassInstances[instanceID];
 
+	float3 vertexPosition = GET_VERTEX_POS();
+	float2 vertexUV = GET_VERTEX_UV();
+	float3 vertexNormal = GET_VERTEX_NORMAL();
+	float3 vertexTangent = GET_VERTEX_TANGENT();
+    
     float3 posWS;
     float  scale;
     float  yaw;
@@ -43,9 +40,9 @@ void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
     // -----------------------------------------------------------------------
     // Local -> scale
     // -----------------------------------------------------------------------
-    float3 p = IN.Pos * scale;
-    float3 n = IN.Normal;
-    float3 t = IN.Tangent;
+	float3 p = vertexPosition * scale;
+	float3 n = vertexNormal;
+	float3 t = vertexTangent;
 
     // -----------------------------------------------------------------------
     // Interaction
@@ -72,7 +69,7 @@ void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
     // Tip weight
     // NOTE: If blade height is not in Pos.y, use UV.y.
     // -----------------------------------------------------------------------
-    float height01 = saturate(IN.Pos.y);
+	float height01 = saturate(vertexPosition.y);
     float wTip = height01 * height01;
 
     // -----------------------------------------------------------------------
@@ -141,14 +138,11 @@ void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
     // -----------------------------------------------------------------------
     p += posWS;
 
-    float3 Nw = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
-    float3 Tw = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
+	float3 normal = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
+	float3 tangent = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
 
-    OUT.UV = IN.UV;
-    OUT.WorldPosition = p;
-    OUT.WorldNormal = Nw;
-    OUT.WorldTangent = Tw;
-	OUT.CurrClip = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
-	OUT.PrevClip = mul(float4(p, 1.0f), g_FrameCB.PrevViewProj);
-    OUT.SVPosition = ApplyTAAJittering(mul(float4(p, 1.0f), g_FrameCB.ViewProj));
+    SET_VSOUT_WORLD_POS_STATIC(float4(p, 1.0f));
+    SET_VSOUT_UV(vertexUV);
+    SET_VSOUT_WORLD_NORMAL(normal);
+    SET_VSOUT_WORLD_TANGENT(tangent);
 }
