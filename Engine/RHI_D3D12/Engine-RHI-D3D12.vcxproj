@@ -224,7 +224,6 @@
     <ClInclude Include="Public\IFenceD3D12.h" />
     <ClInclude Include="Public\FenceD3D12Impl.hpp" />
     <ClInclude Include="Public\FramebufferD3D12Impl.hpp" />
-    <ClInclude Include="Public\GenerateMips.hpp" />
     <ClInclude Include="Public\PipelineResourceAttribsD3D12.hpp" />
     <ClInclude Include="Public\PipelineResourceSignatureD3D12Impl.hpp" />
     <ClInclude Include="Public\IPipelineStateCacheD3D12.h" />

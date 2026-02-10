@@ -88,7 +88,7 @@ void main(in PSInput IN, out PSOutput OUT)
 	float4 baseColor = g_BaseColorFactor;
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
-		baseColor *= g_BaseColorTex.SampleLevel(g_LinearWrapSampler, uv, 0);
+		baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
 	}
    
 	// --- Alpha/Coverage ----------------------------------------------------------

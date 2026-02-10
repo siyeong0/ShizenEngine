@@ -189,6 +189,174 @@ namespace shz
 			mips.emplace_back(static_cast<TextureMip&&>(tm));
 		}
 
+		// ------------------------------------------------------------
+		// Preserve alpha test coverage across mip chain (optional)
+		// ------------------------------------------------------------
+		// This fixes the classic issue where binary alpha (0/1) gets averaged in lower mips,
+		// causing masked foliage/grass to shrink/disappear at distance.
+		//
+		// We preserve coverage for a given cutoff by scaling alpha in each mip level
+		// so that fraction(alpha > cutoff) matches mip0.
+		//
+		// NOTE:
+		// - Apply ONLY when the texture's alpha is used for masking (NOT for regular transparency).
+		// - Works best on 8-bit alpha formats like RGBA8/BGRA8.
+		if (pSettings != nullptr && pSettings->bPreserveAlphaCoverage && desc.MipLevels > 1)
+		{
+			const float alphaCutoff01 = Clamp(pSettings->AlphaCutoff, 0.0f, 1.0f);
+
+			// We only support common 8-bit RGBA/BGRA formats here.
+			// If needed, extend this block to other formats.
+			bool supportedFmt = false;
+			bool isBGRA = false;
+
+			switch (outFmt)
+			{
+			case TEX_FORMAT_RGBA8_UNORM:
+			case TEX_FORMAT_RGBA8_UNORM_SRGB:
+				supportedFmt = true;
+				isBGRA = false;
+				break;
+
+			case TEX_FORMAT_BGRA8_UNORM:
+			case TEX_FORMAT_BGRA8_UNORM_SRGB:
+				supportedFmt = true;
+				isBGRA = true;
+				break;
+
+			default:
+				supportedFmt = false;
+				break;
+			}
+
+			if (!supportedFmt)
+			{
+				// Not fatal: just skip.
+				// You may log a warning if you want.
+			}
+			else
+			{
+				const uint32 alphaByteOffset = isBGRA ? 3u : 3u; // Both RGBA and BGRA have A at byte 3.
+				const uint32 bytesPerPixel = bpp;              // Element size for these formats should be 4.
+
+				if (bytesPerPixel < 4u)
+				{
+					// Shouldn't happen for the above formats, but be safe.
+				}
+				else
+				{
+					auto ComputeCoverage = [&](const TextureMip& mip) -> float
+						{
+							const uint32 w = mip.Width;
+							const uint32 h = mip.Height;
+							const uint8* data = mip.Data.data();
+
+							const uint8 cutoffU8 = static_cast<uint8>(std::clamp(alphaCutoff01, 0.0f, 1.0f) * 255.0f + 0.5f);
+
+							uint64 pass = 0;
+							const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
+
+							// Tight rows: w * bytesPerPixel
+							const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+
+							for (uint32 y = 0; y < h; ++y)
+							{
+								const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+								for (uint32 x = 0; x < w; ++x)
+								{
+									const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
+									pass += (a > cutoffU8) ? 1u : 0u;
+								}
+							}
+
+							if (count == 0) return 0.0f;
+							return static_cast<float>(pass) / static_cast<float>(count);
+						};
+
+					auto CoverageWithScale = [&](const TextureMip& mip, float scale) -> float
+						{
+							const uint32 w = mip.Width;
+							const uint32 h = mip.Height;
+							const uint8* data = mip.Data.data();
+
+							const float cutoff = alphaCutoff01;
+
+							uint64 pass = 0;
+							const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
+							const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+
+							for (uint32 y = 0; y < h; ++y)
+							{
+								const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+								for (uint32 x = 0; x < w; ++x)
+								{
+									const uint8 aU8 = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
+									float a = (static_cast<float>(aU8) / 255.0f) * scale;
+									a = std::min(std::max(a, 0.0f), 1.0f);
+									pass += (a > cutoff) ? 1u : 0u;
+								}
+							}
+
+							if (count == 0) return 0.0f;
+							return static_cast<float>(pass) / static_cast<float>(count);
+						};
+
+					auto ApplyScale = [&](TextureMip& mip, float scale)
+						{
+							const uint32 w = mip.Width;
+							const uint32 h = mip.Height;
+							uint8* data = mip.Data.data();
+
+							const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+
+							for (uint32 y = 0; y < h; ++y)
+							{
+								uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+								for (uint32 x = 0; x < w; ++x)
+								{
+									uint8& aU8 = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
+									float a = (static_cast<float>(aU8) / 255.0f) * scale;
+									a = std::min(std::max(a, 0.0f), 1.0f);
+									aU8 = static_cast<uint8>(a * 255.0f + 0.5f);
+								}
+							}
+						};
+
+					// Target coverage from mip0.
+					const float target = ComputeCoverage(mips[0]);
+
+					// If target is 0 or 1, scaling won't do much; still safe to proceed.
+					// Typical foliage masks have a meaningful target between 0 and 1.
+					for (uint32 mip = 1; mip < desc.MipLevels; ++mip)
+					{
+						TextureMip& tm = mips[mip];
+
+						// Binary search scale factor.
+						// Scale > 1 tends to increase coverage; scale < 1 decreases.
+						float lo = 0.0f;
+						float hi = 16.0f; // Usually enough. You can clamp by setting a setting.
+
+						// If even hi can't reach target (rare), we still get best effort.
+						// (This can happen when mip alpha is all zeros due to filtering.)
+						for (int it = 0; it < 10; ++it)
+						{
+							const float mid = 0.5f * (lo + hi);
+							const float cov = CoverageWithScale(tm, mid);
+
+							if (cov < target)
+								lo = mid;
+							else
+								hi = mid;
+						}
+
+						const float scale = 0.5f * (lo + hi);
+						ApplyScale(tm, scale);
+					}
+				}
+			}
+		}
+
+
 		if (!tex.IsValid())
 		{
 			ASSERT(false, "TextureImporter: Produced Texture is invalid.");

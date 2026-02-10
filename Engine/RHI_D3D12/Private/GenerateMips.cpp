@@ -72,8 +72,7 @@ namespace shz
 		Params[1].InitAsDescriptorTable(1, &SRVRange);
 		CD3DX12_DESCRIPTOR_RANGE UAVRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 0);
 		Params[2].InitAsDescriptorTable(1, &UAVRange);
-		CD3DX12_STATIC_SAMPLER_DESC SamplerLinearClampDesc(
-			0, D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
+		CD3DX12_STATIC_SAMPLER_DESC SamplerLinearClampDesc(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
 		CD3DX12_ROOT_SIGNATURE_DESC RootSigDesc;
 		RootSigDesc.NumParameters = _countof(Params);
 		RootSigDesc.pParameters = Params;
@@ -164,9 +163,13 @@ namespace shz
 			// the source width or height is odd.
 			uint32_t NonPowerOfTwo = (SrcWidth & 1) | (SrcHeight & 1) << 1;
 			if (TexDesc.Format == TEX_FORMAT_RGBA8_UNORM_SRGB)
+			{
 				ComputeCtx.SetPipelineState(m_pGenerateMipsGammaPSO[NonPowerOfTwo]);
+			}
 			else
+			{
 				ComputeCtx.SetPipelineState(m_pGenerateMipsLinearPSO[NonPowerOfTwo]);
+			}
 
 			// We can downsample up to four times, but if the ratio between levels is not
 			// exactly 2:1, we have to shift our blend weights, which gets complicated or
@@ -177,15 +180,21 @@ namespace shz
 			_BitScanForward((unsigned long*)&AdditionalMips, DstWidth | DstHeight);
 			uint32_t NumMips = 1 + (AdditionalMips > 3 ? 3 : AdditionalMips);
 			if (TopMip + NumMips > BottomMip)
+			{
 				NumMips = BottomMip - TopMip;
+			}
 
 			// These are clamped to 1 after computing additional mips because clamped
 			// dimensions should not limit us from downsampling multiple times.  (E.g.
 			// 16x1 -> 8x1 -> 4x1 -> 2x1 -> 1x1.)
 			if (DstWidth == 0)
+			{
 				DstWidth = 1;
+			}
 			if (DstHeight == 0)
+			{
 				DstHeight = 1;
+			}
 
 			D3D12_DESCRIPTOR_HEAP_TYPE HeapType = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 			DescriptorHeapAllocation   DescriptorAlloc = Ctx.AllocateDynamicGPUVisibleDescriptor(HeapType, 5);
@@ -223,7 +232,9 @@ namespace shz
 			// So we must populate all 4 slots even though we may actually process less than 4 mip levels
 			// Copy top mip level UAV descriptor handle to all unused slots
 			for (uint32 u = 0; u < MaxMipsHandledByCS; ++u)
+			{
 				SrcDescriptorRanges[1 + u] = pTexView->GetMipLevelUAV(TopMip + std::min(u + 1, NumMips));
+			}
 
 			pd3d12Device->CopyDescriptors(1, &DstDescriptorRange, &DstRangeSize, 1 + MaxMipsHandledByCS, SrcDescriptorRanges, SrcRangeSizes, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 

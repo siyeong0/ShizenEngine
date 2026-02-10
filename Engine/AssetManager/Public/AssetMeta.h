@@ -18,6 +18,8 @@ namespace shz
 		bool bGenerateMips = true;
 		bool bFlipVertically = false;
 		bool bPremultiplyAlpha = false;
+		bool bPreserveAlphaCoverage = true;
+		float32 AlphaCutoff = 0.5f;
 
 		TEXTURE_LOAD_MIP_FILTER     MipFilter = TEXTURE_LOAD_MIP_FILTER_DEFAULT;
 		TEXTURE_LOAD_COMPRESS_MODE  CompressMode = TEXTURE_LOAD_COMPRESS_MODE_NONE;

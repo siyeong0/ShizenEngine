@@ -111,9 +111,6 @@
     <ClInclude Include="Public\FramebufferD3D12Impl.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\GenerateMips.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Public\PipelineResourceAttribsD3D12.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
