@@ -12,6 +12,7 @@
 #include "Engine/RuntimeData/Public/TextureImporter.h"
 #include "Engine/RuntimeData/Public/MaterialImporter.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
+#include "Engine/AssetManager/Public/AssimpImporter.h"
 
 #include "Engine/RenderSystem/Public/DeferredSystem.h"
 #include "Engine/RenderSystem/Public/ForwardSystem.h"
@@ -71,6 +72,7 @@ namespace shz
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<AssimpAsset>::TypeID, AssimpImporter{});
 		}
 
 		// Renderer + shader factory
@@ -755,22 +757,14 @@ namespace shz
 		// Trees: render-only ECS entities (same as before)
 		// ------------------------------------------------------------
 		{
-			AssetRef<StaticMesh> treeAssets[] =
-			{
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree1.shzmesh.json"),
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree2.shzmesh.json"),
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree3.shzmesh.json"),
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree4.shzmesh.json"),
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/Tree5.shzmesh.json"),
-			};
+			AssetRef<AssimpAsset> treeAssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf");
+			const AssimpAsset& treeAssimp = *m_pAssetManager->LoadBlocking(treeAssimpRef);
+			StaticMesh treeStaticMesh;
+			BuildStaticMeshAsset(treeAssimp, &treeStaticMesh, {}, nullptr, m_pAssetManager.get());
 
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[0])),
-				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[1])),
-				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[2])),
-				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[3])),
-				&(m_pRenderer->CreateStaticMeshRenderData(treeAssets[4])),
+				&(m_pRenderer->CreateStaticMeshRenderData(treeStaticMesh)),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
@@ -805,7 +799,7 @@ namespace shz
 				e.set<CTransform>(tr);
 
 				CMeshRenderer mr = {};
-				mr.MeshRef = treeAssets[meshIdx];
+				mr.MeshRef = {};
 				mr.bCastShadow = true;
 
 				mr.RenderObjectHandle = m_pRenderScene->AddObject(

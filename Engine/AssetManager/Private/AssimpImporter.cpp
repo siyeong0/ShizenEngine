@@ -8,6 +8,16 @@
 #include <system_error>
 #include <fstream>
 #include <cctype>
+#include <unordered_map>
+#include <optional>
+#include <algorithm>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -41,6 +51,18 @@ namespace shz
 		return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 	}
 
+	static inline bool isControlChar(unsigned char c) noexcept
+	{
+		return c < 32u;
+	}
+
+	static inline std::string toLowerASCII(std::string s)
+	{
+		for (char& c : s)
+			c = (char)std::tolower((unsigned char)c);
+		return s;
+	}
+
 	// Trim spaces + optional wrapping quotes, normalize slashes to '/'
 	static std::string sanitizePathString(std::string s)
 	{
@@ -64,6 +86,10 @@ namespace shz
 			}
 		}
 
+		// remove trailing \0 and control chars (some exporters embed weird tail bytes)
+		while (!s.empty() && (s.back() == '\0' || isControlChar((unsigned char)s.back())))
+			s.pop_back();
+
 		for (char& c : s)
 		{
 			if (c == '\\') c = '/';
@@ -82,6 +108,16 @@ namespace shz
 			return {};
 
 		return path.substr(0, pos + 1);
+	}
+
+	static std::string getFileNameOnly(const std::string& path)
+	{
+		if (path.empty())
+			return {};
+		const size_t pos = path.find_last_of("/\\");
+		if (pos == std::string::npos)
+			return path;
+		return path.substr(pos + 1);
 	}
 
 	// Fix patterns like "c:/c:/dev/..." or "C:\C:\dev\..."
@@ -109,6 +145,27 @@ namespace shz
 		return s;
 	}
 
+	// More FBX-ish sanitize:
+	// - strip file:// prefixes
+	// - strip leading "./"
+	// - normalize slashes
+	// - fix duplicate drive
+	static std::string sanitizeFbxTexturePath(std::string s)
+	{
+		s = sanitizePathString(std::move(s));
+
+		const char* k1 = "file:///";
+		const char* k2 = "file://";
+		if (s.rfind(k1, 0) == 0) s = s.substr(std::strlen(k1));
+		else if (s.rfind(k2, 0) == 0) s = s.substr(std::strlen(k2));
+
+		while (s.rfind("./", 0) == 0)
+			s = s.substr(2);
+
+		s = fixDuplicateDrivePrefix(std::move(s));
+		return s;
+	}
+
 	static std::string normalizeResolvedPath(const std::filesystem::path& p)
 	{
 		std::filesystem::path n = p.lexically_normal();
@@ -118,9 +175,44 @@ namespace shz
 		return out;
 	}
 
-	static std::filesystem::path pathFromUtf8(const std::string& s)
+	// ------------------------------------------------------------
+	// Windows path decoding (UTF-8 first, then ANSI codepage fallback)
+	// ------------------------------------------------------------
+	static std::filesystem::path pathFromAssimpString(const std::string& s)
 	{
+#if defined(_WIN32)
+		auto ToWide = [](const std::string& in, UINT cp, std::wstring& out) -> bool
+		{
+			out.clear();
+			if (in.empty())
+				return false;
+
+			const int flags = (cp == CP_UTF8) ? MB_ERR_INVALID_CHARS : 0;
+			int len = MultiByteToWideChar(cp, flags, in.c_str(), (int)in.size(), nullptr, 0);
+			if (len <= 0)
+				return false;
+
+			out.resize((size_t)len);
+			int written = MultiByteToWideChar(cp, flags, in.c_str(), (int)in.size(), out.data(), len);
+			if (written != len)
+				return false;
+
+			return true;
+		};
+
+		std::wstring w;
+		if (ToWide(s, CP_UTF8, w))
+			return std::filesystem::path(w);
+
+		// ANSI fallback (CP_ACP)
+		if (ToWide(s, CP_ACP, w))
+			return std::filesystem::path(w);
+
+		// last resort: treat as narrow
 		return std::filesystem::path(s);
+#else
+		return std::filesystem::path(s);
+#endif
 	}
 
 	static inline uint32 makeAssimpFlags(const AssimpImportSettings& s)
@@ -211,6 +303,20 @@ namespace shz
 		return true;
 	}
 
+	static bool ensureDirectory(const std::filesystem::path& p, std::string* outError)
+	{
+		std::error_code ec;
+		if (std::filesystem::exists(p, ec))
+			return true;
+
+		if (!std::filesystem::create_directories(p, ec))
+		{
+			if (outError) *outError = "EnsureDirectory: create_directories failed: " + ec.message();
+			return false;
+		}
+		return true;
+	}
+
 	static bool tryDumpEmbeddedTextureToFile(
 		const aiScene* scene,
 		const std::string& sceneFilePath,
@@ -240,18 +346,11 @@ namespace shz
 			return false;
 		}
 
-		const std::filesystem::path sceneDir = pathFromUtf8(getDirectoryOfPath(sceneFilePath));
+		const std::filesystem::path sceneDir = pathFromAssimpString(getDirectoryOfPath(sceneFilePath));
 		const std::filesystem::path dumpDir = sceneDir / "_embedded_textures";
 
-		std::error_code ec;
-		if (!std::filesystem::exists(dumpDir, ec))
-		{
-			if (!std::filesystem::create_directories(dumpDir, ec))
-			{
-				if (outError) *outError = "EnsureDirectory: create_directories failed: " + ec.message();
-				return false;
-			}
-		}
+		if (!ensureDirectory(dumpDir, outError))
+			return false;
 
 		std::string ext = ".bin";
 		const char* hint = tex->achFormatHint;
@@ -298,14 +397,159 @@ namespace shz
 		}
 	}
 
+	static bool fileExists(const std::filesystem::path& p)
+	{
+		std::error_code ec;
+		return std::filesystem::exists(p, ec) && !ec;
+	}
+
+	// Case-insensitive filename match in a directory:
+	// - if exact path exists, return it
+	// - else scan parent directory entries and match filename lower
+	static bool tryResolveCaseInsensitiveInSameDir(const std::filesystem::path& p, std::filesystem::path& out)
+	{
+		out.clear();
+
+		if (fileExists(p))
+		{
+			out = p;
+			return true;
+		}
+
+		const std::filesystem::path dir = p.parent_path();
+		const std::filesystem::path want = p.filename();
+
+		if (dir.empty() || want.empty())
+			return false;
+
+		std::error_code ec;
+		if (!std::filesystem::exists(dir, ec) || ec)
+			return false;
+
+		const std::string wantLower = toLowerASCII(want.generic_string());
+
+		for (auto it = std::filesystem::directory_iterator(dir, ec);
+			!ec && it != std::filesystem::directory_iterator();
+			it.increment(ec))
+		{
+			if (ec) break;
+			if (!it->is_regular_file(ec)) continue;
+
+			const std::string haveLower = toLowerASCII(it->path().filename().generic_string());
+			if (haveLower == wantLower)
+			{
+				out = it->path();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// ------------------------------------------------------------
+	// Texture search index (build once per import)
+	// ------------------------------------------------------------
+	struct TexturePathIndex final
+	{
+		// key: lower(filename.ext) -> list of full paths
+		std::unordered_map<std::string, std::vector<std::filesystem::path>> ByBaseLower = {};
+	};
+
+	static bool isLikelyTextureExt(const std::filesystem::path& p)
+	{
+		const std::string ext = toLowerASCII(p.extension().generic_string());
+		return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".dds" || ext == ".exr" || ext == ".bmp" || ext == ".tif" || ext == ".tiff";
+	}
+
+	static TexturePathIndex buildTextureIndex(const std::vector<std::filesystem::path>& roots)
+	{
+		TexturePathIndex idx;
+
+		std::error_code ec;
+		for (const std::filesystem::path& root : roots)
+		{
+			if (root.empty())
+				continue;
+
+			if (!std::filesystem::exists(root, ec) || ec)
+				continue;
+
+			for (auto it = std::filesystem::recursive_directory_iterator(root, ec);
+				!ec && it != std::filesystem::recursive_directory_iterator();
+				it.increment(ec))
+			{
+				if (ec) break;
+
+				if (!it->is_regular_file(ec))
+					continue;
+
+				const std::filesystem::path p = it->path();
+				if (!isLikelyTextureExt(p))
+					continue;
+
+				const std::string baseLower = toLowerASCII(p.filename().generic_string());
+				idx.ByBaseLower[baseLower].push_back(p);
+			}
+		}
+
+		return idx;
+	}
+
+	static bool findByFileNameIndex(
+		const TexturePathIndex& idx,
+		const std::string& fileName,
+		std::filesystem::path& out)
+	{
+		out.clear();
+		const std::string key = toLowerASCII(fileName);
+		auto it = idx.ByBaseLower.find(key);
+		if (it == idx.ByBaseLower.end() || it->second.empty())
+			return false;
+
+		out = it->second.front();
+		return true;
+	}
+
+	static std::vector<std::filesystem::path> makeDefaultTextureSearchRoots(const std::filesystem::path& sceneDir)
+	{
+		std::vector<std::filesystem::path> roots;
+		roots.reserve(8);
+
+		if (!sceneDir.empty())
+		{
+			roots.push_back(sceneDir);
+			roots.push_back(sceneDir / "Textures");
+			roots.push_back(sceneDir / "textures");
+		}
+
+		const std::filesystem::path parent = sceneDir.parent_path();
+		if (!parent.empty())
+		{
+			roots.push_back(parent / "Textures");
+			roots.push_back(parent / "textures");
+		}
+
+		// de-dup (lexically)
+		for (std::filesystem::path& p : roots)
+			p = p.lexically_normal();
+
+		std::sort(roots.begin(), roots.end());
+		roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
+
+		return roots;
+	}
+
 	// ------------------------------------------------------------
 	// Material import helpers
 	// ------------------------------------------------------------
-	static bool resolveTexturePath(
+	static bool resolveTexturePathRobust(
 		const aiScene* scene,
 		const aiMaterial* mat,
 		aiTextureType type,
 		const std::string& sceneFilePath,
+		const std::filesystem::path& sceneDir,
+		const std::vector<std::filesystem::path>& searchRoots,
+		const TexturePathIndex* pIndex,
 		std::string& outPath,
 		std::string* outError)
 	{
@@ -325,7 +569,9 @@ namespace shz
 		if (!cstr || cstr[0] == '\0')
 			return false;
 
-		std::string raw = sanitizePathString(cstr);
+		std::string raw = sanitizeFbxTexturePath(cstr);
+		if (raw.empty())
+			return false;
 
 		// Embedded "*0" ...
 		if (!raw.empty() && raw[0] == '*')
@@ -356,73 +602,207 @@ namespace shz
 			return false;
 		}
 
-		const std::filesystem::path sceneDir = pathFromUtf8(getDirectoryOfPath(sceneFilePath));
-		const std::filesystem::path p = pathFromUtf8(raw);
+		const std::filesystem::path pRaw = pathFromAssimpString(raw);
 
-		std::filesystem::path resolved;
-		if (p.is_absolute() || p.has_root_name())
-			resolved = p;
-		else
-			resolved = sceneDir / p;
-
-		resolved = resolved.lexically_normal();
-
-		std::error_code ec;
-		if (!std::filesystem::exists(resolved, ec) || ec)
+		auto acceptFound = [&](const std::filesystem::path& found) -> bool
 		{
-			if (outError)
-				*outError = "Texture file does not exist: " + resolved.string();
-			return false;
+			std::filesystem::path resolved = found.lexically_normal();
+
+			std::filesystem::path ci;
+			if (tryResolveCaseInsensitiveInSameDir(resolved, ci))
+				resolved = ci;
+
+			if (!fileExists(resolved))
+				return false;
+
+			outPath = normalizeResolvedPath(resolved);
+			outPath = fixDuplicateDrivePrefix(static_cast<std::string&&>(outPath));
+			return !outPath.empty();
+		};
+
+		// 1) Try as absolute (or rooted) first
+		if (pRaw.is_absolute() || pRaw.has_root_name())
+		{
+			if (acceptFound(pRaw))
+				return true;
+
+			// absolute but invalid on this machine -> fall back to filename search
 		}
 
-		outPath = normalizeResolvedPath(resolved);
-		outPath = fixDuplicateDrivePrefix(static_cast<std::string&&>(outPath));
-		return !outPath.empty();
+		// 2) Try relative against sceneDir (classic)
+		{
+			const std::filesystem::path candidate = (sceneDir / pRaw).lexically_normal();
+			if (acceptFound(candidate))
+				return true;
+		}
+
+		// 3) Try search roots with full relative path (sometimes raw contains subdirs)
+		for (const std::filesystem::path& root : searchRoots)
+		{
+			if (root.empty())
+				continue;
+
+			const std::filesystem::path candidate = (root / pRaw).lexically_normal();
+			if (acceptFound(candidate))
+				return true;
+		}
+
+		// 4) Try filename-only across common roots
+		const std::string fileName = getFileNameOnly(raw);
+		if (!fileName.empty())
+		{
+			for (const std::filesystem::path& root : searchRoots)
+			{
+				if (root.empty())
+					continue;
+
+				const std::filesystem::path candidate = (root / pathFromAssimpString(fileName)).lexically_normal();
+				if (acceptFound(candidate))
+					return true;
+			}
+
+			// 5) Index lookup (recursive search done once)
+			if (pIndex != nullptr)
+			{
+				std::filesystem::path indexed;
+				if (findByFileNameIndex(*pIndex, fileName, indexed))
+				{
+					if (acceptFound(indexed))
+						return true;
+				}
+			}
+		}
+
+		if (outError)
+		{
+			*outError = "Texture path resolve failed. raw='" + raw + "' sceneDir='" + sceneDir.generic_string() + "'";
+		}
+
+		return false;
 	}
 
+	static bool resolveTexturePathAnyRobust(
+		const aiScene* scene,
+		const aiMaterial* mat,
+		const std::initializer_list<aiTextureType>& types,
+		const std::string& sceneFilePath,
+		const std::filesystem::path& sceneDir,
+		const std::vector<std::filesystem::path>& searchRoots,
+		const TexturePathIndex* pIndex,
+		std::string& outPath,
+		std::string* outError)
+	{
+		for (aiTextureType t : types)
+		{
+			outPath.clear();
+			if (resolveTexturePathRobust(scene, mat, t, sceneFilePath, sceneDir, searchRoots, pIndex, outPath, outError))
+				return true;
+		}
+		outPath.clear();
+		return false;
+	}
+
+	// ------------------------------------------------------------
+	// Improved material import (glTF alpha/twosided + robust paths)
+	// ------------------------------------------------------------
 	static MaterialId importOneMaterial(
 		const aiScene* scene,
 		const aiMaterial* mat,
 		uint32 materialIndex,
 		const std::string& sceneFilePath,
+		const std::filesystem::path& sceneDir,
+		const std::vector<std::filesystem::path>& searchRoots,
+		const TexturePathIndex* pIndex,
 		AssetManager* pAssetManager,
 		const AssimpImportSettings& setting,
 		std::string* outError)
 	{
+		if (mat == nullptr)
+			return 0;
 
 		std::string name;
-		aiString n;
-		if (mat != nullptr && mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS)
 		{
-			name = std::string(n.C_Str());
+			aiString n;
+			if (mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS && n.length > 0)
+				name = n.C_Str();
+			else
+				name = std::string("Material_") + std::to_string(materialIndex);
 		}
-		else
-		{
-			name = std::string("Material_") + std::to_string(materialIndex);
-		}
-		std::string templateName = "DefaultLit"; // TODO: from settings?
+
+		const std::string templateName = "DefaultLit"; // TODO: from settings?
 
 		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
-
 		MaterialId outId = pMaterialManager->CreateMaterial(name, templateName);
+		if (outId == 0)
+			return 0;
+
 		Material& material = pMaterialManager->GetMaterial(outId);
 
-		// BaseColor
+		auto ieq = [](const std::string& a, const char* b)
+		{
+			if (!b) return false;
+			if (a.size() != std::strlen(b)) return false;
+			for (size_t i = 0; i < a.size(); ++i)
+			{
+				const char ca = (char)std::tolower((unsigned char)a[i]);
+				const char cb = (char)std::tolower((unsigned char)b[i]);
+				if (ca != cb) return false;
+			}
+			return true;
+		};
+
+		// glTF alpha mode / cutoff / twosided
+		std::string alphaMode = "OPAQUE";
+#if defined(AI_MATKEY_GLTF_ALPHAMODE)
+		{
+			aiString am;
+			if (mat->Get(AI_MATKEY_GLTF_ALPHAMODE, am) == AI_SUCCESS && am.length > 0)
+				alphaMode = am.C_Str();
+		}
+#endif
+
+		float alphaCutoff = 0.5f;
+#if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
+		{
+			float v = alphaCutoff;
+			if (mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, v) == AI_SUCCESS)
+				alphaCutoff = v;
+		}
+#endif
+
+		bool twoSided = false;
+#if defined(AI_MATKEY_TWOSIDED)
+		{
+			int v = 0;
+			if (mat->Get(AI_MATKEY_TWOSIDED, v) == AI_SUCCESS)
+				twoSided = (v != 0);
+		}
+#endif
+
+		// BaseColor factor
 		float baseColor[4] = { 1, 1, 1, 1 };
 		{
 			aiColor4D c(1, 1, 1, 1);
 #if defined(AI_MATKEY_BASE_COLOR)
-			if (mat != nullptr && mat->Get(AI_MATKEY_BASE_COLOR, c) == AI_SUCCESS)
+			if (mat->Get(AI_MATKEY_BASE_COLOR, c) == AI_SUCCESS)
 			{
 				baseColor[0] = c.r; baseColor[1] = c.g; baseColor[2] = c.b; baseColor[3] = c.a;
 			}
 			else
 #endif
-				if (mat != nullptr && mat->Get(AI_MATKEY_COLOR_DIFFUSE, c) == AI_SUCCESS)
+				if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, c) == AI_SUCCESS)
 				{
 					baseColor[0] = c.r; baseColor[1] = c.g; baseColor[2] = c.b; baseColor[3] = c.a;
 				}
 		}
+
+		// Opacity multiplier (common non-glTF)
+		{
+			float opacity = 1.0f;
+			if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
+				baseColor[3] *= opacity;
+		}
+
 		material.SetFloat4("g_BaseColorFactor", baseColor);
 
 		// Emissive
@@ -430,7 +810,7 @@ namespace shz
 			aiColor3D e(0, 0, 0);
 			float emissive[3] = { 0, 0, 0 };
 
-			if (mat != nullptr && mat->Get(AI_MATKEY_COLOR_EMISSIVE, e) == AI_SUCCESS)
+			if (mat->Get(AI_MATKEY_COLOR_EMISSIVE, e) == AI_SUCCESS)
 			{
 				emissive[0] = e.r; emissive[1] = e.g; emissive[2] = e.b;
 			}
@@ -445,15 +825,17 @@ namespace shz
 			float roughness = 1.0f;
 
 #if defined(AI_MATKEY_METALLIC_FACTOR)
-			if (!(mat != nullptr && mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS))
 			{
-				metallic = 0.0f;
+				float v = metallic;
+				if (mat->Get(AI_MATKEY_METALLIC_FACTOR, v) == AI_SUCCESS)
+					metallic = v;
 			}
 #endif
 #if defined(AI_MATKEY_ROUGHNESS_FACTOR)
-			if (!(mat != nullptr && mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS))
 			{
-				roughness = 1.0f;
+				float v = roughness;
+				if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, v) == AI_SUCCESS)
+					roughness = v;
 			}
 #endif
 			material.SetFloat("g_MetallicFactor", metallic);
@@ -461,101 +843,133 @@ namespace shz
 		}
 
 		material.SetFloat("g_OcclusionStrength", 1.0f);
-
-		// Opacity / cutoff
-		{
-			float opacity = 1.0f;
-			if (mat != nullptr && mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
-			{
-				baseColor[3] = opacity;
-				material.SetFloat4("g_BaseColorFactor", baseColor);
-			}
-
-			float alphaCutoff = 0.5f;
-#if defined(AI_MATKEY_GLTF_ALPHACUTOFF)
-			if (!(mat != nullptr && mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff) == AI_SUCCESS))
-			{
-				alphaCutoff = 0.5f;
-			}
-#endif
-			material.SetFloat("g_AlphaCutoff", alphaCutoff);
-		}
-
+		material.SetFloat("g_AlphaCutoff", alphaCutoff);
 		material.SetFloat("g_NormalScale", 1.0f);
 
-		auto bindTexture = [&](const char* shaderVar, const std::string& texPath)
-			{
-				ASSERT(shaderVar != nullptr, "shaderVar is null.");
-				ASSERT(shaderVar[0] != '\0', "shaderVar is empty.");
-				ASSERT(!texPath.empty(), "texPath is empty.");
-				ASSERT(pAssetManager != nullptr, "pAssetManager is null.");
-				ASSERT(setting.bRegisterTextureAssets, "setting:bRegisterTextureAssets is false.");
-
-				const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
-				ASSERT(texRef, "RegisterAsset<TextureAsset> returned null AssetRef.");
-
-				material.SetTextureAssetRef(shaderVar, texRef);
-			};
-
+		// Decide blend/cull/depth
+		MATERIAL_BLEND_MODE blendMode = MATERIAL_BLEND_MODE_OPAQUE;
+		if (ieq(alphaMode, "BLEND"))
+			blendMode = MATERIAL_BLEND_MODE_TRANSPARENT;
+		else if (ieq(alphaMode, "MASK"))
+			blendMode = MATERIAL_BLEND_MODE_MASKED;
+		else
 		{
-			std::string path;
-			uint32 materialFlag = 0;
-
-			// BaseColor
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_BASE_COLOR, sceneFilePath, path, outError) ||
-				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE, sceneFilePath, path, outError))
-			{
-				bindTexture("g_BaseColorTex", path);
-				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
-			}
-
-			// Normal
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_NORMALS, sceneFilePath, path, outError) ||
-				resolveTexturePath(scene, mat, aiTextureType_NORMAL_CAMERA, sceneFilePath, path, outError))
-			{
-				bindTexture("g_NormalTex", path);
-				materialFlag |= hlsl::MAT_HAS_NORMAL;
-			}
-
-			// Metallic/Roughness
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_METALNESS, sceneFilePath, path, outError) ||
-				resolveTexturePath(scene, mat, aiTextureType_DIFFUSE_ROUGHNESS, sceneFilePath, path, outError) ||
-				resolveTexturePath(scene, mat, aiTextureType_UNKNOWN, sceneFilePath, path, outError))
-			{
-				bindTexture("g_MetallicRoughnessTex", path);
-				materialFlag |= hlsl::MAT_HAS_MR;
-			}
-
-			// AO
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_AMBIENT_OCCLUSION, sceneFilePath, path, outError))
-			{
-				bindTexture("g_AOTex", path);
-				materialFlag |= hlsl::MAT_HAS_AO;
-			}
-
-			// Emissive
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_EMISSIVE, sceneFilePath, path, outError))
-			{
-				bindTexture("g_EmissiveTex", path);
-				materialFlag |= hlsl::MAT_HAS_EMISSIVE;
-			}
-
-			// Height
-			path.clear();
-			if (resolveTexturePath(scene, mat, aiTextureType_HEIGHT, sceneFilePath, path, outError))
-			{
-				bindTexture("g_HeightTex", path);
-				materialFlag |= hlsl::MAT_HAS_HEIGHT;
-			}
-
-			material.SetUint("g_MaterialFlags", materialFlag);
+			// exporter didn't emit alphaMode but alpha<1
+			if (baseColor[3] < 0.999f)
+				blendMode = MATERIAL_BLEND_MODE_TRANSPARENT;
 		}
 
+		material.SetBlendMode(blendMode);
+		material.SetCullMode(twoSided ? CULL_MODE_NONE : CULL_MODE_BACK);
+
+		if (blendMode == MATERIAL_BLEND_MODE_TRANSPARENT)
+		{
+			material.SetDepthEnable(true);
+			material.SetDepthWriteEnable(false);
+			material.SetDepthFunc(COMPARISON_FUNC_LESS_EQUAL);
+		}
+		else
+		{
+			material.SetDepthEnable(true);
+			material.SetDepthWriteEnable(true);
+			material.SetDepthFunc(COMPARISON_FUNC_LESS_EQUAL);
+		}
+
+		// Bind textures
+		uint32 materialFlag = 0;
+
+		auto bindTexture = [&](const char* shaderVar, const std::string& texPath) -> bool
+		{
+			if (!setting.bRegisterTextureAssets)
+				return false;
+			if (pAssetManager == nullptr)
+				return false;
+			if (shaderVar == nullptr || shaderVar[0] == '\0')
+				return false;
+			if (texPath.empty())
+				return false;
+
+			const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
+			if (!texRef)
+				return false;
+
+			material.SetTextureAssetRef(shaderVar, texRef);
+			return true;
+		};
+
+		// BaseColor
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_BaseColorTex", path))
+					materialFlag |= hlsl::MAT_HAS_BASECOLOR;
+			}
+		}
+
+		// Normal
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_NORMALS, aiTextureType_NORMAL_CAMERA, aiTextureType_HEIGHT },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_NormalTex", path))
+					materialFlag |= hlsl::MAT_HAS_NORMAL;
+			}
+		}
+
+		// Metallic/Roughness (glTF: metallicRoughnessTexture)
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_METALNESS, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_UNKNOWN },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_MetallicRoughnessTex", path))
+					materialFlag |= hlsl::MAT_HAS_MR;
+			}
+		}
+
+		// AO (glTF: occlusionTexture)
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP, aiTextureType_AMBIENT },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_AOTex", path))
+					materialFlag |= hlsl::MAT_HAS_AO;
+			}
+		}
+
+		// Emissive
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_EMISSIVE },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_EmissiveTex", path))
+					materialFlag |= hlsl::MAT_HAS_EMISSIVE;
+			}
+		}
+
+		// Height/Displacement
+		{
+			std::string path;
+			if (resolveTexturePathAnyRobust(scene, mat,
+				{ aiTextureType_HEIGHT, aiTextureType_DISPLACEMENT },
+				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
+			{
+				if (bindTexture("g_HeightTex", path))
+					materialFlag |= hlsl::MAT_HAS_HEIGHT;
+			}
+		}
+
+		material.SetUint("g_MaterialFlags", materialFlag);
 		return outId;
 	}
 
@@ -636,18 +1050,61 @@ namespace shz
 			return false;
 		}
 
+		// Scene directory + search roots + index
+		const std::filesystem::path sceneDir = pathFromAssimpString(getDirectoryOfPath(filePath)).lexically_normal();
+		const std::vector<std::filesystem::path> searchRoots = makeDefaultTextureSearchRoots(sceneDir);
+
+		// Build index once (only if materials and you expect path issues)
+		TexturePathIndex texIndex = {};
+		const TexturePathIndex* pTexIndex = nullptr;
+
+		if (setting.bImportMaterials)
+		{
+			texIndex = buildTextureIndex(searchRoots);
+			pTexIndex = &texIndex;
+		}
+
 		// ------------------------------------------------------------
-		// Import materials (optional)
+		// Import materials (optional) - robust
 		// ------------------------------------------------------------
 		if (setting.bImportMaterials)
 		{
 			std::vector<MaterialId> materials;
-			materials.reserve(scene->mNumMaterials);
+			materials.resize(scene->mNumMaterials, 0);
+
+			// fallback material
+			MaterialId fallbackId = 0;
+			{
+				MaterialManager* pMM = MaterialManager::GetInstance();
+				fallbackId = pMM->CreateMaterial("DefaultMaterial", "DefaultLit");
+				Material& m = pMM->GetMaterial(fallbackId);
+				const float base[4] = { 1,1,1,1 };
+				m.SetFloat4("g_BaseColorFactor", base);
+				m.SetFloat("g_MetallicFactor", 0.0f);
+				m.SetFloat("g_RoughnessFactor", 1.0f);
+				m.SetUint("g_MaterialFlags", 0);
+			}
 
 			for (uint32 i = 0; i < scene->mNumMaterials; ++i)
 			{
 				const aiMaterial* mat = scene->mMaterials[i];
-				materials.emplace_back(importOneMaterial(scene, mat, i, filePath, pAssetManager, setting, outError));
+
+				MaterialId mid = importOneMaterial(
+					scene,
+					mat,
+					i,
+					filePath,
+					sceneDir,
+					searchRoots,
+					pTexIndex,
+					pAssetManager,
+					setting,
+					outError);
+
+				if (mid == 0)
+					mid = fallbackId;
+
+				materials[i] = mid;
 			}
 
 			pOutMesh->SetMaterialSlots(std::move(materials));
@@ -683,10 +1140,10 @@ namespace shz
 		auto& idx16 = pOutMesh->GetIndicesU16();
 
 		auto pushIndex = [&](uint32 idx)
-			{
-				if (indexType == VT_UINT32) idx32.push_back(idx);
-				else idx16.push_back(static_cast<uint16>(idx));
-			};
+		{
+			if (indexType == VT_UINT32) idx32.push_back(idx);
+			else idx16.push_back(static_cast<uint16>(idx));
+		};
 
 		// ------------------------------------------------------------
 		// Import meshes by traversing nodes (BAKE transforms)
@@ -705,106 +1162,96 @@ namespace shz
 		sections.reserve(setting.bMergeMeshes ? scene->mNumMeshes : 1);
 
 		auto importMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global)
+		{
+			ASSERT(mesh, "mesh is null.");
+			ASSERT(mesh->HasPositions(), "mesh has no positions.");
+
+			const uint32 baseVertex = static_cast<uint32>(positions.size());
+			const uint32 vertexCount = mesh->mNumVertices;
+
+			const bool hasNormals = mesh->HasNormals();
+			const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
+			const bool hasUV0 = mesh->HasTextureCoords(0);
+
+			const aiMatrix3x3 normalM = makeNormalMatrix(global);
+
+			for (uint32 v = 0; v < vertexCount; ++v)
 			{
-				ASSERT(mesh, "mesh is null.");
-				ASSERT(mesh->HasPositions(), "mesh has no positions.");
+				const aiVector3D& pA = mesh->mVertices[v];
 
-				const uint32 baseVertex = static_cast<uint32>(positions.size());
-				const uint32 vertexCount = mesh->mNumVertices;
+				float3 p = float3(pA.x, pA.y, pA.z) * setting.UniformScale;
+				p = transformPoint(global, p);
+				positions.push_back(p);
 
-				const bool hasNormals = mesh->HasNormals();
-				const bool hasTangents = (mesh->mTangents != nullptr) && (mesh->mBitangents != nullptr);
-				const bool hasUV0 = mesh->HasTextureCoords(0);
+				float3 n = hasNormals
+					? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
+					: float3(0.0f, 1.0f, 0.0f);
+				normals.push_back(transformNormal(normalM, n));
 
-				const aiMatrix3x3 normalM = makeNormalMatrix(global);
+				float3 t = hasTangents
+					? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
+					: float3(1.0f, 0.0f, 0.0f);
+				tangents.push_back(transformNormal(normalM, t));
 
-				for (uint32 v = 0; v < vertexCount; ++v)
-				{
-					const aiVector3D& pA = mesh->mVertices[v];
+				if (hasUV0)
+					texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
+				else
+					texCoords.push_back(float2(0.0f, 0.0f));
+			}
 
-					float3 p = float3(pA.x, pA.y, pA.z) * setting.UniformScale;
-					p = transformPoint(global, p);
-					positions.push_back(p);
+			StaticMesh::Section sec = {};
+			sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
+			sec.MaterialSlot = mesh->mMaterialIndex;
 
-					float3 n = hasNormals
-						? float3(mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z)
-						: float3(0.0f, 1.0f, 0.0f);
-					normals.push_back(transformNormal(normalM, n));
+			const uint32 firstIndex = pOutMesh->GetIndexCount();
+			uint32 indexCount = 0;
 
-					float3 t = hasTangents
-						? float3(mesh->mTangents[v].x, mesh->mTangents[v].y, mesh->mTangents[v].z)
-						: float3(1.0f, 0.0f, 0.0f);
-					tangents.push_back(transformNormal(normalM, t));
+			for (uint32 f = 0; f < mesh->mNumFaces; ++f)
+			{
+				const aiFace& face = mesh->mFaces[f];
+				ASSERT(face.mNumIndices == 3, "Only triangles are supported.");
 
-					if (hasUV0)
-					{
-						texCoords.push_back(float2(mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y));
-					}
-					else
-					{
-						texCoords.push_back(float2(0.0f, 0.0f));
-					}
-				}
+				pushIndex(face.mIndices[0]);
+				pushIndex(face.mIndices[1]);
+				pushIndex(face.mIndices[2]);
+				indexCount += 3;
+			}
 
-				StaticMesh::Section sec = {};
-				sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
-				sec.MaterialSlot = mesh->mMaterialIndex;
+			sec.FirstIndex = firstIndex;
+			sec.IndexCount = indexCount;
 
-				const uint32 firstIndex = pOutMesh->GetIndexCount();
-				uint32 indexCount = 0;
-
-				for (uint32 f = 0; f < mesh->mNumFaces; ++f)
-				{
-					const aiFace& face = mesh->mFaces[f];
-					ASSERT(face.mNumIndices == 3, "Only triangles are supported.");
-
-					pushIndex(face.mIndices[0]);
-					pushIndex(face.mIndices[1]);
-					pushIndex(face.mIndices[2]);
-					indexCount += 3;
-				}
-
-				sec.FirstIndex = firstIndex;
-				sec.IndexCount = indexCount;
-
-				sections.push_back(sec);
-			};
+			sections.push_back(sec);
+		};
 
 		auto traverseNode = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> bool
+		{
+			ASSERT(node, "node is null.");
+
+			aiMatrix4x4 global = parent * node->mTransformation;
+
+			for (uint32 i = 0; i < node->mNumMeshes; ++i)
 			{
-				ASSERT(node, "node is null.");
+				const uint32 meshIndex = node->mMeshes[i];
+				ASSERT(meshIndex < scene->mNumMeshes, "meshIndex out of range.");
 
-				aiMatrix4x4 global = parent * node->mTransformation;
+				const aiMesh* pMesh = scene->mMeshes[meshIndex];
+				importMeshAsSection(pMesh, global);
 
-				for (uint32 i = 0; i < node->mNumMeshes; ++i)
-				{
-					const uint32 meshIndex = node->mMeshes[i];
-					ASSERT(meshIndex < scene->mNumMeshes, "meshIndex out of range.");
+				if (!setting.bMergeMeshes)
+					return true;
+			}
 
-					const aiMesh* pMesh = scene->mMeshes[meshIndex];
-					importMeshAsSection(pMesh, global);
+			for (uint32 c = 0; c < node->mNumChildren; ++c)
+			{
+				if (!self(self, node->mChildren[c], global))
+					return false;
 
-					if (!setting.bMergeMeshes)
-					{
-						return true;
-					}
-				}
+				if (!setting.bMergeMeshes && !sections.empty())
+					return true;
+			}
 
-				for (uint32 c = 0; c < node->mNumChildren; ++c)
-				{
-					if (!self(self, node->mChildren[c], global))
-					{
-						return false;
-					}
-
-					if (!setting.bMergeMeshes && !sections.empty())
-					{
-						return true;
-					}
-				}
-
-				return true;
-			};
+			return true;
+		};
 
 		{
 			const aiMatrix4x4 identity;
