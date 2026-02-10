@@ -12,9 +12,6 @@ struct FrameConstants
     float4x4 InvViewProj;
 	float4x4 PrevViewProj;
     
-	float4x4 ViewProjNoJitter;
-	float4x4 PrevViewProjNoJitter;
-    
     float3 CameraPosition;
 	uint FrameIndex;
 
@@ -22,11 +19,6 @@ struct FrameConstants
 
     float2 ViewportSize;
     float2 InvViewportSize;
-
-	float2 JitterPixels;
-	float2 JitterNDC;
-	float2 PrevJitterPixels;
-	float2 PrevJitterNDC;
     
     float NearPlane;
     float FarPlane;
@@ -261,11 +253,6 @@ struct GrassRenderConstants
 {
     float4 BaseColorFactor;
     float4 Tint;
-
-    float AlphaCut;
-    float Ambient;
-    float ShadowStregth;
-    float DirectLightStrength;
 
     // Wind (world-space)
     float2 WindDirXZ;

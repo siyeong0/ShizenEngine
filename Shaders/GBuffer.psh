@@ -91,16 +91,37 @@ void main(in PSInput IN, out PSOutput OUT)
 		baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
 	}
    
-	float alphaCutoff = 0.1;
-	
-	float a = saturate(baseColor.a);
-	
-	float denom = max(1.0 - alphaCutoff, 1e-6);
-	float coverage = saturate((a - alphaCutoff) / denom);
-	coverage = max(coverage, 1e-4);
+	// --- Alpha/Coverage ----------------------------------------------------------
+    float alphaCutoff = 0.3f;
 
-	uint2 ip = SVPosToPixel(IN.SVPosition);
-	AlphaDitherTest(coverage, ip);
+    float alpha = saturate(baseColor.a);
+
+	// Cutoff를 coverage(0..1)로 맵핑 (A2C 흉내낼 때도 이게 좋음)
+    float denom = max(1.0f - alphaCutoff, 1e-6f);
+    float coverage = saturate((alpha - alphaCutoff) / denom);
+
+	// 매우 작은 값은 0으로 보내거나 최소값 부여 (선호에 따라)
+    coverage = max(coverage, 0.0f);
+
+	// 픽셀 좌표
+    uint2 ip = SVPosToPixel(IN.SVPosition);
+
+	// ---- A2C-like quantize + stochastic rounding ----
+	// N=4면 4x MSAA 느낌, N=8이면 더 부드러움(추천)
+    static const float SAMPLE = 4.0f;
+
+	// coverage를 N단계로 확률적 라운딩
+    float x = coverage * SAMPLE;
+    float base = floor(x); // 0..N
+    float frac = x - base; // 0..1
+
+	// NOTE: Bayer를 쓸거면 여기 t는 Bayer threshold를 쓰는 게 더 A2C스러움
+    float t = DitherThreshold_Bayer8(ip); // [0,1)
+    float k = base + (t < frac ? 1.0f : 0.0f);
+    float coverageQ = saturate(k / SAMPLE);
+
+	// clip도 coverageQ로 (저장과 반드시 일치)
+    AlphaDitherTest_Bayer8(coverageQ, ip);
 
 	// Metallic / Roughness
 	float metallic = g_MetallicFactor;
@@ -164,7 +185,7 @@ void main(in PSInput IN, out PSOutput OUT)
 	// Pack to GBuffer
 	OUT.GBuffer0 = float4(baseColor.rgb, baseColor.a);
 	OUT.GBuffer1 = float4(PackNormal01(N), 1.0);
-	OUT.GBuffer2 = float4(metallic, roughness, ao, coverage);
+	OUT.GBuffer2 = float4(metallic, roughness, ao, coverageQ);
 	OUT.GBuffer3 = float4(emissive, 1.0);
 	
 	float2 currUV = ClipToUV(IN.CurrClip);

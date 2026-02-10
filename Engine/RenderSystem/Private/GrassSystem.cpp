@@ -92,7 +92,6 @@ namespace shz
 			bd.Size = sizeof(hlsl::GrassGenConstants);
 
 			renderer.AddBuffer(STRING_HASH("GrassGenConstantsCB"), bd);
-			renderer.RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassGenConstantsCB"));
 		}
 
 		// ---------------------------------------------------------------------

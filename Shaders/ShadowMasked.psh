@@ -33,6 +33,6 @@ void main(in PSInput PSIn)
     {
         float alpha = g_BaseColorTex.Sample(g_LinearWrapSampler, PSIn.UV).a;
         // Alpha cutout (MASK)
-        AlphaDitherTest(alpha * g_BaseColorFactor.a, PSIn.Pos);
+        AlphaDitherTest_Bayer8(alpha * g_BaseColorFactor.a, SVPosToPixel(PSIn.Pos));
     }
 }

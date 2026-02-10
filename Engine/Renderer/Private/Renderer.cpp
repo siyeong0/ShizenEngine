@@ -341,41 +341,6 @@ namespace shz
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
-		auto halton = [](int index, int base) -> float
-		{
-			float f = 1.0f;
-			float r = 0.0f;
-			while (index > 0)
-			{
-				f /= (float)base;
-				r += f * (float)(index % base);
-				index /= base;
-			}
-			return r;
-		};
-
-		// [-0.5, 0.5] jitter
-		auto getJitterPixels = [&halton](uint32 frameIndex, uint32 sampleCount) -> float2
-		{
-			uint32 i = frameIndex % sampleCount;
-			// Halton은 1부터 시작하는 게 보통
-			float jx = halton((int)i + 1, 2) - 0.5f;
-			float jy = halton((int)i + 1, 3) - 0.5f;
-			return float2(jx, jy);
-		};
-
-		auto jitterProjection = [](const Matrix4x4& proj, float2 jitterPixels, float2 viewportSize) -> Matrix4x4
-		{
-			Matrix4x4 p = proj;
-
-			const float ndcX = (2.0f * jitterPixels.x) / viewportSize.x;
-			const float ndcY = (2.0f * jitterPixels.y) / viewportSize.y;
-
-			p._m20 += ndcX;
-			p._m21 += ndcY;
-
-			return p;
-		};
 
 		float2 viewportSize =
 		{
@@ -383,32 +348,14 @@ namespace shz
 			static_cast<float>(view.Viewport.bottom - view.Viewport.top)
 		};
 
-		// 2) Halton jitter (pixel 단위, -0.5..0.5)
-		const uint32 kJitterSampleCount = 8;     // 8 또는 16
-		const float  kJitterScalePixels = 1.0f;  // 1.0부터 시작(필요하면 0.75/0.5)
-
-		float2 jitterPix = getJitterPixels((uint32)viewFamily.FrameIndex, kJitterSampleCount) * kJitterScalePixels;
-
-		// 3) Proj 분리
-		const Matrix4x4 projNoJitter = view.ProjMatrix;
-		const Matrix4x4 projJittered = jitterProjection(projNoJitter, jitterPix, viewportSize);
-
-		// 4) ViewProj도 분리
-		const Matrix4x4 viewProjNoJitter = view.ViewMatrix * projNoJitter;
-		const Matrix4x4 viewProjJittered = view.ViewMatrix * projJittered;
-
-		// 5) Frustum은 보통 no-jitter로 (culling 안정)
 		ViewFrustumExt frustumMain = {};
-		ExtractViewFrustumPlanesFromMatrix(viewProjNoJitter, frustumMain);
+		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+		ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
 
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
-		static Matrix4x4 s_PrevViewProjJittered = Matrix4x4::Identity();
-		static Matrix4x4 s_PrevViewProjNoJitter = Matrix4x4::Identity();
-
-		static float2 s_PrevJitterPix = { 0,0 };
-		static float2 s_PrevJitterNdc = { 0,0 };
+		static Matrix4x4 sPrevViewProj = Matrix4x4::Identity();
 
 		Matrix4x4 lightViewProj = {};
 		{
@@ -416,16 +363,12 @@ namespace shz
 
 			cb->View = view.ViewMatrix;
 
-			cb->Proj = projJittered;
-			cb->ViewProj = viewProjJittered;
+			cb->Proj = view.ProjMatrix;
+			cb->ViewProj = viewProj;
 			cb->InvViewProj = cb->ViewProj.Inversed();
-			cb->PrevViewProj = s_PrevViewProjJittered;
+			cb->PrevViewProj = sPrevViewProj;
 
-			cb->ViewProjNoJitter = viewProjNoJitter;
-			cb->PrevViewProjNoJitter = s_PrevViewProjNoJitter;
-
-			s_PrevViewProjJittered = viewProjJittered;
-			s_PrevViewProjNoJitter = viewProjNoJitter;
+			sPrevViewProj = viewProj;
 
 			cb->CameraPosition = view.CameraPosition;
 			cb->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
@@ -439,15 +382,6 @@ namespace shz
 
 			cb->ViewportSize = viewportSize;
 			cb->InvViewportSize = { 1.f / viewportSize.x, 1.f / viewportSize.y };
-
-			cb->JitterPixels = jitterPix;
-			cb->JitterNDC = { (2.0f * jitterPix.x) / viewportSize.x, (2.0f * jitterPix.y) / viewportSize.y };
-
-			cb->PrevJitterPixels = s_PrevJitterPix;
-			cb->PrevJitterNDC = s_PrevJitterNdc;
-
-			s_PrevJitterPix = cb->JitterPixels;
-			s_PrevJitterNdc = cb->JitterNDC;
 
 			cb->NearPlane = view.NearPlane;
 			cb->FarPlane = view.FarPlane;

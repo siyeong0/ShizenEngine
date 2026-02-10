@@ -1,9 +1,3 @@
-// ============================================================================
-// GrassGenerateInstances.hlsl
-// Chunk-based grass instance generation (LOD0 Mesh / LOD1 CrossPlane / LOD2 Billboard)
-// Wave-coalesced atomics into ByteAddress counters
-// ============================================================================
-
 #include "HLSL_Structures.hlsli"
 #include "HeightField.hlsli"
 #include "GrassCommon.hlsli"

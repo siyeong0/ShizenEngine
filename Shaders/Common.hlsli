@@ -32,37 +32,41 @@ uint2 SVPosToPixel(float4 svPos)
 }
 
 //------------------------------------------------------------------------------
-// Hash / noise (break 8-frame periodic patterns)
+// Ordered dither (Bayer 8x8) - screen-space stable
+// Returns threshold in [0,1)
 //------------------------------------------------------------------------------
-// A tiny integer hash. Good enough for temporal dithering thresholds.
-uint HashU32(uint x)
+float DitherThreshold_Bayer8(uint2 pixel)
 {
-	x ^= x >> 16;
-	x *= 0x7feb352du;
-	x ^= x >> 15;
-	x *= 0x846ca68bu;
-	x ^= x >> 16;
-	return x;
+    // 8x8 Bayer matrix values in [0..63]
+    // Indexing: [y][x]
+    static const uint B8[64] =
+    {
+        0, 32, 8, 40, 2, 34, 10, 42,
+        48, 16, 56, 24, 50, 18, 58, 26,
+        12, 44, 4, 36, 14, 46, 6, 38,
+        60, 28, 52, 20, 62, 30, 54, 22,
+         3, 35, 11, 43, 1, 33, 9, 41,
+        51, 19, 59, 27, 49, 17, 57, 25,
+        15, 47, 7, 39, 13, 45, 5, 37,
+        63, 31, 55, 23, 61, 29, 53, 21
+    };
+
+    uint x = pixel.x & 7u;
+    uint y = pixel.y & 7u;
+    uint idx = y * 8u + x;
+
+    // +0.5로 cell center를 쓰면 약간 더 고르게 느껴질 때가 많음
+    return ((float) B8[idx] + 0.5f) / 64.0f;
 }
 
-// Returns [0,1).
-float Hash01(uint2 p, uint frameIndex)
-{
-	uint h = HashU32(p.x * 73856093u ^ p.y * 19349663u ^ frameIndex * 83492791u);
-    // Keep 24 bits for stable float.
-	return (float) (h & 0x00FFFFFFu) / 16777216.0f;
-}
-
 //------------------------------------------------------------------------------
-// Alpha dither test
-//------------------------------------------------------------------------------
+// Alpha dither test (Bayer 8x8)
 // coverage: [0..1], pixel: integer pixel coords
-void AlphaDitherTest(float coverage, uint2 pixel)
+//------------------------------------------------------------------------------
+void AlphaDitherTest_Bayer8(float coverage, uint2 pixel)
 {
-    // Use hashed threshold instead of small repeating Bayer matrix.
-    // This removes obvious 8-frame periodic patterns.
-	float t = Hash01(pixel, (uint) g_FrameCB.FrameIndex);
-	clip(coverage - t);
+    float t = DitherThreshold_Bayer8(pixel); // [0,1)
+    clip(coverage - t);
 }
 
 static const int MAX_HALTON_SEQUENCE = 16;

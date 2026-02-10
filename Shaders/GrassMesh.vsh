@@ -112,12 +112,9 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     float3 windBendAxis = cross(float3(0.0f, 1.0f, 0.0f), windDirJittered);
     windBendAxis = NormalizeSafe3(windBendAxis, float3(1.0f, 0.0f, 0.0f));
 
-    float phase = dot(posWS.xz, windDir2) * g_GrassCB.WindFreq
-        + g_FrameCB.CurrTime * g_GrassCB.WindSpeed
-        + yaw * 0.37f;
+    float phase = dot(posWS.xz, windDir2) * g_GrassCB.WindFreq + g_FrameCB.CurrTime * g_GrassCB.WindSpeed+ yaw * 0.37f;
 
-    float gust = 1.0f + g_GrassCB.WindGust *
-        sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
+    float gust = 1.0f + g_GrassCB.WindGust * sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
 
     float windS = sin(phase);
     float windMag = windS * 0.5f + 0.5f;

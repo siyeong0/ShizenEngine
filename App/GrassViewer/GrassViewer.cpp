@@ -103,10 +103,6 @@ namespace shz
 			rendererCI.pAssetManager = m_pAssetManager.get();
 
 			m_pRenderer->Initialize(rendererCI);
-
-			m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh");
-			m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh");
-			m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh");
 		}
 
 		// -----------------------------------------------------------------
@@ -205,6 +201,7 @@ namespace shz
 				bd.Size = sizeof(hlsl::GrassRenderConstants);
 
 				m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
+				m_pRenderer->RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
 			}
 
 			// Grass buffers
@@ -354,6 +351,10 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
+				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh");
+				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh");
+				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh");
+
 				auto uniform01 = [](StaticMesh& mesh)
 				{
 					mesh.RecomputeBounds();
@@ -628,14 +629,8 @@ namespace shz
 			ren.BaseColorFactor = float4(150.f, 200.f, 100.f, 255.f) / 255.f;
 			ren.Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
 
-			ren.AlphaCut = 0.5f;
-
-			ren.Ambient = 0.30f;
-			ren.ShadowStregth = 0.18f;
-			ren.DirectLightStrength = 0.22f;
-
 			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
-			ren.WindStrength = 0.45f;
+			ren.WindStrength = 1.45f;
 			ren.WindSpeed = 1.75f;
 
 			ren.WindFreq = 0.155f;
