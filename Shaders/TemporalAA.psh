@@ -1,4 +1,4 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 
 Texture2D<float4> g_CurrentColor;
 Texture2D<float4> g_HistoryColor;
@@ -25,13 +25,15 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float2 velocity = g_Velocity.Sample(g_LinearClampSampler, uv);
     float2 uvPrev = uv - velocity;
-	//if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
-	//{
-	//	OutColor = float4(currColor.rgb, 1.0f);
-	//	return;
-	//}
 	
     float4 currColor = g_CurrentColor.Sample(g_LinearClampSampler, uv);
+    
+    if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
+    {
+        OutColor = float4(currColor.rgb, 1.0f);
+        return;
+    }
+    
     float4 histColor = g_HistoryColor.Sample(g_LinearClampSampler, uvPrev);
 
     float4 left = g_CurrentColor.Sample(g_LinearClampSampler, uv, int2(-1, 0));
@@ -45,179 +47,14 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     histColor = clamp(histColor, lower, upper);
     
     float coverage = g_GBuffer2.Sample(g_LinearClampSampler, uv).a;
-    float historyW = lerp(0.2, 0.9, saturate(coverage));
 	
+    float velocityLen = length(velocity * g_FrameCB.ViewportSize);
+    float motionFade = saturate(1.0 - velocityLen * 0.25);
+
+    float historyW_cov = lerp(0.2, 0.9, saturate(coverage));
+    float historyW = historyW_cov * motionFade;
+    
     float3 resolveColor = lerp(currColor, histColor, historyW).rgb;
     
     OutColor = float4(resolveColor, 1.0);
 }
-//#include "HLSL_Structures.hlsli"
-
-//Texture2D<float4> g_CurrentColor;
-//Texture2D<float4> g_HistoryColor;
-
-//Texture2D<float2> g_Velocity; // uv-space (per-frame). If it's pixel-space, convert below.
-//Texture2D<float> g_Depth; // current depth (0..1). If reversed-Z, adjust comparisons.
-
-//SamplerState g_LinearClampSampler;
-
-//struct PSInput
-//{
-//	float4 Pos : SV_POSITION;
-//	float2 UV : TEXCOORD0;
-//};
-
-//static float Luminance(float3 c)
-//{
-//	return dot(c, float3(0.2126, 0.7152, 0.0722));
-//}
-
-//static float3 SafeNormalize3(float3 v, float3 fallbackV)
-//{
-//	float len2 = dot(v, v);
-//	if (len2 < 1e-20f)
-//		return fallbackV;
-//	return v * rsqrt(len2);
-//}
-
-//// ----------------------------------------------------------------------------
-//// Neighborhood clamp helper: build AABB from 3x3 neighborhood in current color
-//// ----------------------------------------------------------------------------
-//static void NeighborhoodAABB(float2 uv, float2 texel, out float3 cMin, out float3 cMax)
-//{
-//	cMin = float3(1e9, 1e9, 1e9);
-//	cMax = float3(-1e9, -1e9, -1e9);
-
-//    // 3x3 taps
-//    [unroll]
-//	for (int j = -1; j <= 1; ++j)
-//	{
-//        [unroll]
-//		for (int i = -1; i <= 1; ++i)
-//		{
-//			float2 u = uv + float2(i, j) * texel;
-//			float3 c = g_CurrentColor.SampleLevel(g_LinearClampSampler, u, 0).rgb;
-//			cMin = min(cMin, c);
-//			cMax = max(cMax, c);
-//		}
-//	}
-//}
-
-//static float3 ClampToAABB(float3 x, float3 mn, float3 mx)
-//{
-//	return min(max(x, mn), mx);
-//}
-
-//// ----------------------------------------------------------------------------
-//// Depth-based disocclusion: compare current depth with reprojected history depth
-//// Since you only have current depth texture, we approximate with current depth
-//// sampled at uvPrev. (Not perfect, but *very* effective).
-//// ----------------------------------------------------------------------------
-//static float DisocclusionFactor(float depthNow, float depthPrevSampled)
-//{
-//    // If reversed Z: depth closer -> larger, then flip logic accordingly.
-//    // Here assumes standard depth: closer -> smaller.
-
-//	float diff = abs(depthNow - depthPrevSampled);
-
-//    // Tune: threshold depends on your depth precision and projection
-//    // 0.001~0.01 typical. Start 0.0025.
-//	const float kDepthThresh = 0.0025f;
-
-//    // 0 = disoccluded (reject history), 1 = trust
-//	return saturate(1.0f - diff / kDepthThresh);
-//}
-
-//// ----------------------------------------------------------------------------
-//// Main
-//// ----------------------------------------------------------------------------
-//void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
-//{
-//	float2 uv = PSIn.UV;
-
-//    // Current
-//	float4 curr = g_CurrentColor.Sample(g_LinearClampSampler, uv);
-
-//    // Velocity (assumed uv-space). If your velocity is in pixels, do:
-//    // float2 vel = g_Velocity.Sample(g_LinearClampSampler, uv) * g_InvRenderSize;
-//	float2 vel = g_Velocity.Sample(g_LinearClampSampler, uv);
-
-//	float2 uvPrev = uv - vel;
-
-//    // Reject history if outside screen (clamp sampling would smear edges)
-//    // 작은 border도 같이 컷 (필요하면 0.0 -> texel 정도로)
-//	if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
-//	{
-//		OutColor = float4(curr.rgb, 1.0f);
-//		return;
-//	}
-
-//	float4 hist = g_HistoryColor.Sample(g_LinearClampSampler, uvPrev);
-
-//    // ------------------------------------------------------------------------
-//    // 1) History pre-filter: neighborhood clamp to avoid ghost trails
-//    // ------------------------------------------------------------------------
-//    // NOTE: needs texel size. If you don't have it in cb, approximate using ddx/ddy:
-//    // texel  float2(abs(ddx(uv.x)), abs(ddy(uv.y))) is not reliable.
-//    // Best: pass inv resolution in a cbuffer.
-//    //
-//    // Here: infer from SV_POSITION if your render target is full-res.
-//    // If you have FrameConstants, replace this with g_FrameCB.InvRenderSize.
-//	float2 pixelPos = PSIn.Pos.xy;
-//    // Fallback assumption: UV is linear in screen, texel = fwidth(uv)
-//    // Better version shown below using fwidth:
-//	float2 texel = float2(fwidth(uv.x), fwidth(uv.y));
-//    // Guard against fwidth==0 in some cases
-//	texel = max(texel, float2(1.0 / 4096.0, 1.0 / 4096.0));
-
-//	float3 nbMin, nbMax;
-//	NeighborhoodAABB(uv, texel, nbMin, nbMax);
-
-//	float3 histClamped = ClampToAABB(hist.rgb, nbMin, nbMax);
-
-//    // ------------------------------------------------------------------------
-//    // 2) Depth-based disocclusion (approx): compare depth at uv vs depth at uvPrev
-//    // ------------------------------------------------------------------------
-//	float depthNow = g_Depth.Sample(g_LinearClampSampler, uv);
-//	float depthPrevSampled = g_Depth.Sample(g_LinearClampSampler, uvPrev);
-//	float depthTrust = DisocclusionFactor(depthNow, depthPrevSampled);
-
-//    // ------------------------------------------------------------------------
-//    // 3) Luminance-based trust (your original)
-//    // ------------------------------------------------------------------------
-//	float lumC = Luminance(curr.rgb);
-//	float lumH = Luminance(histClamped);
-//	float lumDiff = abs(lumC - lumH);
-
-//    // Tune: higher -> more sensitive, less history
-//	const float kLumSensitivity = 2.0f;
-//	float lumTrust = saturate(1.0f - lumDiff * kLumSensitivity);
-
-//    // ------------------------------------------------------------------------
-//    // 4) Velocity-based history weight (fast motion => reduce history)
-//    // ------------------------------------------------------------------------
-//	float velLen = length(vel);
-
-//    // Tune based on velocity unit:
-//    // If vel is uv-space per frame: typical velLen ~ 0..0.02
-//    // If vel is pixel-space per frame: typical velLen ~ 0..20
-//	const float kVelLo = 0.0015f;
-//	const float kVelHi = 0.01f;
-//	float velTrust = 1.0f - smoothstep(kVelLo, kVelHi, velLen);
-
-//    // ------------------------------------------------------------------------
-//    // Combine trust & final blend
-//    // ------------------------------------------------------------------------
-//    // Base history weight: keep similar to your 0.60, but make it adaptive.
-//	const float baseHistory = 0.65f;
-
-//	float trust = lumTrust * depthTrust * velTrust;
-
-//    // Clamp trust floor to avoid shimmer when everything is stable:
-//    // (optional) trust = max(trust, 0.15f * depthTrust);
-//	float w = baseHistory * trust;
-
-//	float3 outRgb = lerp(curr.rgb, histClamped, w);
-
-//	OutColor = float4(outRgb, 1.0f);
-//}

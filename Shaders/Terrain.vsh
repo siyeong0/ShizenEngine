@@ -97,9 +97,7 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     float3 worldPos = float3(worldXZ.x, wy, worldXZ.y);
     OUT.WorldPos = worldPos;
 
-	OUT.SVPosition = mul(float4(worldPos, 1.0), g_FrameCB.ViewProj);
-	//OUT.CurrClip = mul(float4(worldPos, 1.0), g_FrameCB.ViewProjNoJitter);
-	//OUT.PrevClip = mul(float4(worldPos, 1.0), g_FrameCB.PrevViewProjNoJitter);
+    OUT.SVPosition = ApplyTAAJittering(mul(float4(worldPos, 1.0), g_FrameCB.ViewProj));
 	OUT.CurrClip = ApplyTAAJittering(mul(float4(worldPos, 1.0), g_FrameCB.ViewProj));
 	OUT.PrevClip = mul(float4(worldPos, 1.0), g_FrameCB.PrevViewProj);
     

@@ -161,11 +161,9 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     OUT.WorldPos = p;
     OUT.WorldN = Nw;
     OUT.WorldT = Tw;
-    //OUT.CurrClip = mul(float4(p, 1.0f), g_FrameCB.ViewProjNoJitter);
-	//OUT.PrevClip = mul(float4(p, 1.0f), g_FrameCB.PrevViewProjNoJitter);
-	OUT.CurrClip = ApplyTAAJittering(mul(float4(p, 1.0f), g_FrameCB.ViewProj));
+	OUT.CurrClip = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
 	OUT.PrevClip = mul(float4(p, 1.0f), g_FrameCB.PrevViewProj);
-	OUT.SVPosition = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
+    OUT.SVPosition = ApplyTAAJittering(mul(float4(p, 1.0f), g_FrameCB.ViewProj));
     
     return OUT;
 }

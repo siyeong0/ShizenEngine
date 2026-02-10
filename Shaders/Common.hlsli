@@ -99,6 +99,7 @@ float4 ApplyTAAJittering(float4 clipSpace)
 	jitter.x = ( jitter.x - 0.5f) / g_FrameCB.ViewportSize.x * 2.f;
 	jitter.y = (jitter.y - 0.5f) / g_FrameCB.ViewportSize.y * 2.f;
 
+    clipSpace.xy += jitter;
 	return clipSpace;
 }
 

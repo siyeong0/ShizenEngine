@@ -35,12 +35,10 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     OUT.WorldPos = worldPos4.xyz;
 
     // Clip position
-	OUT.SVPosition = mul(worldPos4, g_FrameCB.ViewProj);
-	// OUT.CurrClip = mul(worldPos4, g_FrameCB.ViewProjNoJitter);
-	OUT.CurrClip = ApplyTAAJittering(mul(worldPos4, g_FrameCB.ViewProj));
+    OUT.SVPosition = ApplyTAAJittering(mul(worldPos4, g_FrameCB.ViewProj));
+	OUT.CurrClip = mul(worldPos4, g_FrameCB.ViewProj);
     
 	float4 prevWorldPos4 = mul(float4(IN.Pos, 1.0), oc.PrevWorld);
-	// OUT.PrevClip = mul(prevWorldPos4, g_FrameCB.PrevViewProjNoJitter);
 	OUT.PrevClip = mul(prevWorldPos4, g_FrameCB.PrevViewProj);
     
     // Texcoord
