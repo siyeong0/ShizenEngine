@@ -3,10 +3,10 @@
 Texture2D<float4> g_CurrentColor;
 Texture2D<float4> g_HistoryColor;
 
-Texture2D<float2> g_Velocity; // uv-space (per-frame). If it's pixel-space, convert below.
-Texture2D<float> g_Depth; // current depth (0..1). If reversed-Z, adjust comparisons.
+Texture2D<float2> g_Velocity; // uv-space per-frame
+Texture2D<float> g_Depth; // current depth (0..1), same space as history depth if you have one
 
-Texture2D<float4> g_GBuffer2; // .a = coverage
+Texture2D<float4> g_GBuffer2; // .a = coverage (continuous recommended)
 
 SamplerState g_LinearClampSampler;
 
@@ -15,6 +15,11 @@ struct PSInput
     float4 Pos : SV_POSITION;
     float2 UV : TEXCOORD0;
 };
+
+static float Luminance(float3 c)
+{
+    return dot(c, float3(0.2126, 0.7152, 0.0722));
+}
 
 // ----------------------------------------------------------------------------
 // Main
@@ -25,36 +30,72 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float2 velocity = g_Velocity.Sample(g_LinearClampSampler, uv);
     float2 uvPrev = uv - velocity;
-	
+
     float4 currColor = g_CurrentColor.Sample(g_LinearClampSampler, uv);
-    
+
+    // prevUV 밖이면 history 무효
     if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
     {
         OutColor = float4(currColor.rgb, 1.0f);
         return;
     }
-    
+
     float4 histColor = g_HistoryColor.Sample(g_LinearClampSampler, uvPrev);
 
+    // --- Neighborhood clamp (5-tap cross) ---
     float4 left = g_CurrentColor.Sample(g_LinearClampSampler, uv, int2(-1, 0));
     float4 right = g_CurrentColor.Sample(g_LinearClampSampler, uv, int2(1, 0));
     float4 top = g_CurrentColor.Sample(g_LinearClampSampler, uv, int2(0, -1));
     float4 bottom = g_CurrentColor.Sample(g_LinearClampSampler, uv, int2(0, 1));
-	
+
     float4 lower = min(currColor, min(min(left, right), min(top, bottom)));
     float4 upper = max(currColor, max(max(left, right), max(top, bottom)));
-	
-    histColor = clamp(histColor, lower, upper);
-    
-    float coverage = g_GBuffer2.Sample(g_LinearClampSampler, uv).a;
-	
-    float velocityLen = length(velocity * g_FrameCB.ViewportSize);
-    float motionFade = saturate(1.0 - velocityLen * 0.25);
 
-    float historyW_cov = lerp(0.2, 0.9, saturate(coverage));
-    float historyW = historyW_cov * motionFade;
+    // (선택) luminance 기반으로 clamp를 조금 완화하고 싶으면 여기서 lower/upper를 확장할 수도 있음.
+    histColor = clamp(histColor, lower, upper);
+
+    // --- Coverage-driven history control ---
+    float coverage = g_GBuffer2.Sample(g_LinearClampSampler, uv).a;
+    coverage = saturate(coverage);
+
+    // Motion fade (pixel units)
+    float velocityLenPx = length(velocity * g_FrameCB.ViewportSize);
+    float motionFade = saturate(1.0 - velocityLenPx * 0.25);
+
+    // Depth-based disocclusion heuristic (약식)
+    // - HistoryDepth가 없어서 완벽하진 않지만, 현재 depth 변화가 큰 경우 history를 줄임
+    // - 가능하면 g_HistoryDepth를 따로 두고 uvPrev에서 샘플해서 비교하는 게 정석.
+    float depthCurr = g_Depth.Sample(g_LinearClampSampler, uv);
+
+    // 화면 외곽/스카이(깊이 극단) 같은 경우 과민 반응 막기 위해 약간 완화
+    float depthReliability = 1.0;
+
+    // coverage가 낮을수록(= edge/디더) history 비중을 낮추는 게 잔상/들뜸에 보통 유리함.
+    // UE 느낌으로는 대략:
+    //  - coverage ~ 0   : history 아주 약하게 (빠르게 현재 프레임 따라감)
+    //  - coverage ~ 1   : history 강하게 (안정)
     
-    float3 resolveColor = lerp(currColor, histColor, historyW).rgb;
-    
+    // edgeFactor: coverage=0.5에서 1, 0이나 1에서 0
+    float edgeFactor = 1.0 - abs(coverage * 2.0 - 1.0);
+    edgeFactor = saturate(edgeFactor);
+
+    float historyOpaque = 0.90;
+    float historyEdge = 0.98;
+
+    float historyW_cov = lerp(historyOpaque, historyEdge, edgeFactor);
+    // float historyW_cov = lerp(0.2, 0.9, saturate(coverage));
+
+    // motion이 크면 history 줄이기
+    float historyW = historyW_cov * motionFade * depthReliability;
+
+    // (추가 안정화) 현재/히스토리 밝기 차이가 크면 history 줄이기 (ghosting 억제)
+    float lumC = Luminance(currColor.rgb);
+    float lumH = Luminance(histColor.rgb);
+    float lumDiff = abs(lumC - lumH);
+    float lumFade = saturate(1.0 - lumDiff * 2.0); // 값은 취향/콘텐츠에 따라 조정
+    historyW *= lumFade;
+
+    float3 resolveColor = lerp(currColor.rgb, histColor.rgb, historyW);
+
     OutColor = float4(resolveColor, 1.0);
 }

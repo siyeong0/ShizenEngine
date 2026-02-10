@@ -76,7 +76,7 @@ namespace shz
         float m_MinScale = 7.7f;
         float m_MaxScale = 13.1f;
         float m_SpawnProb = 1.0f;
-        float m_SpawnRadius = 1000.0f;
+        float m_SpawnRadius = 256.0f;
 
         float m_BendStrengthMin = 0.65f;
         float m_BendStrengthMax = 0.75f;
