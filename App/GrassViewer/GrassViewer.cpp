@@ -309,8 +309,8 @@ namespace shz
 			m_pDeferredSystem = std::make_unique<DeferredSystem>();
 			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 			m_pShadowSystem = std::make_unique<ShadowSystem>();
-			m_pGrassSystem = std::make_unique<GrassSystem>();
 			m_pInteractionSystem = std::make_unique<InteractionSystem>();
+			m_pGrassSystem = std::make_unique<GrassSystem>();
 
 			// ------------------------------------------------------------
 			// Grass model
@@ -375,8 +375,8 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pIndirectArgsSystem, *m_pInteractionSystem);
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pIndirectArgsSystem, *m_pInteractionSystem);
 		}
 
 		// ECS

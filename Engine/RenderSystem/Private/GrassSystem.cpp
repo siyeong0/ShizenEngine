@@ -194,21 +194,6 @@ namespace shz
 
 				// Bind per-frame textures
 				{
-					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
-					{
-						var->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
-
-					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
-					{
-						var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
-
-					if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
-					{
-						var->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-					}
-
 					StateTransitionDesc tr =
 					{
 						renderer.GetTexture(STRING_HASH("HeightField")),
@@ -286,20 +271,45 @@ namespace shz
 				m_pGenCSO = renderer.AcquirePipelineState(psoCI);
 				ASSERT(m_pGenCSO, "AcquireCompute(GrassGenerateInstances) failed.");
 
-				m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD0")
-					->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD0")));
-				m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD1")
-					->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD1")));
-				m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD2")
-					->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD2")));
+				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD0"))
+				{
+					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD0")));
+				}
+				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD1"))
+				{
+					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD1")));
+				}
+				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD2"))
+				{
+					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD2")));
+				}
 
 				m_pGenCSO->CreateShaderResourceBinding(&m_pGenSRB, true);
 				ASSERT(m_pGenSRB, "GrassGenerateInstances SRB create failed.");
 
-				m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer")
-					->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
-				m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS")
-					->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstantsCB")));
+				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer"))
+				{
+					pVar->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
+				}
+				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+				{
+					pVar->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstantsCB")));
+				}
+
+				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
+				{
+					pVar->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+
+				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
+				{
+					var->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+
+				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
+				{
+					var->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			});
 	}
 
