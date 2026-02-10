@@ -103,6 +103,10 @@ namespace shz
 			rendererCI.pAssetManager = m_pAssetManager.get();
 
 			m_pRenderer->Initialize(rendererCI);
+
+			m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh");
+			m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh");
+			m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh");
 		}
 
 		// -----------------------------------------------------------------
@@ -170,54 +174,18 @@ namespace shz
 				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
 				m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
-				m_pRenderer->AddTexture(STRING_HASH("LightingForward"), td);
-				m_pRenderer->AddTexture(STRING_HASH("LightingFinal"), td);
 			}
 
-			// Grass (MSAA)
+			// Grass
 			{
-				// 4x MSAA Color
-				TextureDesc td = {};
-				td.Name = "GrassColorMSAA";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-				td.SampleCount = 4;
-				td.Usage = USAGE_DEFAULT;
-				td.BindFlags = BIND_RENDER_TARGET;
-				m_pRenderer->AddTexture(STRING_HASH("GrassColorMSAA"), td);
+				BufferDesc bd = {};
+				bd.Name = "GrassRenderConstantsCB";
+				bd.Usage = USAGE_DYNAMIC;
+				bd.BindFlags = BIND_UNIFORM_BUFFER;
+				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+				bd.Size = sizeof(hlsl::GrassRenderConstants);
 
-				// 4x MSAA Depth
-				td = {};
-				td.Name = "GrassDepthMSAA";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.SampleCount = 4;
-				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_D32_FLOAT;
-				td.BindFlags = BIND_DEPTH_STENCIL;
-				m_pRenderer->AddTexture(STRING_HASH("GrassDepthMSAA"), td);
-
-				TextureViewDesc vd = {};
-				vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-				vd.Format = TEX_FORMAT_D32_FLOAT;
-				m_pRenderer->AddTextureView(STRING_HASH("GrassDepthMSAA"), vd);
-
-				td = {};
-				td.Name = "GrassColor";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-				m_pRenderer->AddTexture(STRING_HASH("GrassColor"), td);
+				m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
 			}
 
 			// Grass buffers
@@ -327,6 +295,12 @@ namespace shz
 			}
 		}
 
+		// Render Scene
+		{
+			m_pRenderScene = std::make_unique<RenderScene>();
+			ASSERT(m_pRenderScene, "RenderScene is null.");
+		}
+
 		// -----------------------------------------------------------------
 		// Create render systems
 		// -----------------------------------------------------------------
@@ -354,24 +328,46 @@ namespace shz
 				GrassDesc gd = {};
 
 				// LOD0 : Mesh
-				AssetRef<StaticMesh> grassMeshRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic.shzmesh.json");
-				AssetPtr<StaticMesh> grassMeshPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassMeshRef);
-				ASSERT(grassMeshPtr && grassMeshPtr->IsValid(), "Failed to load grass mesh.");
-				uniform01(*grassMeshPtr);
-				gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(*grassMeshPtr);
-
+				{
+					AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
+					const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+					StaticMesh grassMesh;
+					BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+					uniform01(grassMesh);
+					for (auto matId : grassMesh.GetMaterialSlots())
+					{
+						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+					}
+					gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+				}
 				// LOD1 : Cross-plane
-				AssetRef<StaticMesh> grassCrossRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.shzmesh.json");
-				AssetPtr<StaticMesh> grassCrossPtr = m_pAssetManager->LoadBlocking<StaticMesh>(grassCrossRef);
-				ASSERT(grassCrossPtr && grassCrossPtr->IsValid(), "Failed to load grass mesh.");
-				uniform01(*grassCrossPtr);
-				gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(*grassCrossPtr);
-
+				{
+					AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
+					const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
+					StaticMesh grassCrossMesh;
+					BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+					uniform01(grassCrossMesh);
+					for (auto matId : grassCrossMesh.GetMaterialSlots())
+					{
+						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+					}
+					gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
+				}
 				// LOD2 : Billboard
-				AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
-				gd.pBillboardMeshLod2 = &m_pRenderer->CreateBillboardRenderData(grassBillboardTexRef, MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+				{
+					AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
+					StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+					for (auto matId : grassBiilboardMesh.GetMaterialSlots())
+					{
+						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+					}
+					gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-				m_pGrassSystem->SetGrassDesc(gd);
+					m_pGrassSystem->SetGrassDesc(gd);
+				}
 			}
 
 			m_pTerrainSystem->InstallPasses(*m_pRenderer);
@@ -379,15 +375,8 @@ namespace shz
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pIndirectArgsSystem, *m_pInteractionSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pIndirectArgsSystem, *m_pInteractionSystem);
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
-		}
-
-
-		// Render Scene
-		{
-			m_pRenderScene = std::make_unique<RenderScene>();
-			ASSERT(m_pRenderScene, "RenderScene is null.");
 		}
 
 		// ECS
@@ -757,14 +746,9 @@ namespace shz
 		// Trees: render-only ECS entities (same as before)
 		// ------------------------------------------------------------
 		{
-			AssetRef<AssimpAsset> treeAssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf");
-			const AssimpAsset& treeAssimp = *m_pAssetManager->LoadBlocking(treeAssimpRef);
-			StaticMesh treeStaticMesh;
-			BuildStaticMeshAsset(treeAssimp, &treeStaticMesh, {}, "DefaultLit", nullptr, m_pAssetManager.get());
-
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				&(m_pRenderer->CreateStaticMeshRenderData(treeStaticMesh)),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf"))),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);

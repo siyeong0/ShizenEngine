@@ -878,7 +878,7 @@ namespace shz
 
 				// Material (StructuredBuffer binding + instanced draw)
 				{
-					MaterialTemplate& matTmpl = renderer.CreateMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS);
+					renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS);
 
 					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
 					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);

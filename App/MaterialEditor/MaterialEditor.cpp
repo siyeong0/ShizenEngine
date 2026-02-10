@@ -843,22 +843,6 @@ namespace shz
 			m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
 		}
 
-		// Lighting
-		{
-			TextureDesc td = {};
-			td.Name = "LightingFinal";
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = m_Viewport.Width;
-			td.Height = m_Viewport.Height;
-			td.MipLevels = 1;
-			td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-			m_pRenderer->AddTexture(STRING_HASH("LightingFinal"), td);
-		}
-
 		// Render systems
 		{
 			m_pDeferredSystem = std::make_unique<DeferredSystem>();

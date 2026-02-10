@@ -36,6 +36,12 @@ namespace shz
 				b.DeclareTextureRTVWrite(kEmissive);
 				b.DeclareTextureDSVWrite(kDepth);
 
+				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
+
+				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD0"));
+				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
+				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
+
 				//b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
 				//b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
 				//b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
@@ -49,14 +55,12 @@ namespace shz
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 
-				const std::vector<DrawPacket>& packets = ctx.MainDrawPackets;
-
 				IPipelineState* pLastPSO = nullptr;
 				IShaderResourceBinding* pLastSRB = nullptr;
 				IBuffer* pLastVB = nullptr;
 				IBuffer* pLastIB = nullptr;
 
-				for (const DrawPacket& pkt : packets)
+				for (const DrawPacket& pkt : ctx.MainDrawPackets)
 				{
 					ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
 
@@ -110,6 +114,50 @@ namespace shz
 					}
 
 					pContext->DrawIndexed(dia);
+				}
+
+				for (const DrawIndirectPacket& pkt : ctx.MainIndirectPackets)
+				{
+					ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
+
+					if (pLastPSO != pkt.PSO)
+					{
+						pLastPSO = pkt.PSO;
+						pLastSRB = nullptr;
+						pContext->SetPipelineState(pLastPSO);
+					}
+
+					if (pLastSRB != pkt.SRB)
+					{
+						pLastSRB = pkt.SRB;
+						pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+					}
+
+					if (pLastVB != pkt.VertexBuffer)
+					{
+						IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
+						uint64 pOffsets[] = { 0 };
+
+						pContext->SetVertexBuffers(
+							0,
+							1,
+							ppVertexBuffers,
+							pOffsets,
+							RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+							SET_VERTEX_BUFFERS_FLAG_RESET);
+
+						pLastVB = pkt.VertexBuffer;
+					}
+
+					if (pLastIB != pkt.IndexBuffer)
+					{
+						pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+						pLastIB = pkt.IndexBuffer;
+					}
+
+					DrawIndexedIndirectAttribs dia = pkt.DrawAttribs;
+
+					pContext->DrawIndexedIndirect(dia);
 				}
 			});
 

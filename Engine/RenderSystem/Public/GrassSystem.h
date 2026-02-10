@@ -1,8 +1,6 @@
-// ============================================================================
-// GrassSystem.h
-// ============================================================================
 #pragma once
 #include <string>
+
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
@@ -12,10 +10,10 @@
 namespace shz
 {
     class Renderer;
+    class RenderScene;
     class IndirectArgsSystem;
     class InteractionSystem;
     struct StaticMeshRenderData;
-    struct BillboardRenderData;
 
     struct GrassDesc final
     {
@@ -25,7 +23,7 @@ namespace shz
 
         const StaticMeshRenderData* pMeshLod0 = nullptr;
         const StaticMeshRenderData* pCrossMeshLod1 = nullptr;
-        const BillboardRenderData* pBillboardMeshLod2 = nullptr;
+        const StaticMeshRenderData* pBillboardMeshLod2 = nullptr;
     };
 
     class GrassSystem final
@@ -37,7 +35,11 @@ namespace shz
         GrassSystem(const GrassSystem&) = delete;
         GrassSystem& operator=(const GrassSystem&) = delete;
 
-        void InstallPasses(Renderer& renderer, IndirectArgsSystem& indirect, const InteractionSystem& interaction);
+        void InstallPasses(
+            Renderer& renderer,
+            RenderScene& scene,
+            IndirectArgsSystem& indirect,
+            const InteractionSystem& interaction);
 
         void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
@@ -54,34 +56,11 @@ namespace shz
         // Interaction system reference
         const InteractionSystem* m_pInteractionSystem = nullptr;
 
-        // Generate instances
+        // Generate instances (Compute only)
         RefCntAutoPtr<IPipelineState>         m_pGenCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pGenSRB;
 
-        // Render (MSAA) : LOD0/LOD1 only
-        RefCntAutoPtr<IPipelineState>         m_pGrassPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pGrassSRB;
-
-        RefCntAutoPtr<IPipelineState>         m_pGrassCrossPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pGrassCrossSRB;
-
-        // Billboard (1x) : LOD2 only, A2C OFF, renders on top of LightingForward into LightingFinal
-        RefCntAutoPtr<IPipelineState>         m_pGrassBillboard1xPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pGrassBillboard1xSRB;
-
-        // Shadow (optional, current code keeps LOD0 shadow)
-        RefCntAutoPtr<IPipelineState>         m_pGrassShadowPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pGrassShadowSRB;
-
-        // Copy LightingScene(1x) -> GrassColorMSAA(4x)
-        RefCntAutoPtr<IPipelineState>         m_pCopyToMSAAPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pCopyToMSAASRB;
-
-        // Copy LightingForward(1x) -> LightingFinal(1x) as base for billboard pass
-        RefCntAutoPtr<IPipelineState>         m_pCopyToFinalPSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pCopyToFinalSRB;
-
-        // Mesh
+        // Mesh desc
         GrassDesc m_GrassDesc = {};
 
         // Settings
@@ -114,17 +93,5 @@ namespace shz
 
         // Shaders
         std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
-        std::string m_CopyVS = "Fullscreen.vsh";
-        std::string m_CopyPS = "CopyTexture.psh";
-
-        std::string m_GrassMeshVS = "GrassMesh.vsh";
-        std::string m_GrassCrossPlaneVS = "GrassCrossPlane.vsh";
-        std::string m_GrassPS = "GrassForward.psh";
-
-        std::string m_GrassBillboardVS = "GrassBillboard.vsh";
-        std::string m_GrassBillboardPS = "GrassBillboard.psh";
-
-        std::string m_GrassShadowVS = "GrassShadow.vsh";
-        std::string m_ShadowPS = "ShadowMasked.psh";
     };
 } // namespace shz

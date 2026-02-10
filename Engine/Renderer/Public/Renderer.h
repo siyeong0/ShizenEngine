@@ -6,6 +6,7 @@
 
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/RuntimeData/Public/StaticMesh.h"
+#include "Engine/AssetManager/Public/AssimpAsset.h"
 
 #include "Engine/RHI/Interface/IEngineFactory.h"
 #include "Engine/RHI/Interface/IRenderDevice.h"
@@ -30,7 +31,6 @@
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
-#include "Engine/Renderer/Public/BillboardRenderData.h"
 
 namespace shz
 {
@@ -195,12 +195,7 @@ namespace shz
 		// RenderData 
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
-
-		const BillboardRenderData& CreateBillboardRenderData(
-			const AssetRef<Texture>& colorTexRef,
-			MATERIAL_BLEND_MODE blendMode,
-			float2 scale = { 1.0f, 1.0f },
-			float2 pivot01 = { 0.5f, 0.5f });
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<AssimpAsset>& assimpRef, const std::string& materialTempalteName = "DefaultLit", const std::string& name = "");
 
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);
@@ -216,9 +211,9 @@ namespace shz
 		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Material
-		MaterialTemplate& CreateMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
-		MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
-		MaterialTemplate& CreateMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
+		void RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
@@ -257,7 +252,6 @@ namespace shz
 		std::unique_ptr<PipelineStateManager> m_pPipelineStateManager;
 
 		RenderResourceCache<StaticMeshRenderData> m_StaticMeshCache;
-		RenderResourceCache<BillboardRenderData> m_BillboardCache;
 
 		std::unordered_map<uint64, MaterialPipelineBinding> m_PipelineBindingCache;
 

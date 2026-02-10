@@ -3,48 +3,49 @@
 
 cbuffer FRAME_CONSTANTS
 {
-	FrameConstants g_FrameCB;
+    FrameConstants g_FrameCB;
 };
 
 cbuffer GRASS_RENDER_CONSTANTS
 {
-	GrassRenderConstants g_GrassCB;
+    GrassRenderConstants g_GrassCB;
 };
 
 StructuredBuffer<GrassMeshInstance> g_GrassInstances;
 
 struct VSInput
 {
-	float3 Pos : ATTRIB0;
-	float2 UV : ATTRIB1;
-	float3 Normal : ATTRIB2;
-	float3 Tangent : ATTRIB3;
+    float3 Pos     : ATTRIB0;
+    float2 UV      : ATTRIB1;
+    float3 Normal  : ATTRIB2;
+    float3 Tangent : ATTRIB3;
 };
 
 struct VSOutput
 {
-	float4 Pos : SV_Position;
-	float3 PosWS : TEXCOORD0;
-	float3 NormalWS : TEXCOORD1;
-	float2 UV : TEXCOORD2;
+    float4 Pos      : SV_Position; // -> PSInput.Pos
+    float2 UV       : TEXCOORD0;   // -> PSInput.UV
+    float3 WorldPos : TEXCOORD1;   // -> PSInput.WorldPos
+    float3 WorldN   : TEXCOORD2;   // -> PSInput.WorldN
+    float3 WorldT   : TEXCOORD3;   // -> PSInput.WorldT
 };
 
 VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
 {
-	VSOutput OUT;
+    VSOutput OUT;
 
-	GrassMeshInstance rawInst = g_GrassInstances[instanceID];
+    GrassMeshInstance rawInst = g_GrassInstances[instanceID];
 
-	float3 posWS;
-	float scale;
-	float yaw;
-	float pitch;
-	float bend01;
-	float press;
-	uint variantId;
-	uint seed8;
+    float3 posWS;
+    float  scale;
+    float  yaw;
+    float  pitch;
+    float  bend01;
+    float  press;
+    uint   variantId;
+    uint   seed8;
 
-	DecodeGrassMeshInstance(
+    DecodeGrassMeshInstance(
         rawInst,
         posWS,
         scale,
@@ -58,108 +59,115 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     // -----------------------------------------------------------------------
     // Local -> scale
     // -----------------------------------------------------------------------
-	float3 p = IN.Pos * scale;
-	float3 n = IN.Normal;
+    float3 p = IN.Pos * scale;
+    float3 n = IN.Normal;
+    float3 t = IN.Tangent;
 
     // -----------------------------------------------------------------------
     // Interaction
     // -----------------------------------------------------------------------
-	float pressHard = smoothstep(0.05f, 0.25f, saturate(press));
-	float keepBase = 1.0f - pressHard;
+    float pressHard = smoothstep(0.05f, 0.25f, saturate(press));
+    float keepBase = 1.0f - pressHard;
 
     // -----------------------------------------------------------------------
     // Base rigid orientation: yaw + pitch (pitch fades when pressed)
     // -----------------------------------------------------------------------
-	p = ApplyYaw(p, yaw);
-	n = ApplyYaw(n, yaw);
+    p = ApplyYaw(p, yaw);
+    n = ApplyYaw(n, yaw);
+    t = ApplyYaw(t, yaw);
 
-	float3 pitchAxis = ApplyYaw(float3(1.0f, 0.0f, 0.0f), yaw);
-	pitchAxis = NormalizeSafe3(pitchAxis, float3(1.0f, 0.0f, 0.0f));
+    float3 pitchAxis = ApplyYaw(float3(1.0f, 0.0f, 0.0f), yaw);
+    pitchAxis = NormalizeSafe3(pitchAxis, float3(1.0f, 0.0f, 0.0f));
 
-	float pitchAngle = pitch * keepBase;
-	p = RotateAroundAxis(p, pitchAxis, pitchAngle);
-	n = RotateAroundAxis(n, pitchAxis, pitchAngle);
+    float pitchAngle = pitch * keepBase;
+    p = RotateAroundAxis(p, pitchAxis, pitchAngle);
+    n = RotateAroundAxis(n, pitchAxis, pitchAngle);
+    t = RotateAroundAxis(t, pitchAxis, pitchAngle);
 
     // -----------------------------------------------------------------------
     // Tip weight
     // NOTE: If blade height is not in Pos.y, use UV.y.
     // -----------------------------------------------------------------------
-	float height01 = saturate(IN.Pos.y);
-	float wTip = height01 * height01;
+    float height01 = saturate(IN.Pos.y);
+    float wTip = height01 * height01;
 
     // -----------------------------------------------------------------------
     // Flatten axis (cheap per-instance direction from yaw)
     // -----------------------------------------------------------------------
-	float2 pressDir2 = float2(cos(yaw), sin(yaw));
-	float3 pressDirWS = float3(pressDir2.x, 0.0f, pressDir2.y);
+    float2 pressDir2 = float2(cos(yaw), sin(yaw));
+    float3 pressDirWS = float3(pressDir2.x, 0.0f, pressDir2.y);
 
-	float3 pressAxis = cross(float3(0.0f, 1.0f, 0.0f), pressDirWS);
-	pressAxis = NormalizeSafe3(pressAxis, float3(1.0f, 0.0f, 0.0f));
+    float3 pressAxis = cross(float3(0.0f, 1.0f, 0.0f), pressDirWS);
+    pressAxis = NormalizeSafe3(pressAxis, float3(1.0f, 0.0f, 0.0f));
 
     // -----------------------------------------------------------------------
     // Wind (pressed grass reduces wind response)
     // -----------------------------------------------------------------------
-	float2 windDir2 = NormalizeSafe2(g_GrassCB.WindDirXZ, float2(1.0f, 0.0f));
-	float3 windDirWS = float3(windDir2.x, 0.0f, windDir2.y);
+    float2 windDir2 = NormalizeSafe2(g_GrassCB.WindDirXZ, float2(1.0f, 0.0f));
+    float3 windDirWS = float3(windDir2.x, 0.0f, windDir2.y);
 
-	static const float WIND_DIR_JITTER = 0.35f;
+    static const float WIND_DIR_JITTER = 0.35f;
 
-	float3 windDirJittered = ApplyYaw(windDirWS, (yaw - GRASS_PI) * WIND_DIR_JITTER);
-	windDirJittered.y = 0.0f;
-	windDirJittered = NormalizeSafe3(windDirJittered, windDirWS);
+    float3 windDirJittered = ApplyYaw(windDirWS, (yaw - GRASS_PI) * WIND_DIR_JITTER);
+    windDirJittered.y = 0.0f;
+    windDirJittered = NormalizeSafe3(windDirJittered, windDirWS);
 
-	float3 windBendAxis = cross(float3(0.0f, 1.0f, 0.0f), windDirJittered);
-	windBendAxis = NormalizeSafe3(windBendAxis, float3(1.0f, 0.0f, 0.0f));
+    float3 windBendAxis = cross(float3(0.0f, 1.0f, 0.0f), windDirJittered);
+    windBendAxis = NormalizeSafe3(windBendAxis, float3(1.0f, 0.0f, 0.0f));
 
-	float phase = dot(posWS.xz, windDir2) * g_GrassCB.WindFreq
-                + g_FrameCB.CurrTime * g_GrassCB.WindSpeed
-                + yaw * 0.37f;
+    float phase = dot(posWS.xz, windDir2) * g_GrassCB.WindFreq
+        + g_FrameCB.CurrTime * g_GrassCB.WindSpeed
+        + yaw * 0.37f;
 
-	float gust = 1.0f + g_GrassCB.WindGust *
-                 sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
+    float gust = 1.0f + g_GrassCB.WindGust *
+        sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
 
-	float windS = sin(phase);
-	float windMag = windS * 0.5f + 0.5f;
+    float windS = sin(phase);
+    float windMag = windS * 0.5f + 0.5f;
 
-	float windAngle = windMag * gust * bend01 * g_GrassCB.WindStrength;
+    float windAngle = windMag * gust * bend01 * g_GrassCB.WindStrength;
 
-	float windFade = saturate(g_GrassCB.InteractionWindFade);
-	float windKeep = lerp(1.0f, 1.0f - windFade, pressHard);
+    float windFade = saturate(g_GrassCB.InteractionWindFade);
+    float windKeep = lerp(1.0f, 1.0f - windFade, pressHard);
+    windKeep *= keepBase;
 
-	windKeep *= keepBase;
+    windAngle *= windKeep;
+    windAngle = clamp(windAngle, -g_GrassCB.MaxBendAngle, g_GrassCB.MaxBendAngle);
 
-	windAngle *= windKeep;
-	windAngle = clamp(windAngle, -g_GrassCB.MaxBendAngle, g_GrassCB.MaxBendAngle);
-
-	p = RotateAroundAxis(p, windBendAxis, windAngle * wTip);
-	n = RotateAroundAxis(n, windBendAxis, windAngle * wTip);
+    p = RotateAroundAxis(p, windBendAxis, windAngle * wTip);
+    n = RotateAroundAxis(n, windBendAxis, windAngle * wTip);
+    t = RotateAroundAxis(t, windBendAxis, windAngle * wTip);
 
     // -----------------------------------------------------------------------
     // Flatten to ground when pressed
     // -----------------------------------------------------------------------
-	float3 root = float3(0.0f, 0.0f, 0.0f);
+    float3 root = float3(0.0f, 0.0f, 0.0f);
 
-	float targetFlat = max(g_GrassCB.InteractionBendAngle, 0.0f);
-	float flattenAngle = targetFlat * pressHard;
-	float flattenW = pressHard;
+    float targetFlat = max(g_GrassCB.InteractionBendAngle, 0.0f);
+    float flattenAngle = targetFlat * pressHard;
 
-	float3 local = p - root;
-	local = RotateAroundAxis(local, pressAxis, flattenAngle * flattenW);
-	p = local + root;
+    float3 local = p - root;
+    local = RotateAroundAxis(local, pressAxis, flattenAngle * pressHard);
+    p = local + root;
 
-	n = RotateAroundAxis(n, pressAxis, flattenAngle * flattenW);
+    n = RotateAroundAxis(n, pressAxis, flattenAngle * pressHard);
+    t = RotateAroundAxis(t, pressAxis, flattenAngle * pressHard);
 
-	p.y -= pressHard * g_GrassCB.InteractionSink;
+    p.y -= pressHard * g_GrassCB.InteractionSink;
 
     // -----------------------------------------------------------------------
     // World translate & output
     // -----------------------------------------------------------------------
-	p += posWS;
+    p += posWS;
 
-	OUT.PosWS = p;
-	OUT.NormalWS = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
-	OUT.UV = IN.UV;
-	OUT.Pos = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
+    float3 Nw = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
+    float3 Tw = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
 
-	return OUT;
+    OUT.UV = IN.UV;
+    OUT.WorldPos = p;
+    OUT.WorldN = Nw;
+    OUT.WorldT = Tw;
+    OUT.Pos = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
+
+    return OUT;
 }

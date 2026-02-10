@@ -122,4 +122,6 @@ namespace shz
 
 		Box m_Bounds = {};
 	};
+
+	StaticMesh CreateBillboard(AssetRef<Texture> texureRef, const std::string& templateName, MATERIAL_BLEND_MODE blendMode, float2 scale = { 1.0f, 1.0f }, float2 pivot = { 0.5f, 0.5f });
 } // namespace shz

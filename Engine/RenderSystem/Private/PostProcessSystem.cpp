@@ -15,10 +15,8 @@ namespace shz
 			"Post",
 			[](RenderPassBuilder& b)
 			{
-				const uint64 kLighting = STRING_HASH("LightingFinal");
-
 				// Read final lighting result
-				b.DeclareTextureSRVRead(kLighting);
+				b.DeclareTextureSRVRead(STRING_HASH("LightingScene"));
 
 				// Write to swapchain backbuffer RTV (external)
 				b.DeclareSwapChainRTVWrite();
@@ -55,9 +53,7 @@ namespace shz
 				{
 					if (auto* v = m_pPostSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_InputColor"))
 					{
-						v->Set(
-							ctx.pRegistry->GetTextureSRV(STRING_HASH("LightingFinal")),
-							SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+						v->Set(ctx.pRegistry->GetTextureSRV(STRING_HASH("LightingScene")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 					}
 				}
 

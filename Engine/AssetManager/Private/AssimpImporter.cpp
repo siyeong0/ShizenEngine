@@ -709,6 +709,7 @@ namespace shz
 		const aiScene* scene,
 		const aiMaterial* mat,
 		uint32 materialIndex,
+		const std::string& matTmpl,
 		const std::string& sceneFilePath,
 		const std::filesystem::path& sceneDir,
 		const std::vector<std::filesystem::path>& searchRoots,
@@ -729,7 +730,7 @@ namespace shz
 				name = std::string("Material_") + std::to_string(materialIndex);
 		}
 
-		const std::string templateName = "DefaultLit"; // TODO: from settings?
+		const std::string templateName = matTmpl;
 
 		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
 		MaterialId outId = pMaterialManager->CreateMaterial(name, templateName);
@@ -1094,6 +1095,7 @@ namespace shz
 					scene,
 					mat,
 					i,
+					materialTemplateName,
 					filePath,
 					sceneDir,
 					searchRoots,
