@@ -1,165 +1,39 @@
-#include "HLSL_Structures.hlsli"
 #include "Common.hlsli"
+#include "PBRMaterial.hlsli"
 
-// Constant Buffers
-cbuffer MATERIAL_CONSTANTS
+BASE_PS_MAIN_ENTRY()
 {
-	// BaseColor/Opacity
-	float4 g_BaseColorFactor; // rgb = base color, a = opacity
+	float4 svPos = GET_PSIN_POS();
+	float4 currClip = GET_PSIN_CURR_CLIP();
+	float4 prevClip = GET_PSIN_PREV_CLIP();
+	float3 worldPos = GET_PSIN_WORLD_POS();
+	float2 uv = GET_PSIN_UV();
+	float3 normalWS = GET_PSIN_WORLD_NORMAL();
+	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
-	// Emissive
-	float3 g_EmissiveFactor; // emissive rgb
-	float g_EmissiveIntensity; // scalar
-
-	// PBR factors
-	float g_RoughnessFactor; // scalar
-	float g_NormalScale; // scalar
-	float g_OcclusionStrength; // scalar
-	float g_AlphaCutoff; // scalar (for MASK)
-
-	float g_MetallicFactor; // scalar
-	uint g_MaterialFlags; // bitmask HAS_*
-	uint2 _pad0; // 16-byte align
-}
-
-// Resources
-Texture2D g_BaseColorTex;
-Texture2D g_NormalTex;
-Texture2D g_MetallicRoughnessTex;
-Texture2D g_AOTex;
-Texture2D g_EmissiveTex;
-Texture2D g_HeightTex;
-
-SamplerState g_LinearWrapSampler;
-
-struct PSOutput
-{
-	// GBuffer0: Albedo.rgb, Opacity.a
-	float4 GBuffer0 : SV_TARGET0;
-
-	// GBuffer1: Normal.xyz packed (0..1), unused or normal strength in w
-	float4 GBuffer1 : SV_TARGET1;
-
-	// GBuffer2: Metallic, Roughness, AO, Alpha coverage
-	float4 GBuffer2 : SV_TARGET2;
-
-	// GBuffer3: Emissive.rgb, unused in a
-	float4 GBuffer3 : SV_TARGET3;
-	
-	// Velocity: RG = motion vector (uv delta)
-	float2 Velocity : SV_TARGET4;
-};
-
-// ----------------------------------------------------------------------------
-// Helpers
-// ----------------------------------------------------------------------------
-float3 UnpackNormalTS(float3 n01)
-{
-	return normalize(n01 * 2.0 - 1.0);
-}
-
-float3 PackNormal01(float3 n)
-{
-	return n * 0.5 + 0.5;
-}
-
-// ----------------------------------------------------------------------------
-// Main
-// ----------------------------------------------------------------------------
-void main(in BasePSInput IN, out PSOutput OUT)
-{
-	float2 uv = IN.UV;
-
-	// BaseColor / Opacity
-	float4 baseColor = g_BaseColorFactor;
-	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
-	{
-        baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv);
-        baseColor.a = g_BaseColorTex.SampleBias(g_LinearWrapSampler, uv, -2.0).a;
-    }
+	float3 baseColor = GetBaseColor(uv);
+	float alpha = GetOpacity(uv);
    
-	// --- Alpha/Coverage ---
-    float dist = length(g_FrameCB.CameraPosition - IN.WorldPosition); 
-    float fade = saturate((dist - 0.0) / (100 - 0.0));
-
-    float alphaCutoffNear = 0.30;
-    float alphaCutoffFar = 0.05;
-    float alphaCutoff = lerp(alphaCutoffNear, alphaCutoffFar, fade);
-
-    float alpha = saturate(baseColor.a);
-    float denom = max(1.0f - alphaCutoff, 1e-6f);
-    float coverage = saturate((alpha - alphaCutoff) / denom);
+	float coverage = ClipPixelCoverage(alpha, svPos, worldPos);
 	
-    float t = DitherThreshold4x4((int2) SVPosToPixel(IN.SVPosition));
+	float2 metallicRoughness = GetMetallicRoughness(uv);
+	float metallic = metallicRoughness.x;
+	float roughness = metallicRoughness.y;
+	float ao = GetAmbientOcclusion(uv);
+	float3 emissive = GetEmissive(uv);
+	float3 normal = GetNormal(uv, normalWS, tangentWS);
 
-    clip(coverage - t);
+	float2 currUV = ClipToUV(currClip);
+	float2 prevUV = ClipToUV(prevClip);
 	
-	// Metallic / Roughness
-	float metallic = g_MetallicFactor;
-	float roughness = g_RoughnessFactor;
-
-	if ((g_MaterialFlags & MAT_HAS_MR) != 0)
-	{
-		float4 mr = g_MetallicRoughnessTex.Sample(g_LinearWrapSampler, uv);
-
-		// glTF convention: B = metallic, G = roughness
-		metallic *= mr.b;
-		roughness *= mr.g;
-	}
-
-	metallic = saturate(metallic);
-	roughness = saturate(roughness);
-
-	// AO
-	float ao = 1.0;
-	if ((g_MaterialFlags & MAT_HAS_AO) != 0)
-	{
-		ao = g_AOTex.Sample(g_LinearWrapSampler, uv).r;
-		ao = lerp(1.0, ao, g_OcclusionStrength);
-	}
-
-	// Emissive
-	float3 emissive = g_EmissiveFactor;
-	if ((g_MaterialFlags & MAT_HAS_EMISSIVE) != 0)
-	{
-		emissive *= g_EmissiveTex.Sample(g_LinearWrapSampler, uv).rgb;
-	}
-	emissive *= g_EmissiveIntensity;
-
-	// Normal (World Space) + flip
-	float3 N = normalize(IN.WorldNormal);
-
-	bool bFlipNormal = !IN.bFrontFace;
-	if (bFlipNormal)
-	{
-		N = -N;
-	}
-
-	if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
-	{
-		float3 T = normalize(IN.WorldTangent);
-		float3 B = normalize(cross(N, T));
-
-		float3 nTS = UnpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
-		nTS.xy *= g_NormalScale;
-
-		// Keep normal map consistent on backfaces for two-sided shading
-		if (bFlipNormal)
-		{
-			nTS.xy = -nTS.xy;
-		}
-
-		float3x3 TBN = float3x3(T, B, N);
-		N = normalize(mul(nTS, TBN));
-	}
-
 	// Pack to GBuffer
-	OUT.GBuffer0 = float4(baseColor.rgb, baseColor.a);
-	OUT.GBuffer1 = float4(PackNormal01(N), 1.0);
-	OUT.GBuffer2 = float4(metallic, roughness, ao, coverage);
-	OUT.GBuffer3 = float4(emissive, 1.0);
-	
-	float2 currUV = ClipToUV(IN.CurrClip);
-	float2 prevUV = ClipToUV(IN.PrevClip);
-	OUT.Velocity = currUV - prevUV;
+	SET_PSOUT_ALBEDO(baseColor);
+	SET_PSOUT_OPACITY(alpha);
+	SET_PSOUT_NORMAL(normal);
+	SET_PSOUT_METALLIC(metallic);
+	SET_PSOUT_ROUGHNESS(roughness);
+	SET_PSOUT_AO(ao);
+	SET_PSOUT_ALPHACOVERAGE(coverage);
+	SET_PSOUT_EMISSIVE(emissive);
+	SET_PSOUT_VELOCITY(currUV - prevUV);
 }

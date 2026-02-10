@@ -8,9 +8,9 @@ cbuffer GRASS_RENDER_CONSTANTS
 
 StructuredBuffer<GrassMeshInstance> g_GrassInstances;
 
-void main(BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+BASE_VS_MAIN_ENTRY(InstanceID)
 {
-    GrassMeshInstance rawInst = g_GrassInstances[instanceID];
+	GrassMeshInstance rawInst = g_GrassInstances[InstanceID];
 
 	float3 vertexPosition = GET_VERTEX_POS();
 	float2 vertexUV = GET_VERTEX_UV();

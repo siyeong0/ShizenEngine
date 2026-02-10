@@ -1,9 +1,9 @@
+#include "Common.hlsli"
+
 #ifndef PBR_LIGHTING_HLSLI
 #define PBR_LIGHTING_HLSLI
 
 static const float PI = 3.14159265358979323846;
-
-SamplerState g_LinearClampSampler;
 
 TextureCube<float4> g_EnvMapTex;
 TextureCube<float4> g_IrradianceIBLTex;

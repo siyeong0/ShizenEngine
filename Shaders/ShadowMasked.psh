@@ -18,7 +18,6 @@ cbuffer MATERIAL_CONSTANTS
 }
 
 Texture2D g_BaseColorTex;
-SamplerState g_LinearWrapSampler;
 
 struct PSInput
 {

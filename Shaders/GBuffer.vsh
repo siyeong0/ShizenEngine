@@ -6,9 +6,9 @@ StructuredBuffer<ObjectConstants> g_ObjectTable;
 // ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
-void main(in BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+BASE_VS_MAIN_ENTRY(InstanceID)
 {
-	ObjectConstants oc = g_ObjectTable[g_DrawCB.StartInstanceLocation + instanceID];
+	ObjectConstants oc = g_ObjectTable[g_DrawCB.StartInstanceLocation + InstanceID];
 
 	float3 vertexPosition = GET_VERTEX_POS();
 	float2 vertexUV = GET_VERTEX_UV();

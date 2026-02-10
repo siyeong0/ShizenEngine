@@ -8,8 +8,6 @@ Texture2D<float> g_Depth; // current depth (0..1), same space as history depth i
 
 Texture2D<float4> g_GBuffer2; // .a = coverage (continuous recommended)
 
-SamplerState g_LinearClampSampler;
-
 struct PSInput
 {
     float4 Pos : SV_POSITION;

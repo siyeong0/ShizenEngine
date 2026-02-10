@@ -60,6 +60,37 @@ struct BasePSInput
 	bool bFrontFace : SV_IsFrontFace;
 };
 
+#define GET_PSIN_POS()				(IN.SVPosition)
+#define GET_PSIN_CURR_CLIP()		(IN.CurrClip)
+#define GET_PSIN_PREV_CLIP()		(IN.PrevClip)
+#define GET_PSIN_UV()				(IN.UV)
+#define GET_PSIN_WORLD_POS()		(IN.WorldPosition)
+#define GET_PSIN_WORLD_NORMAL()		(IN.bFrontFace ? IN.WorldNormal : -IN.WorldNormal)
+#define GET_PSIN_WORLD_TANGENT()	(IN.bFrontFace ? IN.WorldTangent : -IN.WorldTangent)
+#define GET_PSIN_FRONTFACE()        (IN.bFrontFace)
+
+struct BasePSOutput
+{
+	float4 GBuffer0 : SV_TARGET0; // Albedo.rgb, Opacity.a
+	float4 GBuffer1 : SV_TARGET1; // Normal.xyz packed (0..1), unused or normal strength in w
+	float4 GBuffer2 : SV_TARGET2; // Metallic, Roughness, AO, AlphaCoverage
+	float4 GBuffer3 : SV_TARGET3; // Emissive.rgb, unused in a
+	float2 Velocity : SV_TARGET4; // RG = motion vector (uv delta)
+};
+
+#define SET_PSOUT_ALBEDO(color)				OUT.GBuffer0.rgb = (color);
+#define SET_PSOUT_OPACITY(opacity)			OUT.GBuffer0.a = (opacity);
+#define SET_PSOUT_NORMAL_PACKED(normal)		OUT.GBuffer1 = float4((normal), 1.0);
+#define SET_PSOUT_NORMAL(normal)			OUT.GBuffer1 = float4(PackNormal01((normal)), 1.0);
+#define SET_PSOUT_METALLIC(metallic)		OUT.GBuffer2.r = (metallic);
+#define SET_PSOUT_ROUGHNESS(roughness)		OUT.GBuffer2.g = (roughness);
+#define SET_PSOUT_AO(ao)					OUT.GBuffer2.b = (ao);
+#define SET_PSOUT_ALPHACOVERAGE(ac)			OUT.GBuffer2.a = (ac);
+#define SET_PSOUT_EMISSIVE(emissive)		OUT.GBuffer3 = float4((emissive), 1.0);
+#define SET_PSOUT_VELOCITY(velocity)		OUT.Velocity = (velocity);
+
+#define BASE_VS_MAIN_ENTRY(INST_ID_VAR) void main(BaseVSInput IN, out BaseVSOutput OUT, uint INST_ID_VAR : SV_InstanceID)
+#define BASE_PS_MAIN_ENTRY()			void main(in BasePSInput IN, out BasePSOutput OUT)
 
 // Constant Buffers
 cbuffer FRAME_CONSTANTS
@@ -71,6 +102,25 @@ cbuffer DRAW_CONSTANTS
 {
 	DrawConstants g_DrawCB;
 };
+
+// Samplers
+SamplerState g_LinearWrapSampler;
+SamplerState g_LinearClampSampler;
+SamplerState g_PointWrapSampler;
+SamplerState g_PointClampSampler;
+
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+float3 UnpackNormalTS(float3 n01)
+{
+	return normalize(n01 * 2.0 - 1.0);
+}
+
+float3 PackNormal01(float3 n)
+{
+	return n * 0.5 + 0.5;
+}
 
 //------------------------------------------------------------------------------
 // Clip / UV helpers
@@ -174,6 +224,21 @@ float4 ApplyTAAJittering(float4 clipSpace)
 
 	clipSpace.xy += jitter;
 	return clipSpace;
+}
+
+float ClipPixelCoverage(float alpha, float4 svPos, float3 worldPos)
+{
+	float dist = length(g_FrameCB.CameraPosition - worldPos);
+	float fade = saturate((dist - 0.0) / (100 - 0.0));
+	float alphaCutoffNear = 0.30;
+	float alphaCutoffFar = 0.05;
+	float alphaCutoff = lerp(alphaCutoffNear, alphaCutoffFar, fade);
+	float denom = max(1.0f - alphaCutoff, 1e-6f);
+	float coverage = saturate((alpha - alphaCutoff) / denom);
+	float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
+	clip(coverage - t);
+	
+	return coverage;
 }
 
 #endif // HLSL_COMMON_HLSLI

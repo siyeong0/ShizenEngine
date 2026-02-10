@@ -1,14 +1,10 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 #include "HeightField.hlsli"
 #include "GrassCommon.hlsli"
 
 // ---------------------------------------------------------------------------
 // Constant buffers
 // ---------------------------------------------------------------------------
-cbuffer FRAME_CONSTANTS
-{
-	FrameConstants g_FrameCB;
-};
 
 cbuffer HEIGHT_FIELD_CONSTANTS
 {
@@ -41,10 +37,6 @@ Texture2D<float> g_DensityField;
 
 // Interaction field (0..1). 1 = heavily pressed.
 Texture2D<float> g_InteractionField;
-
-// Samplers
-SamplerState g_LinearClampSampler;
-SamplerState g_LinearWrapSampler;
 
 // ---------------------------------------------------------------------------
 // Random / Hash

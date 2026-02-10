@@ -22,9 +22,9 @@ float3 RotateAroundUp(float3 v, float3 upWS, float yaw)
     return v * c + cross(a, v) * s + a * dot(a, v) * (1.0f - c);
 }
 
-void main(BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+BASE_VS_MAIN_ENTRY(InstanceID)
 {
-    GrassBillboardInstance rawInst = g_GrassInstances[instanceID];
+    GrassBillboardInstance rawInst = g_GrassInstances[InstanceID];
 
 	float3 vertexPosition = GET_VERTEX_POS();
 	float2 vertexUV = GET_VERTEX_UV();

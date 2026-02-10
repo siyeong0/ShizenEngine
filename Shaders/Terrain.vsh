@@ -9,7 +9,6 @@ cbuffer HEIGHT_FIELD_CONSTANTS
 StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
 
 Texture2D<float> g_HeightField;
-SamplerState g_LinearClampSampler;
 
 static float2 snapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
 {
@@ -50,9 +49,9 @@ static float3 computeNormalAt(float2 worldXZ, float stepMul, TerrainDrawConstant
 	return normalize(float3(-dHdx, up, -dHdz));
 }
 
-void main(BaseVSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
+BASE_VS_MAIN_ENTRY(InstanceID)
 {
-	TerrainDrawConstants terrainDrawCB = g_TerrainDrawConstants[g_DrawCB.StartInstanceLocation + instanceID];
+	TerrainDrawConstants terrainDrawCB = g_TerrainDrawConstants[g_DrawCB.StartInstanceLocation + InstanceID];
 	
 	float3 vertexPosition = GET_VERTEX_POS();
 	
