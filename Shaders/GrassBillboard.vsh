@@ -11,17 +11,6 @@ struct VSInput
     float3 Tangent : ATTRIB3;
 };
 
-struct VSOutput
-{
-	float4 SVPosition : SV_POSITION;
-	float4 CurrClip : TEXCOORD0;
-	float4 PrevClip : TEXCOORD1;
-	float2 UV : TEXCOORD2;
-	float3 WorldPos : TEXCOORD3;
-	float3 WorldN : TEXCOORD4;
-	float3 WorldT : TEXCOORD5;
-};
-
 void GetCameraBasisWS(out float3 rightWS, out float3 upWS, out float3 forwardWS)
 {
     rightWS = float3(g_FrameCB.View._11, g_FrameCB.View._21, g_FrameCB.View._31);
@@ -41,10 +30,8 @@ float3 RotateAroundUp(float3 v, float3 upWS, float yaw)
     return v * c + cross(a, v) * s + a * dot(a, v) * (1.0f - c);
 }
 
-VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
+void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
-    VSOutput OUT;
-
     GrassBillboardInstance rawInst = g_GrassInstances[instanceID];
 
     float3 posWS;
@@ -74,12 +61,10 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     float3 Tw = NormalizeSafe3(camR, float3(1.0f, 0.0f, 0.0f));
 
     OUT.UV = IN.UV;
-    OUT.WorldPos = worldPos;
-    OUT.WorldN = Nw;
-    OUT.WorldT = Tw;
+    OUT.WorldPosition = worldPos;
+    OUT.WorldNormal = Nw;
+    OUT.WorldTangent = Tw;
 	OUT.CurrClip = mul(float4(worldPos, 1.0f), g_FrameCB.ViewProj);
 	OUT.PrevClip = mul(float4(worldPos, 1.0f), g_FrameCB.PrevViewProj);
     OUT.SVPosition = ApplyTAAJittering(mul(float4(worldPos, 1.0f), g_FrameCB.ViewProj));
-    
-    return OUT;
 }

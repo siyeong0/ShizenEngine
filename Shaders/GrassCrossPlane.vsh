@@ -16,21 +16,8 @@ struct VSInput
     float3 Tangent : ATTRIB3;
 };
 
-struct VSOutput
+void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
-	float4 SVPosition : SV_POSITION;
-	float4 CurrClip : TEXCOORD0;
-	float4 PrevClip : TEXCOORD1;
-	float2 UV : TEXCOORD2;
-	float3 WorldPos : TEXCOORD3;
-	float3 WorldN : TEXCOORD4;
-	float3 WorldT : TEXCOORD5;
-};
-
-VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
-{
-    VSOutput OUT;
-
     GrassCrossPlaneInstance rawInst = g_GrassInstances[instanceID];
 
     float3 posWS;
@@ -137,12 +124,10 @@ VSOutput main(VSInput IN, uint instanceID : SV_InstanceID)
     float3 Tw = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
 
     OUT.UV = IN.UV;
-    OUT.WorldPos = p;
-    OUT.WorldN = Nw;
-    OUT.WorldT = Tw;
+    OUT.WorldPosition = p;
+    OUT.WorldNormal = Nw;
+    OUT.WorldTangent = Tw;
 	OUT.CurrClip = mul(float4(p, 1.0f), g_FrameCB.ViewProj);
 	OUT.PrevClip = mul(float4(p, 1.0f), g_FrameCB.PrevViewProj);
     OUT.SVPosition = ApplyTAAJittering(mul(float4(p, 1.0f), g_FrameCB.ViewProj));
-    
-    return OUT;
 }

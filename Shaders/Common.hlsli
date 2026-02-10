@@ -3,6 +3,31 @@
 
 #include "HLSL_Structures.hlsli"
 
+struct BaseVSOutput
+{
+    float4 SVPosition   : SV_POSITION;
+    float4 CurrClip     : TEXCOORD0;
+    float4 PrevClip     : TEXCOORD1;
+    float2 UV           : TEXCOORD2;
+    float3 WorldPosition : TEXCOORD3;
+    float3 WorldNormal   : TEXCOORD4;
+    float3 WorldTangent  : TEXCOORD5;
+};
+
+struct BasePSInput
+{
+    float4 SVPosition   : SV_POSITION;
+    float4 CurrClip     : TEXCOORD0;
+    float4 PrevClip     : TEXCOORD1;
+    float2 UV           : TEXCOORD2;
+    float3 WorldPosition : TEXCOORD3;
+    float3 WorldNormal   : TEXCOORD4;
+    float3 WorldTangent  : TEXCOORD5;
+	
+    bool bFrontFace : SV_IsFrontFace;
+};
+
+
 // Constant Buffers
 cbuffer FRAME_CONSTANTS
 {

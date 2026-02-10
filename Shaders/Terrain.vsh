@@ -19,17 +19,6 @@ struct VSInput
     float3 Tangent : ATTRIB3;
 };
 
-struct VSOutput
-{
-	float4 SVPosition : SV_POSITION;
-	float4 CurrClip : TEXCOORD0;
-	float4 PrevClip : TEXCOORD1;
-	float2 UV : TEXCOORD2;
-	float3 WorldPos : TEXCOORD3;
-	float3 WorldN : TEXCOORD4;
-	float3 WorldT : TEXCOORD5;
-};
-
 static float2 snapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
 {
     float2 cell = hf.WorldSpacingXZ * stepMul;
@@ -69,7 +58,7 @@ static float3 computeNormalAt(float2 worldXZ, float stepMul, TerrainDrawConstant
     return normalize(float3(-dHdx, up, -dHdz));
 }
 
-void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
+void main(VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
     TerrainDrawConstants terrainDrawCB = g_TerrainDrawConstants[g_DrawCB.StartInstanceLocation + instanceID];
     
@@ -95,7 +84,7 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     float wy = lerp(hCoarse, hFine, alpha);
 
     float3 worldPos = float3(worldXZ.x, wy, worldXZ.y);
-    OUT.WorldPos = worldPos;
+    OUT.WorldPosition = worldPos;
 
     OUT.SVPosition = ApplyTAAJittering(mul(float4(worldPos, 1.0), g_FrameCB.ViewProj));
 	OUT.CurrClip = ApplyTAAJittering(mul(float4(worldPos, 1.0), g_FrameCB.ViewProj));
@@ -113,6 +102,6 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     float3 T = float3(1.0, 0.0, 0.0);
     T = normalize(T - N * dot(N, T));
 
-    OUT.WorldN = N;
-    OUT.WorldT = T;
+    OUT.WorldNormal = N;
+    OUT.WorldTangent = T;
 }

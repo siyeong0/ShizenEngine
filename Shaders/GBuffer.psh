@@ -32,20 +32,6 @@ Texture2D g_HeightTex;
 
 SamplerState g_LinearWrapSampler;
 
-// Input / Output
-struct PSInput
-{
-	float4 SVPosition : SV_POSITION;
-	float4 CurrClip : TEXCOORD0;
-	float4 PrevClip : TEXCOORD1;
-	float2 UV : TEXCOORD2;
-	float3 WorldPos : TEXCOORD3;
-	float3 WorldN : TEXCOORD4;
-	float3 WorldT : TEXCOORD5;
-	
-	bool bFrontFace : SV_IsFrontFace;
-};
-
 struct PSOutput
 {
 	// GBuffer0: Albedo.rgb, Opacity.a
@@ -80,7 +66,7 @@ float3 PackNormal01(float3 n)
 // ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
-void main(in PSInput IN, out PSOutput OUT)
+void main(in BasePSInput IN, out PSOutput OUT)
 {
 	float2 uv = IN.UV;
 
@@ -93,7 +79,7 @@ void main(in PSInput IN, out PSOutput OUT)
     }
    
 	// --- Alpha/Coverage ---
-    float dist = length(g_FrameCB.CameraPosition - IN.WorldPos); 
+    float dist = length(g_FrameCB.CameraPosition - IN.WorldPosition); 
     float fade = saturate((dist - 0.0) / (100 - 0.0));
 
     float alphaCutoffNear = 0.30;
@@ -141,7 +127,7 @@ void main(in PSInput IN, out PSOutput OUT)
 	emissive *= g_EmissiveIntensity;
 
 	// Normal (World Space) + flip
-	float3 N = normalize(IN.WorldN);
+	float3 N = normalize(IN.WorldNormal);
 
 	bool bFlipNormal = !IN.bFrontFace;
 	if (bFlipNormal)
@@ -151,7 +137,7 @@ void main(in PSInput IN, out PSOutput OUT)
 
 	if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
 	{
-		float3 T = normalize(IN.WorldT);
+		float3 T = normalize(IN.WorldTangent);
 		float3 B = normalize(cross(N, T));
 
 		float3 nTS = UnpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);

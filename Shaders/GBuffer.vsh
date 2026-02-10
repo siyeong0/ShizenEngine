@@ -12,27 +12,16 @@ struct VSInput
     float3 Tangent : ATTRIB3;
 };
 
-struct VSOutput
-{
-	float4 SVPosition : SV_POSITION;
-	float4 CurrClip : TEXCOORD0;
-	float4 PrevClip : TEXCOORD1;
-	float2 UV : TEXCOORD2;
-	float3 WorldPos : TEXCOORD3;
-	float3 WorldN : TEXCOORD4;
-	float3 WorldT : TEXCOORD5;
-};
-
 // ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
-void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
+void main(in VSInput IN, out BaseVSOutput OUT, uint instanceID : SV_InstanceID)
 {
     ObjectConstants oc = g_ObjectTable[g_DrawCB.StartInstanceLocation + instanceID];
 
     // World position
     float4 worldPos4 = mul(float4(IN.Pos, 1.0), oc.World);
-    OUT.WorldPos = worldPos4.xyz;
+    OUT.WorldPosition = worldPos4.xyz;
 
     // Clip position
     OUT.SVPosition = ApplyTAAJittering(mul(worldPos4, g_FrameCB.ViewProj));
@@ -51,6 +40,6 @@ void main(in VSInput IN, out VSOutput OUT, uint instanceID : SV_InstanceID)
     // Orthonormalize tangent against normal
     T = normalize(T - N * dot(N, T));
 
-    OUT.WorldN = N;
-    OUT.WorldT = T;
+    OUT.WorldNormal = N;
+    OUT.WorldTangent = T;
 }
