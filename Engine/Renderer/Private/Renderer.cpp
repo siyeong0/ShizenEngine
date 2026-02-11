@@ -10,6 +10,7 @@
 
 #include "Engine/GraphicsTools/Public/GraphicsUtilities.h"
 #include "Engine/GraphicsTools/Public/MapHelper.hpp"
+#include "Engine/GraphicsTools/Public/ShaderMacroHelper.hpp"
 #include "Engine/GraphicsUtils/Public/GraphicsUtils.hpp"
 
 #include "Engine/Renderer/Public/DrawPacket.h"
@@ -116,24 +117,24 @@ namespace shz
 			ASSERT(dev, "Device is null.");
 
 			RefCntAutoPtr<IBuffer> frameCB;
+			RefCntAutoPtr<IBuffer> viewCB;
 			RefCntAutoPtr<IBuffer> drawCB;
-			RefCntAutoPtr<IBuffer> shadowCB;
 
 			CreateUniformBuffer(dev, sizeof(hlsl::FrameConstants), "Frame constants", &frameCB);
+			CreateUniformBuffer(dev, sizeof(hlsl::ViewConstants), "View constants", &viewCB);
 			CreateUniformBuffer(dev, sizeof(hlsl::DrawConstants), "Draw constants", &drawCB);
-			CreateUniformBuffer(dev, sizeof(hlsl::ShadowConstants), "Shadow constants", &shadowCB);
 
 			ASSERT(frameCB, "Frame CB create failed.");
+			ASSERT(viewCB, "View CB create failed.");
 			ASSERT(drawCB, "Draw CB create failed.");
-			ASSERT(shadowCB, "Shadow CB create failed.");
 
 			m_pRegistry->RegisterBuffer(STRING_HASH("FRAME_CONSTANTS"), std::move(frameCB));
+			m_pRegistry->RegisterBuffer(STRING_HASH("VIEW_CONSTANTS"), std::move(viewCB));
 			m_pRegistry->RegisterBuffer(STRING_HASH("DRAW_CONSTANTS"), std::move(drawCB));
-			m_pRegistry->RegisterBuffer(STRING_HASH("SHADOW_CONSTANTS"), std::move(shadowCB));
 
 			m_pPipelineStateManager->RegisterStaticBufferCBV("FRAME_CONSTANTS", STRING_HASH("FRAME_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferCBV("VIEW_CONSTANTS", STRING_HASH("VIEW_CONSTANTS"));
 			m_pPipelineStateManager->RegisterStaticBufferCBV("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
-			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
 			{
@@ -151,13 +152,9 @@ namespace shz
 				return sb;
 			};
 
-			AddBuffer(STRING_HASH("ObjectTable.GBuffer"), std::move(createObjectTable("ObjectTableSB.GBuffer")));
-			AddBuffer(STRING_HASH("ObjectTable.Forward"), std::move(createObjectTable("ObjectTableSB.Forward")));
-			AddBuffer(STRING_HASH("ObjectTable.Shadow"), std::move(createObjectTable("ObjectTableSB.Shadow")));
-
-			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ObjectTable", STRING_HASH("ObjectTable.GBuffer"));
-			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ForwardObjectTable", STRING_HASH("ObjectTable.Forward"));
-			m_pPipelineStateManager->RegisterStaticBufferSRV("g_ShadowObjectTable", STRING_HASH("ObjectTable.Shadow"));
+			AddBuffer(STRING_HASH("BasePassObjectTable"), std::move(createObjectTable("BasePassObjectTable")));
+			AddBuffer(STRING_HASH("ForwardPassObjectTable"), std::move(createObjectTable("ForwardPassObjectTable")));
+			AddBuffer(STRING_HASH("ShadowPassObjectTable"), std::move(createObjectTable("ShadowPassObjectTable")));
 		}
 
 		// -----------------------------------------------------------------
@@ -221,7 +218,7 @@ namespace shz
 		}
 
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
-		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh");
+		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 
 		return true;
 	}
@@ -311,12 +308,12 @@ namespace shz
 		// Pull shared renderer resources from registry
 		// ---------------------------------------------------------------------
 		IBuffer* pFrameCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("FRAME_CONSTANTS"));
+		IBuffer* pViewCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("VIEW_CONSTANTS"));
 		IBuffer* pDrawCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS"));
-		IBuffer* pShadowCB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("SHADOW_CONSTANTS"));
 
-		IBuffer* pObjSB_GB = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.GBuffer"));
-		IBuffer* pObjSB_Forward = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Forward"));
-		IBuffer* pObjSB_Shadow = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ObjectTable.Shadow"));
+		IBuffer* pBasePassObjectTable = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("BasePassObjectTable"));
+		IBuffer* pForwardPassObjectTable = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ForwardPassObjectTable"));
+		IBuffer* pShadowPassObjectTable = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("ShadowPassObjectTable"));
 
 		ITexture* pEnvTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvTex"));
 		ITexture* pEnvDiffTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("EnvDiffuseTex"));
@@ -325,9 +322,9 @@ namespace shz
 		ITexture* pErrorTex = m_PassCtx.pRegistry->GetTexture(STRING_HASH("ErrorTex"));
 
 		ASSERT(pFrameCB, "FrameCB missing (registry).");
+		ASSERT(pViewCB, "ViewCB missing (registry).");
 		ASSERT(pDrawCB, "DrawCB missing (registry).");
-		ASSERT(pShadowCB, "ShadowCB missing (registry).");
-		ASSERT(pObjSB_GB && pObjSB_Forward && pObjSB_Shadow, "ObjectTable SB missing (registry).");
+		ASSERT(pBasePassObjectTable && pForwardPassObjectTable && pShadowPassObjectTable, "ObjectTable SB missing (registry).");
 		ASSERT(pEnvTex && pEnvDiffTex && pEnvSpecTex && pEnvBrdfTex, "Env textures missing (registry).");
 		ASSERT(pErrorTex, "Error texture missing (registry).");
 
@@ -349,44 +346,35 @@ namespace shz
 		};
 
 		ViewFrustumExt frustumMain = {};
-		Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+		Matrix4x4 viewProj = view.ViewProjMatrix;
 		ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+
+		m_PassCtx.MainViewFrustum = frustumMain;
 
 		// ------------------------------------------------------------
 		// Update Frame/Shadow constants + compute lightViewProj
 		// ------------------------------------------------------------
-		static Matrix4x4 sPrevViewProj = Matrix4x4::Identity();
-
 		Matrix4x4 lightViewProj = {};
 		{
-			MapHelper<hlsl::FrameConstants> cb(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
+			MapHelper<hlsl::FrameConstants> frameCB(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
-			cb->View = view.ViewMatrix;
+			frameCB->CameraPosition = view.CameraPosition;
+			frameCB->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
 
-			cb->Proj = view.ProjMatrix;
-			cb->ViewProj = viewProj;
-			cb->InvViewProj = cb->ViewProj.Inversed();
-			cb->PrevViewProj = sPrevViewProj;
+			frameCB->FrustumPlanesWS[0] = frustumMain.NearPlane;
+			frameCB->FrustumPlanesWS[1] = frustumMain.FarPlane;
+			frameCB->FrustumPlanesWS[2] = frustumMain.TopPlane;
+			frameCB->FrustumPlanesWS[3] = frustumMain.BottomPlane;
+			frameCB->FrustumPlanesWS[4] = frustumMain.LeftPlane;
+			frameCB->FrustumPlanesWS[5] = frustumMain.RightPlane;
 
-			sPrevViewProj = viewProj;
+			frameCB->ViewportSize = viewportSize;
+			frameCB->InvViewportSize = { 1.f / viewportSize.x, 1.f / viewportSize.y };
 
-			cb->CameraPosition = view.CameraPosition;
-			cb->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
-
-			cb->FrustumPlanesWS[0] = frustumMain.NearPlane;
-			cb->FrustumPlanesWS[1] = frustumMain.FarPlane;
-			cb->FrustumPlanesWS[2] = frustumMain.TopPlane;
-			cb->FrustumPlanesWS[3] = frustumMain.BottomPlane;
-			cb->FrustumPlanesWS[4] = frustumMain.LeftPlane;
-			cb->FrustumPlanesWS[5] = frustumMain.RightPlane;
-
-			cb->ViewportSize = viewportSize;
-			cb->InvViewportSize = { 1.f / viewportSize.x, 1.f / viewportSize.y };
-
-			cb->NearPlane = view.NearPlane;
-			cb->FarPlane = view.FarPlane;
-			cb->DeltaTime = viewFamily.DeltaTime;
-			cb->CurrTime = viewFamily.CurrentTime;
+			frameCB->NearPlane = view.NearPlane;
+			frameCB->FarPlane = view.FarPlane;
+			frameCB->DeltaTime = viewFamily.DeltaTime;
+			frameCB->CurrTime = viewFamily.CurrentTime;
 
 			// Global light (first one)
 			const RenderScene::LightObject* globalLight = nullptr;
@@ -396,9 +384,9 @@ namespace shz
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
 
-			cb->LightDirWS = lightDirWs;
-			cb->LightColor = lightColor;
-			cb->LightIntensity = lightIntensity;
+			frameCB->LightDirWS = lightDirWs;
+			frameCB->LightColor = lightColor;
+			frameCB->LightIntensity = lightIntensity;
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
 			const float ShadowVisibleDistance = 200.0f;
@@ -499,16 +487,26 @@ namespace shz
 				nearZ, farZ);
 
 			lightViewProj = lightView * lightProj;
-			cb->LightViewProj = lightViewProj;
-		}
+			frameCB->LightViewProj = lightViewProj;
 
-		{
-			MapHelper<hlsl::ShadowConstants> cb(ctx, pShadowCB, MAP_WRITE, MAP_FLAG_DISCARD);
-			cb->LightViewProj = lightViewProj;
+			m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
+			m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
+			m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
+
+			m_PassCtx.ShadowView.CameraPosition = float3(0.0f, 0.0f, 0.0f);
+			m_PassCtx.ShadowView.ViewMatrix = lightView;
+			m_PassCtx.ShadowView.ProjMatrix = lightProj;
+			m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
+
+			m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+			m_PassCtx.ShadowView.NearPlane = 0.1f;
+			m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
 		}
 
 		ViewFrustumExt frustumShadow = {};
 		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);
+
+		m_PassCtx.ShadowViewFrustum = frustumShadow;
 
 		// ------------------------------------------------------------
 		// Visibility (dense object indices)
@@ -550,12 +548,12 @@ namespace shz
 		// Common barriers
 		// ------------------------------------------------------------
 		pushBarrier(pFrameCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		pushBarrier(pShadowCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
+		pushBarrier(pViewCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 		pushBarrier(pDrawCB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
 
-		pushBarrier(pObjSB_GB, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		pushBarrier(pObjSB_Forward, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-		pushBarrier(pObjSB_Shadow, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pBasePassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pForwardPassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+		pushBarrier(pShadowPassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvSpecTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
@@ -639,7 +637,7 @@ namespace shz
 			m_PassCtx.MainDrawPackets,
 			instanceRemap);
 
-		packObjectTableFromRemap(pObjSB_GB, instanceRemap);
+		packObjectTableFromRemap(pBasePassObjectTable, instanceRemap);
 
 		// Forward
 		scene.BuildDrawPackets(
@@ -649,7 +647,7 @@ namespace shz
 			m_PassCtx.ForwardDrawPackets,
 			instanceRemap);
 
-		packObjectTableFromRemap(pObjSB_Forward, instanceRemap);
+		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
 		// Shadow
 		scene.BuildDrawPackets(
@@ -659,7 +657,7 @@ namespace shz
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);
 
-		packObjectTableFromRemap(pObjSB_Shadow, instanceRemap);
+		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
@@ -706,6 +704,12 @@ namespace shz
 			if (!barriers.empty())
 			{
 				ctx->TransitionResourceStates(static_cast<uint32>(barriers.size()), barriers.data());
+			}
+
+			if (m_bViewCBDirty)
+			{
+				// Reset to main view
+				UpdateViewConstantBuffer(view);
 			}
 
 			if (pass.eDomain == EPassExecutionDomain::RenderPass && pass.pRHIRenderpass)
@@ -1577,33 +1581,37 @@ namespace shz
 		ASSERT(pMaterialManager, "MaterialManager is null.");
 		ASSERT(pMaterialManager->HasMaterial(materialId), "Material is not found.");
 
-		const Material& material = pMaterialManager->GetMaterial(materialId);
+		Material& material = pMaterialManager->GetMaterial(materialId);
 
 		// ---------------------------------------------------------------------
 		// PSO acquire
 		// ---------------------------------------------------------------------
-		// TODO: Replace
+		EMaterialPass pass = EMaterialPass::Base;
 		if (renderPassKey == STRING_HASH("Shadow"))
 		{
-			if (material.GetBlendMode() == MATERIAL_BLEND_MODE_OPAQUE)
-			{
-				out.pPSO = m_pShadowOpaquePSO;
-			}
-			else if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
-			{
-				out.pPSO = m_pShadowMaskedPSO;
-			}
-			else
-			{
-				ASSERT(false, "Not supported");
-			}
+			pass = EMaterialPass::ShadowDepth;
+			material.SetBufferResource("g_ObjectTable", STRING_HASH("ShadowPassObjectTable"));
+		}
+		else if (renderPassKey == STRING_HASH("DepthPrepass"))
+		{
+			pass = EMaterialPass::DepthOnly;
+			material.SetBufferResource("g_ObjectTable", STRING_HASH("BasePassObjectTable"));
+		}
+		else if (renderPassKey == STRING_HASH("Forward"))
+		{
+			pass = EMaterialPass::Forward;
+			material.SetBufferResource("g_ObjectTable", STRING_HASH("ForwardPassObjectTable"));
+		}
+		else
+		{
+			pass = EMaterialPass::Base;
+			material.SetBufferResource("g_ObjectTable", STRING_HASH("BasePassObjectTable"));
 		}
 
 		ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
 		ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
 
-		GraphicsPipelineStateCreateInfo psoCI =
-			material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
+		GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass, pass);
 
 		out.pPSO = m_pPipelineStateManager->AcquireGraphics(psoCI);
 		ASSERT(out.pPSO, "Failed to acquire PSO.");
@@ -1651,7 +1659,7 @@ namespace shz
 			// Fallback: probe all shaders used by the material/template.
 			if (!anyBound)
 			{
-				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
+				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders(pass))
 				{
 					ASSERT(shader, "Shader in source instance is null.");
 					const SHADER_TYPE st = shader->GetDesc().ShaderType;
@@ -1867,179 +1875,67 @@ namespace shz
 		return m_PipelineBindingCache[hash];
 	}
 
-	RefCntAutoPtr<IPipelineState> Renderer::AcquirePipelineStateFromMaterial(MaterialId materialId, uint64 renderPassKey) const
-	{
-		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
-		ASSERT(pMaterialManager->HasMaterial(materialId), "Material is not found.");
-
-		const Material& material = pMaterialManager->GetMaterial(materialId);
-
-		// TODO: Replace
-		if (renderPassKey == STRING_HASH("Shadow"))
-		{
-			if (material.GetBlendMode() == MATERIAL_BLEND_MODE_OPAQUE)
-			{
-				return m_pShadowOpaquePSO;
-			}
-			else if (material.GetBlendMode() == MATERIAL_BLEND_MODE_MASKED)
-			{
-				return m_pShadowMaskedPSO;
-			}
-			else
-			{
-				ASSERT(false, "Not supported");
-			}
-		}
-
-		RefCntAutoPtr<IPipelineState> pOutPipelineState;
-
-		ASSERT(renderPassKey != 0, "Render pass must be set in graphics pipeline.");
-		ASSERT(m_PassTable.contains(renderPassKey), "Render pass not found.");
-		GraphicsPipelineStateCreateInfo psoCI = material.BuildGraphicsPipelineStateCreateInfo(m_PassTable.at(renderPassKey).pRHIRenderpass);
-		pOutPipelineState = m_pPipelineStateManager->AcquireGraphics(psoCI);
-
-		return pOutPipelineState;
-	}
-
-	RefCntAutoPtr<IShaderResourceBinding> Renderer::AcquireShaderResourceBindingFromMaterial(MaterialId materialId, IPipelineState* pso)
-	{
-		MaterialManager* pMaterialManager = MaterialManager::GetInstance();
-		ASSERT(pMaterialManager->HasMaterial(materialId), "Material is not found.");
-
-		const Material& material = pMaterialManager->GetMaterial(materialId);
-
-		RefCntAutoPtr<IShaderResourceBinding> pOutSRB;
-
-		// Create SRB
-		pso->CreateShaderResourceBinding(&pOutSRB, true);
-		ASSERT(pOutSRB, "Failed to create SRB.");
-
-		// ---------------------------------------------------------------------
-		// Constant Buffers (bind ALL reflected CBs)
-		// ---------------------------------------------------------------------
-		const uint32 cbCount = material.GetTemplate().GetCBufferCount();
-		for (uint32 cbIndex = 0; cbIndex < cbCount; ++cbIndex)
-		{
-			const MaterialCBufferDesc& cb = material.GetTemplate().GetCBuffer(cbIndex);
-
-			BufferDesc desc = {};
-			desc.Name = cb.Name.c_str();
-			desc.Usage = USAGE_DEFAULT;
-			desc.BindFlags = BIND_UNIFORM_BUFFER;
-			desc.CPUAccessFlags = CPU_ACCESS_NONE;
-			desc.Size = cb.ByteSize;
-
-			RefCntAutoPtr<IBuffer> pConstantBuffer;
-			m_pDevice->CreateBuffer(desc, nullptr, &pConstantBuffer);
-			ASSERT(pConstantBuffer, "Failed to create constant buffer: %s", cb.Name.c_str());
-
-			// Bind by name for stages that expose it.
-			for (const RefCntAutoPtr<IShader>& shader : material.GetShaders())
-			{
-				ASSERT(shader, "Shader in source instance is null.");
-
-				const SHADER_TYPE st = shader->GetDesc().ShaderType;
-				IShaderResourceVariable* var = pOutSRB->GetVariableByName(st, cb.Name.c_str());
-				if (var)
-				{
-					var->Set(pConstantBuffer);
-				}
-			}
-
-			// Upload initial blob
-			const uint8* pBlob = material.GetCBufferBlobData(cbIndex);
-			const uint32 blobSize = material.GetCBufferBlobSize(cbIndex);
-
-			ASSERT(pBlob, "Invalid blob pointer. cb=%s", cb.Name.c_str());
-			ASSERT(blobSize == cb.ByteSize, "Blob size mismatch. cb=%s blob=%u expected=%u", cb.Name.c_str(), blobSize, cb.ByteSize);
-			ASSERT(blobSize <= pConstantBuffer->GetDesc().Size, "Blob size exceeds CB size. cb=%s", cb.Name.c_str());
-
-			m_pImmediateContext->UpdateBuffer(
-				pConstantBuffer,
-				0,
-				blobSize,
-				pBlob,
-				RESOURCE_STATE_TRANSITION_MODE_TRANSITION
-			);
-
-			pushBarrier(pConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER);
-		}
-
-		// ---------------------------------------------------------------------
-		// Textures (bind by reflected resource list)
-		// ---------------------------------------------------------------------
-		const uint32 resCount = material.GetTemplate().GetResourceCount();
-		for (uint32 i = 0; i < resCount; ++i)
-		{
-			const MaterialResourceDesc& resDesc = material.GetTemplate().GetResource(i);
-
-			if (resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2D &&
-				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURE2DARRAY &&
-				resDesc.Type != MATERIAL_RESOURCE_TYPE_TEXTURECUBE)
-			{
-				continue;
-			}
-
-			RefCntAutoPtr<ITexture> pTexture;
-			ITextureView* pView = nullptr;
-
-			// Prefer simplified map lookup (MaterialTexture)
-			if (const MaterialTexture* mt = material.GetTextureOrNull(resDesc.Name))
-			{
-				ASSERT(mt->Texture.IsValid(), "Material texture ref invalid: %s", resDesc.Name.c_str());
-				pTexture = CreateTexture(mt->Texture);
-				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			}
-			else
-			{
-				// fallback error
-				pTexture = m_pRegistry->GetTexture(STRING_HASH("ErrorTex"));
-				pView = pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-			}
-
-			bool bSet = false;
-			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_VERTEX, resDesc.Name.c_str()))
-			{
-				var->Set(pView);
-				bSet = true;
-			}
-			if (IShaderResourceVariable* var = pOutSRB->GetVariableByName(SHADER_TYPE_PIXEL, resDesc.Name.c_str()))
-			{
-				var->Set(pView);
-				bSet = true;
-			}
-
-			if (bSet)
-			{
-				ASSERT(pTexture, "");
-				pushBarrier(pTexture, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
-			}
-		}
-
-		return pOutSRB;
-	}
-
 	// ---------------------------------------------------------------------
 	// Material templates
 	// ---------------------------------------------------------------------
 
-	void Renderer::RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo)
+	void Renderer::RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
 	{
 		ASSERT(createInfo.ShaderStages.size() >= 1, "At least one shader stage must be specified.");
 		ASSERT(createInfo.TemplateName != "", "Material template name is empty.");
 
-		const std::string& name = createInfo.TemplateName;
-		auto it = m_TemplateLibrary.find(name);
-		ASSERT(it == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
+		bool bResult = false;
 
-		MaterialTemplate matTemplate;
-		bool bResult = matTemplate.Initialize(*this, createInfo);
-		ASSERT(bResult, "Failed to create material template: %s", name.c_str());
+		MaterialTemplateCreateInfo baseCreateInfo = createInfo;
 
-		m_TemplateLibrary[name] = std::move(matTemplate);
+		// Base pass
+		{
+			const std::string& name = baseCreateInfo.TemplateName;
+			ASSERT(m_TemplateLibrary.find(name) == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
+
+			ShaderMacroHelper macros;
+			switch (blendMode)
+			{
+			case MATERIAL_BLEND_MODE_OPAQUE:
+				macros.AddShaderMacro("OPAQUE", 1);
+				break;
+			case MATERIAL_BLEND_MODE_MASKED:
+				macros.AddShaderMacro("MASKED", 1);
+				break;
+			case MATERIAL_BLEND_MODE_TRANSPARENT:
+				macros.AddShaderMacro("TRANSPARENT", 1);
+				break;
+			}
+			baseCreateInfo.MacroArray = macros;
+
+			MaterialTemplate baseTemplate;
+			bResult = baseTemplate.Initialize(*this, baseCreateInfo);
+			ASSERT(bResult, "Failed to create material template: %s", name.c_str());
+			m_TemplateLibrary[name] = std::move(baseTemplate);
+		}
+
+		// Depth only
+		if (bRegisterDepthOnly)
+		{
+			const std::string name = baseCreateInfo.TemplateName + "_DepthOnly";
+			ASSERT(m_TemplateLibrary.find(name) == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
+
+			MaterialTemplateCreateInfo depthOnlyCreateInfo = baseCreateInfo;
+			depthOnlyCreateInfo.TemplateName = name;
+
+			MaterialTemplate depthOnlyTemplate;
+
+			ShaderMacroHelper macros;
+			macros.AddShaderMacro("DEPHT_ONLY", 1);
+			depthOnlyCreateInfo.MacroArray = macros;
+
+			bResult = depthOnlyTemplate.Initialize(*this, createInfo);
+			ASSERT(bResult, "Failed to create material template: %s", name.c_str());
+			m_TemplateLibrary[name] = std::move(depthOnlyTemplate);
+		}
 	}
 
-	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath)
+	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -2056,10 +1952,10 @@ namespace shz
 		psDesc.EntryPoint = "main";
 		createInfo.ShaderStages.push_back(psDesc);
 
-		RegisterMaterialTemplate(createInfo);
+		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly);
 	}
 
-	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry)
+	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -2076,7 +1972,7 @@ namespace shz
 		psDesc.EntryPoint = psEntry;
 		createInfo.ShaderStages.push_back(psDesc);
 
-		RegisterMaterialTemplate(createInfo);
+		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly);
 	}
 
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const
@@ -2096,10 +1992,18 @@ namespace shz
 		return names;
 	}
 
-	void Renderer::SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO)
+	void Renderer::UpdateViewConstantBuffer(const View& view)
 	{
-		m_pShadowOpaquePSO = pOpaquePSO;
-		m_pShadowMaskedPSO = pMaskedPSO;
+		IBuffer* pViewCB = m_pRegistry->GetBuffer(STRING_HASH("VIEW_CONSTANTS"));
+		MapHelper<hlsl::ViewConstants> viewCB(m_pImmediateContext, pViewCB, MAP_WRITE, MAP_FLAG_DISCARD);
+
+		viewCB->View = view.ViewMatrix;
+		viewCB->Proj = view.ProjMatrix;
+		viewCB->ViewProj = view.ViewProjMatrix;
+		viewCB->InvViewProj = view.ViewProjMatrix.Inversed();
+		viewCB->PrevViewProj = view.PrevViewProjMatrix;
+
+		m_bViewCBDirty = true;
 	}
 
 	// ---------------------------------------------------------------------

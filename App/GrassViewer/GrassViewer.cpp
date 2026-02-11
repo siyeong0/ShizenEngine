@@ -37,14 +37,20 @@ namespace shz
 
 			auto& v = vf.Views[0];
 
+			v.PrevViewMatrix = v.ViewMatrix;
+			v.PrevProjMatrix = v.ProjMatrix;
+			v.PrevViewProjMatrix = v.ViewProjMatrix;
+
+			v.CameraPosition = cam.GetPos();
+
+			v.ViewMatrix = cam.GetViewMatrix();
+			v.ProjMatrix = cam.GetProjMatrix();
+			v.ViewProjMatrix = v.ViewMatrix * v.ProjMatrix;
+
 			v.Viewport.left = 0;
 			v.Viewport.top = 0;
 			v.Viewport.right = vp.Width;
 			v.Viewport.bottom = vp.Height;
-
-			v.CameraPosition = cam.GetPos();
-			v.ViewMatrix = cam.GetViewMatrix();
-			v.ProjMatrix = cam.GetProjMatrix();
 
 			v.NearPlane = cam.GetProjAttribs().NearClipPlane;
 			v.FarPlane = cam.GetProjAttribs().FarClipPlane;
@@ -351,9 +357,9 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
-				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh");
-				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh");
-				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh");
+				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMesh& mesh)
 				{
@@ -786,7 +792,7 @@ namespace shz
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 0;
+			constexpr uint  NUM_TREES = 1000;
 
 			std::mt19937 rng(1337);
 			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);

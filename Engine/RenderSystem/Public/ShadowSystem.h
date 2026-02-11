@@ -20,14 +20,5 @@ namespace shz
 		void InstallPasses(Renderer& renderer);
 
 	private:
-		// Shaders
-		std::string m_ShadowVS = "Shadow.vsh";
-		std::string m_ShadowPS = "Shadow.psh";
-		std::string m_ShadowMaskedVS = "ShadowMasked.vsh";
-		std::string m_ShadowMaskedPS = "ShadowMasked.psh";
-
-		// PSO/SRB (Opaque)
-		RefCntAutoPtr<IPipelineState> m_pShadowOpaquePSO;
-		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
 	};
 } // namespace shz

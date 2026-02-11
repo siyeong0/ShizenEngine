@@ -222,18 +222,15 @@ namespace shz
 		RefCntAutoPtr<IPipelineState> AcquirePipelineState(uint64 passId, ComputePipelineStateCreateInfo& desc, bool bBindCommonResources = true);
 
 		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 passKey);
-		RefCntAutoPtr<IPipelineState> AcquirePipelineStateFromMaterial(MaterialId id, uint64 renderPassKey) const;
-		RefCntAutoPtr<IShaderResourceBinding> AcquireShaderResourceBindingFromMaterial(MaterialId id, IPipelineState* pso);
 
 		// Material
-		void RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo);
-		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath);
-		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry);
+		void RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
-		// Shadow pso, srb
-		void SetShadowPipeline(RefCntAutoPtr<IPipelineState> pOpaquePSO, RefCntAutoPtr<IPipelineState> pMaskedPSO);
+		void UpdateViewConstantBuffer(const View& view);
 
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
@@ -294,7 +291,6 @@ namespace shz
 		std::unordered_map<uint64, RESOURCE_STATE> m_ResourceStates = {};
 		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
 
-		RefCntAutoPtr<IPipelineState> m_pShadowOpaquePSO;
-		RefCntAutoPtr<IPipelineState> m_pShadowMaskedPSO;
+		bool m_bViewCBDirty = true;
 	};
 } // namespace shz

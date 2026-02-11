@@ -7,8 +7,15 @@ namespace shz
     struct View
     {
         float3 CameraPosition;
+
         Matrix4x4 ViewMatrix;
         Matrix4x4 ProjMatrix;
+        Matrix4x4 ViewProjMatrix;
+
+        Matrix4x4 PrevViewMatrix;
+        Matrix4x4 PrevProjMatrix;
+        Matrix4x4 PrevViewProjMatrix;
+
         Rect Viewport;
         float32 NearPlane;
         float32 FarPlane;

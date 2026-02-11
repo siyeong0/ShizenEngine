@@ -42,6 +42,11 @@ namespace shz
 
 		RefCntAutoPtr<IRenderPass> pRHIRenderPass;
 
+		ViewFrustumExt MainViewFrustum;
+		ViewFrustumExt ShadowViewFrustum;
+
+		View ShadowView;
+
 		// ------------------------------------------------------------
 		// Per-pass packets (Renderer°¡ Ã¤¿ò)
 		// ------------------------------------------------------------

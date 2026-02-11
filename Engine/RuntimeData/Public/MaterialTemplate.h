@@ -24,6 +24,8 @@ namespace shz
 		std::string FilePath = {};
 		std::string EntryPoint = "main";
 
+		ShaderMacroArray MacroArray = {};
+
 		SHADER_SOURCE_LANGUAGE SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 		SHADER_COMPILE_FLAGS   CompileFlags = SHADER_COMPILE_FLAG_PACK_MATRIX_ROW_MAJOR;
 
@@ -34,6 +36,7 @@ namespace shz
 	{
 		std::string TemplateName = {};
 		std::vector<MaterialShaderStageDesc> ShaderStages = {};
+		ShaderMacroArray MacroArray = {};
 	};
 
 	struct MaterialValueParamDesc final

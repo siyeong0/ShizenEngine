@@ -4,6 +4,8 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+#include "Engine/GraphicsTools/Public/ShaderMacroHelper.hpp"
+
 #include "Engine/Renderer/Public/Renderer.h" 
 
 namespace shz
@@ -180,6 +182,17 @@ namespace shz
 				sci.Desc.ShaderType = s.ShaderType;
 				sci.Desc.UseCombinedTextureSamplers = s.UseCombinedTextureSamplers;
 				sci.FilePath = s.FilePath.c_str();
+
+				ShaderMacroHelper macros;
+				for (uint32 i = 0; i < ci.MacroArray.Count; ++i)
+				{
+					macros.Add(ci.MacroArray[i]);
+				}
+				for (uint32 i = 0; i < s.MacroArray.Count; ++i)
+				{
+					macros.Add(s.MacroArray[i]);
+				}
+				sci.Macros = macros;
 
 				RefCntAutoPtr<IShader> pShader;
 				renderer.CreateShader(sci, &pShader);

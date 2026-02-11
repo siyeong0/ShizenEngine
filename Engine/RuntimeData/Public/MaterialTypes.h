@@ -55,6 +55,14 @@ namespace shz
 	};
 	DEFINE_FLAG_ENUM_OPERATORS(MaterialParamFlags);
 
+	enum class EMaterialPass : uint8
+	{
+		Base,
+		Forward,
+		DepthOnly,
+		ShadowDepth,
+	};
+
 	enum MATERIAL_BLEND_MODE : uint8
 	{
 		MATERIAL_BLEND_MODE_OPAQUE = 0,        // default

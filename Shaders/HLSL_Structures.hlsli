@@ -6,12 +6,6 @@
 // ----------------------------------------------
 struct FrameConstants
 {
-    float4x4 View;
-    float4x4 Proj;
-    float4x4 ViewProj;
-    float4x4 InvViewProj;
-	float4x4 PrevViewProj;
-    
     float3 CameraPosition;
 	uint FrameIndex;
 
@@ -25,22 +19,27 @@ struct FrameConstants
     float DeltaTime;
     float CurrTime;
 
-    float4x4 LightViewProj;
     float3 LightDirWS;
     float _pad0;
     
     float3 LightColor;
     float LightIntensity;
+    
+    float4x4 LightViewProj;
+};
+
+struct ViewConstants
+{
+    float4x4 View;
+    float4x4 Proj;
+    float4x4 ViewProj;
+    float4x4 InvViewProj;
+    float4x4 PrevViewProj;
 };
 
 struct DrawConstants
 {
     uint StartInstanceLocation;
-};
-
-struct ShadowConstants
-{
-    float4x4 LightViewProj;
 };
 
 // ----------------------------------------------

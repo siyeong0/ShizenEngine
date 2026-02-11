@@ -5,29 +5,31 @@ namespace shz
 {
 	Material::Material(const std::string& name, const std::string& templateName)
 		: m_Name(name)
-		, m_TemplateName(templateName)
-		, m_Template(m_sTemplateLibrary->at(templateName))
+		, m_BaseTemplateName(templateName)
+		, m_BaseTemplate(m_sTemplateLibrary->at(m_BaseTemplateName))
+		, m_DepthOnlyTemplateName(templateName + "_DepthOnly")
+		, m_DepthOnlyTemplate(m_sTemplateLibrary->at(m_DepthOnlyTemplateName))
 	{
 		// Ensure runtime template binding
 		{
 			// Constant buffers (multi-CB)
-			const uint32 cbCount = m_Template.GetCBufferCount();
+			const uint32 cbCount = m_BaseTemplate.GetCBufferCount();
 			m_CBufferBlobs.resize(cbCount);
 
 			for (uint32 i = 0; i < cbCount; ++i)
 			{
-				const MaterialCBufferDesc& CB = m_Template.GetCBuffer(i);
+				const MaterialCBufferDesc& CB = m_BaseTemplate.GetCBuffer(i);
 				m_CBufferBlobs[i].resize(CB.ByteSize);
 				std::memset(m_CBufferBlobs[i].data(), 0, CB.ByteSize);
 			}
 
 			// Resources -> one binding per template resource
-			const uint32 resCount = m_Template.GetResourceCount();
+			const uint32 resCount = m_BaseTemplate.GetResourceCount();
 			m_ResourceBindings.resize(resCount);
 
 			for (uint32 i = 0; i < resCount; ++i)
 			{
-				const MaterialResourceDesc& rd = m_Template.GetResource(i);
+				const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(i);
 
 				MaterialResourceBinding& b = m_ResourceBindings[i];
 				b = {};
@@ -49,10 +51,10 @@ namespace shz
 
 		// Constant buffers (ALL)
 		{
-			const uint32 cbCount = m_Template.GetCBufferCount();
+			const uint32 cbCount = m_BaseTemplate.GetCBufferCount();
 			for (uint32 i = 0; i < cbCount; ++i)
 			{
-				const MaterialCBufferDesc& cb = m_Template.GetCBuffer(i);
+				const MaterialCBufferDesc& cb = m_BaseTemplate.GetCBuffer(i);
 
 				ShaderResourceVariableDesc v = {};
 				v.ShaderStages = cb.ShaderStages;
@@ -64,10 +66,10 @@ namespace shz
 
 		// Resources (textures + buffers)
 		{
-			const uint32 resCount = m_Template.GetResourceCount();
+			const uint32 resCount = m_BaseTemplate.GetResourceCount();
 			for (uint32 i = 0; i < resCount; ++i)
 			{
-				const MaterialResourceDesc& r = m_Template.GetResource(i);
+				const MaterialResourceDesc& r = m_BaseTemplate.GetResource(i);
 
 				ShaderResourceVariableDesc v = {};
 				v.ShaderStages = r.ShaderStages;
@@ -168,7 +170,7 @@ namespace shz
 		ASSERT(pData, "pData is null.");
 
 		MaterialValueParamDesc desc = {};
-		if (!m_Template.ValidateSetValue(name, expectedType, &desc))
+		if (!m_BaseTemplate.ValidateSetValue(name, expectedType, &desc))
 		{
 			return false;
 		}
@@ -229,12 +231,12 @@ namespace shz
 		ASSERT(resourceId != 0, "Invalid resourceId (0).");
 
 		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
+		if (!m_BaseTemplate.FindResourceIndex(resourceName, &resIndex))
 		{
 			return false;
 		}
 
-		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(resIndex);
 
 		const bool bIsTex = IsTextureType(rd.Type);
 		const bool bIsBuf = (rd.Type == MATERIAL_RESOURCE_TYPE_STRUCTUREDBUFFER) || (rd.Type == MATERIAL_RESOURCE_TYPE_RWSTRUCTUREDBUFFER);
@@ -264,12 +266,12 @@ namespace shz
 		ASSERT(resourceName && resourceName[0] != '\0', "Invalid name.");
 
 		uint32 resIndex = 0;
-		if (!m_Template.FindResourceIndex(resourceName, &resIndex))
+		if (!m_BaseTemplate.FindResourceIndex(resourceName, &resIndex))
 		{
 			return false;
 		}
 
-		const MaterialResourceDesc& rd = m_Template.GetResource(resIndex);
+		const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(resIndex);
 		if (!IsTextureType(rd.Type))
 		{
 			return false;
@@ -309,9 +311,11 @@ namespace shz
 	// ---------------------------------------------------------------------
 	// Build graphics PSO create info (no persistent desc state)
 	// ---------------------------------------------------------------------
-	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const
+	GraphicsPipelineStateCreateInfo Material::BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass, EMaterialPass pass) const
 	{
 		ASSERT(pRenderPass, "RenderPass is null.");
+
+		const MaterialTemplate& tmpl = (pass == EMaterialPass::DepthOnly || pass == EMaterialPass::ShadowDepth)? m_DepthOnlyTemplate : m_BaseTemplate;
 
 		GraphicsPipelineStateCreateInfo outCI = {};
 
@@ -391,7 +395,7 @@ namespace shz
 		bool bHasMeshStages = false;
 		bool bHasLegacyStages = false;
 
-		for (const RefCntAutoPtr<IShader>& shader : GetShaders())
+		for (const RefCntAutoPtr<IShader>& shader : GetShaders(pass))
 		{
 			ASSERT(shader, "Shader in template is null.");
 
@@ -424,11 +428,14 @@ namespace shz
 		return outCI;
 	}
 
+	const std::vector<RefCntAutoPtr<IShader>>& Material::GetShaders(EMaterialPass pass) const noexcept 
+	{ 
+		const MaterialTemplate& tmpl = (pass == EMaterialPass::DepthOnly || pass == EMaterialPass::ShadowDepth) ? m_DepthOnlyTemplate : m_BaseTemplate;
+		return tmpl.GetShaders();
+	}
+
 	void Material::Clear()
 	{
-		m_Name.clear();
-		m_TemplateName.clear();
-
 		// options reset
 		m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 		m_CullMode = CULL_MODE_BACK;

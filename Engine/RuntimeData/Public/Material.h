@@ -148,9 +148,9 @@ namespace shz
 		}
 
 		const std::string& GetName() const noexcept { return m_Name; }
-		const std::string& GetTemplateName() const noexcept { return m_TemplateName; }
 
-		const MaterialTemplate& GetTemplate() const noexcept { return m_Template; }
+		const std::string& GetTemplateName() const noexcept { return m_BaseTemplateName; }
+		const MaterialTemplate& GetTemplate() const noexcept { return m_BaseTemplate; }
 
 		void SetBlendMode(MATERIAL_BLEND_MODE mode) { m_BlendMode = mode; }
 		void SetCullMode(CULL_MODE mode) { m_CullMode = mode; }
@@ -220,9 +220,9 @@ namespace shz
 		// - For buffers (StructuredBuffer / RWStructuredBuffer), bind by ResourceId
 		bool SetBufferResource(const char* resourceName, uint64 resourceId);
 
-		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass) const;
+		GraphicsPipelineStateCreateInfo BuildGraphicsPipelineStateCreateInfo(IRenderPass* pRenderPass, EMaterialPass pass) const;
+		const std::vector<RefCntAutoPtr<IShader>>& GetShaders(EMaterialPass pass) const noexcept;
 
-		const std::vector<RefCntAutoPtr<IShader>>& GetShaders() const noexcept { return m_Template.GetShaders(); }
 		const std::unordered_map<std::string, MaterialValueBlob>& GetAllValues() const noexcept { return m_Values; }
 		const std::unordered_map<std::string, MaterialTexture>& GetAllTextures() const noexcept { return m_Textures; }
 
@@ -238,10 +238,12 @@ namespace shz
 
 		// Metadata
 		std::string m_Name = {};
-		std::string m_TemplateName = {};
 
-		// Runtime template binding
-		const MaterialTemplate& m_Template;
+		std::string m_BaseTemplateName = {};
+		const MaterialTemplate& m_BaseTemplate;
+
+		std::string m_DepthOnlyTemplateName = {};
+		const MaterialTemplate& m_DepthOnlyTemplate;
 
 		// Minimal options
 		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;

@@ -34,7 +34,7 @@ static float3 ReconstructWorldPos(float2 uv, float depth01)
     float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
     float4 ndc = float4(ndcXY, depth01, 1.0);
 
-    float4 ws = mul(ndc, g_FrameCB.InvViewProj);
+    float4 ws = mul(ndc, g_ViewCB.InvViewProj);
     ws.xyz /= max(ws.w, 1e-6);
     return ws.xyz;
 }
@@ -47,8 +47,8 @@ static float3 ReconstructWorldRayDir(float2 uv)
     float4 ndcNear = float4(ndcXY, 0.0, 1.0);
     float4 ndcFar = float4(ndcXY, 1.0, 1.0);
 
-    float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
-    float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
+    float4 wsNear = mul(ndcNear, g_ViewCB.InvViewProj);
+    float4 wsFar = mul(ndcFar, g_ViewCB.InvViewProj);
 
     wsNear.xyz /= max(wsNear.w, 1e-6);
     wsFar.xyz /= max(wsFar.w, 1e-6);
