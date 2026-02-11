@@ -19,6 +19,7 @@ namespace shz
     {
         float LOD0Distance = 12.0f;
         float LOD1Distance = 35.0f;
+        float LOD2Distance = 60.0f;
         float LodHysteresis = 1.0f;
 
         const StaticMeshRenderData* pMeshLod0 = nullptr;

@@ -278,6 +278,7 @@ namespace shz
 
 			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
 			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
+			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Normal.png";
 
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
@@ -320,6 +321,14 @@ namespace shz
 
 				m_pRenderer->AddTexture(STRING_HASH("HeightField"), desc, &initData);
 				m_pRenderer->RegisterStaticTextureResource("g_HeightField", STRING_HASH("HeightField"));
+			}
+
+			// Create terrain normal texture
+			{
+				RefCntAutoPtr<ITexture> normalTex = m_pRenderer->CreateTexture(m_pTerrainSystem->GetNormalTextureRef());
+
+				m_pRenderer->AddTexture(STRING_HASH("TerrainNormal"), std::move(normalTex));
+				m_pRenderer->RegisterStaticTextureResource("g_TerrainNormal", STRING_HASH("TerrainNormal"));
 			}
 
 			// Constant buffers

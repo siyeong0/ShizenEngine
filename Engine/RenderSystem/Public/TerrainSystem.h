@@ -27,7 +27,8 @@ namespace shz
 		struct CreateInfo final
 		{
 			std::string HeightMapPath = {};
-			std::string DiffusePath = {}; // optional
+			std::string DiffusePath = {};
+			std::string NormalPath = {};
 
 			float ChunkSize = 64.0f;
 			float WorldSpacingX = 1.0f;
@@ -94,6 +95,7 @@ namespace shz
 		// Assets (CPU)
 		const AssetRef<Texture>& GetHeightTextureRef() const noexcept { return m_HeightTexRef; }
 		const AssetRef<Texture>& GetDiffuseTextureRef() const noexcept { return m_DiffuseTexRef; }
+		const AssetRef<Texture>& GetNormalTextureRef() const noexcept { return m_NormalTexRef; }
 
 		const Texture* GetHeightTexture() const noexcept { return m_HeightTex.Get(); }
 
@@ -120,6 +122,7 @@ namespace shz
 
 		AssetRef<Texture> m_HeightTexRef = {};
 		AssetRef<Texture> m_DiffuseTexRef = {};
+		AssetRef<Texture> m_NormalTexRef = {};
 
 		AssetPtr<Texture> m_HeightTex;
 

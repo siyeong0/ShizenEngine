@@ -340,10 +340,15 @@ namespace shz
 		m_HeightTex = assetManager.LoadBlocking<Texture>(m_HeightTexRef);
 		ASSERT(m_HeightTex && m_HeightTex->IsValid(), "Failed to load height Texture asset.");
 
-		// Optional diffuse (CPU)
+		// Diffuse
 		if (!m_CI.DiffusePath.empty())
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
+		}
+		// Normal
+		if (!m_CI.NormalPath.empty())
+		{
+			m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
 		}
 
 		// CPU height array
@@ -490,15 +495,18 @@ namespace shz
 			mat.SetFloat("g_AlphaCutoff", 0.5f);
 			mat.SetFloat("g_MetallicFactor", 0.0f);
 
+			uint materialFlag = 0;
 			if (m_DiffuseTexRef.IsValid())
 			{
 				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
-				mat.SetUint("g_MaterialFlags", 1);
+				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
 			}
-			else
+			if (m_NormalTexRef.IsValid())
 			{
-				mat.SetUint("g_MaterialFlags", 0);
+				mat.SetTextureAssetRef("g_NormalTex", m_NormalTexRef);
+				materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
+			mat.SetUint("g_MaterialFlags", materialFlag);
 
 			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
 		}
