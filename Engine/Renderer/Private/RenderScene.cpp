@@ -641,8 +641,9 @@ namespace shz
 
 			const bool bIsMainPass = (d.PassKey == passKey);
 			const bool bIsShadowPass = (passKey == STRING_HASH("Shadow")) && d.bCastShadow;
+			const bool bIsDepthPrepass = (passKey == STRING_HASH("DepthPrepass")) && d.bDepthPrepass;
 
-			if (!bIsMainPass && !bIsShadowPass)
+			if (!bIsMainPass && !bIsShadowPass & !bIsDepthPrepass)
 			{
 				continue;
 			}

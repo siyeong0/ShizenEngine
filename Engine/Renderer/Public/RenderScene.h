@@ -78,6 +78,7 @@ namespace shz
 			const StaticMeshRenderData* pMesh = nullptr;
 			uint64 PassKey = 0;
 			bool bCastShadow = true;
+			bool bDepthPrepass = true;
 			uint32 IndirectSlot = 0;
 		};
 

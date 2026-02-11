@@ -152,7 +152,7 @@ namespace shz
                 // -------------------------
                 // Indirect packets
                 // -------------------------
-                for (const DrawIndirectPacket& pkt : ctx.MainIndirectPackets)
+                for (const DrawIndirectPacket& pkt : ctx.DepthPrepassIndirectDrawPackets)
                 {
                     ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
 
@@ -229,16 +229,11 @@ namespace shz
                 b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
                 b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
 
-                // NOTE:
-                // DepthPrePass에서 이미 depth clear 했으면 여기서 또 clear하면 depth pre 의미가 약해짐.
-                // 네 프레임그래프/레지스트리 정책이 "패스별 clear가 항상 발생"이면,
-                // 여기 depth clear는 제거하거나, builder에 "Load" 옵션 같은게 있으면 load로 바꾸는게 좋음.
                 b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
                 b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
                 b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
                 b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
                 b.SetClearColor(kVelocity, 0.f, 0.f, 0.f, 0.f);
-                b.SetClearDepthStencil(kDepth, 1.f, 0);
             },
             [](RenderPassContext& ctx)
             {

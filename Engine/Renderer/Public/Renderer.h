@@ -294,6 +294,7 @@ namespace shz
 		std::unique_ptr<RenderResourceRegistry> m_pRegistry;
 
 		RenderPassContext m_PassCtx = {};
+		std::vector<uint64> m_PassAddOrder;
 		std::unordered_map<uint64, RenderPassItem> m_PassTable;
 		std::unordered_map<uint64, std::string> m_PassNameTable;
 		bool m_bRenderGraphDirty = true;

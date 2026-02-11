@@ -58,6 +58,7 @@ namespace shz
 		std::vector<DrawIndirectPacket> MainIndirectPackets = {};
 		std::vector<DrawIndirectPacket> ForwardIndirectPackets = {};
 		std::vector<DrawIndirectPacket> ShadowIndirectPackets = {};
+		std::vector<DrawIndirectPacket> DepthPrepassIndirectDrawPackets = {};
 
 		void ResetFrame()
 		{

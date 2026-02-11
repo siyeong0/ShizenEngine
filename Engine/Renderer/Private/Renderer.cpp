@@ -228,6 +228,7 @@ namespace shz
 		ReleaseSwapChainBuffers();
 
 		m_PassTable.clear();
+		m_PassAddOrder.clear();
 		m_CompiledPassOrder.clear();
 		m_ResourceStates.clear();
 		m_ExternalStates.clear();
@@ -670,7 +671,8 @@ namespace shz
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
-
+		scene.BuildIndirectDrawPackets(STRING_HASH("DepthPrepass"), pipelineResolver, m_PassCtx.DepthPrepassIndirectDrawPackets);
+		
 		IBuffer* pIndirectArgs = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
@@ -684,6 +686,7 @@ namespace shz
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
+		patchIndirectPackets(m_PassCtx.DepthPrepassIndirectDrawPackets);
 
 		// ------------------------------------------------------------
 		// Pending transitions
@@ -1074,6 +1077,7 @@ namespace shz
 		// Store & mark dirty
 		// -----------------------------------------------------------------
 		m_PassTable.emplace(passId, std::move(rpItem));
+		m_PassAddOrder.emplace_back(passId);
 		m_bRenderGraphDirty = true;
 
 		m_PassNameTable[passId] = name;
@@ -2091,19 +2095,9 @@ namespace shz
 		// ------------------------------------------------------------
 		// Collect passes
 		// ------------------------------------------------------------
-		std::vector<uint64> passes;
-		passes.reserve(m_PassTable.size());
+		ASSERT(!m_PassAddOrder.empty(), "Requires at least one render pass.");
 
-		for (const auto& pair : m_PassTable)
-		{
-			uint64 passId = pair.first;
-			ASSERT(passId != 0, "Invalid pass ID.");
-			passes.push_back(passId);
-		}
-
-		ASSERT(!passes.empty(), "Requires at least one render pass.");
-
-		const uint32 n = static_cast<uint32>(passes.size());
+		const uint32 n = static_cast<uint32>(m_PassAddOrder.size());
 
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
@@ -2158,7 +2152,7 @@ namespace shz
 
 		for (uint32 i = 0; i < n; ++i)
 		{
-			const auto& accesses = m_PassTable.at(passes[i]).ResourceAccess;
+			const auto& accesses = m_PassTable.at(m_PassAddOrder[i]).ResourceAccess;
 
 			// Per-pass per-resource flags:
 			// bit0 = read, bit1 = write
@@ -2265,7 +2259,7 @@ namespace shz
 
 		auto passName = [&](uint32 passIndex) -> const char*
 		{
-			return m_PassTable.at(passes[passIndex]).Name.c_str();
+			return m_PassTable.at(m_PassAddOrder[passIndex]).Name.c_str();
 		};
 
 		auto dumpUse = [&](uint64 rid, const UseList& ul)
@@ -2347,7 +2341,7 @@ namespace shz
 			{
 				if (indeg[i] > 0)
 				{
-					const auto& p = m_PassTable.at(passes[i]);
+					const auto& p = m_PassTable.at(m_PassAddOrder[i]);
 					std::cout << " - " << p.Name << " (indeg=" << indeg[i] << ")\n";
 				}
 			}
@@ -2356,12 +2350,12 @@ namespace shz
 			for (uint32 u = 0; u < n; ++u)
 			{
 				if (indeg[u] == 0) continue;
-				const auto& pu = m_PassTable.at(passes[u]);
+				const auto& pu = m_PassTable.at(m_PassAddOrder[u]);
 
 				for (uint32 v : adj[u])
 				{
 					if (indeg[v] == 0) continue;
-					const auto& pv = m_PassTable.at(passes[v]);
+					const auto& pv = m_PassTable.at(m_PassAddOrder[v]);
 					std::cout << "   " << pu.Name << " -> " << pv.Name << "\n";
 				}
 			}
@@ -2373,7 +2367,7 @@ namespace shz
 		for (uint32 idx : order)
 		{
 			ASSERT(idx < n, "Topo order index out of bounds.");
-			m_CompiledPassOrder.push_back(passes[idx]);
+			m_CompiledPassOrder.push_back(m_PassAddOrder[idx]);
 		}
 	}
 

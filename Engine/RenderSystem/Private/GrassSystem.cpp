@@ -1,6 +1,3 @@
-// ============================================================================
-// GrassSystem.cpp
-// ============================================================================
 #include "pch.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
@@ -100,17 +97,20 @@ namespace shz
 		{
 			RenderScene::IndirectObjectDesc d = {};
 			d.bCastShadow = true;
-
+			
 			d.PassKey = STRING_HASH("GBuffer");
 
+			d.bDepthPrepass = false;
 			d.pMesh = m_GrassDesc.pMeshLod0;
 			d.IndirectSlot = m_IndirectSlotLOD0;
 			scene.AddIndirect(d);
 
+			d.bDepthPrepass = false;
 			d.pMesh = m_GrassDesc.pCrossMeshLod1;
 			d.IndirectSlot = m_IndirectSlotLOD1;
 			scene.AddIndirect(d);
 
+			d.bDepthPrepass = false;
 			d.pMesh = m_GrassDesc.pBillboardMeshLod2;
 			d.IndirectSlot = m_IndirectSlotLOD2;
 			scene.AddIndirect(d);
