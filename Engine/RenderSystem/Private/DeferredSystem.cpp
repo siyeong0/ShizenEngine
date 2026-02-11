@@ -45,11 +45,12 @@ namespace shz
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
 
-				//b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
-				//b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
-				//b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
-				//b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
-				//b.SetClearDepthStencil(kDepth, 1.f, 0);
+				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearColor(kVelocity, 0.f, 0.f, 0.f, 0.f);
+				b.SetClearDepthStencil(kDepth, 1.f, 0);
 			},
 			[](RenderPassContext& ctx)
 			{

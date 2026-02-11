@@ -319,7 +319,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Lifecycle
 	// ------------------------------------------------------------
-	void TerrainSystem::Initialize(AssetManager& assetManager, const CreateInfo& ci)
+	void TerrainSystem::Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci)
 	{
 		Cleanup();
 		m_CI = ci;
@@ -350,6 +350,75 @@ namespace shz
 		buildHeightU16FromHeightTexture(*m_HeightTex);
 		ASSERT(m_Width > 0 && m_Height > 0, "Terrain height texture has invalid dimensions.");
 		ASSERT(m_HeightU16.size() == size_t(m_Width) * size_t(m_Height), "Height data size mismatch.");
+
+		// TerrainDrawConstantsBuffer (StructuredBuffer SRV, updated once per frame)
+		{
+			const float worldSizeX = GetWorldSizeX();
+			const float worldSizeZ = GetWorldSizeZ();
+
+			const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
+			const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
+			const uint32 maxInstances = Max(1u, numChunksX * numChunksZ);
+
+			BufferDesc desc = {};
+			desc.Name = "TerrainDrawConstantsBuffer";
+			desc.Usage = USAGE_DYNAMIC; // CPU write every frame
+			desc.BindFlags = BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+			desc.Mode = BUFFER_MODE_STRUCTURED;
+			desc.ElementByteStride = sizeof(hlsl::TerrainDrawConstants);
+			desc.Size = uint64(desc.ElementByteStride) * uint64(maxInstances);
+
+			renderer.AddBuffer(STRING_HASH("TerrainDrawConstantsBuffer"), desc);
+		}
+
+		// VB
+		{
+			std::vector<TerrainVertex> verts;
+			buildGrid17x17VB(verts);
+
+			BufferDesc vb = {};
+			vb.Name = "Terrain.Grid17x17.VB";
+			vb.Usage = USAGE_IMMUTABLE;
+			vb.BindFlags = BIND_VERTEX_BUFFER;
+			vb.Size = uint32(verts.size() * sizeof(TerrainVertex));
+
+			BufferData init = {};
+			init.pData = verts.data();
+			init.DataSize = vb.Size;
+
+			m_pGridVB = renderer.CreateVertexBuffer(vb, &init);
+			ASSERT(m_pGridVB, "Create terrain VB failed.");
+		}
+
+		// IBs (LOD x StitchMask)
+		const uint32 steps[5] = { 1, 2, 4, 8, 16 };
+		for (uint32 lod = 0; lod < 5; ++lod)
+		{
+			for (uint32 mask = 0; mask < 16; ++mask)
+			{
+				std::vector<uint16> idx;
+				buildGridIndicesLOD_Stitched(steps[lod], uint8(mask), idx);
+
+				m_LodIndexCount[lod][mask] = uint32(idx.size());
+
+				BufferDesc ib = {};
+				std::string name =
+					"Terrain.Grid17x17.IB.step" + std::to_string(steps[lod]) +
+					".mask" + std::to_string(mask);
+				ib.Name = name.c_str();
+				ib.Usage = USAGE_IMMUTABLE;
+				ib.BindFlags = BIND_INDEX_BUFFER;
+				ib.Size = uint32(idx.size() * sizeof(uint16));
+
+				BufferData init = {};
+				init.pData = idx.data();
+				init.DataSize = ib.Size;
+
+				m_pLodIB[lod][mask] = renderer.CreateIndexBuffer(ib, &init);
+				ASSERT(m_pLodIB[lod][mask], "Create terrain IB failed (lod=%u mask=%u).", lod, mask);
+			}
+		}
 	}
 
 	void TerrainSystem::Cleanup()
@@ -399,520 +468,361 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Pass registration (feature-owned)
+	// 
 	// ------------------------------------------------------------
-	void TerrainSystem::InstallPasses(Renderer& renderer)
+	void TerrainSystem::Update(Renderer& renderer, RenderScene* pScene, const View& view)
 	{
-		// -----------------------------------------------------------------
-		// TerrainDrawConstantsBuffer (StructuredBuffer SRV, updated once per frame)
-		// - Must be readable as: StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
-		// -----------------------------------------------------------------
+		ASSERT(pScene, "RenderScene is null.");
+
+		if (m_TerrainMaterialId == 0)
 		{
-			const float worldSizeX = GetWorldSizeX();
-			const float worldSizeZ = GetWorldSizeZ();
+			renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
 
-			const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
-			const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
-			const uint32 maxInstances = Max(1u, numChunksX * numChunksZ);
+			m_TerrainMaterialId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
+			Material& mat = MaterialManager::GetInstance()->GetMaterial(m_TerrainMaterialId);
 
-			BufferDesc desc = {};
-			desc.Name = "TerrainDrawConstantsBuffer";
-			desc.Usage = USAGE_DYNAMIC; // CPU write every frame
-			desc.BindFlags = BIND_SHADER_RESOURCE;
-			desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-			desc.Mode = BUFFER_MODE_STRUCTURED;
-			desc.ElementByteStride = sizeof(hlsl::TerrainDrawConstants);
-			desc.Size = uint64(desc.ElementByteStride) * uint64(maxInstances);
+			mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
+			mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+			mat.SetFloat("g_EmissiveIntensity", 0.0f);
+			mat.SetFloat("g_RoughnessFactor", 0.85f);
+			mat.SetFloat("g_NormalScale", 1.0f);
+			mat.SetFloat("g_OcclusionStrength", 1.0f);
+			mat.SetFloat("g_AlphaCutoff", 0.5f);
+			mat.SetFloat("g_MetallicFactor", 0.0f);
 
-			renderer.AddBuffer(STRING_HASH("TerrainDrawConstantsBuffer"), desc);
+			if (m_DiffuseTexRef.IsValid())
+			{
+				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
+				mat.SetUint("g_MaterialFlags", 1);
+			}
+			else
+			{
+				mat.SetUint("g_MaterialFlags", 0);
+			}
+
+			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
 		}
 
-		// Pass
-		renderer.AddPass(
-			"TerrainGBuffer",
-			EPassExecutionDomain::RenderPass,
-			[](RenderPassBuilder& b)
+		const float worldOriginX = GetWorldOriginX();
+		const float worldOriginZ = GetWorldOriginZ();
+		const float worldSizeX = GetWorldSizeX();
+		const float worldSizeZ = GetWorldSizeZ();
+
+		const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
+		const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
+		if (numChunksX == 0 || numChunksZ == 0)
+		{
+			return;
+		}
+
+		ViewFrustumExt frustumMain = {};
+		{
+			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
+			ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+		}
+
+		auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
+		{
+			return cz * numChunksX + cx;
+		};
+
+		// LOD ranges
+		struct LodRange final { float End; };
+		const LodRange lodRanges[5] =
+		{
+			{ 128.0f },
+			{ 256.0f },
+			{ 512.0f },
+			{ 1024.0f },
+			{ FLT_MAX },
+		};
+
+		auto selectLodOnly = [&](float dist) -> uint32
+		{
+			if (dist < lodRanges[0].End) return 0;
+			if (dist < lodRanges[1].End) return 1;
+			if (dist < lodRanges[2].End) return 2;
+			if (dist < lodRanges[3].End) return 3;
+			return 4;
+		};
+
+		auto morphForClampedLod = [&](float dist, uint32 lod) -> float
+		{
+			if (lod >= 4) return 0.0f;
+
+			const float d1 = lodRanges[lod].End;
+			const float d0 = d1 * 0.85f;
+
+			const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
+			const float s = t * t * (3.0f - 2.0f * t); // smoothstep
+			return s;
+		};
+
+		// Build LOD grid
+		std::vector<uint8> lodGrid;
+		lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), 4u);
+
+		{
+			const float3 cam = view.CameraPosition;
+
+			for (uint32 cz = 0; cz < numChunksZ; ++cz)
 			{
-				const uint64 kAlbedo = STRING_HASH("GBuffer0_Albedo");
-				const uint64 kNormal = STRING_HASH("GBuffer1_Normal");
-				const uint64 kMRAO = STRING_HASH("GBuffer2_MRAO");
-				const uint64 kEmissive = STRING_HASH("GBuffer3_Emissive");
-				const uint64 kVelocity = STRING_HASH("Velocity");
-				const uint64 kDepth = STRING_HASH("GBufferDepth");
+				for (uint32 cx = 0; cx < numChunksX; ++cx)
+				{
+					const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
+					const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
 
-				b.DeclareTextureRTVWrite(kAlbedo);
-				b.DeclareTextureRTVWrite(kNormal);
-				b.DeclareTextureRTVWrite(kMRAO);
-				b.DeclareTextureRTVWrite(kEmissive);
-				b.DeclareTextureRTVWrite(kVelocity);
-				b.DeclareTextureDSVWrite(kDepth);
+					const float remainX = worldOriginX + worldSizeX - chunkOriginX;
+					const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
 
-				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
+					const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
+					const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
 
-				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kEmissive, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearColor(kVelocity, 0.f, 0.f, 0.f, 0.f);
-				b.SetClearDepthStencil(kDepth, 1.f, 0);
-			},
-			[this](RenderPassContext& ctx)
+					if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
+					{
+						lodGrid[idx2D(cx, cz)] = 4;
+						continue;
+					}
+
+					const float cxw = chunkOriginX + 0.5f * chunkSizeX;
+					const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+
+					const float dx = cam.x - cxw;
+					const float dz = cam.z - czw;
+					const float dist = std::sqrt(dx * dx + dz * dz);
+
+					const uint32 lod = selectLodOnly(dist);
+					lodGrid[idx2D(cx, cz)] = uint8(Clamp(lod, 0u, 4u));
+				}
+			}
+		}
+
+		// Neighbor clamp (LOD diff <= 1)
+		{
+			bool changed = true;
+			uint32 iter = 0;
+
+			while (changed && iter++ < 16)
 			{
-				ASSERT(ctx.pImmediateContext, "Context is null.");
-				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(ctx.pViewFamily, "ViewFamily is null.");
-
-				IDeviceContext* pCtx = ctx.pImmediateContext;
-
-				const float worldOriginX = GetWorldOriginX();
-				const float worldOriginZ = GetWorldOriginZ();
-				const float worldSizeX = GetWorldSizeX();
-				const float worldSizeZ = GetWorldSizeZ();
-
-				const uint32 numChunksX = uint32(std::ceil(worldSizeX / Max(1e-6f, m_ChunkSize)));
-				const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / Max(1e-6f, m_ChunkSize)));
-				if (numChunksX == 0 || numChunksZ == 0)
-					return;
-
-				const ViewFamily& viewFamily = *ctx.pViewFamily;
-				ASSERT(!viewFamily.Views.empty(), "ViewFamily has no views.");
-				const View& view = viewFamily.Views[0];
-
-				ViewFrustumExt frustumMain = {};
-				{
-					const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-					ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
-				}
-
-				auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
-					{
-						return cz * numChunksX + cx;
-					};
-
-				// LOD ranges
-				struct LodRange final { float End; };
-				const LodRange lodRanges[5] =
-				{
-					{ 128.0f },
-					{ 256.0f },
-					{ 512.0f },
-					{ 1024.0f },
-					{ FLT_MAX },
-				};
-
-				auto selectLodOnly = [&](float dist) -> uint32
-					{
-						if (dist < lodRanges[0].End) return 0;
-						if (dist < lodRanges[1].End) return 1;
-						if (dist < lodRanges[2].End) return 2;
-						if (dist < lodRanges[3].End) return 3;
-						return 4;
-					};
-
-				auto morphForClampedLod = [&](float dist, uint32 lod) -> float
-					{
-						if (lod >= 4) return 0.0f;
-
-						const float d1 = lodRanges[lod].End;
-						const float d0 = d1 * 0.85f;
-
-						const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
-						const float s = t * t * (3.0f - 2.0f * t); // smoothstep
-						return s;
-					};
-
-				// Build LOD grid
-				std::vector<uint8> lodGrid;
-				lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), 4u);
-
-				{
-					const float3 cam = view.CameraPosition;
-
-					for (uint32 cz = 0; cz < numChunksZ; ++cz)
-					{
-						for (uint32 cx = 0; cx < numChunksX; ++cx)
-						{
-							const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
-							const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
-
-							const float remainX = worldOriginX + worldSizeX - chunkOriginX;
-							const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
-
-							const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
-							const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
-
-							if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
-							{
-								lodGrid[idx2D(cx, cz)] = 4;
-								continue;
-							}
-
-							const float cxw = chunkOriginX + 0.5f * chunkSizeX;
-							const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
-
-							const float dx = cam.x - cxw;
-							const float dz = cam.z - czw;
-							const float dist = std::sqrt(dx * dx + dz * dz);
-
-							const uint32 lod = selectLodOnly(dist);
-							lodGrid[idx2D(cx, cz)] = uint8(Clamp(lod, 0u, 4u));
-						}
-					}
-				}
-
-				// Neighbor clamp (LOD diff <= 1)
-				{
-					bool changed = true;
-					uint32 iter = 0;
-
-					while (changed && iter++ < 16)
-					{
-						changed = false;
-
-						for (uint32 cz = 0; cz < numChunksZ; ++cz)
-						{
-							for (uint32 cx = 0; cx < numChunksX; ++cx)
-							{
-								uint8& a = lodGrid[idx2D(cx, cz)];
-
-								auto clampPair = [&](uint32 nx, uint32 nz)
-									{
-										if (nx >= numChunksX || nz >= numChunksZ)
-											return;
-
-										uint8& b = lodGrid[idx2D(nx, nz)];
-
-										if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
-										if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
-									};
-
-								if (cx > 0)             clampPair(cx - 1, cz);
-								if (cx + 1 < numChunksX) clampPair(cx + 1, cz);
-								if (cz > 0)             clampPair(cx, cz - 1);
-								if (cz + 1 < numChunksZ) clampPair(cx, cz + 1);
-							}
-						}
-					}
-				}
-
-				// ------------------------------------------------------------
-				// Build visible instances + batch draw calls by (lod, stitchMask)
-				// ------------------------------------------------------------
-				struct BatchKey final
-				{
-					uint8 Lod = 0;
-					uint8 Mask = 0;
-
-					bool operator==(const BatchKey& o) const noexcept { return Lod == o.Lod && Mask == o.Mask; }
-				};
-
-				struct Batch final
-				{
-					uint8  Lod = 0;
-					uint8  Mask = 0;
-					uint32 StartInstance = 0;
-					uint32 InstanceCount = 0;
-				};
-
-				// Max possible is numChunksX*numChunksZ, reserve that once.
-				std::vector<hlsl::TerrainDrawConstants> instances;
-				instances.reserve(size_t(numChunksX) * size_t(numChunksZ));
-
-				std::vector<Batch> batches;
-				batches.reserve(64);
-
-				auto hash01 = [](uint32 v) -> float
-					{
-						v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16;
-						return float(v & 0x00FFFFFFu) / 16777216.0f;
-					};
-
-				const float yMin = m_HeightOffset;
-				const float yMax = m_HeightOffset + m_HeightScale;
-
-				const float3 cam = view.CameraPosition;
-
-				auto nLod = [&](int32 nx, int32 nz, uint32 lodHere) -> uint32
-					{
-						if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
-							return lodHere;
-						return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
-					};
-
-				BatchKey currentKey = { 255u, 255u };
-				uint32 currentBatchStart = 0;
-
-				auto flushBatch = [&](const BatchKey& key)
-					{
-						const uint32 end = uint32(instances.size());
-						const uint32 count = end - currentBatchStart;
-						if (count == 0)
-							return;
-
-						Batch b = {};
-						b.Lod = key.Lod;
-						b.Mask = key.Mask;
-						b.StartInstance = currentBatchStart;
-						b.InstanceCount = count;
-						batches.push_back(b);
-
-						currentBatchStart = end;
-					};
+				changed = false;
 
 				for (uint32 cz = 0; cz < numChunksZ; ++cz)
 				{
 					for (uint32 cx = 0; cx < numChunksX; ++cx)
 					{
-						const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
-						const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
+						uint8& a = lodGrid[idx2D(cx, cz)];
 
-						const float remainX = worldOriginX + worldSizeX - chunkOriginX;
-						const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
-
-						const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
-						const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
-
-						if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
-							continue;
-
-						// Frustum cull using conservative yMin/yMax
-						Box localBounds = {};
-						localBounds.Min = float3{ 0.f, yMin, 0.f };
-						localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
-
-						Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.f, chunkOriginZ });
-						if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-							continue;
-
-						const uint32 lod = uint32(lodGrid[idx2D(cx, cz)]);
-						ASSERT(lod < 5, "Invalid LOD.");
-
-						uint8 mask = Stitch_None;
-						if (nLod(int32(cx) - 1, int32(cz), lod) > lod) mask |= Stitch_Left;
-						if (nLod(int32(cx) + 1, int32(cz), lod) > lod) mask |= Stitch_Right;
-						if (nLod(int32(cx), int32(cz) - 1, lod) > lod) mask |= Stitch_Bottom;
-						if (nLod(int32(cx), int32(cz) + 1, lod) > lod) mask |= Stitch_Top;
-
-						// Distance for morph
-						const float cxw = chunkOriginX + 0.5f * chunkSizeX;
-						const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
-						const float dx = cam.x - cxw;
-						const float dz = cam.z - czw;
-						const float dist = std::sqrt(dx * dx + dz * dz);
-
-						const float morph = morphForClampedLod(dist, lod);
-
-						// If batch key changed, flush previous
-						const BatchKey key = { uint8(lod), uint8(mask) };
-						if (!(key == currentKey))
+						auto clampPair = [&](uint32 nx, uint32 nz)
 						{
-							if (currentKey.Lod != 255u)
-								flushBatch(currentKey);
+							if (nx >= numChunksX || nz >= numChunksZ)
+								return;
 
-							currentKey = key;
-							currentBatchStart = uint32(instances.size());
-						}
+							uint8& b = lodGrid[idx2D(nx, nz)];
 
-						hlsl::TerrainDrawConstants dc = {};
-						dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
-						dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
+							if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
+							if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
+						};
 
-						dc.HeightUVScale = float2{ 1, 1 };
-						dc.HeightUVBias = float2{ 0, 0 };
-						dc.SurfaceUVScale = float2{ 1, 1 };
-						dc.SurfaceUVBias = float2{ 0, 0 };
-
-						const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
-						dc.NormalSampleStep = normalSteps[lod];
-
-						dc.LodIndex = lod;
-						dc.LodMorphAlpha = morph;
-
-						// Debug chunk color
-						const uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
-						const float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
-						const float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
-						const float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
-						dc.DebugChunkColor = float4{ r, g, b, 1.0f };
-
-						instances.emplace_back(dc);
+						if (cx > 0)             clampPair(cx - 1, cz);
+						if (cx + 1 < numChunksX) clampPair(cx + 1, cz);
+						if (cz > 0)             clampPair(cx, cz - 1);
+						if (cz + 1 < numChunksZ) clampPair(cx, cz + 1);
 					}
 				}
+			}
+		}
 
-				// Flush last batch
-				if (currentKey.Lod != 255u)
-				{
-					flushBatch(currentKey);
-				}
+		// ------------------------------------------------------------
+		// Build visible instances + batch draw calls by (lod, stitchMask)
+		// ------------------------------------------------------------
+		struct BatchKey final
+		{
+			uint8 Lod = 0;
+			uint8 Mask = 0;
 
-				if (instances.empty() || batches.empty())
-					return;
+			bool operator==(const BatchKey& o) const noexcept { return Lod == o.Lod && Mask == o.Mask; }
+		};
 
-				// ------------------------------------------------------------
-				// Upload structured buffer ONCE per frame
-				// ------------------------------------------------------------
-				{
-					IBuffer* pSBuf = ctx.pRegistry->GetBuffer(STRING_HASH("TerrainDrawConstantsBuffer"));
-					ASSERT(pSBuf, "TerrainDrawConstantsBuffer is null.");
+		struct Batch final
+		{
+			uint8  Lod = 0;
+			uint8  Mask = 0;
+			uint32 StartInstance = 0;
+			uint32 InstanceCount = 0;
+		};
 
-					// USAGE_DYNAMIC + MAP_WRITE(DISCARD)
-					MapHelper<hlsl::TerrainDrawConstants> map(
-						pCtx,
-						pSBuf,
-						MAP_WRITE,
-						MAP_FLAG_DISCARD);
+		// Max possible is numChunksX*numChunksZ, reserve that once.
+		std::vector<hlsl::TerrainDrawConstants> instances;
+		instances.reserve(size_t(numChunksX) * size_t(numChunksZ));
 
-					hlsl::TerrainDrawConstants* dst = map;
-					ASSERT(dst, "Failed to map TerrainDrawConstantsBuffer.");
+		std::vector<Batch> batches;
+		batches.reserve(64);
 
-					std::memcpy(dst, instances.data(), instances.size() * sizeof(hlsl::TerrainDrawConstants));
-				}
+		auto hash01 = [](uint32 v) -> float
+		{
+			v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16;
+			return float(v & 0x00FFFFFFu) / 16777216.0f;
+		};
 
-				// ------------------------------------------------------------
-				// Bind pipeline, VB, SRB once, then draw batches
-				// ------------------------------------------------------------
-				pCtx->SetPipelineState(m_TerrainBinding.pPSO);
-				pCtx->CommitShaderResources(m_TerrainBinding.pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+		const float yMin = m_HeightOffset;
+		const float yMax = m_HeightOffset + m_HeightScale;
 
-				{
-					IBuffer* vbs[] = { m_pGridVB };
-					uint64 offs[] = { 0 };
-					pCtx->SetVertexBuffers(
-						0, 1, vbs, offs,
-						RESOURCE_STATE_TRANSITION_MODE_VERIFY,
-						SET_VERTEX_BUFFERS_FLAG_RESET);
-				}
+		const float3 cam = view.CameraPosition;
 
-				DrawIndexedAttribs dia = {};
-				dia.IndexType = VT_UINT16;
-				dia.Flags = DRAW_FLAG_VERIFY_ALL;
+		auto nLod = [&](int32 nx, int32 nz, uint32 lodHere) -> uint32
+		{
+			if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
+				return lodHere;
+			return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
+		};
 
-				uint32 currentLod = 0xFFFFFFFFu;
-				uint32 currentMask = 0xFFFFFFFFu;
+		BatchKey currentKey = { 255u, 255u };
+		uint32 currentBatchStart = 0;
 
-				for (const Batch& b : batches)
-				{
-					const uint32 lod = uint32(b.Lod);
-					const uint32 mask = uint32(b.Mask);
+		auto flushBatch = [&](const BatchKey& key)
+		{
+			const uint32 end = uint32(instances.size());
+			const uint32 count = end - currentBatchStart;
+			if (count == 0)
+				return;
 
-					if (lod != currentLod || mask != currentMask)
-					{
-						currentLod = lod;
-						currentMask = mask;
+			Batch b = {};
+			b.Lod = key.Lod;
+			b.Mask = key.Mask;
+			b.StartInstance = currentBatchStart;
+			b.InstanceCount = count;
+			batches.push_back(b);
 
-						RefCntAutoPtr<IBuffer>& ib = m_pLodIB[lod][mask];
-						ASSERT(ib, "Terrain IB is null (lod=%u mask=%u).", lod, mask);
+			currentBatchStart = end;
+		};
 
-						pCtx->SetIndexBuffer(ib, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
-						ASSERT(lod < 5, "LOD out of range.");
-						dia.NumIndices = m_LodIndexCount[lod][mask];
-					}
-
-					// Instance range
-					dia.NumInstances = b.InstanceCount;
-					dia.FirstInstanceLocation = b.StartInstance;
-
-					// ---------------------------------------------------------
-					// DRAW_CONSTANTS update (StartInstanceLocation)
-					// ---------------------------------------------------------
-					{
-						MapHelper<hlsl::DrawConstants> map(
-							pCtx,
-							ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
-							MAP_WRITE,
-							MAP_FLAG_DISCARD);
-
-						hlsl::DrawConstants* dst = map;
-						ASSERT(dst, "Failed to map DRAW_CONSTANTS.");
-						dst->StartInstanceLocation = dia.FirstInstanceLocation;
-					}
-
-					pCtx->DrawIndexed(dia);
-				}
-			},
-			[this, &renderer]()
+		for (uint32 cz = 0; cz < numChunksZ; ++cz)
+		{
+			for (uint32 cx = 0; cx < numChunksX; ++cx)
 			{
-				// VB
+				const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
+				const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
+
+				const float remainX = worldOriginX + worldSizeX - chunkOriginX;
+				const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
+
+				const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
+				const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
+
+				if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
+					continue;
+
+				// Frustum cull using conservative yMin/yMax
+				Box localBounds = {};
+				localBounds.Min = float3{ 0.f, yMin, 0.f };
+				localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
+
+				Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.f, chunkOriginZ });
+				if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+					continue;
+
+				const uint32 lod = uint32(lodGrid[idx2D(cx, cz)]);
+				ASSERT(lod < 5, "Invalid LOD.");
+
+				uint8 mask = Stitch_None;
+				if (nLod(int32(cx) - 1, int32(cz), lod) > lod) mask |= Stitch_Left;
+				if (nLod(int32(cx) + 1, int32(cz), lod) > lod) mask |= Stitch_Right;
+				if (nLod(int32(cx), int32(cz) - 1, lod) > lod) mask |= Stitch_Bottom;
+				if (nLod(int32(cx), int32(cz) + 1, lod) > lod) mask |= Stitch_Top;
+
+				// Distance for morph
+				const float cxw = chunkOriginX + 0.5f * chunkSizeX;
+				const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+				const float dx = cam.x - cxw;
+				const float dz = cam.z - czw;
+				const float dist = std::sqrt(dx * dx + dz * dz);
+
+				const float morph = morphForClampedLod(dist, lod);
+
+				// If batch key changed, flush previous
+				const BatchKey key = { uint8(lod), uint8(mask) };
+				if (!(key == currentKey))
 				{
-					std::vector<TerrainVertex> verts;
-					buildGrid17x17VB(verts);
+					if (currentKey.Lod != 255u)
+						flushBatch(currentKey);
 
-					BufferDesc vb = {};
-					vb.Name = "Terrain.Grid17x17.VB";
-					vb.Usage = USAGE_IMMUTABLE;
-					vb.BindFlags = BIND_VERTEX_BUFFER;
-					vb.Size = uint32(verts.size() * sizeof(TerrainVertex));
-
-					BufferData init = {};
-					init.pData = verts.data();
-					init.DataSize = vb.Size;
-
-					m_pGridVB = renderer.CreateVertexBuffer(vb, &init);
-					ASSERT(m_pGridVB, "Create terrain VB failed.");
+					currentKey = key;
+					currentBatchStart = uint32(instances.size());
 				}
 
-				// IBs (LOD x StitchMask)
-				const uint32 steps[5] = { 1, 2, 4, 8, 16 };
-				for (uint32 lod = 0; lod < 5; ++lod)
-				{
-					for (uint32 mask = 0; mask < 16; ++mask)
-					{
-						std::vector<uint16> idx;
-						buildGridIndicesLOD_Stitched(steps[lod], uint8(mask), idx);
+				hlsl::TerrainDrawConstants dc = {};
+				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
+				dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
 
-						m_LodIndexCount[lod][mask] = uint32(idx.size());
+				dc.HeightUVScale = float2{ 1, 1 };
+				dc.HeightUVBias = float2{ 0, 0 };
+				dc.SurfaceUVScale = float2{ 1, 1 };
+				dc.SurfaceUVBias = float2{ 0, 0 };
 
-						BufferDesc ib = {};
-						std::string name =
-							"Terrain.Grid17x17.IB.step" + std::to_string(steps[lod]) +
-							".mask" + std::to_string(mask);
-						ib.Name = name.c_str();
-						ib.Usage = USAGE_IMMUTABLE;
-						ib.BindFlags = BIND_INDEX_BUFFER;
-						ib.Size = uint32(idx.size() * sizeof(uint16));
+				const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
+				dc.NormalSampleStep = normalSteps[lod];
 
-						BufferData init = {};
-						init.pData = idx.data();
-						init.DataSize = ib.Size;
+				dc.LodIndex = lod;
+				dc.LodMorphAlpha = morph;
 
-						m_pLodIB[lod][mask] = renderer.CreateIndexBuffer(ib, &init);
-						ASSERT(m_pLodIB[lod][mask], "Create terrain IB failed (lod=%u mask=%u).", lod, mask);
-					}
-				}
+				// Debug chunk color
+				const uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
+				const float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
+				const float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
+				const float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
+				dc.DebugChunkColor = float4{ r, g, b, 1.0f };
 
-				// Material (StructuredBuffer binding + instanced draw)
-				{
-					renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
+				instances.emplace_back(dc);
+			}
+		}
 
-					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
-					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+		// Flush last batch
+		if (currentKey.Lod != 255u)
+		{
+			flushBatch(currentKey);
+		}
 
-					mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
-					mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-					mat.SetFloat("g_EmissiveIntensity", 0.0f);
-					mat.SetFloat("g_RoughnessFactor", 0.85f);
-					mat.SetFloat("g_NormalScale", 1.0f);
-					mat.SetFloat("g_OcclusionStrength", 1.0f);
-					mat.SetFloat("g_AlphaCutoff", 0.5f);
-					mat.SetFloat("g_MetallicFactor", 0.0f);
+		if (instances.empty() || batches.empty())
+		{
+			return;
+		}
 
-					if (m_DiffuseTexRef.IsValid())
-					{
-						mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
-						mat.SetUint("g_MaterialFlags", 1);
-					}
-					else
-					{
-						mat.SetUint("g_MaterialFlags", 0);
-					}
+		// ------------------------------------------------------------
+		// Upload structured buffer ONCE per frame
+		// ------------------------------------------------------------
+		{
+			std::vector<uint8> byteBuffer(instances.size() * sizeof(hlsl::TerrainDrawConstants));
+			std::memcpy(byteBuffer.data(), instances.data(), instances.size() * sizeof(hlsl::TerrainDrawConstants));
+			renderer.UpdateBuffer(STRING_HASH("TerrainDrawConstantsBuffer"), std::move(byteBuffer));
+		}
 
-					// StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
-					// IMPORTANT: this must bind as SRV buffer (not cbuffer).
-					mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
+		for (auto h : m_SceneHandles)
+		{
+			pScene->RemoveTerrain(h);
+		}
 
-					m_TerrainBinding = renderer.AcquireMaterialPipelineBinding(matId, STRING_HASH("TerrainGBuffer"));
-				}
-			});
+		m_SceneHandles.clear();
+
+		for (const Batch& b : batches)
+		{
+			const uint32 lod = uint32(b.Lod);
+			const uint32 mask = uint32(b.Mask);
+
+			RenderScene::TerrainObject object = {};
+			object.IndexType = VT_UINT16;
+
+			object.VertexBuffer = m_pGridVB;
+			object.IndexBuffer = m_pLodIB[lod][mask];
+			object.IndexCount = m_LodIndexCount[lod][mask];
+
+			object.InstanceCount = b.InstanceCount;
+			object.FirstInstanceLocation = b.StartInstance;
+
+			object.MaterialId = m_TerrainMaterialId;
+
+			Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
+			m_SceneHandles.push_back(handle);
+		}
 	}
 
 	// ------------------------------------------------------------

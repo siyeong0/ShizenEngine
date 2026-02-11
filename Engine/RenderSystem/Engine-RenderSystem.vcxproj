@@ -153,6 +153,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\DeferredSystem.h" />
+    <ClInclude Include="Public\DepthPrepassSystem.h" />
     <ClInclude Include="Public\ForwardSystem.h" />
     <ClInclude Include="Public\GrassSystem.h" />
     <ClInclude Include="Public\IndirectArgsSystem.h" />
@@ -169,6 +170,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Private\DeferredSystem.cpp" />
+    <ClCompile Include="Private\DepthPrepassSystem.cpp" />
     <ClCompile Include="Private\ForwardSystem.cpp" />
     <ClCompile Include="Private\GrassSystem.cpp" />
     <ClCompile Include="Private\IndirectArgsSystem.cpp" />

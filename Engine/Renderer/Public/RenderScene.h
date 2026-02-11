@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <unordered_map>
+#include <functional>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -9,6 +10,8 @@
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/DrawPacket.h"
+
+#include "Engine/RHI/Interface/IBuffer.h"
 
 namespace shz
 {
@@ -20,6 +23,9 @@ namespace shz
 	class RenderScene final
 	{
 	public:
+		// ------------------------------------------------------------
+		// SceneObject (기존)
+		// ------------------------------------------------------------
 		struct SceneObject final
 		{
 			const StaticMeshRenderData* pMesh = nullptr;
@@ -30,9 +36,30 @@ namespace shz
 			bool bCastShadow = true;
 		};
 
+		// ------------------------------------------------------------
+		// TerrainObject (요구한 형태)
+		// - TerrainSystem이 프러스텀 컬링/LOD 후 "그릴 청크"를 Add/Remove로 관리
+		// - Renderer는 BuildTerrainDrawPackets 로 패킷만 뽑아감
+		// ------------------------------------------------------------
+		struct TerrainObject final
+		{
+			RefCntAutoPtr<IBuffer> VertexBuffer = {};
+			RefCntAutoPtr<IBuffer> IndexBuffer = {};
+
+			uint32 IndexCount = 0;
+			VALUE_TYPE IndexType = VT_UINT32;
+
+			uint32 FirstInstanceLocation = 0;
+			uint32 InstanceCount = 0;
+
+			MaterialId MaterialId = 0;
+
+			bool bCastShadow = false;
+		};
+
 		struct LightObject final
 		{
-			uint32 Type = 0; // TODO: replace with enum
+			uint32 Type = 0;
 			float3 Color = { 1.0f, 1.0f, 1.0f };
 			float  Intensity = 1.0f;
 
@@ -48,17 +75,11 @@ namespace shz
 		struct IndirectObjectDesc final
 		{
 			const StaticMeshRenderData* pMesh = nullptr;
-
-			// 어떤 pass에서 그릴지 (Forward/Shadow 등)
 			uint64 PassKey = 0;
-
 			bool bCastShadow = true;
-
-			// Indirect args 슬롯 (0..MAX_NUM_INDIRECTS-1)
 			uint32 IndirectSlot = 0;
 		};
 
-		// Indirect object handle (SceneObject와 별개)
 		struct IndirectObject final
 		{
 			IndirectObjectDesc Desc = {};
@@ -73,7 +94,9 @@ namespace shz
 
 		void Reset();
 
-		// Scene Objects
+		// ------------------------------------------------------------
+		// Scene Objects (기존)
+		// ------------------------------------------------------------
 		Handle<SceneObject> AddObject(
 			const StaticMeshRenderData& rd,
 			const Matrix4x4& transform = Matrix4x4::Identity(),
@@ -87,6 +110,21 @@ namespace shz
 
 		uint32 GetObjectCount() const noexcept { return static_cast<uint32>(m_ObjectDense.size()); }
 
+		// ------------------------------------------------------------
+		// Terrain Objects (신규)
+		// ------------------------------------------------------------
+		Handle<TerrainObject> AddTerrain(const TerrainObject& obj);
+		void RemoveTerrain(Handle<TerrainObject> h);
+
+		TerrainObject* GetTerrainOrNull(Handle<TerrainObject> h) noexcept;
+		const TerrainObject* GetTerrainOrNull(Handle<TerrainObject> h) const noexcept;
+
+		uint32 GetTerrainCount() const noexcept { return static_cast<uint32>(m_TerrainDense.size()); }
+		const std::vector<TerrainObject>& GetTerrains() const noexcept { return m_TerrainDense; }
+
+		// ------------------------------------------------------------
+		// Indirect / Lights (기존)
+		// ------------------------------------------------------------
 		Handle<IndirectObject> AddIndirect(const IndirectObjectDesc& desc);
 		void RemoveIndirect(Handle<IndirectObject> h);
 		IndirectObject* GetIndirectOrNull(Handle<IndirectObject> h) noexcept;
@@ -94,7 +132,6 @@ namespace shz
 		uint32 GetIndirectCount() const noexcept { return static_cast<uint32>(m_IndirectDense.size()); }
 		const std::vector<IndirectObject>& GetIndirectObjects() const noexcept { return m_IndirectDense; }
 
-		// Lights
 		Handle<LightObject> AddLight(const LightObject& light);
 		void RemoveLight(Handle<LightObject> h);
 		void UpdateLight(Handle<LightObject> h, const LightObject& light);
@@ -105,16 +142,16 @@ namespace shz
 		uint32 GetLightCount() const noexcept { return static_cast<uint32>(m_LightDense.size()); }
 		const std::vector<LightObject>& GetLights() const noexcept { return m_LightDense; }
 
-		// ObjectConstants Table (CPU mirror)
+		// ------------------------------------------------------------
+		// ObjectConstants (기존)
+		// ------------------------------------------------------------
 		const std::vector<hlsl::ObjectConstants>& GetObjectConstantsTableCPU() const noexcept { return m_ObjectTableCPU; }
 
 		const std::vector<uint32>& GetDirtyOcIndices() const noexcept { return m_DirtyOcIndices; }
 		void ClearDirtyOcIndices();
 
-		// Dense iteration for renderer (visibility, etc.)
 		uint32 GetObjectDenseCount() const noexcept { return static_cast<uint32>(m_ObjectDense.size()); }
 
-		// NOTE: Dense index is internal stable only within a frame.
 		const SceneObject& GetObjectByDenseIndex(uint32 denseIndex) const noexcept
 		{
 			ASSERT(denseIndex < static_cast<uint32>(m_ObjectDense.size()), "Object dense index OOB.");
@@ -127,10 +164,13 @@ namespace shz
 			return m_ObjectDense[denseIndex].OcIndex;
 		}
 
+		// ------------------------------------------------------------
+		// Static mesh draw packets (기존)
+		// ------------------------------------------------------------
 		void BuildDrawPackets(
 			uint64 passKey,
 			const std::vector<uint32>& visibleObjectDenseIndices,
-			const std::function<const struct MaterialPipelineBinding&(MaterialId, uint64)>& resolver,
+			const std::function<const struct MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets,
 			std::vector<uint32>& outInstanceRemap) const;
 
@@ -139,7 +179,11 @@ namespace shz
 			const std::function<const struct MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawIndirectPacket>& outPackets) const;
 
-		// Renderer가 BatchId로 상태를 조회할 수 있게
+		void BuildTerrainDrawPackets(
+			uint64 passKey,
+			const std::function<const struct MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
+			std::vector<DrawPacket>& outPackets) const;
+
 		uint32 GetBatchCount() const noexcept { return static_cast<uint32>(m_Batches.size()); }
 
 		struct BatchView final
@@ -148,7 +192,6 @@ namespace shz
 			uint32 SectionIndex = 0;
 			MaterialId MaterialId = 0;
 
-			// convenience for renderer-side filtering
 			bool bCastShadow = true;
 			uint64 PassKey = 0;
 		};
@@ -156,7 +199,7 @@ namespace shz
 		bool TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept;
 
 		// ------------------------------------------------------------
-		// Height field / Terrain
+		// Interaction stamps (기존)
 		// ------------------------------------------------------------
 		void AddInteractionStamp(const hlsl::InteractionStamp& stamp) { m_InteractionStamps.emplace_back(stamp); }
 		void ConsumeInteractionStamps(std::vector<hlsl::InteractionStamp>* out) { out->swap(m_InteractionStamps); m_InteractionStamps.clear(); }
@@ -164,11 +207,10 @@ namespace shz
 	private:
 		static constexpr uint32 INVALID_INDEX = 0xFFFFFFFFu;
 
-		// Public Handle -> internal slot mapping
 		template<typename T>
 		struct Slot final
 		{
-			UniqueHandle<T> Owner = {}; // owns handle lifetime
+			UniqueHandle<T> Owner = {};
 			uint32 DenseIndex = INVALID_INDEX;
 			bool bOccupied = false;
 		};
@@ -194,14 +236,11 @@ namespace shz
 		uint32 findDenseIndex(Handle<T> h, const std::vector<Slot<T>>& slots) const noexcept;
 
 		// ------------------------------------------------------------
-		// Batch Key
-		//
-		// "드로우콜을 나누는 기준"을 모두 포함해야 한다.
-		// - Mesh/Section/Pass/Material/ShadowFlag
+		// Batch Key (mesh objects)
 		// ------------------------------------------------------------
 		struct DrawBatchKey final
 		{
-			const void* MeshPtr = nullptr; // StaticMeshRenderData address
+			const void* MeshPtr = nullptr;
 			uint32 SectionIndex = 0;
 			uint64 PassKey = 0;
 			MaterialId MatId = 0;
@@ -230,9 +269,6 @@ namespace shz
 			}
 		};
 
-		// ------------------------------------------------------------
-		// Batch / Instances
-		// ------------------------------------------------------------
 		struct SectionHandle final
 		{
 			uint32 BatchId = INVALID_INDEX;
@@ -247,10 +283,7 @@ namespace shz
 
 		struct BatchInstance final
 		{
-			// Remap을 통해 결국 ObjectTable[OcIndex]를 참조한다.
 			uint32 OcIndex = 0;
-
-			// swap-remove 시 owner의 SectionHandle을 갱신하기 위한 역참조
 			uint32 OwnerObjectDenseIndex = 0;
 			uint16 OwnerSectionSlot = 0;
 			uint8  OwnerPassSlot = 0; // 0:Main, 1:Shadow
@@ -260,7 +293,6 @@ namespace shz
 		{
 			DrawBatchKey Key = {};
 
-			// Renderer가 해석할 참조
 			const StaticMeshRenderData* pMesh = nullptr;
 			uint32 SectionIndex = 0;
 			MaterialId MaterialId = 0;
@@ -272,85 +304,63 @@ namespace shz
 			bool IsEmpty() const noexcept { return Instances.empty(); }
 		};
 
-		// ------------------------------------------------------------
-		// Object storage
-		// ------------------------------------------------------------
 		struct ObjectRecord final
 		{
 			SceneObject Obj = {};
-
-			// 고정 OcIndex 슬롯
 			uint32 OcIndex = INVALID_INDEX;
-
-			// 섹션 핸들들(섹션 수와 동일) : main + shadow
 			std::vector<SectionHandles> Sections;
 		};
 
 	private:
-		// OcIndex allocator
 		uint32 allocOcIndex();
 		void freeOcIndex(uint32 ocIndex);
-
 		void markOcDirty(uint32 ocIndex);
 
-		// Material -> pass classification
 		uint64 classifyMainPassKey(MaterialId matId) const noexcept;
 		bool   shouldRenderInShadow(MaterialId matId) const noexcept;
 
-		// Batch ops
 		uint32 getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, uint64 passKey, bool bCastShadow);
-
 		void addObjectToBatches(uint32 objectDenseIndex);
 		void removeObjectFromBatches(uint32 objectDenseIndex);
-
 		void batchRemoveInstance(uint32 batchId, uint32 instanceIndex);
 
 		static DrawBatchKey makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, bool bCastShadow);
 
 	private:
-		// ------------------------------------------------------------
-		// Objects: Dense/Sparse (public handle)
-		// ------------------------------------------------------------
+		// Objects
 		std::vector<Slot<SceneObject>> m_ObjectSlots;
 		std::vector<uint32> m_ObjectSparse;
-		std::vector<ObjectRecord> m_ObjectDense;
+		std::vector<struct ObjectRecord> m_ObjectDense;
 		std::vector<Handle<SceneObject>> m_ObjectHandles;
 
-		// ------------------------------------------------------------
-		// Indirect objects: Dense/Sparse (public handle)
-		// ------------------------------------------------------------
+		// Terrain
+		std::vector<Slot<TerrainObject>> m_TerrainSlots;
+		std::vector<uint32> m_TerrainSparse;
+		std::vector<TerrainObject> m_TerrainDense;
+		std::vector<Handle<TerrainObject>> m_TerrainHandles;
+
+		// Indirect
 		std::vector<Slot<IndirectObject>> m_IndirectSlots;
 		std::vector<uint32> m_IndirectSparse;
 		std::vector<IndirectObject> m_IndirectDense;
 		std::vector<Handle<IndirectObject>> m_IndirectHandles;
 
-		// ------------------------------------------------------------
-		// Lights: Dense/Sparse
-		// ------------------------------------------------------------
+		// Lights
 		std::vector<Slot<LightObject>> m_LightSlots;
 		std::vector<uint32> m_LightSparse;
 		std::vector<LightObject> m_LightDense;
 		std::vector<Handle<LightObject>> m_LightHandles;
 
-		// ------------------------------------------------------------
-		// Batches
-		// ------------------------------------------------------------
-		std::unordered_map<DrawBatchKey, uint32, DrawBatchKeyHasher> m_BatchLookup;
-		std::vector<Batch> m_Batches;
+		// 
+		std::unordered_map<struct DrawBatchKey, uint32, struct DrawBatchKeyHasher> m_BatchLookup;
+		std::vector<struct Batch> m_Batches;
 
-		// ------------------------------------------------------------
-		// ObjectConstants table
-		// ------------------------------------------------------------
 		std::vector<hlsl::ObjectConstants> m_ObjectTableCPU;
 		std::vector<uint32> m_FreeOcIndices;
 
-		// dirty tracking
-		std::vector<uint8> m_OcDirty;          // OcIndex -> 0/1
-		std::vector<uint32> m_DirtyOcIndices;  // unique list
+		std::vector<uint8> m_OcDirty;
+		std::vector<uint32> m_DirtyOcIndices;
 
-		// ------------------------------------------------------------
-		// Terrain / Height field
-		// ------------------------------------------------------------
 		std::vector<hlsl::InteractionStamp> m_InteractionStamps;
 	};
 } // namespace shz

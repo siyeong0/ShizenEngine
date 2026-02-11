@@ -56,11 +56,11 @@ namespace shz
 		TerrainSystem(const TerrainSystem&) = delete;
 		TerrainSystem& operator=(const TerrainSystem&) = delete;
 
-		void Initialize(AssetManager& assetManager, const CreateInfo& ci);
+		void Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci);
 		void Cleanup();
 
-		// Pass registration (feature-owned)
-		void InstallPasses(Renderer& renderer);
+		// Per-frame update: frustum cull + (Add/Remove TerrainObject in RenderScene)
+		void Update(Renderer& renderer, RenderScene* pScene, const View& view);
 
 		// Basic info
 		uint32 GetWidth()  const noexcept { return m_Width; }
@@ -126,21 +126,17 @@ namespace shz
 		std::vector<uint16> m_HeightU16 = {};
 
 		// ------------------------------------------------------------
-		// GPU render state (feature-owned)
-		// ------------------------------------------------------------
-		MaterialPipelineBinding m_TerrainBinding;
-
 		RefCntAutoPtr<IBuffer> m_pGridVB;
-
-		// NOTE:
-		// - IB is selected by (LOD, StitchMask). Mask is 4-bit: L/R/B/T.
-		// - Neighbor LOD diff is clamped to <= 1 step for stitch simplicity.
 		RefCntAutoPtr<IBuffer> m_pLodIB[5][16];
 		uint32 m_LodIndexCount[5][16] = {};
 
+		MaterialId m_TerrainMaterialId = 0;
+
 		// shader paths
 		std::string m_TerrainVS = "Terrain.vsh";
-		std::string m_TerrainPS = "GBuffer.psh"; // reuse
+		std::string m_TerrainPS = "GBuffer.psh";
+
+		std::vector<Handle<RenderScene::TerrainObject>> m_SceneHandles;
 
 	};
 } // namespace shz

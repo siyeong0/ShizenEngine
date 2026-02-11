@@ -207,6 +207,16 @@ namespace shz
 			m_PendingBufferUpdates.emplace_back(bud);
 		}
 
+		void UpdateBuffer(uint64 id, const std::vector<uint8>&& data)
+		{
+			ASSERT(m_pRegistry->HasBuffer(id), "Buffer not found.");
+			ASSERT(m_pRegistry->GetBuffer(id)->GetDesc().Size >= data.size(), "Data size mistmatch.");
+			BufferUpdateDesc bud = {};
+			bud.ResourceId = id;
+			bud.Data = std::move(data);
+			m_PendingBufferUpdates.emplace_back(bud);
+		}
+
 		// RenderData 
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");

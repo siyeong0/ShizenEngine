@@ -285,7 +285,7 @@ namespace shz
 			tci.HeightOffset = -80.0f;
 			tci.bCenterXZ = true;
 
-			m_pTerrainSystem->Initialize(*m_pAssetManager, tci);
+			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);
 			// Create height field texture R16_UNORM 
 			{
 				const uint32 width = m_pTerrainSystem->GetWidth();
@@ -415,7 +415,6 @@ namespace shz
 				}
 			}
 
-			m_pTerrainSystem->InstallPasses(*m_pRenderer);
 			m_pDeferredSystem->InstallPasses(*m_pRenderer);
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
 			m_pShadowSystem->InstallPasses(*m_pRenderer);
@@ -629,6 +628,8 @@ namespace shz
 			m_pEcs->Tick(dt);
 		}
 
+		m_pTerrainSystem->Update(*m_pRenderer, m_pRenderScene.get(), m_ViewFamily.Views[0]);
+
 		// Update grass render constants
 		{
 			hlsl::GrassRenderConstants ren = {};
@@ -792,7 +793,7 @@ namespace shz
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 1000;
+			constexpr uint  NUM_TREES = 0;
 
 			std::mt19937 rng(1337);
 			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);

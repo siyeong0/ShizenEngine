@@ -18,6 +18,12 @@ namespace shz
 			s.DenseIndex = INVALID_INDEX;
 			s.bOccupied = false;
 		}
+		for (Slot<TerrainObject>& s : m_TerrainSlots)
+		{
+			s.Owner.Reset();
+			s.DenseIndex = INVALID_INDEX;
+			s.bOccupied = false;
+		}
 		for (Slot<IndirectObject>& s : m_IndirectSlots)
 		{
 			s.Owner.Reset();
@@ -32,11 +38,15 @@ namespace shz
 		}
 
 		m_ObjectSparse.clear();
+		m_TerrainSparse.clear();
 		m_IndirectSparse.clear();
 		m_LightSparse.clear();
 
 		m_ObjectDense.clear();
 		m_ObjectHandles.clear();
+
+		m_TerrainDense.clear();
+		m_TerrainHandles.clear();
 
 		m_IndirectDense.clear();
 		m_IndirectHandles.clear();
@@ -261,6 +271,91 @@ namespace shz
 		return &m_ObjectDense[(size_t)dense].Obj;
 	}
 
+	// ------------------------------------------------------------
+	// Terrain: Add/Remove/Get
+	// ------------------------------------------------------------
+	Handle<RenderScene::TerrainObject> RenderScene::AddTerrain(const TerrainObject& obj)
+	{
+		ASSERT(obj.VertexBuffer, "AddTerrain: VertexBuffer is null.");
+		ASSERT(obj.IndexBuffer, "AddTerrain: IndexBuffer is null.");
+		ASSERT(obj.IndexCount > 0, "AddTerrain: IndexCount is 0.");
+		ASSERT(obj.InstanceCount > 0, "AddTerrain: InstanceCount is 0.");
+		ASSERT(obj.MaterialId != 0, "AddTerrain: MaterialId is 0.");
+
+		UniqueHandle<TerrainObject> owner = UniqueHandle<TerrainObject>::Make();
+		const Handle<TerrainObject> h = owner.Get();
+		ASSERT(h.IsValid(), "Failed to allocate TerrainObject handle.");
+
+		const uint32 handleIndex = h.GetIndex();
+		ensureCapacity(handleIndex, m_TerrainSlots);
+		ensureCapacity(handleIndex, m_TerrainSparse);
+
+		Slot<TerrainObject>& slot = m_TerrainSlots[handleIndex];
+		ASSERT(!slot.bOccupied && !slot.Owner.Get().IsValid(), "TerrainObject slot already occupied.");
+
+		const uint32 denseIndex = static_cast<uint32>(m_TerrainDense.size());
+
+		m_TerrainDense.emplace_back(obj);
+		m_TerrainHandles.emplace_back(h);
+
+		slot.Owner = std::move(owner);
+		slot.DenseIndex = denseIndex;
+		slot.bOccupied = true;
+
+		m_TerrainSparse[handleIndex] = denseIndex;
+		return h;
+	}
+
+	void RenderScene::RemoveTerrain(Handle<TerrainObject> h)
+	{
+		const uint32 denseIndex = findDenseIndex(h, m_TerrainSlots);
+		ASSERT(denseIndex != INVALID_INDEX, "Attempted to remove non-existing TerrainObject.");
+
+		const uint32 lastIndex = static_cast<uint32>(m_TerrainDense.size() - 1);
+		if (denseIndex != lastIndex)
+		{
+			m_TerrainDense[denseIndex] = std::move(m_TerrainDense[lastIndex]);
+
+			const Handle<TerrainObject> movedHandle = m_TerrainHandles[lastIndex];
+			m_TerrainHandles[denseIndex] = movedHandle;
+
+			const uint32 movedHandleIndex = movedHandle.GetIndex();
+			Slot<TerrainObject>& movedSlot = m_TerrainSlots[movedHandleIndex];
+			ASSERT(movedSlot.bOccupied && movedSlot.Owner.Get() == movedHandle, "Moved slot mismatch.");
+			movedSlot.DenseIndex = denseIndex;
+
+			m_TerrainSparse[movedHandleIndex] = denseIndex;
+		}
+
+		m_TerrainDense.pop_back();
+		m_TerrainHandles.pop_back();
+
+		const uint32 handleIndex = h.GetIndex();
+		Slot<TerrainObject>& slot = m_TerrainSlots[handleIndex];
+		slot.Owner.Reset();
+		slot.DenseIndex = INVALID_INDEX;
+		slot.bOccupied = false;
+
+		m_TerrainSparse[handleIndex] = INVALID_INDEX;
+	}
+
+	RenderScene::TerrainObject* RenderScene::GetTerrainOrNull(Handle<TerrainObject> h) noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_TerrainSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_TerrainDense[(size_t)dense];
+	}
+
+	const RenderScene::TerrainObject* RenderScene::GetTerrainOrNull(Handle<TerrainObject> h) const noexcept
+	{
+		const uint32 dense = findDenseIndex(h, m_TerrainSlots);
+		if (dense == INVALID_INDEX) return nullptr;
+		return &m_TerrainDense[(size_t)dense];
+	}
+
+	// ------------------------------------------------------------
+	// Indirect: Add/Remove/Get
+	// ------------------------------------------------------------
 	Handle<RenderScene::IndirectObject> RenderScene::AddIndirect(const IndirectObjectDesc& desc)
 	{
 		ASSERT(desc.pMesh, "AddIndirect: mesh is null.");
@@ -441,12 +536,17 @@ namespace shz
 	void RenderScene::BuildDrawPackets(
 		uint64 passKey,
 		const std::vector<uint32>& visibleObjectDenseIndices,
-		const std::function<const MaterialPipelineBinding&(MaterialId, uint64)>& resolver,
+		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets,
 		std::vector<uint32>& outInstanceRemap) const
 	{
 		outPackets.clear();
 		outInstanceRemap.clear();
+
+		if (passKey == STRING_HASH("GBuffer"))
+		{
+			BuildTerrainDrawPackets(passKey, resolver, outPackets);
+		}
 
 		if (visibleObjectDenseIndices.empty())
 		{
@@ -599,6 +699,39 @@ namespace shz
 
 				outPackets.emplace_back(pkt);
 			}
+		}
+	}
+
+	void RenderScene::BuildTerrainDrawPackets(
+		uint64 passKey,
+		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
+		std::vector<DrawPacket>& outPackets) const
+	{
+		for (const TerrainObject& t : m_TerrainDense)
+		{
+			ASSERT(t.VertexBuffer, "TerrainObject VB is null.");
+			ASSERT(t.IndexBuffer, "TerrainObject IB is null.");
+			ASSERT(t.IndexCount > 0, "TerrainObject IndexCount is 0.");
+
+			const MaterialPipelineBinding& pb = resolver(t.MaterialId, passKey);
+			ASSERT(pb.pPSO && pb.pSRB, "Terrain pipeline binding is null.");
+
+			DrawPacket pkt = {};
+			pkt.VertexBuffer = t.VertexBuffer;
+			pkt.IndexBuffer = t.IndexBuffer;
+			pkt.PSO = pb.pPSO;
+			pkt.SRB = pb.pSRB;
+
+			pkt.DrawAttribs = {};
+			pkt.DrawAttribs.IndexType = t.IndexType;
+			pkt.DrawAttribs.NumIndices = t.IndexCount;
+			pkt.DrawAttribs.FirstIndexLocation = 0;
+			pkt.DrawAttribs.BaseVertex = 0;
+			pkt.DrawAttribs.NumInstances = t.InstanceCount;
+			pkt.DrawAttribs.FirstInstanceLocation = t.FirstInstanceLocation;
+			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+			outPackets.emplace_back(pkt);
 		}
 	}
 
