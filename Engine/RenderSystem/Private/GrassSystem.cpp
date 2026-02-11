@@ -1,4 +1,3 @@
-// Engine/RenderSystem/Private/GrassSystem.cpp
 #include "pch.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
@@ -572,9 +571,29 @@ namespace shz
                     { SHADER_TYPE_COMPUTE, "g_VisibleCellTable",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_PoolPositions",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_CounterBuffer",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_DensityField",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                 };
                 rl.Variables = vars;
                 rl.NumVariables = _countof(vars);
+
+                SamplerDesc linearClamp =
+                {
+                    FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+                    TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+                };
+                SamplerDesc linearWrap =
+                {
+                    FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+                    TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+                };
+                ImmutableSamplerDesc samplers[] =
+                {
+                    { SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
+                    { SHADER_TYPE_COMPUTE, "g_LinearWrapSampler",  linearWrap  },
+                };
+                rl.ImmutableSamplers = samplers;
+                rl.NumImmutableSamplers = _countof(samplers);
 
                 psoCI.pCS = cs;
 
@@ -602,6 +621,12 @@ namespace shz
 
                 if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer"))
                     v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
+                    v->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolChunkCoord"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolChunkCoord")));
             });
     }
 
