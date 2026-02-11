@@ -187,221 +187,284 @@ namespace shz
 			mips.emplace_back(static_cast<TextureMip&&>(tm));
 		}
 
-		// ------------------------------------------------------------
-// Preserve alpha test coverage across mip chain (optional)
+        // ------------------------------------------------------------
+// Preserve alpha test coverage across mip chain (stronger)
 // ------------------------------------------------------------
-// Fix: binary alpha (0/1) gets averaged in lower mips, causing masked foliage/grass
-//      to shrink/disappear at distance.
+// Stronger changes:
+//  1) Per-mip target coverage: compute from mip0 with stride 2^m sampling
+//     so the target reflects the area that mip represents.
+//  2) Auto-expand search upper bound if needed.
+//  3) More iterations + early-exit on epsilon.
+//  4) No goto, cleaner guards.
 //
-// Strategy:
-//  - Compute target coverage from mip0: fraction(alpha > cutoff)
-//  - For each mip>0, find scale s (binary search) such that
-//      fraction(saturate(alpha*s) > cutoff) ~= target
-//  - Apply alpha = saturate(alpha*s)
-//
-// Safety:
-//  - Auto-skip if texture is effectively opaque (avoid affecting opaque/basecolor textures).
-//  - Only supports 8-bit RGBA/BGRA formats here.
-		if (setting.bPreserveAlphaCoverage && desc.MipLevels > 1)
-		{
-			const float alphaCutoff01 = Clamp(setting.AlphaCutoff, 0.0f, 1.0f);
+// Notes:
+//  - This is a "scale only" method: alpha' = saturate(alpha * s).
+//  - Works best for MASKed foliage/grass. Avoid for fully opaque textures.
+        if (setting.bPreserveAlphaCoverage && desc.MipLevels > 1)
+        {
+            const float alphaCutoff01 = Clamp(setting.AlphaCutoff, 0.0f, 1.0f);
 
-			bool supportedFmt = false;
-			bool isBGRA = false;
+            bool supportedFmt = false;
+            switch (outFmt)
+            {
+            case TEX_FORMAT_RGBA8_UNORM:
+            case TEX_FORMAT_RGBA8_UNORM_SRGB:
+            case TEX_FORMAT_BGRA8_UNORM:
+            case TEX_FORMAT_BGRA8_UNORM_SRGB:
+                supportedFmt = true;
+                break;
+            default:
+                supportedFmt = false;
+                break;
+            }
 
-			switch (outFmt)
-			{
-			case TEX_FORMAT_RGBA8_UNORM:
-			case TEX_FORMAT_RGBA8_UNORM_SRGB:
-				supportedFmt = true;
-				isBGRA = false;
-				break;
+            if (supportedFmt && !mips.empty() && bpp >= 4u)
+            {
+                constexpr uint32 kAlphaByteOffset = 3u; // RGBA/BGRA 모두 alpha는 byte 3
+                const uint32 bytesPerPixel = bpp;       // expected 4
 
-			case TEX_FORMAT_BGRA8_UNORM:
-			case TEX_FORMAT_BGRA8_UNORM_SRGB:
-				supportedFmt = true;
-				isBGRA = true;
-				break;
+                auto Clamp01 = [](float v) -> float { return std::min(std::max(v, 0.0f), 1.0f); };
 
-			default:
-				supportedFmt = false;
-				break;
-			}
+                auto ComputeAlphaMinMaxU8 = [&](const TextureMip& mip, uint8& outMin, uint8& outMax)
+                {
+                    outMin = 255;
+                    outMax = 0;
 
-			if (supportedFmt)
-			{
-				// For RGBA8/BGRA8, alpha is at byte 3.
-				const uint32 alphaByteOffset = 3u;
-				const uint32 bytesPerPixel = bpp; // expected 4
+                    const uint32 w = mip.Width;
+                    const uint32 h = mip.Height;
+                    if (w == 0 || h == 0 || mip.Data.empty())
+                        return;
 
+                    const uint8* data = mip.Data.data();
+                    const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
 
-				// Local helpers (lambdas)
-				auto ComputeCoverageU8 = [&](const TextureMip& mip, uint8 cutoffU8) -> float
-					{
-						const uint32 w = mip.Width;
-						const uint32 h = mip.Height;
-						const uint8* data = mip.Data.data();
+                    for (uint32 y = 0; y < h; ++y)
+                    {
+                        const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+                        for (uint32 x = 0; x < w; ++x)
+                        {
+                            const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + kAlphaByteOffset];
+                            outMin = std::min(outMin, a);
+                            outMax = std::max(outMax, a);
+                        }
+                    }
+                };
 
-						uint64 pass = 0;
-						const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
-						const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+                auto ComputeCoverageU8 = [&](const TextureMip& mip, uint8 cutoffU8) -> float
+                {
+                    const uint32 w = mip.Width;
+                    const uint32 h = mip.Height;
+                    if (w == 0 || h == 0 || mip.Data.empty())
+                        return 0.0f;
 
-						for (uint32 y = 0; y < h; ++y)
-						{
-							const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
-							for (uint32 x = 0; x < w; ++x)
-							{
-								const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
-								pass += (a > cutoffU8) ? 1u : 0u;
-							}
-						}
+                    const uint8* data = mip.Data.data();
+                    const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
 
-						return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
-					};
+                    uint64 pass = 0;
+                    const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
 
-				auto CoverageWithScale = [&](const TextureMip& mip, float scale, float cutoff01f) -> float
-					{
-						const uint32 w = mip.Width;
-						const uint32 h = mip.Height;
-						const uint8* data = mip.Data.data();
+                    for (uint32 y = 0; y < h; ++y)
+                    {
+                        const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+                        for (uint32 x = 0; x < w; ++x)
+                        {
+                            const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + kAlphaByteOffset];
+                            pass += (a > cutoffU8) ? 1u : 0u;
+                        }
+                    }
 
-						uint64 pass = 0;
-						const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
-						const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+                    return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
+                };
 
-						for (uint32 y = 0; y < h; ++y)
-						{
-							const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
-							for (uint32 x = 0; x < w; ++x)
-							{
-								const uint8 aU8 = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
-								float a = (static_cast<float>(aU8) / 255.0f) * scale;
-								a = std::min(std::max(a, 0.0f), 1.0f);
-								pass += (a > cutoff01f) ? 1u : 0u;
-							}
-						}
+                // Stronger: compute per-mip target coverage from mip0 using stride sampling (2^m)
+                // This better matches what each mip "means" and preserves distant silhouette more reliably.
+                auto ComputeTargetFromMip0_Stride = [&](uint32 mipLevel, float cutoff01f) -> float
+                {
+                    const TextureMip& m0 = mips[0];
+                    const uint32 w0 = m0.Width;
+                    const uint32 h0 = m0.Height;
+                    if (w0 == 0 || h0 == 0 || m0.Data.empty())
+                        return 0.0f;
 
-						return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
-					};
+                    const uint8* data = m0.Data.data();
+                    const uint64 rowBytes0 = static_cast<uint64>(w0) * bytesPerPixel;
 
-				auto ApplyScale = [&](TextureMip& mip, float scale)
-					{
-						const uint32 w = mip.Width;
-						const uint32 h = mip.Height;
-						uint8* data = mip.Data.data();
+                    const uint32 step = (mipLevel >= 31) ? 0u : (1u << mipLevel);
+                    const uint32 stride = std::max(step, 1u);
 
-						const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+                    const float cutoff = Clamp01(cutoff01f);
+                    const float cutoffU8f = cutoff * 255.0f;
+                    const uint8 cutoffU8 = static_cast<uint8>(std::min(std::max(cutoffU8f, 0.0f), 255.0f) + 0.5f);
 
-						for (uint32 y = 0; y < h; ++y)
-						{
-							uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
-							for (uint32 x = 0; x < w; ++x)
-							{
-								uint8& aU8 = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
-								float a = (static_cast<float>(aU8) / 255.0f) * scale;
-								a = std::min(std::max(a, 0.0f), 1.0f);
-								aU8 = static_cast<uint8>(a * 255.0f + 0.5f);
-							}
-						}
-					};
+                    uint64 pass = 0;
+                    uint64 count = 0;
 
-				// Compute target coverage from mip0 (using integer cutoff for stability).
-				const uint8 cutoffU8 = static_cast<uint8>(Clamp(alphaCutoff01, 0.0f, 1.0f) * 255.0f + 0.5f);
-				const float target = ComputeCoverageU8(mips[0], cutoffU8);
+                    // 샘플링은 0..w0/h0에서 stride 간격으로만 찍음
+                    for (uint32 y = 0; y < h0; y += stride)
+                    {
+                        const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes0);
+                        for (uint32 x = 0; x < w0; x += stride)
+                        {
+                            const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + kAlphaByteOffset];
+                            pass += (a > cutoffU8) ? 1u : 0u;
+                            ++count;
+                        }
+                    }
 
-				if (bytesPerPixel >= 4u && !mips.empty())
-				{
-					// ------------------------------------------------------------
-					// Guard 1) Skip if mip0 alpha is basically opaque/constant
-					// (common for opaque basecolor textures that still have an alpha channel)
-					// ------------------------------------------------------------
-					{
-						const TextureMip& m0 = mips[0];
-						const uint32 w = m0.Width;
-						const uint32 h = m0.Height;
+                    return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
+                };
 
-						if (w > 0 && h > 0 && !m0.Data.empty())
-						{
-							const uint8* data = m0.Data.data();
-							const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
+                auto CoverageWithScale = [&](const TextureMip& mip, float scale, float cutoff01f) -> float
+                {
+                    const uint32 w = mip.Width;
+                    const uint32 h = mip.Height;
+                    if (w == 0 || h == 0 || mip.Data.empty())
+                        return 0.0f;
 
-							uint8 aMin = 255;
-							uint8 aMax = 0;
+                    const uint8* data = mip.Data.data();
+                    const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
 
-							for (uint32 y = 0; y < h; ++y)
-							{
-								const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
-								for (uint32 x = 0; x < w; ++x)
-								{
-									const uint8 a = row[static_cast<size_t>(x) * bytesPerPixel + alphaByteOffset];
-									aMin = std::min(aMin, a);
-									aMax = std::max(aMax, a);
-								}
-							}
+                    uint64 pass = 0;
+                    const uint64 count = static_cast<uint64>(w) * static_cast<uint64>(h);
 
-							// Loose thresholds to catch "opaque PNG with near-255 edge pixels".
-							const bool alphaNearlyConstant = (aMax - aMin) <= 2; // <= 2/255
-							const bool alphaNearlyOpaque = (aMin >= 250);      // min alpha >= ~0.98
+                    const float cutoff = Clamp01(cutoff01f);
 
-							if (alphaNearlyConstant && alphaNearlyOpaque)
-							{
-								// Skip preserve coverage.
-								goto SKIP_PRESERVE_ALPHA_COVERAGE;
-							}
-						}
-					}
+                    for (uint32 y = 0; y < h; ++y)
+                    {
+                        const uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+                        for (uint32 x = 0; x < w; ++x)
+                        {
+                            const uint8 aU8 = row[static_cast<size_t>(x) * bytesPerPixel + kAlphaByteOffset];
+                            float a = (static_cast<float>(aU8) / 255.0f) * scale;
+                            a = Clamp01(a);
+                            pass += (a > cutoff) ? 1u : 0u;
+                        }
+                    }
 
-					// Guard 2) If target is effectively 0 or 1, scaling is meaningless and can still perturb alpha slightly.
-					// - target ~1 => texture is almost fully opaque (should have been caught by Guard 1, but keep safe).
-					// - target ~0 => almost fully masked out for this cutoff.
-					if (target < 0.005f || target > 0.995f)
-					{
-						goto SKIP_PRESERVE_ALPHA_COVERAGE;
-					}
+                    return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
+                };
 
-					// For each mip > 0, find scale so that its coverage matches target.
-					for (uint32 mip = 1; mip < desc.MipLevels; ++mip)
-					{
-						TextureMip& tm = mips[mip];
+                auto ApplyScale = [&](TextureMip& mip, float scale)
+                {
+                    const uint32 w = mip.Width;
+                    const uint32 h = mip.Height;
+                    if (w == 0 || h == 0 || mip.Data.empty())
+                        return;
 
-						// If mip is empty or degenerate, skip.
-						if (tm.Width == 0 || tm.Height == 0 || tm.Data.empty())
-							continue;
+                    uint8* data = mip.Data.data();
+                    const uint64 rowBytes = static_cast<uint64>(w) * bytesPerPixel;
 
-						float lo = 0.0f;
-						float hi = 16.0f; // Typical upper bound; tweakable via settings if desired.
+                    for (uint32 y = 0; y < h; ++y)
+                    {
+                        uint8* row = data + static_cast<size_t>(y) * static_cast<size_t>(rowBytes);
+                        for (uint32 x = 0; x < w; ++x)
+                        {
+                            uint8& aU8 = row[static_cast<size_t>(x) * bytesPerPixel + kAlphaByteOffset];
+                            float a = (static_cast<float>(aU8) / 255.0f) * scale;
+                            a = Clamp01(a);
+                            aU8 = static_cast<uint8>(a * 255.0f + 0.5f);
+                        }
+                    }
+                };
 
-						// Optional: early widen if even hi is not enough (rare, but safe).
-						// (If mip alpha collapsed close to 0 everywhere, no scale can recover coverage.)
-						const float covAtHi = CoverageWithScale(tm, hi, alphaCutoff01);
-						if (covAtHi < target)
-						{
-							// Can't reach target; best-effort at hi.
-							ApplyScale(tm, hi);
-							continue;
-						}
+                // -----------------------------
+                // Guards (strong but safe)
+                // -----------------------------
+                bool bSkip = false;
 
-						// Binary search.
-						for (int it = 0; it < 10; ++it)
-						{
-							const float mid = 0.5f * (lo + hi);
-							const float cov = CoverageWithScale(tm, mid, alphaCutoff01);
+                // Guard 1) Skip if mip0 alpha is basically opaque/constant
+                {
+                    uint8 aMin = 255, aMax = 0;
+                    ComputeAlphaMinMaxU8(mips[0], aMin, aMax);
 
-							if (cov < target)
-								lo = mid;
-							else
-								hi = mid;
-						}
+                    const bool alphaNearlyConstant = (aMax - aMin) <= 2; // <= 2/255
+                    const bool alphaNearlyOpaque = (aMin >= 250);      // min alpha >= ~0.98
+                    if (alphaNearlyConstant && alphaNearlyOpaque)
+                        bSkip = true;
+                }
 
-						const float scale = 0.5f * (lo + hi);
-						ApplyScale(tm, scale);
-					}
+                // Guard 2) If mip0 target is degenerate for this cutoff, skip
+                // (너무 0/1이면 scale이 의미 없고 노이즈만 만들 수 있음)
+                if (!bSkip)
+                {
+                    const float t0 = ComputeTargetFromMip0_Stride(0, alphaCutoff01);
+                    if (t0 < 0.0025f || t0 > 0.9975f)
+                        bSkip = true;
+                }
 
-				SKIP_PRESERVE_ALPHA_COVERAGE:
-					;
-				}
-			}
-		}
+                if (!bSkip)
+                {
+                    // Tuning knobs (stronger defaults)
+                    const int   kSearchIters = 16;      // 10 -> 16
+                    const float kTargetEps = 1.0e-4f; // coverage 오차 허용
+                    const float kScaleMin = 0.0f;
+                    const float kScaleMaxHard = 128.0f;  // 16 -> 128 (하드 상한)
+                    const float kScaleInitHi = 16.0f;   // 시작 hi
+                    const int   kHiGrowSteps = 6;       // hi 확장 횟수 (16*2^6=1024 이지만 hard clamp 적용)
+
+                    for (uint32 mip = 1; mip < desc.MipLevels; ++mip)
+                    {
+                        TextureMip& tm = mips[mip];
+                        if (tm.Width == 0 || tm.Height == 0 || tm.Data.empty())
+                            continue;
+
+                        // Stronger: per-mip target
+                        const float target = ComputeTargetFromMip0_Stride(mip, alphaCutoff01);
+
+                        // target이 거의 0/1이면 해당 mip만 스킵 (여기서 억지로 만지면 오히려 튐)
+                        if (target < 0.001f || target > 0.999f)
+                            continue;
+
+                        float lo = kScaleMin;
+                        float hi = kScaleInitHi;
+
+                        // Ensure hi can reach target (monotonic: scale↑ => coverage↑)
+                        float covHi = CoverageWithScale(tm, hi, alphaCutoff01);
+                        for (int g = 0; g < kHiGrowSteps && covHi < target && hi < kScaleMaxHard; ++g)
+                        {
+                            hi = std::min(hi * 2.0f, kScaleMaxHard);
+                            covHi = CoverageWithScale(tm, hi, alphaCutoff01);
+                        }
+
+                        // If still cannot reach, best effort at hi.
+                        if (covHi < target)
+                        {
+                            ApplyScale(tm, hi);
+                            continue;
+                        }
+
+                        // Binary search with epsilon early-out
+                        float prevMid = -1.0f;
+                        for (int it = 0; it < kSearchIters; ++it)
+                        {
+                            const float mid = 0.5f * (lo + hi);
+                            const float cov = CoverageWithScale(tm, mid, alphaCutoff01);
+
+                            if (std::abs(cov - target) <= kTargetEps)
+                            {
+                                lo = hi = mid;
+                                break;
+                            }
+
+                            // coverage가 target보다 작으면 scale 올려야 함
+                            if (cov < target)
+                                lo = mid;
+                            else
+                                hi = mid;
+
+                            // scale 변화가 거의 없으면 중단
+                            if (prevMid >= 0.0f && std::abs(mid - prevMid) < 1.0e-6f)
+                                break;
+
+                            prevMid = mid;
+                        }
+
+                        const float scale = 0.5f * (lo + hi);
+                        ApplyScale(tm, scale);
+                    }
+                }
+            }
+        }
 
 
 		if (!tex.IsValid())
