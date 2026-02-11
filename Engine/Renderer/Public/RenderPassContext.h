@@ -53,6 +53,7 @@ namespace shz
 		std::vector<DrawPacket> MainDrawPackets = {};
 		std::vector<DrawPacket> ForwardDrawPackets = {};
 		std::vector<DrawPacket> ShadowDrawPackets = {};
+		std::vector<DrawPacket> DepthPrepassDrawPackets = {};
 
 		std::vector<DrawIndirectPacket> MainIndirectPackets = {};
 		std::vector<DrawIndirectPacket> ForwardIndirectPackets = {};

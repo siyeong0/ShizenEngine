@@ -649,15 +649,23 @@ namespace shz
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
-		// Shadow
-		scene.BuildDrawPackets(
+		// Shadow // TOOD: off shadow now
+		/*scene.BuildDrawPackets(
 			STRING_HASH("Shadow"),
 			visibleObjectIndexShadow,
 			pipelineResolver,
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);
 
-		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);
+		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);*/
+
+		// Depth prepass
+		scene.BuildDrawPackets(
+			STRING_HASH("DepthPrepass"),
+			visibleObjectIndexMain,
+			pipelineResolver,
+			m_PassCtx.DepthPrepassDrawPackets,
+			instanceRemap);
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);

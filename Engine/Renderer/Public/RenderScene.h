@@ -34,6 +34,7 @@ namespace shz
 			Matrix4x4 WorldInvTranspose = {};
 
 			bool bCastShadow = true;
+			bool bDepthPrepass = true;
 		};
 
 		// ------------------------------------------------------------

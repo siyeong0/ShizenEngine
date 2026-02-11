@@ -543,10 +543,7 @@ namespace shz
 		outPackets.clear();
 		outInstanceRemap.clear();
 
-		if (passKey == STRING_HASH("GBuffer"))
-		{
-			BuildTerrainDrawPackets(passKey, resolver, outPackets);
-		}
+		BuildTerrainDrawPackets(passKey, resolver, outPackets);
 
 		if (visibleObjectDenseIndices.empty())
 		{
@@ -707,6 +704,11 @@ namespace shz
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets) const
 	{
+		if (!(passKey == STRING_HASH("GBuffer") || passKey == STRING_HASH("Shadow") || passKey == STRING_HASH("DepthPrepass")))
+		{
+			return;
+		}
+
 		for (const TerrainObject& t : m_TerrainDense)
 		{
 			ASSERT(t.VertexBuffer, "TerrainObject VB is null.");
@@ -933,6 +935,28 @@ namespace shz
 
 				const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), *obj.pMesh, si, matId, obj.bCastShadow);
 				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, STRING_HASH("Shadow"), obj.bCastShadow);
+
+				Batch& batch = m_Batches[batchId];
+				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+				batch.Instances.emplace_back(inst);
+
+				rec.Sections[si].Shadow.BatchId = batchId;
+				rec.Sections[si].Shadow.InstanceIndex = instIndex;
+			}
+
+			// -----------------------------
+			// Depth pre-pass batch
+			// -----------------------------
+			if (obj.bDepthPrepass)
+			{
+				BatchInstance inst = {};
+				inst.OcIndex = rec.OcIndex;
+				inst.OwnerObjectDenseIndex = objectDenseIndex;
+				inst.OwnerSectionSlot = static_cast<uint16>(si);
+				inst.OwnerPassSlot = 1;
+
+				const DrawBatchKey key = makeBatchKey(STRING_HASH("DepthPrepass"), *obj.pMesh, si, matId, obj.bCastShadow);
+				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, STRING_HASH("DepthPrepass"), obj.bCastShadow);
 
 				Batch& batch = m_Batches[batchId];
 				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
