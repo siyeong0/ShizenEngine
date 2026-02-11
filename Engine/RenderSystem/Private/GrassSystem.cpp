@@ -1,3 +1,4 @@
+// Engine/RenderSystem/Private/GrassSystem.cpp
 #include "pch.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
@@ -15,302 +16,593 @@
 
 namespace shz
 {
-	namespace hlsl
-	{
+    namespace hlsl
+    {
 #include "Shaders/HLSL_Structures.hlsli"
-	}
+    }
 
-	void GrassSystem::InstallPasses(
-		Renderer& renderer,
-		RenderScene& scene,
-		IndirectArgsSystem& indirect,
-		const InteractionSystem& interaction)
-	{
-		m_pInteractionSystem = &interaction;
+    static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
 
-		ASSERT(m_GrassDesc.pMeshLod0, "GrassDesc.pMeshLod0 is null");
-		ASSERT(m_GrassDesc.pCrossMeshLod1, "GrassDesc.pCrossMeshLod1 is null");
-		ASSERT(m_GrassDesc.pBillboardMeshLod2, "GrassDesc.pBillboardMeshLod2 is null");
+    void GrassSystem::InstallPasses(
+        Renderer& renderer,
+        RenderScene& scene,
+        IndirectArgsSystem& indirect,
+        const InteractionSystem& interaction)
+    {
+        m_pInteractionSystem = &interaction;
 
-		// ---------------------------------------------------------------------
-		// Buffers (instances)
-		// ---------------------------------------------------------------------
-		{
-			BufferDesc bd = {};
-			bd.Usage = USAGE_DEFAULT;
-			bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-			bd.Mode = BUFFER_MODE_STRUCTURED;
+        ASSERT(m_GrassDesc.pMeshLod0, "GrassDesc.pMeshLod0 is null");
+        ASSERT(m_GrassDesc.pCrossMeshLod1, "GrassDesc.pCrossMeshLod1 is null");
+        ASSERT(m_GrassDesc.pBillboardMeshLod2, "GrassDesc.pBillboardMeshLod2 is null");
 
-			bd.Name = "GrassInstanceBufferLOD0";
-			bd.ElementByteStride = sizeof(hlsl::GrassMeshInstance);
-			bd.Size = MAX_NUM_GRASS_LOD0_INSTANCES * sizeof(hlsl::GrassMeshInstance);
-			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD0"), bd);
+        const uint32 visibleDim = 2u * m_ChunkHalfExtent;      // 128
+        const uint32 visibleCells = visibleDim * visibleDim;   // 16384
+        const uint32 numPools = visibleCells;                  // 1:1 (simple, fast)
 
-			bd.Name = "GrassInstanceBufferLOD1";
-			bd.ElementByteStride = sizeof(hlsl::GrassCrossPlaneInstance);
-			bd.Size = MAX_NUM_GRASS_LOD1_INSTANCES * sizeof(hlsl::GrassCrossPlaneInstance);
-			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD1"), bd);
+        // ---------------------------------------------------------------------
+        // Buffers (render instances, 기존 그대로)
+        // ---------------------------------------------------------------------
+        {
+            BufferDesc bd = {};
+            bd.Usage = USAGE_DEFAULT;
+            bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+            bd.Mode = BUFFER_MODE_STRUCTURED;
 
-			bd.Name = "GrassInstanceBufferLOD2";
-			bd.ElementByteStride = sizeof(hlsl::GrassBillboardInstance);
-			bd.Size = MAX_NUM_GRASS_LOD2_INSTANCES * sizeof(hlsl::GrassBillboardInstance);
-			renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD2"), bd);
-		}
+            bd.Name = "GrassInstanceBufferLOD0";
+            bd.ElementByteStride = sizeof(hlsl::GrassMeshInstance);
+            bd.Size = MAX_NUM_GRASS_LOD0_INSTANCES * sizeof(hlsl::GrassMeshInstance);
+            renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD0"), bd);
 
-		// Allocate indirect slots
-		m_IndirectSlotLOD0 = indirect.AllocateSlot("GrassLOD0");
-		m_IndirectSlotLOD1 = indirect.AllocateSlot("GrassLOD1");
-		m_IndirectSlotLOD2 = indirect.AllocateSlot("GrassLOD2");
+            bd.Name = "GrassInstanceBufferLOD1";
+            bd.ElementByteStride = sizeof(hlsl::GrassCrossPlaneInstance);
+            bd.Size = MAX_NUM_GRASS_LOD1_INSTANCES * sizeof(hlsl::GrassCrossPlaneInstance);
+            renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD1"), bd);
 
-		// Indirect templates
-		{
-			hlsl::IndirectArgsTemplate t = {};
-			t.StartIndexLocation = 0;
-			t.BaseVertexLocation = 0;
-			t.StartInstanceLocation = 0;
+            bd.Name = "GrassInstanceBufferLOD2";
+            bd.ElementByteStride = sizeof(hlsl::GrassBillboardInstance);
+            bd.Size = MAX_NUM_GRASS_LOD2_INSTANCES * sizeof(hlsl::GrassBillboardInstance);
+            renderer.AddBuffer(STRING_HASH("GrassInstanceBufferLOD2"), bd);
+        }
 
-			t.IndexCountPerInstance = m_GrassDesc.pMeshLod0->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD0, t);
+        // ---------------------------------------------------------------------
+        // ChunkPool buffers
+        //
+        // VisibleCellTable: 128x128 mapping -> poolIndex, chunkCoord
+        // PoolChunkCoord: poolIndex -> chunkCoord (int2)
+        // PoolDirty: poolIndex -> uint (0/1)
+        // PoolPositions: poolIndex * SamplesPerChunk -> float4(x,y,z,_)
+        // FreeList: stack of pool indices, FreeListCounter
+        // ---------------------------------------------------------------------
+        {
+            // Visible cell table (structured)
+            // struct Cell { uint PoolIndex; int2 ChunkCoord; uint _pad; } => 16 bytes
+            BufferDesc bd = {};
+            bd.Usage = USAGE_DEFAULT;
+            bd.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+            bd.Mode = BUFFER_MODE_STRUCTURED;
+            bd.ElementByteStride = 16;
+            bd.Size = uint64(visibleCells) * 16ull;
+            bd.Name = "Grass_VisibleCellTable";
+            renderer.AddBuffer(STRING_HASH("Grass_VisibleCellTable"), bd);
 
-			t.IndexCountPerInstance = m_GrassDesc.pCrossMeshLod1->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD1, t);
+            // pool -> chunkCoord (int2) => 8 bytes, but make 16 stride for alignment
+            bd.ElementByteStride = 16;
+            bd.Size = uint64(numPools) * 16ull;
+            bd.Name = "Grass_PoolChunkCoord";
+            renderer.AddBuffer(STRING_HASH("Grass_PoolChunkCoord"), bd);
 
-			t.IndexCountPerInstance = m_GrassDesc.pBillboardMeshLod2->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD2, t);
-		}
+            // pool dirty flag (uint) => 4 bytes, but structured 16 stride (simple)
+            bd.ElementByteStride = 16;
+            bd.Size = uint64(numPools) * 16ull;
+            bd.Name = "Grass_PoolDirty";
+            renderer.AddBuffer(STRING_HASH("Grass_PoolDirty"), bd);
 
-		// GrassGenConstantsCB (CS)
-		{
-			BufferDesc bd = {};
-			bd.Name = "GrassGenConstantsCB";
-			bd.Usage = USAGE_DYNAMIC;
-			bd.BindFlags = BIND_UNIFORM_BUFFER;
-			bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-			bd.Size = sizeof(hlsl::GrassGenConstants);
+            // pool positions: float4 per sample
+            bd.ElementByteStride = 16;
+            bd.Size = uint64(numPools) * uint64(m_SamplesPerChunk) * 16ull;
+            bd.Name = "Grass_PoolPositions";
+            renderer.AddBuffer(STRING_HASH("Grass_PoolPositions"), bd);
 
-			renderer.AddBuffer(STRING_HASH("GrassGenConstantsCB"), bd);
-		}
+            // free list (uint) array
+            bd.Mode = BUFFER_MODE_STRUCTURED;
+            bd.ElementByteStride = 16;               // store uint in .x, padding
+            bd.Size = uint64(numPools) * 16ull;
+            bd.Name = "Grass_FreeList";
+            renderer.AddBuffer(STRING_HASH("Grass_FreeList"), bd);
 
-		// ---------------------------------------------------------------------
-		// Register indirect objects to RenderScene (Deferred에서 그리기)
-		// ---------------------------------------------------------------------
-		{
-			RenderScene::IndirectObjectDesc d = {};
-			d.bCastShadow = true;
-			
-			d.PassKey = STRING_HASH("GBuffer");
+            // free list counter (uint) in RAW/ByteAddress
+            BufferDesc raw = {};
+            raw.Name = "Grass_FreeListCounter";
+            raw.Usage = USAGE_DEFAULT;
+            raw.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+            raw.Mode = BUFFER_MODE_RAW;
+            raw.Size = 4; // uint
+            renderer.AddBuffer(STRING_HASH("Grass_FreeListCounter"), raw);
+        }
 
-			d.bDepthPrepass = false;
-			d.pMesh = m_GrassDesc.pMeshLod0;
-			d.IndirectSlot = m_IndirectSlotLOD0;
-			scene.AddIndirect(d);
+        // ---------------------------------------------------------------------
+        // Constants buffer (CS)
+        // ---------------------------------------------------------------------
+        {
+            BufferDesc bd = {};
+            bd.Name = "GrassGenConstants";
+            bd.Usage = USAGE_DYNAMIC;
+            bd.BindFlags = BIND_UNIFORM_BUFFER;
+            bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+            bd.Size = sizeof(hlsl::GrassGenConstants);
+            renderer.AddBuffer(STRING_HASH("GrassGenConstants"), bd);
+        }
 
-			d.bDepthPrepass = false;
-			d.pMesh = m_GrassDesc.pCrossMeshLod1;
-			d.IndirectSlot = m_IndirectSlotLOD1;
-			scene.AddIndirect(d);
+        // Allocate indirect slots
+        m_IndirectSlotLOD0 = indirect.AllocateSlot("GrassLOD0");
+        m_IndirectSlotLOD1 = indirect.AllocateSlot("GrassLOD1");
+        m_IndirectSlotLOD2 = indirect.AllocateSlot("GrassLOD2");
 
-			d.bDepthPrepass = false;
-			d.pMesh = m_GrassDesc.pBillboardMeshLod2;
-			d.IndirectSlot = m_IndirectSlotLOD2;
-			scene.AddIndirect(d);
-		}
+        // Indirect templates
+        {
+            hlsl::IndirectArgsTemplate t = {};
+            t.StartIndexLocation = 0;
+            t.BaseVertexLocation = 0;
+            t.StartInstanceLocation = 0;
 
-		// =====================================================================
-		// Pass 1) GrassGenerateInstances (compute)  << 이것만 유지 >>
-		// =====================================================================
-		renderer.AddPass(
-			"GrassGenerateInstances",
-			EPassExecutionDomain::OutsideRenderPass,
-			[&](RenderPassBuilder& b)
-			{
-				// Outputs
-				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD0"), RENDER_ACCESS_WRITE);
-				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD1"), RENDER_ACCESS_WRITE);
-				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD2"), RENDER_ACCESS_WRITE);
+            t.IndexCountPerInstance = m_GrassDesc.pMeshLod0->IndexCount;
+            indirect.SetTemplate(m_IndirectSlotLOD0, t);
 
-				// Inputs
-				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
-				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE);
+            t.IndexCountPerInstance = m_GrassDesc.pCrossMeshLod1->IndexCount;
+            indirect.SetTemplate(m_IndirectSlotLOD1, t);
 
-				// Constants
-				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstantsCB"));
-			},
-			[this, &renderer](RenderPassContext& ctx)
-			{
-				ASSERT(ctx.pImmediateContext, "ImmediateContext is null.");
-				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pGenCSO && m_pGenSRB, "GrassGenerate PSO/SRB not ready.");
+            t.IndexCountPerInstance = m_GrassDesc.pBillboardMeshLod2->IndexCount;
+            indirect.SetTemplate(m_IndirectSlotLOD2, t);
+        }
 
-				IDeviceContext* pContext = ctx.pImmediateContext;
+        // Register indirect objects to RenderScene
+        {
+            RenderScene::IndirectObjectDesc d = {};
+            d.bCastShadow = true;
+            d.PassKey = STRING_HASH("GBuffer");
 
-				// Upload constants
-				{
-					MapHelper<hlsl::GrassGenConstants> map(
-						pContext,
-						ctx.pRegistry->GetBuffer(STRING_HASH("GrassGenConstantsCB")),
-						MAP_WRITE,
-						MAP_FLAG_DISCARD);
+            d.bDepthPrepass = false;
+            d.pMesh = m_GrassDesc.pMeshLod0;
+            d.IndirectSlot = m_IndirectSlotLOD0;
+            scene.AddIndirect(d);
 
-					map->IndirectSlotLOD0 = m_IndirectSlotLOD0;
-					map->IndirectSlotLOD1 = m_IndirectSlotLOD1;
-					map->IndirectSlotLOD2 = m_IndirectSlotLOD2;
+            d.bDepthPrepass = false;
+            d.pMesh = m_GrassDesc.pCrossMeshLod1;
+            d.IndirectSlot = m_IndirectSlotLOD1;
+            scene.AddIndirect(d);
 
-					map->LOD0Distance = m_GrassDesc.LOD0Distance;
-					map->LOD1Distance = m_GrassDesc.LOD1Distance;
-					map->LodHysteresis = m_GrassDesc.LodHysteresis;
+            d.bDepthPrepass = false;
+            d.pMesh = m_GrassDesc.pBillboardMeshLod2;
+            d.IndirectSlot = m_IndirectSlotLOD2;
+            scene.AddIndirect(d);
+        }
 
-					map->YOffset = m_YOffset;
-					map->ChunkSize = m_ChunkSize;
-					map->ChunkHalfExtent = m_ChunkHalfExtent;
-					map->SamplesPerChunk = m_SamplesPerChunk;
-					map->Jitter = m_Jitter;
-					map->MinPitch = m_MinPitch;
-					map->MaxPitch = m_MaxPitch;
-					map->MinScale = m_MinScale;
-					map->MaxScale = m_MaxScale;
-					map->SpawnProb = m_SpawnProb;
-					map->SpawnRadius = m_SpawnRadius;
-					map->BendStrengthMin = m_BendStrengthMin;
-					map->BendStrengthMax = m_BendStrengthMax;
-					map->SeedSalt = m_SeedSalt;
-					map->DensityTiling = m_DensityTiling;
-					map->DensityContrast = m_DensityContrast;
-					map->DensityPow = m_DensityPow;
-					map->SlopeToDensity = m_SlopeToDensity;
-					map->HeightMinN = m_HeightMinN;
-					map->HeightMaxN = m_HeightMaxN;
-					map->HeightFadeN = m_HeightFadeN;
+        // ---------------------------------------------------------------------
+        // One-time init of FreeList + counters + tables using UpdateBuffer (CPU)
+        // ---------------------------------------------------------------------
+        {
+            // FreeList: push [0..numPools-1]
+            std::vector<uint8> freeListData;
+            freeListData.resize(size_t(numPools) * 16u);
+            for (uint32 i = 0; i < numPools; ++i)
+            {
+                // store i in first uint of 16 bytes
+                std::memcpy(freeListData.data() + size_t(i) * 16u, &i, sizeof(uint32));
+            }
+            renderer.UpdateBuffer(STRING_HASH("Grass_FreeList"), std::move(freeListData));
 
-					map->InteractionInvWorldSizeXZ = float2{ 1.0f, 1.0f } / m_pInteractionSystem->GetWorldSizeXZ();
-					map->InteractionOriginXZ = m_pInteractionSystem->GetWorldOriginXZ();
+            // FreeListCounter = numPools
+            uint32 counterInit = numPools;
+            renderer.UpdateBuffer(STRING_HASH("Grass_FreeListCounter"), counterInit);
 
-					const uint interactionResolution = m_pInteractionSystem->GetInteractionFieldResolution();
-					const uint2 interactionTexelOrigin = m_pInteractionSystem->GetTexelOrigin();
-					map->InteractionTexelOrigin = interactionTexelOrigin;
-					map->InteractionInvFieldSize = float2{ 1.0f / interactionResolution, 1.0f / interactionResolution };
-				}
+            // VisibleCellTable init: PoolIndex = 0xFFFFFFFF (invalid)
+            // PoolChunkCoord init: invalid
+            // PoolDirty init: 0
+            {
+                const uint32 INVALID = 0xFFFFFFFFu;
 
-				// Bind per-frame textures
-				{
-					StateTransitionDesc tr =
-					{
-						renderer.GetTexture(STRING_HASH("HeightField")),
-						RESOURCE_STATE_UNKNOWN,
-						RESOURCE_STATE_SHADER_RESOURCE,
-						STATE_TRANSITION_FLAG_UPDATE_STATE
-					};
-					pContext->TransitionResourceStates(1, &tr);
-				}
+                std::vector<uint8> cells;
+                cells.resize(size_t(visibleCells) * 16u);
+                for (uint32 i = 0; i < visibleCells; ++i)
+                {
+                    // uint PoolIndex = INVALID
+                    std::memcpy(cells.data() + size_t(i) * 16u, &INVALID, sizeof(uint32));
+                    // rest don't matter
+                }
+                renderer.UpdateBuffer(STRING_HASH("Grass_VisibleCellTable"), std::move(cells));
 
-				// Dispatch
-				{
-					pContext->SetPipelineState(m_pGenCSO);
-					pContext->CommitShaderResources(m_pGenSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                std::vector<uint8> poolCoord;
+                poolCoord.resize(size_t(numPools) * 16u, 0);
+                for (uint32 i = 0; i < numPools; ++i)
+                {
+                    // int2 ChunkCoord = (INT_MIN, INT_MIN)
+                    int32 v[2] = { (int32)0x80000000u, (int32)0x80000000u };
+                    std::memcpy(poolCoord.data() + size_t(i) * 16u + 4u, v, 8u); // put after uint? shader side matches
+                }
+                renderer.UpdateBuffer(STRING_HASH("Grass_PoolChunkCoord"), std::move(poolCoord));
 
-					DispatchComputeAttribs disp = {};
-					disp.ThreadGroupCountX = (2u * m_ChunkHalfExtent + 8u - 1u) / 8u;
-					disp.ThreadGroupCountY = (2u * m_ChunkHalfExtent + 8u - 1u) / 8u;
-					disp.ThreadGroupCountZ = 1;
+                std::vector<uint8> dirty;
+                dirty.resize(size_t(numPools) * 16u, 0);
+                renderer.UpdateBuffer(STRING_HASH("Grass_PoolDirty"), std::move(dirty));
+            }
+        }
 
-					pContext->DispatchCompute(disp);
-				}
-			},
-				[this, &renderer]()
-			{
-				ShaderCreateInfo csCI = {};
-				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				csCI.EntryPoint = "GenerateGrassInstances";
-				csCI.Desc.Name = "GrassGenerateInstancesCS";
-				csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
-				csCI.Desc.UseCombinedTextureSamplers = false;
-				csCI.FilePath = m_GrassGenCS.c_str();
+        // =====================================================================
+        // Pass A) UpdateChunkPools (alloc/release + dirty mark)
+        // =====================================================================
+        renderer.AddPass(
+            "Grass_UpdateChunkPools",
+            EPassExecutionDomain::OutsideRenderPass,
+            [&](RenderPassBuilder& b)
+            {
+                b.DeclareBufferUAV(STRING_HASH("Grass_VisibleCellTable"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolChunkCoord"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolDirty"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_FreeList"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_FreeListCounter"), RENDER_ACCESS_WRITE);
 
-				RefCntAutoPtr<IShader> cs;
-				renderer.CreateShader(csCI, &cs);
-				ASSERT(cs, "GrassGenerateInstancesCS compile failed.");
+                b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
+            },
+            [this, &renderer](RenderPassContext& ctx)
+            {
+                ASSERT(ctx.pImmediateContext && ctx.pRegistry, "invalid ctx");
+                ASSERT(m_pUpdatePoolsCSO && m_pUpdatePoolsSRB, "UpdatePools PSO/SRB not ready");
 
-				ComputePipelineStateCreateInfo psoCI = {};
-				psoCI.PSODesc.Name = "PSO_GrassGenerateInstances";
-				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+                IDeviceContext* pContext = ctx.pImmediateContext;
 
-				auto& rl = psoCI.PSODesc.ResourceLayout;
-				rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+                // Upload constants (includes camera chunk coord etc.)
+                {
+                    MapHelper<hlsl::GrassGenConstants> map(
+                        pContext,
+                        ctx.pRegistry->GetBuffer(STRING_HASH("GrassGenConstants")),
+                        MAP_WRITE,
+                        MAP_FLAG_DISCARD);
 
-				ShaderResourceVariableDesc vars[] =
-				{
-					{ SHADER_TYPE_COMPUTE, "g_CounterBuffer",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_DensityField",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_InteractionField", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS",SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-				};
-				rl.Variables = vars;
-				rl.NumVariables = _countof(vars);
+                    map->ChunkVisibleDim = 2u * m_ChunkHalfExtent;
+                    map->ChunkHalfExtent = m_ChunkHalfExtent;
+                    map->NumPools = map->ChunkVisibleDim * map->ChunkVisibleDim;
+                    map->SamplesPerChunk = m_SamplesPerChunk;
+                    map->ChunkSize = m_ChunkSize;
 
-				SamplerDesc linearClamp =
-				{
-					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-				};
-				SamplerDesc linearWrap =
-				{
-					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
-					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-				};
-				ImmutableSamplerDesc samplers[] =
-				{
-					{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
-					{ SHADER_TYPE_COMPUTE, "g_LinearWrapSampler",  linearWrap  },
-				};
-				rl.ImmutableSamplers = samplers;
-				rl.NumImmutableSamplers = _countof(samplers);
+                    map->IndirectSlotLOD0 = m_IndirectSlotLOD0;
+                    map->IndirectSlotLOD1 = m_IndirectSlotLOD1;
+                    map->IndirectSlotLOD2 = m_IndirectSlotLOD2;
 
-				psoCI.pCS = cs;
+                    map->LOD0Distance = m_GrassDesc.LOD0Distance;
+                    map->LOD1Distance = m_GrassDesc.LOD1Distance;
 
-				m_pGenCSO = renderer.AcquirePipelineState(psoCI);
-				ASSERT(m_pGenCSO, "AcquireCompute(GrassGenerateInstances) failed.");
+                    map->YOffset = m_YOffset;
+                    map->Jitter = m_Jitter;
 
-				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD0"))
-				{
-					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD0")));
-				}
-				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD1"))
-				{
-					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD1")));
-				}
-				if (auto* pVar = m_pGenCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD2"))
-				{
-					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD2")));
-				}
+                    map->MinPitch = m_MinPitch;
+                    map->MaxPitch = m_MaxPitch;
+                    map->MinScale = m_MinScale;
+                    map->MaxScale = m_MaxScale;
+                    map->SpawnProb = m_SpawnProb;
+                    map->SpawnRadius = m_SpawnRadius;
 
-				m_pGenCSO->CreateShaderResourceBinding(&m_pGenSRB, true);
-				ASSERT(m_pGenSRB, "GrassGenerateInstances SRB create failed.");
+                    map->BendStrengthMin = m_BendStrengthMin;
+                    map->BendStrengthMax = m_BendStrengthMax;
+                    map->SeedSalt = m_SeedSalt;
 
-				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer"))
-				{
-					pVar->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
-				}
-				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
-				{
-					pVar->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstantsCB")));
-				}
+                    map->DensityTiling = m_DensityTiling;
+                    map->DensityContrast = m_DensityContrast;
+                    map->DensityPow = m_DensityPow;
+                    map->SlopeToDensity = m_SlopeToDensity;
 
-				if (auto* pVar = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
-				{
-					pVar->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
+                    map->HeightMinN = m_HeightMinN;
+                    map->HeightMaxN = m_HeightMaxN;
+                    map->HeightFadeN = m_HeightFadeN;
 
-				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
-				{
-					var->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
+                    map->InteractionInvWorldSizeXZ = float2{ 1.0f, 1.0f } / m_pInteractionSystem->GetWorldSizeXZ();
+                    map->InteractionOriginXZ = m_pInteractionSystem->GetWorldOriginXZ();
 
-				if (auto* var = m_pGenSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
-				{
-					var->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-			});
-	}
+                    const uint interactionResolution = m_pInteractionSystem->GetInteractionFieldResolution();
+                    map->InteractionInvFieldSize = float2{ 1.0f / interactionResolution, 1.0f / interactionResolution };
+                    map->InteractionTexelOrigin = m_pInteractionSystem->GetTexelOrigin();
+                }
+
+                pContext->SetPipelineState(m_pUpdatePoolsCSO);
+                pContext->CommitShaderResources(m_pUpdatePoolsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+                DispatchComputeAttribs disp = {};
+                disp.ThreadGroupCountX = DivUp(2u * m_ChunkHalfExtent, 8u);
+                disp.ThreadGroupCountY = DivUp(2u * m_ChunkHalfExtent, 8u);
+                disp.ThreadGroupCountZ = 1;
+                pContext->DispatchCompute(disp);
+            },
+                [this, &renderer]()
+            {
+                ShaderCreateInfo csCI = {};
+                csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+                csCI.EntryPoint = "UpdateChunkPoolsCS";
+                csCI.Desc.Name = "Grass_UpdateChunkPoolsCS";
+                csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+                csCI.Desc.UseCombinedTextureSamplers = false;
+                csCI.FilePath = m_GrassGenCS.c_str();
+
+                RefCntAutoPtr<IShader> cs;
+                renderer.CreateShader(csCI, &cs);
+                ASSERT(cs, "UpdateChunkPoolsCS compile failed");
+
+                ComputePipelineStateCreateInfo psoCI = {};
+                psoCI.PSODesc.Name = "PSO_Grass_UpdateChunkPools";
+                psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+
+                auto& rl = psoCI.PSODesc.ResourceLayout;
+                rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+                ShaderResourceVariableDesc vars[] =
+                {
+                    { SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_VisibleCellTable",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolDirty",               SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_FreeList",                SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_FreeListCounter",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                };
+                rl.Variables = vars;
+                rl.NumVariables = _countof(vars);
+
+                psoCI.pCS = cs;
+
+                m_pUpdatePoolsCSO = renderer.AcquirePipelineState(psoCI);
+                ASSERT(m_pUpdatePoolsCSO, "AcquireCompute(UpdateChunkPools) failed");
+
+                m_pUpdatePoolsCSO->CreateShaderResourceBinding(&m_pUpdatePoolsSRB, true);
+                ASSERT(m_pUpdatePoolsSRB, "UpdatePools SRB create failed");
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+                    v->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstants")));
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_VisibleCellTable"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_VisibleCellTable")));
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolChunkCoord"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolChunkCoord")));
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolDirty"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolDirty")));
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_FreeList"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_FreeList")));
+
+                if (auto* v = m_pUpdatePoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_FreeListCounter"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_FreeListCounter")));
+            });
+
+        // =====================================================================
+        // Pass B) FillNewPools (dirty pool만 positions 생성)
+        // =====================================================================
+        renderer.AddPass(
+            "Grass_FillNewPools",
+            EPassExecutionDomain::OutsideRenderPass,
+            [&](RenderPassBuilder& b)
+            {
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolDirty"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolPositions"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolChunkCoord"), RENDER_ACCESS_READ);
+
+                // Inputs for spawn (only used here)
+                b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
+                b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
+                b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
+
+                b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
+            },
+            [this, &renderer](RenderPassContext& ctx)
+            {
+                ASSERT(ctx.pImmediateContext && ctx.pRegistry, "invalid ctx");
+                ASSERT(m_pFillNewPoolsCSO && m_pFillNewPoolsSRB, "FillNewPools PSO/SRB not ready");
+
+                IDeviceContext* pContext = ctx.pImmediateContext;
+
+                // HeightField must be SRV
+                {
+                    StateTransitionDesc tr =
+                    {
+                        renderer.GetTexture(STRING_HASH("HeightField")),
+                        RESOURCE_STATE_UNKNOWN,
+                        RESOURCE_STATE_SHADER_RESOURCE,
+                        STATE_TRANSITION_FLAG_UPDATE_STATE
+                    };
+                    pContext->TransitionResourceStates(1, &tr);
+                }
+
+                pContext->SetPipelineState(m_pFillNewPoolsCSO);
+                pContext->CommitShaderResources(m_pFillNewPoolsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+                // dispatch: one group per pool (threads=256 => up to 256 samples handled per group loop)
+                DispatchComputeAttribs disp = {};
+                disp.ThreadGroupCountX = (2u * m_ChunkHalfExtent) * (2u * m_ChunkHalfExtent); // visibleCells
+                disp.ThreadGroupCountY = 1;
+                disp.ThreadGroupCountZ = 1;
+                pContext->DispatchCompute(disp);
+            },
+                [this, &renderer]()
+            {
+                ShaderCreateInfo csCI = {};
+                csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+                csCI.EntryPoint = "FillNewPoolsCS";
+                csCI.Desc.Name = "Grass_FillNewPoolsCS";
+                csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+                csCI.Desc.UseCombinedTextureSamplers = false;
+                csCI.FilePath = m_GrassGenCS.c_str();
+
+                RefCntAutoPtr<IShader> cs;
+                renderer.CreateShader(csCI, &cs);
+                ASSERT(cs, "FillNewPoolsCS compile failed");
+
+                ComputePipelineStateCreateInfo psoCI = {};
+                psoCI.PSODesc.Name = "PSO_Grass_FillNewPools";
+                psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+
+                auto& rl = psoCI.PSODesc.ResourceLayout;
+                rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+                ShaderResourceVariableDesc vars[] =
+                {
+                    { SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolDirty",               SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolPositions",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_HeightField",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_DensityField",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_InteractionField",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_VisibleCellTable",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                };
+                rl.Variables = vars;
+                rl.NumVariables = _countof(vars);
+
+                SamplerDesc linearClamp =
+                {
+                    FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+                    TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+                };
+                SamplerDesc linearWrap =
+                {
+                    FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+                    TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+                };
+                ImmutableSamplerDesc samplers[] =
+                {
+                    { SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
+                    { SHADER_TYPE_COMPUTE, "g_LinearWrapSampler",  linearWrap  },
+                };
+                rl.ImmutableSamplers = samplers;
+                rl.NumImmutableSamplers = _countof(samplers);
+
+                psoCI.pCS = cs;
+
+                m_pFillNewPoolsCSO = renderer.AcquirePipelineState(psoCI);
+                ASSERT(m_pFillNewPoolsCSO, "AcquireCompute(FillNewPools) failed");
+
+                m_pFillNewPoolsCSO->CreateShaderResourceBinding(&m_pFillNewPoolsSRB, true);
+                ASSERT(m_pFillNewPoolsSRB, "FillNewPools SRB create failed");
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+                    v->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstants")));
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolDirty"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolDirty")));
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolChunkCoord"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolChunkCoord")));
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolPositions"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolPositions")));
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
+                    v->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
+                    v->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
+                    v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+
+                if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_VisibleCellTable"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_VisibleCellTable")));
+            });
+
+        // =====================================================================
+        // Pass C) BuildInstancesFromPools (매 프레임 positions -> LOD instance + counters)
+        // =====================================================================
+        renderer.AddPass(
+            "Grass_BuildInstancesFromPools",
+            EPassExecutionDomain::OutsideRenderPass,
+            [&](RenderPassBuilder& b)
+            {
+                b.DeclareBufferUAV(STRING_HASH("Grass_PoolPositions"), RENDER_ACCESS_READ);
+                b.DeclareBufferUAV(STRING_HASH("Grass_VisibleCellTable"), RENDER_ACCESS_READ);
+
+                b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD0"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD1"), RENDER_ACCESS_WRITE);
+                b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD2"), RENDER_ACCESS_WRITE);
+
+                b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE);
+
+                b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
+            },
+            [this, &renderer](RenderPassContext& ctx)
+            {
+                ASSERT(ctx.pImmediateContext && ctx.pRegistry, "invalid ctx");
+                ASSERT(m_pBuildInstancesCSO && m_pBuildInstancesSRB, "BuildInstances PSO/SRB not ready");
+
+                IDeviceContext* pContext = ctx.pImmediateContext;
+
+                // (중요) IndirectCountBuffer(각 slot uint) 초기화는 UpdateBuffer로 하면 느려질 수 있어서,
+                // 여기서는 CS에서 slot 3개만 0으로 만들도록 구성했음.
+                // 단, 네 IndirectCountBuffer 레이아웃이 slot*4 offset인 전제를 그대로 사용.
+                pContext->SetPipelineState(m_pBuildInstancesCSO);
+                pContext->CommitShaderResources(m_pBuildInstancesSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+                // Dispatch:
+                // - X: visibleCells (pool 하나당 한 group)
+                DispatchComputeAttribs disp = {};
+                disp.ThreadGroupCountX = (2u * m_ChunkHalfExtent) * (2u * m_ChunkHalfExtent);
+                disp.ThreadGroupCountY = 1;
+                disp.ThreadGroupCountZ = 1;
+                pContext->DispatchCompute(disp);
+            },
+                [this, &renderer]()
+            {
+                ShaderCreateInfo csCI = {};
+                csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+                csCI.EntryPoint = "BuildInstancesFromPoolsCS";
+                csCI.Desc.Name = "Grass_BuildInstancesFromPoolsCS";
+                csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+                csCI.Desc.UseCombinedTextureSamplers = false;
+                csCI.FilePath = m_GrassGenCS.c_str();
+
+                RefCntAutoPtr<IShader> cs;
+                renderer.CreateShader(csCI, &cs);
+                ASSERT(cs, "BuildInstancesFromPoolsCS compile failed");
+
+                ComputePipelineStateCreateInfo psoCI = {};
+                psoCI.PSODesc.Name = "PSO_Grass_BuildInstancesFromPools";
+                psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+
+                auto& rl = psoCI.PSODesc.ResourceLayout;
+                rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+                ShaderResourceVariableDesc vars[] =
+                {
+                    { SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_VisibleCellTable",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_PoolPositions",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                    { SHADER_TYPE_COMPUTE, "g_CounterBuffer",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+                };
+                rl.Variables = vars;
+                rl.NumVariables = _countof(vars);
+
+                psoCI.pCS = cs;
+
+                m_pBuildInstancesCSO = renderer.AcquirePipelineState(psoCI);
+                ASSERT(m_pBuildInstancesCSO, "AcquireCompute(BuildInstancesFromPools) failed");
+
+                if (auto* pVar = m_pBuildInstancesCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD0"))
+                    pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD0")));
+                if (auto* pVar = m_pBuildInstancesCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD1"))
+                    pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD1")));
+                if (auto* pVar = m_pBuildInstancesCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD2"))
+                    pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD2")));
+
+                m_pBuildInstancesCSO->CreateShaderResourceBinding(&m_pBuildInstancesSRB, true);
+                ASSERT(m_pBuildInstancesSRB, "BuildInstances SRB create failed");
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "GRASS_GEN_CONSTANTS"))
+                    v->Set(renderer.GetBuffer(STRING_HASH("GrassGenConstants")));
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_VisibleCellTable"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_VisibleCellTable")));
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolPositions"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolPositions")));
+
+                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer"))
+                    v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
+            });
+    }
 
 } // namespace shz

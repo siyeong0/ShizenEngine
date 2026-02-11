@@ -7,13 +7,13 @@
 struct FrameConstants
 {
     float3 CameraPosition;
-	uint FrameIndex;
+    uint FrameIndex;
 
     float4 FrustumPlanesWS[6];
 
     float2 ViewportSize;
     float2 InvViewportSize;
-    
+	
     float NearPlane;
     float FarPlane;
     float DeltaTime;
@@ -21,10 +21,10 @@ struct FrameConstants
 
     float3 LightDirWS;
     float _pad0;
-    
+	
     float3 LightColor;
     float LightIntensity;
-    
+	
     float4x4 LightViewProj;
 };
 
@@ -59,7 +59,7 @@ struct ObjectConstants
 {
     float4x4 World;
     float4x4 WorldInvTranspose;
-	float4x4 PrevWorld;
+    float4x4 PrevWorld;
 };
 
 // ----------------------------------------------
@@ -90,25 +90,25 @@ struct HeightFieldConstants
 
 struct TerrainDrawConstants
 {
-    // Chunk placement in world
+	// Chunk placement in world
     float2 ChunkOriginXZ;
     float2 ChunkSizeXZ;
 
-    // Height UV mapping (optional extra scale/bias on top of base World->UV)
+	// Height UV mapping (optional extra scale/bias on top of base World->UV)
     float2 HeightUVScale;
     float2 HeightUVBias;
 
-    // Surface UV mapping for material/tiling
+	// Surface UV mapping for material/tiling
     float2 SurfaceUVScale;
     float2 SurfaceUVBias;
 
-    // Normal sampling step multiplier (>= 1)
+	// Normal sampling step multiplier (>= 1)
     float NormalSampleStep;
-    
+	
     float LodMorphAlpha;
     uint LodIndex;
     float _pad0;
-    
+	
     float4 DebugChunkColor;
 };
 
@@ -140,51 +140,51 @@ struct IndirectConstants
 // ----------------------------------------------
 struct GrassMeshInstance
 {
-	float3 PosWS; // world position (x,y,z)
-	float Scale; // uniform scale
+    float3 PosWS; // world position (x,y,z)
+    float Scale; // uniform scale
 
-    // Angles packed:
-    // [ 0..15]  Yaw   UNORM16 (0..2pi)
-    // [16..31]  Pitch UNORM16 (mapped from [-MaxPitch..+MaxPitch])
-	uint PackedAngles;
+	// Angles packed:
+	// [ 0..15]  Yaw   UNORM16 (0..2pi)
+	// [16..31]  Pitch UNORM16 (mapped from [-MaxPitch..+MaxPitch])
+    uint PackedAngles;
 
-    // PackedParams layout:
-    // [ 0.. 7]  BendStrength UNORM8
-    // [ 8..15]  Press        UNORM8
-    // [16..23]  VariantId    (0..255)  // mesh/texture variation index
-    // [24..31]  Seed8        (0..255)  // stable random for shading
-	uint PackedParams;
+	// PackedParams layout:
+	// [ 0.. 7]  BendStrength UNORM8
+	// [ 8..15]  Press        UNORM8
+	// [16..23]  VariantId    (0..255)  // mesh/texture variation index
+	// [24..31]  Seed8        (0..255)  // stable random for shading
+    uint PackedParams;
 };
 
 struct GrassCrossPlaneInstance
 {
-	float3 PosWS;
-	float Scale;
+    float3 PosWS;
+    float Scale;
 
-    // Packed0 layout:
-    // [ 0..15]  Yaw UNORM16 (0..2pi)
-    // [16..23]  VariantId (0..255)   // choose texture/mesh variation
-    // [24..31]  Seed8     (0..255)   // stable random
-	uint Packed0;
+	// Packed0 layout:
+	// [ 0..15]  Yaw UNORM16 (0..2pi)
+	// [16..23]  VariantId (0..255)   // choose texture/mesh variation
+	// [24..31]  Seed8     (0..255)   // stable random
+    uint Packed0;
 
-    // Packed1 layout:
-    // [ 0.. 7]  BendStrength UNORM8
-    // [ 8..15]  Press        UNORM8
-    // [16..23]  Reserved / AtlasFrame (0..255) optional
-    // [24..31]  Flags        (bitfield) optional
-	uint Packed1;
+	// Packed1 layout:
+	// [ 0.. 7]  BendStrength UNORM8
+	// [ 8..15]  Press        UNORM8
+	// [16..23]  Reserved / AtlasFrame (0..255) optional
+	// [24..31]  Flags        (bitfield) optional
+    uint Packed1;
 };
 
 struct GrassBillboardInstance
 {
-	float3 PosWS;
-	float Scale;
+    float3 PosWS;
+    float Scale;
 
-    // Packed layout:
-    // [ 0..15]  Yaw UNORM16 (0..2pi)
-    // [16..23]  Impostor/AtlasIndex (0..255)  // choose billboard frame set
-    // [24..31]  Seed8 (0..255)
-	uint Packed;
+	// Packed layout:
+	// [ 0..15]  Yaw UNORM16 (0..2pi)
+	// [16..23]  Impostor/AtlasIndex (0..255)  // choose billboard frame set
+	// [24..31]  Seed8 (0..255)
+    uint Packed;
 };
 
 // ----------------------------------------------
@@ -196,23 +196,23 @@ struct GrassGenConstants
     uint IndirectSlotLOD0;
     uint IndirectSlotLOD1;
     uint IndirectSlotLOD2;
-    uint _pad0;
+    float YOffset;
     
     float LOD0Distance;
     float LOD1Distance;
     float LodHysteresis;
-    float _pad1;
+    uint _pad0;
     
-    // Optional extra vertical offset for grass placement (meters)
-    float YOffset;
     float MinPitch;
     float MaxPitch;
-    float _pad2;
-
+	
     // Chunk placement
+    uint ChunkVisibleDim;
     float ChunkSize; // meters
+    
     int ChunkHalfExtent; // half grid around camera
     uint SamplesPerChunk;
+    uint NumPools;
     float Jitter; // 0..1
 
     float MinScale;
@@ -225,22 +225,22 @@ struct GrassGenConstants
     uint SeedSalt;
     uint _pad3;
 
-    // Density field (world tiled) tuning
+	// Density field (world tiled) tuning
     float DensityTiling; // meters -> uv
     float DensityContrast; // 0..0.49
     float DensityPow; // curve
     float _pad4;
 
-    // Slope/Height masks
+	// Slope/Height masks
     float SlopeToDensity; // slope -> 0..1
     float HeightMinN; // normalized 0..1
     float HeightMaxN; // normalized 0..1
     float HeightFadeN; // normalized fade width
-    
-    // Interaction field mapping (world->interaction local uv)
+	
+	// Interaction field mapping (world->interaction local uv)
     float2 InteractionOriginXZ;
     float2 InteractionInvWorldSizeXZ; // 1 / FieldWorldSizeXZ
-    
+	
     uint2 InteractionTexelOrigin; // ring buffer origin (0..FieldSize-1)
     float2 InteractionInvFieldSize; // 1/FieldSize (e.g. 1/4096)
 };
@@ -253,7 +253,7 @@ struct GrassRenderConstants
     float4 BaseColorFactor;
     float4 Tint;
 
-    // Wind (world-space)
+	// Wind (world-space)
     float2 WindDirXZ;
     float WindStrength;
     float WindSpeed;
@@ -263,7 +263,7 @@ struct GrassRenderConstants
     float MaxBendAngle;
     float _pad1;
 
-    // Interaction bending
+	// Interaction bending
     float InteractionBendAngle;
     float InteractionSink;
     float InteractionWindFade;
@@ -314,11 +314,11 @@ struct InteractionConstants
     float ClampMin;
     float _Pad0;
 
-    // Sliding field mapping
+	// Sliding field mapping
     float2 FieldOriginXZ; // world-space origin (meters) of LOCAL field window
     float2 FieldWorldSizeXZ; // world coverage size (meters)
 
-    // Ring mapping: which texel corresponds to FieldOriginXZ (0..W-1)
+	// Ring mapping: which texel corresponds to FieldOriginXZ (0..W-1)
     uint2 TexelOrigin; // ring offset in texels
     uint _Pad1;
     uint _Pad2;
@@ -327,12 +327,12 @@ struct InteractionConstants
 // Per-dispatch constants (updated many times per frame)
 struct InteractionDispatch
 {
-    // Rect in "LOCAL texel space" [0..W), [0..H) (not ring-space)
-    // We convert local->ring inside shader using TexelOrigin.
+	// Rect in "LOCAL texel space" [0..W), [0..H) (not ring-space)
+	// We convert local->ring inside shader using TexelOrigin.
     uint2 RectOffset; // local offset in texels
     uint2 RectSize; // local size in texels
 
-    // For stamp-based apply
+	// For stamp-based apply
     uint StampIndex; // which stamp to apply
     uint Mode; // 0 = ClearRect, 1 = ApplySingleStamp
     uint2 _Pad;

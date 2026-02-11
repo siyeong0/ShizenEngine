@@ -1,3 +1,4 @@
+// Engine/RenderSystem/Public/GrassSystem.h
 #pragma once
 #include <string>
 
@@ -19,7 +20,6 @@ namespace shz
     {
         float LOD0Distance = 12.0f;
         float LOD1Distance = 35.0f;
-        float LOD2Distance = 60.0f;
         float LodHysteresis = 1.0f;
 
         const StaticMeshRenderData* pMeshLod0 = nullptr;
@@ -45,31 +45,54 @@ namespace shz
         void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
     private:
+        // ------------------------------------------------------------
+        // Limits (render instance buffers)
+        // ------------------------------------------------------------
         static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 16;
         static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 18;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
+        // ------------------------------------------------------------
+        // Chunk pool config (128 x 128 visible window)
+        // ------------------------------------------------------------
+        uint  m_ChunkHalfExtent = 64; // => VisibleDim = 128
+        float m_ChunkSize = 4.0f;
+
+        uint  m_SamplesPerChunk = 1024;
+
+        // ------------------------------------------------------------
         // Indirect slot for this system
+        // ------------------------------------------------------------
         uint32 m_IndirectSlotLOD0 = 0;
         uint32 m_IndirectSlotLOD1 = 0;
         uint32 m_IndirectSlotLOD2 = 0;
 
+        // ------------------------------------------------------------
         // Interaction system reference
+        // ------------------------------------------------------------
         const InteractionSystem* m_pInteractionSystem = nullptr;
 
-        // Generate instances (Compute only)
-        RefCntAutoPtr<IPipelineState>         m_pGenCSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pGenSRB;
+        // ------------------------------------------------------------
+        // ChunkPool PSOs/SRBs (Compute only)
+        // ------------------------------------------------------------
+        RefCntAutoPtr<IPipelineState>         m_pUpdatePoolsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pUpdatePoolsSRB;
 
+        RefCntAutoPtr<IPipelineState>         m_pFillNewPoolsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pFillNewPoolsSRB;
+
+        RefCntAutoPtr<IPipelineState>         m_pBuildInstancesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pBuildInstancesSRB;
+
+        // ------------------------------------------------------------
         // Mesh desc
+        // ------------------------------------------------------------
         GrassDesc m_GrassDesc = {};
 
-        // Settings
+        // ------------------------------------------------------------
+        // Spawn settings (used ONLY when filling newly allocated pools)
+        // ------------------------------------------------------------
         float m_YOffset = -0.05f;
-
-        float m_ChunkSize = 4.0f;
-        uint  m_ChunkHalfExtent = 64;
-        uint  m_SamplesPerChunk = 1024;
         float m_Jitter = 0.95f;
 
         float m_MinPitch = -0.2f;
@@ -92,7 +115,9 @@ namespace shz
         float m_HeightMaxN = 1.00f;
         float m_HeightFadeN = 0.03f;
 
-        // Shaders
+        // ------------------------------------------------------------
+        // Shader path (single file, multiple entry points)
+        // ------------------------------------------------------------
         std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
     };
 } // namespace shz
