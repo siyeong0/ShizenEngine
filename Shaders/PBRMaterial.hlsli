@@ -44,16 +44,16 @@ float3 GetBaseColor(float2 uv)
 
 float GetOpacity(float2 uv)
 {
-//#ifndef MASKED
-//    return 1.0;
-//#else
+#ifndef MASKED
+    return 1.0;
+#else
 	float alpha = g_BaseColorFactor.a;
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
 		alpha *= g_BaseColorTex.SampleBias(g_LinearWrapSampler, uv, -2.0).a;
 	}
 	return alpha;
-//#endif
+#endif
 }
 
 float3 GetNormal(float2 uv, float3 normalWS, float3 tangentWS)
