@@ -1899,6 +1899,19 @@ namespace shz
 		ASSERT(createInfo.TemplateName != "", "Material template name is empty.");
 
 		bool bResult = false;
+		ShaderMacroHelper macros;
+		switch (blendMode)
+		{
+		case MATERIAL_BLEND_MODE_OPAQUE:
+			macros.AddShaderMacro("OPAQUE", 1);
+			break;
+		case MATERIAL_BLEND_MODE_MASKED:
+			macros.AddShaderMacro("MASKED", 1);
+			break;
+		case MATERIAL_BLEND_MODE_TRANSPARENT:
+			macros.AddShaderMacro("TRANSPARENT", 1);
+			break;
+		}
 
 		MaterialTemplateCreateInfo baseCreateInfo = createInfo;
 
@@ -1907,19 +1920,6 @@ namespace shz
 			const std::string& name = baseCreateInfo.TemplateName;
 			ASSERT(m_TemplateLibrary.find(name) == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
 
-			ShaderMacroHelper macros;
-			switch (blendMode)
-			{
-			case MATERIAL_BLEND_MODE_OPAQUE:
-				macros.AddShaderMacro("OPAQUE", 1);
-				break;
-			case MATERIAL_BLEND_MODE_MASKED:
-				macros.AddShaderMacro("MASKED", 1);
-				break;
-			case MATERIAL_BLEND_MODE_TRANSPARENT:
-				macros.AddShaderMacro("TRANSPARENT", 1);
-				break;
-			}
 			baseCreateInfo.MacroArray = macros;
 
 			MaterialTemplate baseTemplate;
@@ -1939,11 +1939,11 @@ namespace shz
 
 			MaterialTemplate depthOnlyTemplate;
 
-			ShaderMacroHelper macros;
 			macros.AddShaderMacro("DEPHT_ONLY", 1);
+
 			depthOnlyCreateInfo.MacroArray = macros;
 
-			bResult = depthOnlyTemplate.Initialize(*this, createInfo);
+			bResult = depthOnlyTemplate.Initialize(*this, depthOnlyCreateInfo);
 			ASSERT(bResult, "Failed to create material template: %s", name.c_str());
 			m_TemplateLibrary[name] = std::move(depthOnlyTemplate);
 		}

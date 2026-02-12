@@ -92,13 +92,13 @@ namespace shz
         // ------------------------------------------------------------
         // Spawn settings (used ONLY when filling newly allocated pools)
         // ------------------------------------------------------------
-        float m_YOffset = -0.05f;
+        float m_YOffset = 0.00f;
         float m_Jitter = 0.95f;
 
         float m_MinPitch = -0.2f;
         float m_MaxPitch = 0.2f;
-        float m_MinScale = 7.7f;
-        float m_MaxScale = 13.1f;
+        float m_MinScale = 0.35f;
+        float m_MaxScale = 0.55f;
         float m_SpawnProb = 1.0f;
         float m_SpawnRadius = 128.0f;
 

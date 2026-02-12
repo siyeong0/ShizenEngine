@@ -68,7 +68,7 @@ struct BasePSInput
 #define GET_PSIN_UV()				(IN.UV)
 #define GET_PSIN_WORLD_POS()		(IN.WorldPosition)
 #define GET_PSIN_WORLD_NORMAL()		(IN.bFrontFace ? IN.WorldNormal : -IN.WorldNormal)
-#define GET_PSIN_WORLD_TANGENT()	(IN.bFrontFace ? IN.WorldTangent : -IN.WorldTangent)
+#define GET_PSIN_WORLD_TANGENT()	(IN.WorldTangent)
 #define GET_PSIN_FRONTFACE()        (IN.bFrontFace)
 
 struct BasePSOutput
@@ -101,8 +101,7 @@ struct BaseVSOutput
 	float4 SVPosition : SV_POSITION;
 
 #ifdef MASKED
-	float3 WorldPosition : TEXCOORD0;
-	float2 UV : TEXCOORD1;
+	float2 UV : TEXCOORD0;
 #endif
 };
 
@@ -115,22 +114,20 @@ struct BaseVSOutput
 #ifdef MASKED
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)		                            \
-OUT.WorldPosition = (pos).xyz;											\
-OUT.SVPosition = ApplyTAAJittering(mul((pos), g_ViewCB.ViewProj));
+OUT.SVPosition = (mul((pos), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)	                        \
-OUT.WorldPosition = (curr).xyz;											\
-OUT.SVPosition = ApplyTAAJittering(mul((curr), g_ViewCB.ViewProj));
+OUT.SVPosition = (mul((curr), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_UV(uv)     OUT.UV = (uv);
 
 #else // MASKED
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)		                            \
-OUT.SVPosition = ApplyTAAJittering(mul((pos), g_ViewCB.ViewProj));
+OUT.SVPosition = (mul((pos), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)	                        \
-OUT.SVPosition = ApplyTAAJittering(mul((curr), g_ViewCB.ViewProj));
+OUT.SVPosition = (mul((curr), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_UV(uv)     /* no-op */
 
@@ -141,21 +138,19 @@ struct BasePSInput
 	float4 SVPosition : SV_POSITION;
 
 #ifdef MASKED
-	float3 WorldPosition : TEXCOORD0;
-	float2 UV : TEXCOORD1;
+	float2 UV : TEXCOORD0;
 #endif
 };
 
 #define GET_PSIN_POS()          (IN.SVPosition)
 
 #ifdef MASKED
-#define GET_PSIN_WORLD_POS()    (IN.WorldPosition)  
 #define GET_PSIN_UV()           (IN.UV)
-#else
-#define GET_PSIN_WORLD_POS()    (float3(0.0, 0.0, 0.0))  
+#else 
 #define GET_PSIN_UV()           (float2(0.0, 0.0))
 #endif
 
+#define GET_PSIN_WORLD_POS()        (float3(0.0, 0.0, 0.0))  
 #define GET_PSIN_CURR_CLIP()		(float4(0.0, 0.0, 0.0, 1.0))
 #define GET_PSIN_PREV_CLIP()		(float4(0.0, 0.0, 0.0, 1.0))
 #define GET_PSIN_WORLD_NORMAL()		(float3(0.0, 0.0, 1.0))
@@ -324,19 +319,31 @@ float4 ApplyTAAJittering(float4 clipSpace)
     return clipSpace;
 }
 
-float ClipPixelCoverage(float alpha, float4 svPos, float3 worldPos)
+//float ClipPixelCoverage(float alpha, float4 svPos, float3 worldPos)
+//{
+//    float dist = length(g_FrameCB.CameraPosition - worldPos);
+//    float fade = saturate(dist / 100.0);
+//    float alphaCutoffNear = 0.6;
+//    float alphaCutoffFar = 0.3;
+//    float alphaCutoff = lerp(alphaCutoffNear, alphaCutoffFar, fade);
+//    float denom = max(1.0f - alphaCutoff, 1e-6f);
+//    float coverage = saturate((alpha - alphaCutoff) / denom);
+//    float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
+//    clip(coverage - t);
+	
+//    return coverage;
+//}
+
+float ClipPixelCoverage(float alpha, float4 svPos)
 {
-    float dist = length(g_FrameCB.CameraPosition - worldPos);
-    float fade = saturate((dist - 0.0) / (100 - 0.0));
-    float alphaCutoffNear = 0.30;
-    float alphaCutoffFar = 0.05;
-    float alphaCutoff = lerp(alphaCutoffNear, alphaCutoffFar, fade);
-    float denom = max(1.0f - alphaCutoff, 1e-6f);
-    float coverage = saturate((alpha - alphaCutoff) / denom);
+    float fade = saturate(svPos.z);
+    float cutoff = lerp(0.6, 0.3, fade);
+    float coverage = saturate((alpha - cutoff) / (1.0 - cutoff));
     float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
     clip(coverage - t);
-	
+    
     return coverage;
 }
+
 
 #endif // HLSL_COMMON_HLSLI

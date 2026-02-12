@@ -630,9 +630,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
         }
 
         float scaleT = Rand01(seed ^ 0x5555u);
-        float scale =
-            lerp(g_CB.MinScale, g_CB.MaxScale, scaleT) *
-            0.04f;
+        float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
 
         float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
         float pitch = lerp(g_CB.MinPitch, g_CB.MaxPitch, Rand01(seed ^ 0x7777u));

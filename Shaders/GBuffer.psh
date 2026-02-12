@@ -14,7 +14,7 @@ BASE_PS_MAIN_ENTRY()
 	float3 baseColor = GetBaseColor(uv);
 	float alpha = GetOpacity(uv);
    
-	float coverage = ClipPixelCoverage(alpha, svPos, worldPos);
+	float coverage = ClipPixelCoverage(alpha, svPos);
 	
 	float2 metallicRoughness = GetMetallicRoughness(uv);
 	float metallic = metallicRoughness.x;

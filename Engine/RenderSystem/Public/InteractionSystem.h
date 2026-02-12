@@ -35,14 +35,14 @@ namespace shz
         uint32 GetInteractionFieldResolution() const { return INTERACTION_FIELD_RESOLUTION; }
 
     private:
-        static constexpr uint32 INTERACTION_FIELD_RESOLUTION = 4096;
+        static constexpr uint32 INTERACTION_FIELD_RESOLUTION = 512;
         static constexpr uint32 MAX_NUM_INTERACTION_STAMPS = 1024;
 
         static constexpr uint32 THREAD_GROUP_SIZE_X = 8;
         static constexpr uint32 THREAD_GROUP_SIZE_Y = 8;
 
         // World coverage of the interaction field (meters).
-        static constexpr float  INTERACTION_FIELD_WORLD_SIZE = 256.0f;
+        static constexpr float  INTERACTION_FIELD_WORLD_SIZE = 64.0f;
 
         // ---------- Batch apply tuning ----------
         // Local-space binning tile size (texels). (tweak)
