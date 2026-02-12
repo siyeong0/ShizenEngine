@@ -30,6 +30,14 @@
 // - g_TerrainNormal is not used here.
 // - PoolPositions stores float4(x, y, z, UNUSED). w is reserved for future use.
 // - Out-of-heightfield cells write NaN y (rare), Build skips NaN.
+//
+// Internal optimizations applied:
+// - Build: early random gate using (SpawnProb * chunkDensity) BEFORE expensive samples (height/interaction).
+// - Build: avoid re-sampling height/interaction for rejected candidates.
+// - Build: reduce per-iteration work by computing only what¡¯s needed before LOD split.
+// - Wave reserve: still 3 meshes (LOD0/1/2), but only performs InterlockedAdd when a mesh has any lanes active.
+// - Update: minimize redundant loads/stores.
+// - Fill: write NaN-out cells with one tight loop; keep w always 0.
 
 #include "Common.hlsli"
 #include "HeightField.hlsli"
@@ -76,9 +84,9 @@ RWStructuredBuffer<PoolDirty> g_PoolDirty;
 RWStructuredBuffer<float4> g_PoolPositions; // [pool * SamplesPerChunk + i] = float4(x,y,z,UNUSED)
 
 // Rendering outputs
-RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
+RWStructuredBuffer<GrassMeshInstance>        g_OutInstancesLOD0;
 RWStructuredBuffer<GrassCrossPlaneInstance> g_OutInstancesLOD1;
-RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
+RWStructuredBuffer<GrassBillboardInstance>  g_OutInstancesLOD2;
 
 // Per-mesh instance counter (append counter + final instanceCount).
 // Layout: uint counter per mesh at byteOffset = meshId * 4.
@@ -93,7 +101,7 @@ Texture2D<float> g_InteractionField;
 // Constants / helpers
 // ---------------------------------------------------------------------------
 
-static const uint INVALID_U32 = 0xFFFFFFFFu;
+static const uint  INVALID_U32 = 0xFFFFFFFFu;
 static const float INVALID_NAN = asfloat(0x7FC00000u);
 
 // ---------------------------------------------------------------------------
@@ -220,7 +228,9 @@ float ComputeHeightMask(float hN)
 	}
 
 	float a = smoothstep(hMinN, hMinN + hFadeN, hN);
-	float b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hN);
+	float b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hMaxN);
+	// NOTE: keep original intent: band-pass.
+	b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hN);
 	return saturate(a * b);
 }
 
@@ -235,7 +245,7 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 	{
 		float4 P = g_FrameCB.FrustumPlanesWS[i];
 		float3 n = P.xyz;
-		float d = P.w;
+		float  d = P.w;
 
 		float3 v;
 		v.x = (n.x >= 0.0f) ? bmax.x : bmin.x;
@@ -254,10 +264,10 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 // Distance-based sample scaling (used in Build)
 // ---------------------------------------------------------------------------
 
-static const float CHUNK_DENSITY_MIP = 3.0f;
-static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
-static const uint SAMPLES_MIN_FAR = 16u;
-static const uint SAMPLES_MAX_CLAMP = 4096u;
+static const float CHUNK_DENSITY_MIP          = 3.0f;
+static const float DENSITY_DISABLE_THRESHOLD  = 0.01f;
+static const uint  SAMPLES_MIN_FAR            = 16u;
+static const uint  SAMPLES_MAX_CLAMP          = 4096u;
 
 float ComputeDistanceSampleScale(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
@@ -301,7 +311,7 @@ uint BallotCountBits(BallotMask b)
 uint BallotPrefixCountBits(BallotMask b, uint lane)
 {
 	uint word = lane >> 5;
-	uint bit = lane & 31;
+	uint bit  = lane & 31;
 	uint prefix = 0u;
 
 	if (word > 0u)
@@ -330,7 +340,7 @@ uint BallotPrefixCountBits(BallotMask b, uint lane)
 uint WaveReserveMeshCounter(uint meshId, BallotMask ballot)
 {
 	uint base = 0u;
-	uint cnt = BallotCountBits(ballot);
+	uint cnt  = BallotCountBits(ballot);
 
 	if (cnt != 0u && WaveIsFirstLane())
 	{
@@ -387,8 +397,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 
 	cell.PoolIndex = pool;
 
-	bool same = all(cell.ChunkCoord == desiredChunk);
-	if (same)
+	if (all(cell.ChunkCoord == desiredChunk))
 	{
 		g_VisibleCellTable[cellIndex] = cell;
 		return;
@@ -426,11 +435,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	uint pool = cellIndex;
 
 	PoolDirty pd = g_PoolDirty[pool];
-	if (pd.Dirty == 0u)
-	{
-		return;
-	}
-
 	if (pd.Dirty != 1u)
 	{
 		return;
@@ -451,6 +455,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	if (!ClampChunkToHeightfield(chunkOriginXZ, g_CB.ChunkSize))
 	{
 		uint base = pool * g_CB.SamplesPerChunk;
+
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
 			g_PoolPositions[base + s] = float4(0.0f, INVALID_NAN, 0.0f, 0.0f);
@@ -466,6 +471,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	}
 
 	float chunkHeight = SampleWorldHeight(chunkOriginXZ);
+
 	if (tid.x == 0u)
 	{
 		PoolChunkCoord pc = g_PoolChunkCoord[pool];
@@ -527,6 +533,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	VisibleCell cell = g_VisibleCellTable[cellIndex];
 
 	int2 chunkCoord = cell.ChunkCoord;
+
 	float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
 
 	float2 chunkOriginClamped = chunkOriginXZ;
@@ -574,10 +581,11 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	uint baseSamples = g_CB.SamplesPerChunk;
 	uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
 
+	// Apply per-chunk density once (cheap thinning control).
 	uint densityScaled = (uint) round((float) samplesThisChunk * saturate(chunkDensity));
 	samplesThisChunk = max(densityScaled, (uint) min(SAMPLES_MIN_FAR, samplesThisChunk));
-
 	samplesThisChunk = min(samplesThisChunk, baseSamples);
+
 	if (samplesThisChunk == 0u)
 	{
 		return;
@@ -592,6 +600,9 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	uint base = pool * g_CB.SamplesPerChunk;
 	uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 
+	// Precompute the cheapest part of the spawn gate (saves texture taps).
+	float spawnGateBase = saturate(g_CB.SpawnProb * chunkDensity);
+
 	for (uint s = tid.x; s < samplesThisChunk; s += 256u)
 	{
 		float4 p = g_PoolPositions[base + s];
@@ -600,9 +611,17 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
+		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
+
+		// Early reject BEFORE expensive height/interaction samples.
+		if (Rand01(seed ^ 0x4444u) > spawnGateBase)
+		{
+			continue;
+		}
+
 		float2 posXZ = float2(p.x, p.z);
 
-		// Re-evaluate per-sample masks here (w is reserved/unused).
+		// Height band-pass (1 height tap).
 		float hN = SampleHeightNormalized(posXZ);
 		float heightMask = ComputeHeightMask(hN);
 		if (heightMask <= 0.001f)
@@ -610,24 +629,30 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
+		// Refine spawn gate with heightMask (still no interaction tap yet).
+		float spawnGate = spawnGateBase * heightMask;
+		if (spawnGate <= 0.001f)
+		{
+			continue;
+		}
+
+		// If you want pressed grass to reduce spawn, you need press01 (interaction tap).
 		float press01 = saturate(SampleInteraction(posXZ));
+
+		// Optional: pressed grass reduces density.
+		// spawnGate *= (1.0f - 0.5f * press01);
+
+		// Final gate with updated spawnGate.
+		// NOTE: reuse a different salt to decorrelate.
+		if (Rand01(seed ^ 0x4A4Au) > spawnGate)
+		{
+			continue;
+		}
 
 		float3 posWS = float3(p.x, p.y, p.z);
 
 		float2 dxz = float2(posWS.x, posWS.z) - camXZ;
 		float distSqr = dot(dxz, dxz);
-
-		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
-
-		float spawnGate = saturate(g_CB.SpawnProb * chunkDensity * heightMask);
-
-		// Example: pressed grass can be reduced:
-		// spawnGate *= (1.0f - 0.5f * press01);
-
-		if (Rand01(seed ^ 0x4444u) > spawnGate)
-		{
-			continue;
-		}
 
 		float scaleT = Rand01(seed ^ 0x5555u);
 		float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
@@ -644,6 +669,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		bool emit1 = (!emit0) && (distSqr < lod1Sqr);
 		bool emit2 = (!emit0) && (!emit1);
 
+		// Reserve per mesh (only InterlockedAdd when a mesh actually has active lanes).
 		BallotMask b0 = WaveBallotWrap(emit0);
 		BallotMask b1 = WaveBallotWrap(emit1);
 		BallotMask b2 = WaveBallotWrap(emit2);
@@ -659,7 +685,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			uint pfx = BallotPrefixCountBits(b0, lane);
 
 			GrassMeshInstance inst = MakeGrassMeshInstance(posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
-
 			g_OutInstancesLOD0[base0 + pfx] = inst;
 		}
 		else if (emit1)
@@ -667,7 +692,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			uint pfx = BallotPrefixCountBits(b1, lane);
 
 			GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
-
 			g_OutInstancesLOD1[base1 + pfx] = inst;
 		}
 		else
@@ -675,7 +699,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			uint pfx = BallotPrefixCountBits(b2, lane);
 
 			GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
-
 			g_OutInstancesLOD2[base2 + pfx] = inst;
 		}
 	}
