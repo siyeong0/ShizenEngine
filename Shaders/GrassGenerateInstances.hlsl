@@ -25,15 +25,6 @@
 #include "HeightField.hlsli"
 #include "GrassCommon.hlsli"
 
-// ---------------------------------------------------------------------------
-// Constant buffers
-// ---------------------------------------------------------------------------
-
-cbuffer HEIGHT_FIELD_CONSTANTS
-{
-	HeightFieldConstants g_HeightFieldCB;
-};
-
 cbuffer GRASS_GEN_CONSTANTS
 {
 	GrassGenConstants g_CB;
@@ -158,7 +149,7 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 
 float2 WorldXZToHeightUV(float2 worldXZ)
 {
-	return HF_WorldXZToUV(worldXZ, g_HeightFieldCB, float2(1.0f, 1.0f), float2(0.0f, 0.0f));
+	return HF_WorldXZToUV(worldXZ, float2(1.0f, 1.0f), float2(0.0f, 0.0f));
 }
 
 float SampleHeightNormalized(float2 worldXZ)
@@ -170,7 +161,7 @@ float SampleHeightNormalized(float2 worldXZ)
 float SampleWorldHeight(float2 worldXZ)
 {
 	float2 uv = WorldXZToHeightUV(worldXZ);
-	return HF_SampleWorldHeight(g_HeightField, g_LinearClampSampler, uv, g_HeightFieldCB, g_CB.YOffset);
+	return HF_SampleWorldHeight(g_HeightField, g_LinearClampSampler, uv, g_CB.YOffset);
 }
 
 float RemapDensity(float d, float contrast01)

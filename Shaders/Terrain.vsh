@@ -1,11 +1,6 @@
 #include "Common.hlsli"
 #include "HeightField.hlsli"
 
-cbuffer HEIGHT_FIELD_CONSTANTS
-{
-	HeightFieldConstants g_HeightFieldCB;
-};
-
 StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
 
 Texture2D<float> g_HeightField;
@@ -24,7 +19,6 @@ static float sampleWorldHeightAt(float2 worldXZ, TerrainDrawConstants terrainDra
 		g_HeightField,
 		g_LinearClampSampler,
 		worldXZ,
-		g_HeightFieldCB,
 		terrainDrawCB.HeightUVScale,
 		terrainDrawCB.HeightUVBias,
 		0.0);
