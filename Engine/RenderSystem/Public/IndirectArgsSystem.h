@@ -1,49 +1,73 @@
 #pragma once
 #include <array>
+#include <string>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Math/Math.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
+#include "Engine/RHI/Interface/IShader.h"
 #include "Engine/RHI/Interface/IPipelineState.h"
 #include "Engine/RHI/Interface/IShaderResourceBinding.h"
 
 namespace shz
 {
-	class Renderer;
+    class Renderer;
+    struct RenderPassBuilder;
+    struct RenderPassContext;
 
-	namespace hlsl
-	{
+    namespace hlsl
+    {
 #include "Shaders/HLSL_Structures.hlsli"
-	} // namespace hlsl
+    }
 
-	class IndirectArgsSystem final
-	{
-	public:
-		IndirectArgsSystem() = default;
-		~IndirectArgsSystem() = default;
+    class IndirectArgsSystem final
+    {
+    public:
+        struct MeshHandle final
+        {
+            uint32 MeshId = 0;
+            uint32 BaseSlot = 0;
+            uint32 NumSlots = 0;
+        };
 
-		IndirectArgsSystem(const IndirectArgsSystem&) = delete;
-		IndirectArgsSystem& operator=(const IndirectArgsSystem&) = delete;
+        IndirectArgsSystem() = default;
+        ~IndirectArgsSystem() = default;
 
-		void InstallPasses(Renderer& renderer);
+        IndirectArgsSystem(const IndirectArgsSystem&) = delete;
+        IndirectArgsSystem& operator=(const IndirectArgsSystem&) = delete;
 
-		uint32 AllocateSlot(const std::string& debugName);
-		void ResetAllSlots();
+        void InstallPasses(Renderer& renderer);
 
-		void SetTemplate(uint32 slot, const hlsl::IndirectArgsTemplate& t);
-		uint32 GetNumSlots() const { return m_NumSlots; }
-		static constexpr uint32 GetArgsOffsetBytes(uint32 slot) { return slot * 20u; }
-		void SetWriteArgsShader(const char* filePath) { m_WriteArgsCS = filePath ? filePath : ""; }
+        MeshHandle AllocateMesh(const std::string& debugName, uint32 numSlots);
+        uint32 AllocateSlot(const std::string& debugName);
 
-	private:
-		uint32 m_NumSlots = 0;
-		std::array<uint8, MAX_NUM_INDIRECTS> m_SlotUsed = {};
-		std::array<hlsl::IndirectArgsTemplate, MAX_NUM_INDIRECTS> m_Templates = {};
+        void ResetAllSlots();
 
-		RefCntAutoPtr<IPipelineState> m_pWriteArgsCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pWriteArgsSRB;
+        void SetTemplate(uint32 slot, const hlsl::IndirectArgsTemplate& t);
 
-		std::string m_WriteArgsCS = "WriteIndirectArgs.hlsl";
-	};
+    private:
+        bool allocateContiguousSlots(uint32 numSlots, uint32& outBaseSlot);
+
+    private:
+        // CPU-side mirrors for upload
+        std::array<hlsl::IndirectArgsTemplate, MAX_NUM_INDIRECTS> m_Templates = {};
+        std::array<uint32, MAX_NUM_INDIRECTS> m_SlotMeshId = {};
+
+        std::array<uint8, MAX_NUM_INDIRECTS> m_SlotUsed = {};
+        std::array<uint8, MAX_NUM_INDIRECT_MESHES> m_MeshUsed = {};
+
+        uint32 m_NumSlots = 0;
+        uint32 m_NumMeshes = 0;
+
+        // Compute PSOs/SRBs
+        RefCntAutoPtr<IPipelineState> m_pWriteArgsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pWriteArgsSRB;
+
+        RefCntAutoPtr<IPipelineState> m_pResetMeshCountsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pResetMeshCountsSRB;
+
+        // Shader path
+        std::string m_WriteArgsCS = "WriteIndirectArgs.hlsl";
+    };
 } // namespace shz

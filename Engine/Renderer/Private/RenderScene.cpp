@@ -657,15 +657,15 @@ namespace shz
 				continue;
 			}
 
-			// 정책: mesh의 section마다 indirect args slot을 하나씩 사용한다.
-			// slot = d.IndirectSlot + sectionIndex
+			// Policy:
+			// - One indirect args slot per mesh section.
+			// - Slot range must be contiguous: [IndirectBaseSlot .. IndirectBaseSlot + sectionCount).
 			for (uint32 si = 0; si < sectionCount; ++si)
 			{
 				const StaticMeshRenderData::Section& sec = mesh->Sections[si];
 
-				const uint32 slot = d.IndirectSlot + si;
-				// MAX_NUM_INDIRECTS = 256 (HLSL과 맞춰 사용)
-				ASSERT(slot < 256u, "IndirectSlot out of range. base=%u, si=%u", d.IndirectSlot, si);
+				const uint32 slot = d.IndirectBaseSlot + si;
+				ASSERT(slot < MAX_NUM_INDIRECTS, "Indirect slot out of range. base=%u si=%u", d.IndirectBaseSlot, si);
 
 				const MaterialPipelineBinding& pb = resolver(sec.MaterialId, passKey);
 				ASSERT(pb.pPSO && pb.pSRB, "Pipeline binding is null.");
@@ -676,29 +676,30 @@ namespace shz
 				pkt.PSO = pb.pPSO;
 				pkt.SRB = pb.pSRB;
 
-				// DrawIndexedIndirectAttribs 설정
-				// - 실제 인덱스/인스턴스 카운트는 IndirectArgsBuffer(=g_IndirectArgs)에 들어있다.
-				// - 여기서는 offset/stride/count/indexType만 채운다.
-				// - pAttribsBuffer는 Renderer가 패스 실행 직전에 꽂아준다.
+				// Indirect args:
+				// - 20 bytes per slot at offset = slot * 20
 				pkt.DrawAttribs = {};
 				pkt.DrawAttribs.IndexType = mesh->IndexType;
 
-				pkt.DrawAttribs.DrawArgsOffset = slot * 20u; // INDIRECT_ARGS_STRIDE_BYTES
+				pkt.DrawAttribs.DrawArgsOffset = static_cast<uint64>(slot) * 20u;
 				pkt.DrawAttribs.DrawCount = 1;
-				pkt.DrawAttribs.DrawArgsStride = 20;
+				pkt.DrawAttribs.DrawArgsStride = 20u;
 
 				pkt.DrawAttribs.pAttribsBuffer = nullptr;
 				pkt.DrawAttribs.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
-				// counter는 안 쓰는 정책
+				// Counter buffer:
+				// - We use slot draw-count buffer (0 or 1).
+				// - If counter == 0 -> the draw is skipped.
 				pkt.DrawAttribs.pCounterBuffer = nullptr;
-				pkt.DrawAttribs.CounterOffset = 0;
-				pkt.DrawAttribs.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_NONE;
+				pkt.DrawAttribs.CounterOffset = static_cast<uint64>(slot) * 4u;
+				pkt.DrawAttribs.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
 				outPackets.emplace_back(pkt);
 			}
 		}
 	}
+
 
 	void RenderScene::BuildTerrainDrawPackets(
 		uint64 passKey,

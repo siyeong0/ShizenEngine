@@ -115,47 +115,57 @@ namespace shz
 			renderer.AddBuffer(STRING_HASH("GrassGenConstants"), bd);
 		}
 
-		// Allocate indirect slots
-		m_IndirectSlotLOD0 = indirect.AllocateSlot("GrassLOD0");
-		m_IndirectSlotLOD1 = indirect.AllocateSlot("GrassLOD1");
-		m_IndirectSlotLOD2 = indirect.AllocateSlot("GrassLOD2");
+		// Allocate indirect mesh ranges
+		const uint32 lod0Sections = static_cast<uint32>(m_GrassDesc.pMeshLod0->Sections.size());
+		const uint32 lod1Sections = static_cast<uint32>(m_GrassDesc.pCrossMeshLod1->Sections.size());
+		const uint32 lod2Sections = static_cast<uint32>(m_GrassDesc.pBillboardMeshLod2->Sections.size());
 
-		// Indirect templates
+		// Allocate indirect
+		m_IndirectLOD0 = indirect.AllocateMesh("GrassLOD0", lod0Sections);
+		m_IndirectLOD1 = indirect.AllocateMesh("GrassLOD1", lod1Sections);
+		m_IndirectLOD2 = indirect.AllocateMesh("GrassLOD2", lod2Sections);
+
+		auto SetMeshTemplates = [&](const StaticMeshRenderData* mesh, uint32 baseSlot)
 		{
-			hlsl::IndirectArgsTemplate t = {};
-			t.StartIndexLocation = 0;
-			t.BaseVertexLocation = 0;
-			t.StartInstanceLocation = 0;
+			const uint32 sectionCount = static_cast<uint32>(mesh->Sections.size());
+			for (uint32 si = 0; si < sectionCount; ++si)
+			{
+				const auto& sec = mesh->Sections[si];
 
-			t.IndexCountPerInstance = m_GrassDesc.pMeshLod0->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD0, t);
+				hlsl::IndirectArgsTemplate t = {};
+				t.IndexCountPerInstance = sec.IndexCount;
+				t.StartIndexLocation = sec.FirstIndex;
+				t.BaseVertexLocation = sec.BaseVertex;
+				t.StartInstanceLocation = 0;
 
-			t.IndexCountPerInstance = m_GrassDesc.pCrossMeshLod1->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD1, t);
+				indirect.SetTemplate(baseSlot + si, t);
+			}
+		};
 
-			t.IndexCountPerInstance = m_GrassDesc.pBillboardMeshLod2->IndexCount;
-			indirect.SetTemplate(m_IndirectSlotLOD2, t);
-		}
+		SetMeshTemplates(m_GrassDesc.pMeshLod0, m_IndirectLOD0.BaseSlot);
+		SetMeshTemplates(m_GrassDesc.pCrossMeshLod1, m_IndirectLOD1.BaseSlot);
+		SetMeshTemplates(m_GrassDesc.pBillboardMeshLod2, m_IndirectLOD2.BaseSlot);
 
 		// Register indirect objects to RenderScene
 		{
 			RenderScene::IndirectObjectDesc d = {};
 			d.bCastShadow = true;
 			d.PassKey = STRING_HASH("GBuffer");
-
 			d.bDepthPrepass = false;
+
 			d.pMesh = m_GrassDesc.pMeshLod0;
-			d.IndirectSlot = m_IndirectSlotLOD0;
+			d.IndirectBaseSlot = m_IndirectLOD0.BaseSlot;
+			d.IndirectMeshId = m_IndirectLOD0.MeshId;
 			scene.AddIndirect(d);
 
-			d.bDepthPrepass = false;
 			d.pMesh = m_GrassDesc.pCrossMeshLod1;
-			d.IndirectSlot = m_IndirectSlotLOD1;
+			d.IndirectBaseSlot = m_IndirectLOD1.BaseSlot;
+			d.IndirectMeshId = m_IndirectLOD1.MeshId;
 			scene.AddIndirect(d);
 
-			d.bDepthPrepass = false;
 			d.pMesh = m_GrassDesc.pBillboardMeshLod2;
-			d.IndirectSlot = m_IndirectSlotLOD2;
+			d.IndirectBaseSlot = m_IndirectLOD2.BaseSlot;
+			d.IndirectMeshId = m_IndirectLOD2.MeshId;
 			scene.AddIndirect(d);
 		}
 
@@ -238,9 +248,9 @@ namespace shz
 					map->SamplesPerChunk = m_SamplesPerChunk;
 					map->ChunkSize = m_ChunkSize;
 
-					map->IndirectSlotLOD0 = m_IndirectSlotLOD0;
-					map->IndirectSlotLOD1 = m_IndirectSlotLOD1;
-					map->IndirectSlotLOD2 = m_IndirectSlotLOD2;
+					map->LOD0MeshId = m_IndirectLOD0.MeshId;
+					map->LOD1MeshId = m_IndirectLOD1.MeshId;
+					map->LOD2MeshId = m_IndirectLOD2.MeshId;
 
 					map->LOD0Distance = m_GrassDesc.LOD0Distance;
 					map->LOD1Distance = m_GrassDesc.LOD1Distance;
@@ -494,7 +504,7 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD1"), RENDER_ACCESS_WRITE);
 				b.DeclareBufferUAV(STRING_HASH("GrassInstanceBufferLOD2"), RENDER_ACCESS_WRITE);
 
-				b.DeclareBufferUAV(STRING_HASH("IndirectCountBuffer"), RENDER_ACCESS_WRITE);
+				b.DeclareBufferUAV(STRING_HASH("IndirectMeshInstanceCountBuffer"), RENDER_ACCESS_WRITE);
 
 				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
 
@@ -543,7 +553,7 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_VisibleCellTable",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_CounterBuffer",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_DensityField",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
@@ -605,9 +615,9 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolChunkCoord")));
 				}
-				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_CounterBuffer"))
+				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer"))
 				{
-					v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectCountBuffer")));
+					v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectMeshInstanceCountBuffer")));
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{

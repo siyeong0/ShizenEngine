@@ -1,4 +1,3 @@
-// Engine/RenderSystem/Public/GrassSystem.h
 #pragma once
 #include <string>
 
@@ -8,11 +7,12 @@
 #include "Engine/RHI/Interface/IPipelineState.h"
 #include "Engine/RHI/Interface/IShaderResourceBinding.h"
 
+#include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
+
 namespace shz
 {
     class Renderer;
     class RenderScene;
-    class IndirectArgsSystem;
     class InteractionSystem;
     struct StaticMeshRenderData;
 
@@ -63,9 +63,9 @@ namespace shz
         // ------------------------------------------------------------
         // Indirect slot for this system
         // ------------------------------------------------------------
-        uint32 m_IndirectSlotLOD0 = 0;
-        uint32 m_IndirectSlotLOD1 = 0;
-        uint32 m_IndirectSlotLOD2 = 0;
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD0;
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD1;
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD2;
 
         // ------------------------------------------------------------
         // Interaction system reference

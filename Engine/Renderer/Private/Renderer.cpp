@@ -673,7 +673,8 @@ namespace shz
 		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("DepthPrepass"), pipelineResolver, m_PassCtx.DepthPrepassIndirectDrawPackets);
 		
-		IBuffer* pIndirectArgs = m_PassCtx.pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+		IBuffer* pIndirectArgs = m_pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
+		IBuffer* pIndirectCounters = m_pRegistry->GetBuffer(STRING_HASH("IndirectDrawCountBuffer"));
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
 		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
@@ -681,6 +682,7 @@ namespace shz
 			for (DrawIndirectPacket& p : packets)
 			{
 				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+				p.DrawAttribs.pCounterBuffer = pIndirectCounters;
 			}
 		};
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);

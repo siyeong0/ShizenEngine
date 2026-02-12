@@ -32,6 +32,7 @@ namespace shz
 
 				// If you want to use indirect for some geometry in depth-only, declare it
 				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
+				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectDrawCountBuffer"));
 
 				// Grass instances (if depth-only pass needs them via SRV in VS)
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD0"));
@@ -192,6 +193,7 @@ namespace shz
 				b.DeclareTextureDSVWrite(kDepth);
 
 				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
+				b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectDrawCountBuffer"));
 
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD0"));
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));

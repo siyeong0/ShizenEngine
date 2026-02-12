@@ -15,7 +15,15 @@
 //
 // Assumptions:
 // - NumPools == VisibleCells == ChunkVisibleDim * ChunkVisibleDim
-// - IndirectCountBuffer layout: uint counter per slot at byteOffset = slot * 4
+// - poolIndex == cellIndex
+//
+// IMPORTANT (updated design):
+// - g_MeshInstanceCountBuffer is the ONLY counter source.
+//   * It acts as:
+//     (A) append counter for instance buffers (returns base index)
+//     (B) final per-mesh instanceCount used by WriteIndirectArgs.hlsl later
+// - Per-slot counters are NOT written here anymore.
+//   WriteIndirectArgs will map meshId -> slot drawCount (0/1) and args instanceCount.
 //
 // NOTE:
 // - This file expects FrameConstants (g_FrameCB) contains CameraPosition and FrustumPlanesWS[6].
@@ -52,7 +60,7 @@ struct PoolChunkCoord
 
 struct PoolDirty
 {
-	// 0 = Clean, 1 = NeedsFill, 2 = Filling (optional safety)
+    // 0 = Clean, 1 = NeedsFill, 2 = Filling (optional safety)
     uint Dirty;
     uint3 _pad;
 };
@@ -72,8 +80,9 @@ RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
 RWStructuredBuffer<GrassCrossPlaneInstance> g_OutInstancesLOD1;
 RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
 
-// slot counters (IndirectCountBuffer)
-RWByteAddressBuffer g_CounterBuffer;
+// Per-mesh instance counter (append counter + final instanceCount).
+// Layout: uint counter per mesh at byteOffset = meshId * 4.
+RWByteAddressBuffer g_MeshInstanceCountBuffer;
 
 // Inputs
 Texture2D<float> g_HeightField;
@@ -139,7 +148,9 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
     float2 e = o + chunkSize.xx;
 
     if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
+    {
         return false;
+    }
 
     chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
     return true;
@@ -176,7 +187,9 @@ float RemapDensity(float d, float contrast01)
 float SampleWorldDensity(float2 worldXZ, float mipLevel)
 {
     float2 uv = WorldXZToHeightUV(worldXZ);
-    float d = g_DensityField.SampleLevel(g_LinearWrapSampler, uv, 0.0).r;
+
+    // NOTE: mipLevel is intentionally used (coarse, stable density).
+    float d = g_DensityField.SampleLevel(g_LinearWrapSampler, uv, mipLevel).r;
 
     d = saturate(d);
     d = RemapDensity(d, g_CB.DensityContrast);
@@ -217,7 +230,7 @@ float ComputeHeightMask(float hN)
 
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
-	[unroll]
+    [unroll]
     for (int i = 0; i < 6; ++i)
     {
         float4 P = g_FrameCB.FrustumPlanesWS[i];
@@ -230,7 +243,9 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
         v.z = (n.z >= 0.0f) ? bmax.z : bmin.z;
 
         if (dot(n, v) + d < 0.0f)
+        {
             return false;
+        }
     }
     return true;
 }
@@ -263,7 +278,7 @@ uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, floa
 }
 
 // ---------------------------------------------------------------------------
-// Wave helpers (counter reserve/scatter)
+// Wave helpers (mesh counter reserve/scatter)
 // ---------------------------------------------------------------------------
 
 struct BallotMask
@@ -290,31 +305,39 @@ uint BallotPrefixCountBits(BallotMask b, uint lane)
     uint prefix = 0u;
 
     if (word > 0u)
+    {
         prefix += countbits(b.M.x);
+    }
     if (word > 1u)
+    {
         prefix += countbits(b.M.y);
+    }
     if (word > 2u)
+    {
         prefix += countbits(b.M.z);
+    }
 
     uint w =
-		(word == 0u) ? b.M.x :
-		(word == 1u) ? b.M.y :
-		(word == 2u) ? b.M.z : b.M.w;
+        (word == 0u) ? b.M.x :
+        (word == 1u) ? b.M.y :
+        (word == 2u) ? b.M.z : b.M.w;
 
     uint mask = (bit == 0u) ? 0u : ((1u << bit) - 1u);
     prefix += countbits(w & mask);
     return prefix;
 }
 
-uint WaveReserveByteAddressCounter(uint counterByteOffset, BallotMask ballot)
+uint WaveReserveMeshCounter(uint meshId, BallotMask ballot)
 {
     uint base = 0u;
     uint cnt = BallotCountBits(ballot);
 
     if (cnt != 0u && WaveIsFirstLane())
     {
-        g_CounterBuffer.InterlockedAdd(counterByteOffset, cnt, base);
+        uint byteOffset = meshId * 4u;
+        g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, cnt, base);
     }
+
     return WaveReadLaneFirst(base);
 }
 
@@ -326,10 +349,12 @@ uint MakeSeed8(uint seed)
 {
     return (WangHash(seed) >> 24) & 0xFFu;
 }
+
 uint MakeVariantId(uint seed)
 {
     return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
 }
+
 uint MakeAtlasIndex(uint seed)
 {
     return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
@@ -344,7 +369,9 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 {
     uint dim = g_CB.ChunkVisibleDim;
     if (tid.x >= dim || tid.y >= dim)
+    {
         return;
+    }
 
     uint cellIndex = tid.y * dim + tid.x;
     uint pool = cellIndex;
@@ -392,16 +419,22 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
     uint cellIndex = gid.x;
     if (cellIndex >= visibleCells)
+    {
         return;
+    }
 
     uint pool = cellIndex;
 
     PoolDirty pd = g_PoolDirty[pool];
     if (pd.Dirty == 0u)
+    {
         return;
+    }
 
     if (pd.Dirty != 1u)
+    {
         return;
+    }
 
     if (tid.x == 0u)
     {
@@ -422,6 +455,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
         {
             g_PoolPositions[base + s] = float4(0.0f, INVALID_NAN, 0.0f, 0.0f);
         }
+
         GroupMemoryBarrierWithGroupSync();
         if (tid.x == 0u)
         {
@@ -458,7 +492,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
         float y = SampleWorldHeight(posXZ);
 
-		// NOTE: w is RESERVED (keep 0 for now).
+        // NOTE: w is RESERVED (keep 0 for now).
         g_PoolPositions[base + s] = float4(posXZ.x, y, posXZ.y, 0.0f);
     }
 
@@ -471,7 +505,9 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 }
 
 // ---------------------------------------------------------------------------
-// Entry C) BuildInstancesFromPoolsCS  (THINNING HERE, press/mask sampled HERE)
+// Entry C) BuildInstancesFromPoolsCS
+// - THINNING HERE
+// - reserves output indices using g_MeshInstanceCountBuffer (meshId-based)
 // ---------------------------------------------------------------------------
 
 [numthreads(256, 1, 1)]
@@ -482,7 +518,9 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
     uint cellIndex = gid.x;
     if (cellIndex >= visibleCells)
+    {
         return;
+    }
 
     uint pool = cellIndex;
 
@@ -493,18 +531,24 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
     float2 chunkOriginClamped = chunkOriginXZ;
     if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
+    {
         return;
+    }
 
     PoolChunkCoord pc = g_PoolChunkCoord[pool];
     float chunkHeight = pc.ChunkHeight;
     if (chunkHeight == 0.0f)
+    {
         chunkHeight = SampleWorldHeight(chunkOriginClamped);
+    }
 
     float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
     float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + 120.0f, chunkOriginClamped.y + g_CB.ChunkSize);
 
     if (!AabbInsideFrustum(chunkMin, chunkMax))
+    {
         return;
+    }
 
     float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
     float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
@@ -514,14 +558,18 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
     float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
     if (distChunkSqr > spawnRadiusSqr)
+    {
         return;
+    }
 
     float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
     float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
 
     float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
     if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
+    {
         return;
+    }
 
     uint baseSamples = g_CB.SamplesPerChunk;
     uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
@@ -531,11 +579,15 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
     samplesThisChunk = min(samplesThisChunk, baseSamples);
     if (samplesThisChunk == 0u)
+    {
         return;
+    }
 
-    uint off0 = (g_CB.IndirectSlotLOD0 << 2);
-    uint off1 = (g_CB.IndirectSlotLOD1 << 2);
-    uint off2 = (g_CB.IndirectSlotLOD2 << 2);
+    // Mesh ids for each LOD (must be filled from CPU).
+    // These are the IDs used by IndirectArgsSystem (mesh-based counting).
+    uint meshId0 = g_CB.LOD0MeshId;
+    uint meshId1 = g_CB.LOD1MeshId;
+    uint meshId2 = g_CB.LOD2MeshId;
 
     uint base = pool * g_CB.SamplesPerChunk;
     uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
@@ -544,15 +596,19 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
     {
         float4 p = g_PoolPositions[base + s];
         if (isnan(p.y))
+        {
             continue;
+        }
 
         float2 posXZ = float2(p.x, p.z);
 
-		// Re-evaluate per-sample masks here (w is reserved/unused).
+        // Re-evaluate per-sample masks here (w is reserved/unused).
         float hN = SampleHeightNormalized(posXZ);
         float heightMask = ComputeHeightMask(hN);
         if (heightMask <= 0.001f)
+        {
             continue;
+        }
 
         float press01 = saturate(SampleInteraction(posXZ));
 
@@ -565,16 +621,18 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
         float spawnGate = saturate(g_CB.SpawnProb * chunkDensity * heightMask);
 
-		// Example: pressed grass can be reduced:
-		// spawnGate *= (1.0f - 0.5f * press01);
+        // Example: pressed grass can be reduced:
+        // spawnGate *= (1.0f - 0.5f * press01);
 
         if (Rand01(seed ^ 0x4444u) > spawnGate)
+        {
             continue;
+        }
 
         float scaleT = Rand01(seed ^ 0x5555u);
         float scale =
-			lerp(g_CB.MinScale, g_CB.MaxScale, scaleT) *
-			0.04f;
+            lerp(g_CB.MinScale, g_CB.MaxScale, scaleT) *
+            0.04f;
 
         float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
         float pitch = lerp(g_CB.MinPitch, g_CB.MaxPitch, Rand01(seed ^ 0x7777u));
@@ -592,9 +650,9 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
         BallotMask b1 = WaveBallotWrap(emit1);
         BallotMask b2 = WaveBallotWrap(emit2);
 
-        uint base0 = WaveReserveByteAddressCounter(off0, b0);
-        uint base1 = WaveReserveByteAddressCounter(off1, b1);
-        uint base2 = WaveReserveByteAddressCounter(off2, b2);
+        uint base0 = WaveReserveMeshCounter(meshId0, b0);
+        uint base1 = WaveReserveMeshCounter(meshId1, b1);
+        uint base2 = WaveReserveMeshCounter(meshId2, b2);
 
         uint lane = WaveGetLaneIndex();
 
@@ -602,8 +660,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
         {
             uint pfx = BallotPrefixCountBits(b0, lane);
 
-            GrassMeshInstance inst = MakeGrassMeshInstance(
-				posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
+            GrassMeshInstance inst = MakeGrassMeshInstance(posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
 
             g_OutInstancesLOD0[base0 + pfx] = inst;
         }
@@ -611,8 +668,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
         {
             uint pfx = BallotPrefixCountBits(b1, lane);
 
-            GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(
-				posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
+            GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
 
             g_OutInstancesLOD1[base1 + pfx] = inst;
         }
@@ -620,8 +676,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
         {
             uint pfx = BallotPrefixCountBits(b2, lane);
 
-            GrassBillboardInstance inst = MakeGrassBillboardInstance(
-				posWS, scale, yaw, atlasIndex, seed8);
+            GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
 
             g_OutInstancesLOD2[base2 + pfx] = inst;
         }

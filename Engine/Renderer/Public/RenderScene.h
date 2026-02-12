@@ -76,10 +76,16 @@ namespace shz
 		struct IndirectObjectDesc final
 		{
 			const StaticMeshRenderData* pMesh = nullptr;
-			uint64 PassKey = 0;
 			bool bCastShadow = true;
 			bool bDepthPrepass = true;
-			uint32 IndirectSlot = 0;
+
+			uint64 PassKey = 0;
+
+			// Base slot for this mesh's sections (slot = BaseSlot + sectionIndex)
+			uint32 IndirectBaseSlot = 0;
+
+			// Mesh id for instance counting (GPU increments this).
+			uint32 IndirectMeshId = 0;
 		};
 
 		struct IndirectObject final
