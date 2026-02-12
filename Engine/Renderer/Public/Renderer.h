@@ -242,6 +242,8 @@ namespace shz
 
 		void UpdateViewConstantBuffer(const View& view);
 
+		IDeviceContext* GetImmediateContext() { return m_pImmediateContext; }
+
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
 
