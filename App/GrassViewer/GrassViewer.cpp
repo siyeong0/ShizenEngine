@@ -420,7 +420,7 @@ namespace shz
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-						// m_pGrassSystem->SetGrassDesc(gd);
+						m_pGrassSystem->SetGrassDesc(gd);
 					}
 				}
 
@@ -465,7 +465,7 @@ namespace shz
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-						m_pGrassSystem->SetGrassDesc(gd);
+						//m_pGrassSystem->SetGrassDesc(gd);
 					}
 				}
 			}
@@ -893,18 +893,18 @@ namespace shz
 		// ------------------------------------------------------------
 		{
 			AssetRef<StaticMesh> helmetRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
-			StaticMesh& helmetMesh = *m_pAssetManager->LoadBlocking(helmetRef);
-			auto uniform01 = [](StaticMesh& mesh)
-			{
-				mesh.RecomputeBounds();
-				const Box& b = mesh.GetBounds();
-				float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-				mesh.ApplyUniformScale(yScale01);
-				mesh.MoveBottomToOrigin(true);
-			};
-			uniform01(helmetMesh);
-			// const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
-			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetMesh);
+			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
+			//StaticMesh& helmetMesh = *m_pAssetManager->LoadBlocking(helmetRef);
+			//auto uniform01 = [](StaticMesh& mesh)
+			//{
+			//	mesh.RecomputeBounds();
+			//	const Box& b = mesh.GetBounds();
+			//	float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+			//	mesh.ApplyUniformScale(yScale01);
+			//	mesh.MoveBottomToOrigin(true);
+			//};
+			//uniform01(helmetMesh);
+			//const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetMesh);
 
 			constexpr uint32 kHelmetCount = 300;
 			constexpr float  kMinY = 20.0f;

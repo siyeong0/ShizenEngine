@@ -48,8 +48,8 @@ namespace shz
         // ------------------------------------------------------------
         // Limits (render instance buffers)
         // ------------------------------------------------------------
-        static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 16;
-        static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 18;
+        static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
+        static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
         // ------------------------------------------------------------
@@ -58,7 +58,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32; // => VisibleDim = 64
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 128;
+        uint  m_SamplesPerChunk = 1024;
 
         // ------------------------------------------------------------
         // Indirect slot for this system
