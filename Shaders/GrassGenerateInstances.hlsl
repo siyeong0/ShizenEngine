@@ -1,3 +1,17 @@
+// GrassGenerateInstances.hlsl
+//
+// Pool-based grass generation with species packing.
+// - UpdateChunkPoolsCS: poolIndex == cellIndex (stable mapping, no freelist).
+// - FillNewPoolsCS: fills full SamplesPerChunk with valid positions + SpeciesId (NO thinning).
+// - ClearSpeciesCountersCS: clears counts/offsets/writeCounters.
+// - CountInstancesFromPoolsCS: applies thinning rules, counts per (species, lod).
+// - PrefixSpeciesOffsetsCS: exclusive scan per LOD across species.
+// - BuildInstancesFromPoolsCS: applies thinning + writes packed instances, and increments mesh-based counters.
+//
+// NOTE:
+// - Mesh counters are updated with wave-grouped reservation by meshId (fast + correct).
+// - Species packing uses atomic writeCounters (could be wave-optimized later if needed).
+
 #include "Common.hlsli"
 #include "HeightField.hlsli"
 #include "GrassCommon.hlsli"
@@ -50,7 +64,7 @@ RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
 RWStructuredBuffer<GrassCrossPlaneInstance> g_OutInstancesLOD1;
 RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
 
-// Per-mesh counter (IndirectArgs mesh-based)
+// Per-mesh counter (IndirectArgs mesh-based). Layout: uint counter per meshId at byteOffset = meshId*4.
 RWByteAddressBuffer g_MeshInstanceCountBuffer;
 
 // Species/LOD packing buffers
@@ -249,18 +263,32 @@ uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, floa
 }
 
 // ---------------------------------------------------------------------------
-// Mesh counter reserve helpers (wave optimized)
+// Mesh counter reserve helpers (wave optimized, grouped by meshId)
+// - One atomic per unique meshId in the wave.
+// - Keeps correctness of mesh counters while reducing atomics drastically.
 // ---------------------------------------------------------------------------
 struct BallotMask
 {
 	uint4 M;
 };
 
-BallotMask WaveBallotWrap(bool pred)
+BallotMask WaveBallotAll()
 {
 	BallotMask b;
-	b.M = WaveActiveBallot(pred);
+	b.M = WaveActiveBallot(true);
 	return b;
+}
+
+bool BallotAny(BallotMask b)
+{
+	return (b.M.x | b.M.y | b.M.z | b.M.w) != 0u;
+}
+
+BallotMask BallotAndNot(BallotMask a, BallotMask b)
+{
+	BallotMask r;
+	r.M = uint4(a.M.x & ~b.M.x, a.M.y & ~b.M.y, a.M.z & ~b.M.z, a.M.w & ~b.M.w);
+	return r;
 }
 
 uint BallotCountBits(BallotMask b)
@@ -268,46 +296,73 @@ uint BallotCountBits(BallotMask b)
 	return countbits(b.M.x) + countbits(b.M.y) + countbits(b.M.z) + countbits(b.M.w);
 }
 
-uint BallotPrefixCountBits(BallotMask b, uint lane)
+bool BallotTestLane(BallotMask b, uint lane)
 {
 	uint word = lane >> 5;
-	uint bit = lane & 31;
-	uint prefix = 0u;
-
-	if (word > 0u)
-	{
-		prefix += countbits(b.M.x);
-	}
-	if (word > 1u)
-	{
-		prefix += countbits(b.M.y);
-	}
-	if (word > 2u)
-	{
-		prefix += countbits(b.M.z);
-	}
+	uint bit = lane & 31u;
 
 	uint w =
 		(word == 0u) ? b.M.x :
 		(word == 1u) ? b.M.y :
 		(word == 2u) ? b.M.z : b.M.w;
 
-	uint mask = (bit == 0u) ? 0u : ((1u << bit) - 1u);
-	prefix += countbits(w & mask);
-	return prefix;
+	return ((w >> bit) & 1u) != 0u;
 }
 
-uint WaveReserveMeshCounter(uint meshId, BallotMask ballot)
+uint BallotFirstLane(BallotMask b)
 {
-	uint base = 0u;
-	uint cnt = BallotCountBits(ballot);
-
-	if (cnt != 0u && WaveIsFirstLane())
+	// Assumes BallotAny(b) == true.
+	if (b.M.x != 0u)
 	{
-		uint byteOffset = meshId * 4u;
-		g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, cnt, base);
+		return 0u + firstbitlow(b.M.x);
 	}
-	return WaveReadLaneFirst(base);
+	if (b.M.y != 0u)
+	{
+		return 32u + firstbitlow(b.M.y);
+	}
+	if (b.M.z != 0u)
+	{
+		return 64u + firstbitlow(b.M.z);
+	}
+	return 96u + firstbitlow(b.M.w);
+}
+
+// Returns base for THIS lane's meshId group (value returned by InterlockedAdd for that meshId group).
+uint WaveReserveMeshCounter_Grouped(uint meshId)
+{
+	uint lane = WaveGetLaneIndex();
+	BallotMask remaining = WaveBallotAll();
+
+	uint myBase = 0u;
+
+	[loop]
+	while (BallotAny(remaining))
+	{
+		uint leaderLane = BallotFirstLane(remaining);
+		uint leaderMesh = WaveReadLaneAt(meshId, leaderLane);
+
+		BallotMask group;
+		group.M = WaveActiveBallot(meshId == leaderMesh);
+
+		uint cnt = BallotCountBits(group);
+
+		uint base = 0u;
+		if (lane == leaderLane)
+		{
+			uint byteOffset = leaderMesh * 4u;
+			g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, cnt, base);
+		}
+		base = WaveReadLaneAt(base, leaderLane);
+
+		if (BallotTestLane(group, lane))
+		{
+			myBase = base;
+		}
+
+		remaining = BallotAndNot(remaining, group);
+	}
+
+	return myBase;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,8 +428,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 // ---------------------------------------------------------------------------
 // Entry B) FillNewPoolsCS
 // - NO THINNING
-// - PoolPositions.w = asfloat(speciesId)
-// - speciesId picked uniformly: seed % NumSpecies
+// - SpeciesId chosen uniformly
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -415,7 +469,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
 			g_PoolPositions[base + s].Position = float3(0.0, INVALID_NAN, 0.0);
-			g_PoolPositions[base + s].SpeciesId = 0;
+			g_PoolPositions[base + s].SpeciesId = 0u;
 		}
 
 		GroupMemoryBarrierWithGroupSync();
@@ -459,7 +513,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
 
-		// w stores speciesId (as uint bits)
 		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
 		g_PoolPositions[base + s].SpeciesId = speciesId;
 	}
@@ -474,7 +527,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 // ---------------------------------------------------------------------------
 // Entry B-1) ClearSpeciesCountersCS
-// - Clears counts + offsets + write counters (optional safety)
+// - Clears counts + offsets + write counters
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
@@ -574,32 +627,21 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	{
 		PoolEntry p = g_PoolPositions[base + s];
 
-		// ------------------------------------------------------------
-		// Early reject invalid pool position
-		// ------------------------------------------------------------
 		if (isnan(p.Position.y))
 		{
 			continue;
 		}
 
-		// SpeciesId stored in poolPos.w (uint bits)
 		uint speciesId = p.SpeciesId;
 		if (speciesId >= g_CB.NumSpecies)
 		{
 			continue;
 		}
 
-		// ------------------------------------------------------------
-		// Stable seed per (chunkCoord, sampleIndex)
-		// ------------------------------------------------------------
 		uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		// ------------------------------------------------------------
-		// Spawn gate (cheap first)
-		// ------------------------------------------------------------
 		float spawnGateBase = saturate(g_CB.SpawnProb * chunkDensity);
-
 		if (Rand01(seed ^ 0x4444u) > spawnGateBase)
 		{
 			continue;
@@ -607,7 +649,6 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		float2 posXZ = p.Position.xz;
 
-		// Height band mask (1 height tap)
 		float hN = SampleHeightNormalized(posXZ);
 		float heightMask = ComputeHeightMask(hN);
 		if (heightMask <= 0.001f)
@@ -621,18 +662,13 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
-		// Interaction press (1 tap)
 		float press01 = saturate(SampleInteraction(posXZ));
 
-		// Final gate
 		if (Rand01(seed ^ 0x4A4Au) > spawnGate)
 		{
 			continue;
 		}
 
-		// ------------------------------------------------------------
-		// LOD decision (distance to camera)
-		// ------------------------------------------------------------
 		float3 posWS = p.Position;
 
 		float2 dxz = posWS.xz - camXZ;
@@ -640,14 +676,9 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
 
-		// ------------------------------------------------------------
-		// Count: species x lod
-		// Layout: idx = speciesId * 3 + lodIndex
-		// ------------------------------------------------------------
 		uint idx = speciesId * 3u + lodIndex;
 		InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
 	}
-
 }
 
 // ---------------------------------------------------------------------------
@@ -692,7 +723,7 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 // Entry C) BuildInstancesFromPoolsCS
 // - THINNING HERE
 // - Packs by species using offsets + writeCounters
-// - Still increments mesh-based counters for WriteIndirectArgs compatibility
+// - Still increments mesh-based counters (wave-grouped) for IndirectArgs compatibility
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -773,32 +804,21 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	{
 		PoolEntry p = g_PoolPositions[base + s];
 
-		// ------------------------------------------------------------
-		// Early reject invalid pool position
-		// ------------------------------------------------------------
 		if (isnan(p.Position.y))
 		{
 			continue;
 		}
 
-		// SpeciesId stored in poolPos.w (uint bits)
 		uint speciesId = p.SpeciesId;
 		if (speciesId >= g_CB.NumSpecies)
 		{
 			continue;
 		}
 
-		// ------------------------------------------------------------
-		// Stable seed per (chunkCoord, sampleIndex)
-		// ------------------------------------------------------------
 		uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		// ------------------------------------------------------------
-		// Spawn gate (cheap first)
-		// ------------------------------------------------------------
 		float spawnGateBase = saturate(g_CB.SpawnProb * chunkDensity);
-
 		if (Rand01(seed ^ 0x4444u) > spawnGateBase)
 		{
 			continue;
@@ -806,7 +826,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		float2 posXZ = p.Position.xz;
 
-		// Height band mask (1 height tap)
 		float hN = SampleHeightNormalized(posXZ);
 		float heightMask = ComputeHeightMask(hN);
 		if (heightMask <= 0.001f)
@@ -820,10 +839,8 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
-		// Interaction press (1 tap)
 		float press01 = saturate(SampleInteraction(posXZ));
 
-		// Final gate
 		if (Rand01(seed ^ 0x4A4Au) > spawnGate)
 		{
 			continue;
@@ -859,16 +876,16 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[speciesId] :
 							   g_SpeciesLOD2MeshId[speciesId];
 
-		// Reserve mesh counter (wave optimized)
-		bool emit0 = (lodIndex == 0u);
-		bool emit1 = (lodIndex == 1u);
-		bool emit2 = (lodIndex == 2u);
+		// ------------------------------------------------------------
+		// Mesh counter reserve (wave grouped by meshId)
+		// ------------------------------------------------------------
+		uint baseMesh = WaveReserveMeshCounter_Grouped(meshId);
+		(void) baseMesh; // mesh counter only; actual instance index uses species packing.
 
-		uint byteOffset = meshId * 4u;
-		uint oldValue;
-		g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, 1u, oldValue);
-
+		// ------------------------------------------------------------
 		// Species packing: atomic add per (species,lod) to get local index
+		// Layout: idx = speciesId*3 + lod
+		// ------------------------------------------------------------
 		uint idx = speciesId * 3u + lodIndex;
 
 		uint local = 0u;
