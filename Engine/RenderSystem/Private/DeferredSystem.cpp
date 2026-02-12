@@ -39,6 +39,8 @@ namespace shz
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
 
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLodOffsets"));
+
 				// Clear depth at frame begin (same as GBuffer pass, but now happens earlier)
 				b.SetClearDepthStencil(kDepth, 1.f, 0);
 			},
@@ -103,7 +105,7 @@ namespace shz
 
 					DrawIndexedAttribs dia = pkt.DrawAttribs;
 
-					// DRAW_CONSTANTS update (StartInstanceLocation 유지)
+					// DRAW_CONSTANTS update 
 					{
 						MapHelper<hlsl::DrawConstants> map(
 							pContext,
@@ -166,6 +168,19 @@ namespace shz
 					}
 
 					DrawIndexedIndirectAttribs dia = pkt.DrawAttribs;
+
+					// DRAW_CONSTANTS update 
+					{
+						MapHelper<hlsl::DrawConstants> map(
+							pContext,
+							ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
+							MAP_WRITE,
+							MAP_FLAG_DISCARD);
+
+						hlsl::DrawConstants* dst = map;
+						dst->StartInstanceLocation = pkt.StartInstanceLocation;
+					}
+
 					pContext->DrawIndexedIndirect(dia);
 				}
 			});
@@ -199,6 +214,8 @@ namespace shz
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
 				b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
 
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLodOffsets"));
+
 				b.SetClearColor(kAlbedo, 0.f, 0.f, 0.f, 0.f);
 				b.SetClearColor(kNormal, 0.f, 0.f, 0.f, 0.f);
 				b.SetClearColor(kMRAO, 0.f, 0.f, 0.f, 0.f);
@@ -207,7 +224,6 @@ namespace shz
 			},
 			[](RenderPassContext& ctx)
 			{
-				// (기존 네 코드 그대로)
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
 
@@ -313,6 +329,18 @@ namespace shz
 					}
 
 					DrawIndexedIndirectAttribs dia = pkt.DrawAttribs;
+
+					{
+						MapHelper<hlsl::DrawConstants> map(
+							pContext,
+							ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
+							MAP_WRITE,
+							MAP_FLAG_DISCARD);
+
+						hlsl::DrawConstants* dst = map;
+						dst->StartInstanceLocation = pkt.StartInstanceLocation;
+					}
+
 					pContext->DrawIndexedIndirect(dia);
 				}
 			});

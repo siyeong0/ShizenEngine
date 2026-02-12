@@ -128,11 +128,16 @@
 #include "Common.hlsli"
 #include "GrassCommon.hlsli"
 
+StructuredBuffer<uint> g_SpeciesLodOffsets;
+
 StructuredBuffer<GrassCrossPlaneInstance> g_GrassInstances;
 
 BASE_VS_MAIN_ENTRY(InstanceID)
 {
-	GrassCrossPlaneInstance rawInst = g_GrassInstances[InstanceID];
+	uint baseInstance = g_SpeciesLodOffsets[g_DrawCB.StartInstanceLocation];
+	uint globalInstanceId = InstanceID + baseInstance;
+
+	GrassCrossPlaneInstance rawInst = g_GrassInstances[globalInstanceId];
 
 	float3 vertexPosition = GET_VERTEX_POS();
 	float2 vertexUV = GET_VERTEX_UV();

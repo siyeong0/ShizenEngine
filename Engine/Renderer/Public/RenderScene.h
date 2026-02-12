@@ -81,6 +81,8 @@ namespace shz
 
 			uint64 PassKey = 0;
 
+			uint32 StartInstanceLocation = 0;
+
 			// Base slot for this mesh's sections (slot = BaseSlot + sectionIndex)
 			uint32 IndirectBaseSlot = 0;
 

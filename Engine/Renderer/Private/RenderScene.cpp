@@ -695,6 +695,8 @@ namespace shz
 				pkt.DrawAttribs.CounterOffset = static_cast<uint64>(slot) * 4u;
 				pkt.DrawAttribs.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
+				pkt.StartInstanceLocation = io.Desc.StartInstanceLocation;
+
 				outPackets.emplace_back(pkt);
 			}
 		}

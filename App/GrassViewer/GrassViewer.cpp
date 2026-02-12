@@ -392,6 +392,7 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					}
@@ -406,6 +407,7 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
 					}
@@ -417,6 +419,7 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
@@ -437,6 +440,7 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					}
@@ -451,6 +455,7 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
 					}
@@ -462,10 +467,11 @@ namespace shz
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-						//m_pGrassSystem->AddGrassDesc(gd);
+						m_pGrassSystem->AddGrassDesc(gd);
 					}
 				}
 			}

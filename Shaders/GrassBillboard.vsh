@@ -1,6 +1,8 @@
 #include "Common.hlsli"
 #include "GrassCommon.hlsli"
 
+StructuredBuffer<uint> g_SpeciesLodOffsets;
+
 StructuredBuffer<GrassBillboardInstance> g_GrassInstances;
 
 void GetCameraBasisWS(out float3 rightWS, out float3 upWS, out float3 forwardWS)
@@ -24,7 +26,10 @@ float3 RotateAroundUp(float3 v, float3 upWS, float yaw)
 
 BASE_VS_MAIN_ENTRY(InstanceID)
 {
-	GrassBillboardInstance rawInst = g_GrassInstances[InstanceID];
+	uint baseInstance = g_SpeciesLodOffsets[g_DrawCB.StartInstanceLocation];
+	uint globalInstanceId = InstanceID + baseInstance;
+
+	GrassBillboardInstance rawInst = g_GrassInstances[globalInstanceId];
 
 	float3 vertexPosition = GET_VERTEX_POS();
 	float2 vertexUV = GET_VERTEX_UV();

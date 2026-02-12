@@ -37,8 +37,13 @@ RWStructuredBuffer<VisibleCell> g_VisibleCellTable;
 RWStructuredBuffer<PoolChunkCoord> g_PoolChunkCoord;
 RWStructuredBuffer<PoolDirty> g_PoolDirty;
 
-// PoolPositions: float4(x,y,z,w) where w = asfloat(speciesId)
-RWStructuredBuffer<float4> g_PoolPositions;
+// PoolEntries
+struct PoolEntry
+{
+	float3 Position;
+	uint SpeciesId;
+};
+RWStructuredBuffer<PoolEntry> g_PoolPositions;
 
 // Rendering outputs
 RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
@@ -409,7 +414,8 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
-			g_PoolPositions[base + s] = float4(0.0f, INVALID_NAN, 0.0f, 0.0f);
+			g_PoolPositions[base + s].Position = float3(0.0, INVALID_NAN, 0.0);
+			g_PoolPositions[base + s].SpeciesId = 0;
 		}
 
 		GroupMemoryBarrierWithGroupSync();
@@ -454,7 +460,8 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
 
 		// w stores speciesId (as uint bits)
-		g_PoolPositions[base + s] = float4(posXZ.x, y, posXZ.y, asfloat(speciesId));
+		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
+		g_PoolPositions[base + s].SpeciesId = speciesId;
 	}
 
 	GroupMemoryBarrierWithGroupSync();
@@ -565,18 +572,18 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < samplesThisChunk; s += 256u)
 	{
-		float4 p = g_PoolPositions[base + s];
+		PoolEntry p = g_PoolPositions[base + s];
 
 		// ------------------------------------------------------------
 		// Early reject invalid pool position
 		// ------------------------------------------------------------
-		if (isnan(p.y))
+		if (isnan(p.Position.y))
 		{
 			continue;
 		}
 
 		// SpeciesId stored in poolPos.w (uint bits)
-		uint speciesId = asuint(p.w);
+		uint speciesId = p.SpeciesId;
 		if (speciesId >= g_CB.NumSpecies)
 		{
 			continue;
@@ -598,7 +605,7 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
-		float2 posXZ = float2(p.x, p.z);
+		float2 posXZ = p.Position.xz;
 
 		// Height band mask (1 height tap)
 		float hN = SampleHeightNormalized(posXZ);
@@ -626,7 +633,7 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		// ------------------------------------------------------------
 		// LOD decision (distance to camera)
 		// ------------------------------------------------------------
-		float3 posWS = float3(p.x, p.y, p.z);
+		float3 posWS = p.Position;
 
 		float2 dxz = posWS.xz - camXZ;
 		float distSqr = dot(dxz, dxz);
@@ -678,20 +685,6 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 		running0 += c0;
 		running1 += c1;
 		running2 += c2;
-	}
-
-	// Optional: for unused species slots, keep offsets/counters = 0
-	for (uint s = numSpecies; s < (uint) MAX_GRASS_SPECIES; ++s)
-	{
-		uint i0 = s * 3u + 0u;
-		uint i1 = s * 3u + 1u;
-		uint i2 = s * 3u + 2u;
-		g_SpeciesLodOffsets[i0] = 0u;
-		g_SpeciesLodOffsets[i1] = 0u;
-		g_SpeciesLodOffsets[i2] = 0u;
-		g_SpeciesLodWriteCounters[i0] = 0u;
-		g_SpeciesLodWriteCounters[i1] = 0u;
-		g_SpeciesLodWriteCounters[i2] = 0u;
 	}
 }
 
@@ -778,18 +771,18 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < samplesThisChunk; s += 256u)
 	{
-		float4 p = g_PoolPositions[base + s];
+		PoolEntry p = g_PoolPositions[base + s];
 
 		// ------------------------------------------------------------
 		// Early reject invalid pool position
 		// ------------------------------------------------------------
-		if (isnan(p.y))
+		if (isnan(p.Position.y))
 		{
 			continue;
 		}
 
 		// SpeciesId stored in poolPos.w (uint bits)
-		uint speciesId = asuint(p.w);
+		uint speciesId = p.SpeciesId;
 		if (speciesId >= g_CB.NumSpecies)
 		{
 			continue;
@@ -811,7 +804,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
-		float2 posXZ = float2(p.x, p.z);
+		float2 posXZ = p.Position.xz;
 
 		// Height band mask (1 height tap)
 		float hN = SampleHeightNormalized(posXZ);
@@ -839,7 +832,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		// ------------------------------------------------------------
 		// Material/random params
 		// ------------------------------------------------------------
-		float3 posWS = float3(p.x, p.y, p.z);
+		float3 posWS = p.Position;
 
 		float scaleT = Rand01(seed ^ 0x5555u);
 		float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
@@ -860,11 +853,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
 
-		if (speciesId >= g_CB.NumSpecies)
-		{
-			continue;
-		}
-
 		// Pick meshId by species + lod (keeps IndirectArgs flow unchanged)
 		uint meshId =
 			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[speciesId] :
@@ -876,9 +864,9 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		bool emit1 = (lodIndex == 1u);
 		bool emit2 = (lodIndex == 2u);
 
-		BallotMask b = WaveBallotWrap(true); // all active lanes that reached here
-		uint baseMesh = WaveReserveMeshCounter(meshId, b);
-		// (void) baseMesh; // mesh counter only; actual instance buffer index uses species packing
+		uint byteOffset = meshId * 4u;
+		uint oldValue;
+		g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, 1u, oldValue);
 
 		// Species packing: atomic add per (species,lod) to get local index
 		uint idx = speciesId * 3u + lodIndex;

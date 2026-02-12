@@ -214,26 +214,31 @@ namespace shz
 			SetMeshTemplates(gd.pBillboardMeshLod2, m_SpeciesIndirect[sp].LOD2.BaseSlot);
 
 			// Register indirect objects to RenderScene (one per species per LOD)
-			// NOTE: You must ensure DrawConstants(SpeciesId,LodIndex) are set per draw in your render path.
 			{
 				RenderScene::IndirectObjectDesc d = {};
 				d.bCastShadow = true;
 				d.PassKey = STRING_HASH("GBuffer");
 				d.bDepthPrepass = false;
 
+				// LOD0
 				d.pMesh = gd.pMeshLod0;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD0.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD0.MeshId;
+				d.StartInstanceLocation = sp * 3u + 0u;
 				scene.AddIndirect(d);
 
+				// LOD1
 				d.pMesh = gd.pCrossMeshLod1;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD1.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD1.MeshId;
+				d.StartInstanceLocation = sp * 3u + 1u;
 				scene.AddIndirect(d);
 
+				// LOD2
 				d.pMesh = gd.pBillboardMeshLod2;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD2.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD2.MeshId;
+				d.StartInstanceLocation = sp * 3u + 2u;
 				scene.AddIndirect(d);
 			}
 		}

@@ -34,6 +34,8 @@ namespace shz
 		IShaderResourceBinding* SRB = nullptr;
 
 		DrawIndexedIndirectAttribs DrawAttribs = {};
+
+		uint32 StartInstanceLocation = 0;
 	};
 
 } // namespace shz
