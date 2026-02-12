@@ -1,11 +1,6 @@
 #include "Common.hlsli"
 #include "GrassCommon.hlsli"
 
-cbuffer GRASS_RENDER_CONSTANTS
-{
-    GrassRenderConstants g_GrassCB;
-};
-
 StructuredBuffer<GrassMeshInstance> g_GrassInstances;
 
 BASE_VS_MAIN_ENTRY(InstanceID)

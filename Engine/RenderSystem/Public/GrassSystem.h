@@ -53,9 +53,9 @@ namespace shz
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
         // ------------------------------------------------------------
-        // Chunk pool config (128 x 128 visible window)
+        // Chunk pool config (64 x 64 visible window)
         // ------------------------------------------------------------
-        uint  m_ChunkHalfExtent = 64; // => VisibleDim = 128
+        uint  m_ChunkHalfExtent = 32; // => VisibleDim = 64
         float m_ChunkSize = 4.0f;
 
         uint  m_SamplesPerChunk = 1024;
@@ -100,13 +100,12 @@ namespace shz
         float m_MinScale = 7.7f;
         float m_MaxScale = 13.1f;
         float m_SpawnProb = 1.0f;
-        float m_SpawnRadius = 256.0f;
+        float m_SpawnRadius = 128.0f;
 
         float m_BendStrengthMin = 0.65f;
         float m_BendStrengthMax = 0.75f;
         uint  m_SeedSalt = 0xA53A9E37u;
 
-        float m_DensityTiling = 0.02f;
         float m_DensityContrast = 0.28f;
         float m_DensityPow = 0.70f;
         float m_SlopeToDensity = 0.15f;

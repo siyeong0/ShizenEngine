@@ -173,16 +173,12 @@ float RemapDensity(float d, float contrast01)
 
 float SampleWorldDensity(float2 worldXZ, float mipLevel)
 {
-	float tiling = (g_CB.DensityTiling > 0.0f) ? g_CB.DensityTiling : 0.002f;
-	float contrast = (g_CB.DensityContrast > 0.0f) ? g_CB.DensityContrast : 0.25f;
-	float powK = (g_CB.DensityPow > 0.0f) ? g_CB.DensityPow : 0.65f;
-
-	float2 uv = worldXZ * tiling;
-	float d = g_DensityField.SampleLevel(g_LinearWrapSampler, uv, mipLevel).r;
+	float2 uv = WorldXZToHeightUV(worldXZ);
+	float d = g_DensityField.SampleLevel(g_LinearWrapSampler, uv, 0.0).r;
 
 	d = saturate(d);
-	d = RemapDensity(d, contrast);
-	d = pow(d, powK);
+	d = RemapDensity(d, g_CB.DensityContrast);
+	d = pow(d, g_CB.DensityPow);
 	return d;
 }
 
@@ -556,8 +552,8 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	if (!AabbInsideFrustum(chunkMin, chunkMax))
 		return;
 
-	// float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	float2 camXZ = float2(0, 0);
+	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	// float2 camXZ = float2(0, 0);
 	float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
 
 	float2 dChunk = chunkCenterXZ - camXZ;

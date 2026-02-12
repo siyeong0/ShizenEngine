@@ -1,4 +1,4 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 
 #ifndef GRASS_COMMON_HLSLI
 #define GRASS_COMMON_HLSLI
@@ -11,6 +11,14 @@ static const float GRASS_TWO_PI = 6.28318530718f;
 static const float GRASS_EPS = 1e-8f;
 
 static const float DEFAULT_MAX_PITCH_RAD = 0.55f; // ~31.5 deg
+
+// ---------------------------------------------------------------------------
+// Constants buffers
+// ---------------------------------------------------------------------------
+cbuffer GRASS_RENDER_CONSTANTS
+{
+	GrassRenderConstants g_GrassCB;
+};
 
 // ---------------------------------------------------------------------------
 // Math utilities
@@ -115,14 +123,14 @@ float DecodePitch16(uint pitch16)
 
 // LOD0: Mesh
 GrassMeshInstance MakeGrassMeshInstance(
-    float3 posWS,
-    float scale,
-    float yawRad,
-    float pitchRad,
-    float bend01,
-    float press01,
-    uint variantId,
-    uint seed8)
+	float3 posWS,
+	float scale,
+	float yawRad,
+	float pitchRad,
+	float bend01,
+	float press01,
+	uint variantId,
+	uint seed8)
 {
 	GrassMeshInstance o;
 	o.PosWS = posWS;
@@ -133,25 +141,25 @@ GrassMeshInstance MakeGrassMeshInstance(
 	o.PackedAngles = (pitch16 << 16) | (yaw16 & 0xFFFFu);
 
 	o.PackedParams =
-        ((PackUNorm8(bend01) & 0xFFu) << 0) |
-        ((PackUNorm8(press01) & 0xFFu) << 8) |
-        ((variantId & 0xFFu) << 16) |
-        ((seed8 & 0xFFu) << 24);
+		((PackUNorm8(bend01) & 0xFFu) << 0) |
+		((PackUNorm8(press01) & 0xFFu) << 8) |
+		((variantId & 0xFFu) << 16) |
+		((seed8 & 0xFFu) << 24);
 
 	return o;
 }
 
 // LOD1: Cross-plane
 GrassCrossPlaneInstance MakeGrassCrossPlaneInstance(
-    float3 posWS,
-    float scale,
-    float yawRad,
-    float bend01,
-    float press01,
-    uint variantId,
-    uint seed8,
-    uint atlasFrame,
-    uint flags)
+	float3 posWS,
+	float scale,
+	float yawRad,
+	float bend01,
+	float press01,
+	uint variantId,
+	uint seed8,
+	uint atlasFrame,
+	uint flags)
 {
 	GrassCrossPlaneInstance o;
 	o.PosWS = posWS;
@@ -159,26 +167,26 @@ GrassCrossPlaneInstance MakeGrassCrossPlaneInstance(
 
 	uint yaw16 = PackYaw16(yawRad);
 	o.Packed0 =
-        ((yaw16 & 0xFFFFu) << 0) |
-        ((variantId & 0xFFu) << 16) |
-        ((seed8 & 0xFFu) << 24);
+		((yaw16 & 0xFFFFu) << 0) |
+		((variantId & 0xFFu) << 16) |
+		((seed8 & 0xFFu) << 24);
 
 	o.Packed1 =
-        ((PackUNorm8(bend01) & 0xFFu) << 0) |
-        ((PackUNorm8(press01) & 0xFFu) << 8) |
-        ((atlasFrame & 0xFFu) << 16) |
-        ((flags & 0xFFu) << 24);
+		((PackUNorm8(bend01) & 0xFFu) << 0) |
+		((PackUNorm8(press01) & 0xFFu) << 8) |
+		((atlasFrame & 0xFFu) << 16) |
+		((flags & 0xFFu) << 24);
 
 	return o;
 }
 
 // LOD2: Billboard
 GrassBillboardInstance MakeGrassBillboardInstance(
-    float3 posWS,
-    float scale,
-    float yawRad,
-    uint atlasIndex,
-    uint seed8)
+	float3 posWS,
+	float scale,
+	float yawRad,
+	uint atlasIndex,
+	uint seed8)
 {
 	GrassBillboardInstance o;
 	o.PosWS = posWS;
@@ -186,9 +194,9 @@ GrassBillboardInstance MakeGrassBillboardInstance(
 
 	uint yaw16 = PackYaw16(yawRad);
 	o.Packed =
-        ((yaw16 & 0xFFFFu) << 0) |
-        ((atlasIndex & 0xFFu) << 16) |
-        ((seed8 & 0xFFu) << 24);
+		((yaw16 & 0xFFFFu) << 0) |
+		((atlasIndex & 0xFFu) << 16) |
+		((seed8 & 0xFFu) << 24);
 
 	return o;
 }
@@ -197,15 +205,15 @@ GrassBillboardInstance MakeGrassBillboardInstance(
 // Decode helpers (VS/PS-friendly)
 // ---------------------------------------------------------------------------
 void DecodeGrassMeshInstance(
-    GrassMeshInstance inst,
-    out float3 posWS,
-    out float scale,
-    out float yawRad,
-    out float pitchRad,
-    out float bend01,
-    out float press01,
-    out uint variantId,
-    out uint seed8)
+	GrassMeshInstance inst,
+	out float3 posWS,
+	out float scale,
+	out float yawRad,
+	out float pitchRad,
+	out float bend01,
+	out float press01,
+	out uint variantId,
+	out uint seed8)
 {
 	posWS = inst.PosWS;
 	scale = inst.Scale;
@@ -223,16 +231,16 @@ void DecodeGrassMeshInstance(
 }
 
 void DecodeGrassCrossPlaneInstance(
-    GrassCrossPlaneInstance inst,
-    out float3 posWS,
-    out float scale,
-    out float yawRad,
-    out float bend01,
-    out float press01,
-    out uint variantId,
-    out uint seed8,
-    out uint atlasFrame,
-    out uint flags)
+	GrassCrossPlaneInstance inst,
+	out float3 posWS,
+	out float scale,
+	out float yawRad,
+	out float bend01,
+	out float press01,
+	out uint variantId,
+	out uint seed8,
+	out uint atlasFrame,
+	out uint flags)
 {
 	posWS = inst.PosWS;
 	scale = inst.Scale;
@@ -250,12 +258,12 @@ void DecodeGrassCrossPlaneInstance(
 }
 
 void DecodeGrassBillboardInstance(
-    GrassBillboardInstance inst,
-    out float3 posWS,
-    out float scale,
-    out float yawRad,
-    out uint atlasIndex,
-    out uint seed8)
+	GrassBillboardInstance inst,
+	out float3 posWS,
+	out float scale,
+	out float yawRad,
+	out uint atlasIndex,
+	out uint seed8)
 {
 	posWS = inst.PosWS;
 	scale = inst.Scale;
@@ -265,6 +273,74 @@ void DecodeGrassBillboardInstance(
 
 	atlasIndex = (inst.Packed >> 16) & 0xFFu;
 	seed8 = (inst.Packed >> 24) & 0xFFu;
+}
+
+// -----------------------------------------------------------------------------
+// Grass UV Wind (legacy-bend-like)
+// - Uses the same windAngle logic as legacy vertex bending, but applies to UV.
+// - Requires: g_FrameCB, g_GrassCB, ApplyYaw/NormalizeSafe2/NormalizeSafe3, GRASS_PI.
+// -----------------------------------------------------------------------------
+static float2 ApplyGrassWindUV(
+	float2 inUV,
+	float3 posWS,
+	float scale,
+	float yaw,
+	float bend01,
+	float pressHard,
+	float keepBase,
+	float wTip,
+	uint seed8)
+{
+	float2 uv = inUV;
+
+	float2 windDir2 = NormalizeSafe2(g_GrassCB.WindDirXZ, float2(1.0f, 0.0f));
+	float3 windDirWS = float3(windDir2.x, 0.0f, windDir2.y);
+
+	static const float WIND_DIR_JITTER = 0.35f;
+
+	float3 windDirJittered = ApplyYaw(windDirWS, (yaw - GRASS_PI) * WIND_DIR_JITTER);
+	windDirJittered.y = 0.0f;
+	windDirJittered = NormalizeSafe3(windDirJittered, windDirWS);
+
+	float2 windDirJitter2 = NormalizeSafe2(windDirJittered.xz, windDir2);
+
+	float phase = dot(posWS.xz, windDir2) * g_GrassCB.WindFreq + g_FrameCB.CurrTime * g_GrassCB.WindSpeed + yaw * 0.37f;
+
+	float gust = 1.0f + g_GrassCB.WindGust * sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
+
+	float windS = sin(phase);
+	float windMag = windS * 0.5f + 0.5f;
+
+	float windFade = saturate(g_GrassCB.InteractionWindFade);
+	float windKeep = lerp(1.0f, 1.0f - windFade, pressHard);
+	windKeep *= keepBase;
+
+	float windAngle = windMag * gust * bend01 * g_GrassCB.WindStrength;
+	windAngle *= windKeep;
+	windAngle = clamp(windAngle, -g_GrassCB.MaxBendAngle, g_GrassCB.MaxBendAngle);
+
+	// Arc-length style travel (meters-ish)
+	float hLocal = saturate(posWS.y - posWS.y) * 0.0f; // keep compiler happy; overwritten below
+	// NOTE:
+	// We want a height in local space. Caller should supply wTip and scale already.
+	// We approximate "height" from wTip by reusing caller's tip weighting:
+	// Use scale as a proxy for blade height in meters-ish.
+	// If you have true local height available, pass it in and replace this block.
+	hLocal = scale;
+
+	float a = windAngle * wTip;
+	float travel = sin(a) * hLocal;
+
+	static const float UV_PER_METER = 0.6f;
+
+	float2 uvOffset = windDirJitter2 * (travel * UV_PER_METER);
+	uv += uvOffset;
+
+	float2 perp = float2(-windDirJitter2.y, windDirJitter2.x);
+	float flutter = cos(phase * 1.7f + (float(seed8) * 0.11f) + yaw);
+	uv += perp * (travel * UV_PER_METER) * 0.35f * flutter;
+
+	return uv;
 }
 
 #endif // GRASS_COMMON_HLSLI

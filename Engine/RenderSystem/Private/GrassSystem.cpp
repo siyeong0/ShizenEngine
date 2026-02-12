@@ -259,7 +259,6 @@ namespace shz
                     map->BendStrengthMax = m_BendStrengthMax;
                     map->SeedSalt = m_SeedSalt;
 
-                    map->DensityTiling = m_DensityTiling;
                     map->DensityContrast = m_DensityContrast;
                     map->DensityPow = m_DensityPow;
                     map->SlopeToDensity = m_SlopeToDensity;

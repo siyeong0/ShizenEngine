@@ -226,10 +226,10 @@ struct GrassGenConstants
     uint _pad3;
 
 	// Density field (world tiled) tuning
-    float DensityTiling; // meters -> uv
     float DensityContrast; // 0..0.49
     float DensityPow; // curve
     float _pad4;
+	float _pad5;
 
 	// Slope/Height masks
     float SlopeToDensity; // slope -> 0..1
