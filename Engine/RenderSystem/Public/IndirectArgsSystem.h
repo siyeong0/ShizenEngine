@@ -50,6 +50,7 @@ namespace shz
         bool allocateContiguousSlots(uint32 numSlots, uint32& outBaseSlot);
 
     private:
+        // CPU-side mirrors for upload
         std::array<hlsl::IndirectArgsTemplate, MAX_NUM_INDIRECTS> m_Templates = {};
         std::array<uint32, MAX_NUM_INDIRECTS> m_SlotMeshId = {};
 
@@ -59,22 +60,14 @@ namespace shz
         uint32 m_NumSlots = 0;
         uint32 m_NumMeshes = 0;
 
+        // Compute PSOs/SRBs
         RefCntAutoPtr<IPipelineState> m_pWriteArgsCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pWriteArgsSRB;
 
         RefCntAutoPtr<IPipelineState> m_pResetMeshCountsCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pResetMeshCountsSRB;
 
-        // Prefix sum pipeline (single logical pass, 3 dispatch steps)
-        RefCntAutoPtr<IPipelineState> m_pPrefixSumStep0CSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSumStep0SRB;
-
-        RefCntAutoPtr<IPipelineState> m_pPrefixSumStep1CSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSumStep1SRB;
-
-        RefCntAutoPtr<IPipelineState> m_pPrefixSumStep2CSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSumStep2SRB;
-
+        // Shader path
         std::string m_WriteArgsCS = "WriteIndirectArgs.hlsl";
     };
 } // namespace shz
