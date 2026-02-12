@@ -1,4 +1,3 @@
-// Engine/RenderSystem/Public/GrassSystem.h
 #pragma once
 #include <string>
 #include <vector>
