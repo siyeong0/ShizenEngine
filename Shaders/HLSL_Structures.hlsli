@@ -13,7 +13,7 @@ struct FrameConstants
 
 	float2 ViewportSize;
 	float2 InvViewportSize;
-	
+
 	float NearPlane;
 	float FarPlane;
 	float DeltaTime;
@@ -21,10 +21,10 @@ struct FrameConstants
 
 	float3 LightDirWS;
 	float _pad0;
-	
+
 	float3 LightColor;
 	float LightIntensity;
-	
+
 	float4x4 LightViewProj;
 };
 
@@ -37,9 +37,17 @@ struct ViewConstants
 	float4x4 PrevViewProj;
 };
 
+// ---------------------------------------------------------------------------
+// Draw constants (PER DRAW)
+// - Grass uses SpeciesId + LodIndex to look up base offsets in a buffer.
+// - StartInstanceLocation kept for compatibility; you can ignore it for grass.
+// ---------------------------------------------------------------------------
 struct DrawConstants
 {
-	uint StartInstanceLocation;
+	uint StartInstanceLocation; // optional legacy
+	uint SpeciesId; // used by grass
+	uint LodIndex; // 0/1/2 for grass
+	uint _pad0;
 };
 
 // ----------------------------------------------
@@ -65,50 +73,40 @@ struct ObjectConstants
 // ----------------------------------------------
 // HeightField (COMMON for Terrain/Grass/etc.)
 // ----------------------------------------------
-// Convention:
-// - Height texture stores normalized height in [0..1] sampled via linear clamp.
-// - WorldSizeXZ = ((Width-1)*SpacingX, (Height-1)*SpacingZ)
-// - WorldOriginXZ = (centered ? -0.5*WorldSize : 0) for each axis
-// - HeightTexelSize = (1/Width, 1/Height)
 struct HeightFieldConstants
 {
 	float2 WorldOriginXZ;
 	float2 WorldSizeXZ;
 
-	float2 WorldSpacingXZ; // (SpacingX, SpacingZ) in meters
-	float2 HeightTexelSize; // (1/Width, 1/Height)
+	float2 WorldSpacingXZ;
+	float2 HeightTexelSize;
 
-	float HeightScale; // meters
-	float HeightOffset; // meters
-	uint CenterXZ; // 0/1 (optional, mostly for debugging)
+	float HeightScale;
+	float HeightOffset;
+	uint CenterXZ;
 	float NormalUpBias;
 };
 
 // ----------------------------------------------
 // Terrain
 // ----------------------------------------------
-
 struct TerrainDrawConstants
 {
-	// Chunk placement in world
 	float2 ChunkOriginXZ;
 	float2 ChunkSizeXZ;
 
-	// Height UV mapping (optional extra scale/bias on top of base World->UV)
 	float2 HeightUVScale;
 	float2 HeightUVBias;
 
-	// Surface UV mapping for material/tiling
 	float2 SurfaceUVScale;
 	float2 SurfaceUVBias;
 
-	// Normal sampling step multiplier (>= 1)
 	float NormalSampleStep;
-	
+
 	float LodMorphAlpha;
 	uint LodIndex;
 	float _pad0;
-	
+
 	float4 DebugChunkColor;
 };
 
@@ -120,38 +118,28 @@ struct TerrainDrawConstants
 
 struct IndirectArgsTemplate
 {
-    uint IndexCountPerInstance;
-    uint StartIndexLocation;
-    uint BaseVertexLocation;
-    uint StartInstanceLocation;
+	uint IndexCountPerInstance;
+	uint StartIndexLocation;
+	uint BaseVertexLocation;
+	uint StartInstanceLocation;
 };
 
 struct IndirectArgsHeader
 {
-    uint NumSlots;
-    uint NumMeshes;
-    uint MaxInstances;
-    uint _pad0;
+	uint NumSlots;
+	uint NumMeshes;
+	uint MaxInstances;
+	uint _pad0;
 };
 
 // ----------------------------------------------
-// Grass instance (GPU generated)
+// Grass instance
 // ----------------------------------------------
 struct GrassMeshInstance
 {
-	float3 PosWS; // world position (x,y,z)
-	float Scale; // uniform scale
-
-	// Angles packed:
-	// [ 0..15]  Yaw   UNORM16 (0..2pi)
-	// [16..31]  Pitch UNORM16 (mapped from [-MaxPitch..+MaxPitch])
+	float3 PosWS;
+	float Scale;
 	uint PackedAngles;
-
-	// PackedParams layout:
-	// [ 0.. 7]  BendStrength UNORM8
-	// [ 8..15]  Press        UNORM8
-	// [16..23]  VariantId    (0..255)  // mesh/texture variation index
-	// [24..31]  Seed8        (0..255)  // stable random for shading
 	uint PackedParams;
 };
 
@@ -159,18 +147,7 @@ struct GrassCrossPlaneInstance
 {
 	float3 PosWS;
 	float Scale;
-
-	// Packed0 layout:
-	// [ 0..15]  Yaw UNORM16 (0..2pi)
-	// [16..23]  VariantId (0..255)   // choose texture/mesh variation
-	// [24..31]  Seed8     (0..255)   // stable random
 	uint Packed0;
-
-	// Packed1 layout:
-	// [ 0.. 7]  BendStrength UNORM8
-	// [ 8..15]  Press        UNORM8
-	// [16..23]  Reserved / AtlasFrame (0..255) optional
-	// [24..31]  Flags        (bitfield) optional
 	uint Packed1;
 };
 
@@ -178,81 +155,75 @@ struct GrassBillboardInstance
 {
 	float3 PosWS;
 	float Scale;
-
-	// Packed layout:
-	// [ 0..15]  Yaw UNORM16 (0..2pi)
-	// [16..23]  Impostor/AtlasIndex (0..255)  // choose billboard frame set
-	// [24..31]  Seed8 (0..255)
 	uint Packed;
 };
 
 // ----------------------------------------------
 // Grass generation constants (Compute)
 // ----------------------------------------------
-// NOTE: Height decode is shared via HeightFieldConstants HF.
+#ifndef MAX_GRASS_SPECIES
+#define MAX_GRASS_SPECIES 16
+#endif
+
 struct GrassGenConstants
 {
-	uint LOD0MeshId;
-	uint LOD1MeshId;
-	uint LOD2MeshId;
+	// Species count
+	uint NumSpecies;
 	float YOffset;
-	
+	float _padA;
+	float _padB;
+
 	float LOD0Distance;
 	float LOD1Distance;
 	float LodHysteresis;
-	uint _pad0;
-	
+	float _pad0;
+
 	float MinPitch;
 	float MaxPitch;
-	
-	// Chunk placement
+
 	uint ChunkVisibleDim;
-	float ChunkSize; // meters
-	
-	int ChunkHalfExtent; // half grid around camera
+	float ChunkSize;
+
+	int ChunkHalfExtent;
 	uint SamplesPerChunk;
 	uint NumPools;
-	float Jitter; // 0..1
+	float Jitter;
 
 	float MinScale;
 	float MaxScale;
-	float SpawnProb; // base probability
-	float SpawnRadius; // meters
+	float SpawnProb;
+	float SpawnRadius;
 
 	float BendStrengthMin;
 	float BendStrengthMax;
 	uint SeedSalt;
 	uint _pad3;
 
-	// Density field (world tiled) tuning
-	float DensityContrast; // 0..0.49
-	float DensityPow; // curve
+	float DensityContrast;
+	float DensityPow;
 	float _pad4;
 	float _pad5;
 
-	// Slope/Height masks
-	float SlopeToDensity; // slope -> 0..1
-	float HeightMinN; // normalized 0..1
-	float HeightMaxN; // normalized 0..1
-	float HeightFadeN; // normalized fade width
-	
-	// Interaction field mapping (world->interaction local uv)
+	float SlopeToDensity;
+	float HeightMinN;
+	float HeightMaxN;
+	float HeightFadeN;
+
 	float2 InteractionOriginXZ;
-	float2 InteractionInvWorldSizeXZ; // 1 / FieldWorldSizeXZ
-	
-	uint2 InteractionTexelOrigin; // ring buffer origin (0..FieldSize-1)
-	float2 InteractionInvFieldSize; // 1/FieldSize (e.g. 1/4096)
+	float2 InteractionInvWorldSizeXZ;
+
+	uint2 InteractionTexelOrigin;
+	float2 InteractionInvFieldSize;
 };
 
 // ----------------------------------------------
-// Grass rendering constants (VS/PS)
+// Grass rendering constants
 // ----------------------------------------------
 struct GrassRenderConstants
 {
 	float4 BaseColorFactor;
 	float4 Tint;
 
-	// Wind (world-space)
 	float2 WindDirXZ;
 	float WindStrength;
 	float WindSpeed;
@@ -262,7 +233,6 @@ struct GrassRenderConstants
 	float MaxBendAngle;
 	float _pad1;
 
-	// Interaction bending
 	float InteractionBendAngle;
 	float InteractionSink;
 	float InteractionWindFade;
@@ -278,9 +248,6 @@ struct ObjectIndexConstants
 	uint _pad2;
 };
 
-// ----------------------------------------------
-// Interaction
-// ----------------------------------------------
 // ----------------------------------------------
 // Interaction
 // ----------------------------------------------
@@ -300,7 +267,6 @@ struct InteractionStamp
 	float _Pad0;
 };
 
-// Global per-frame constants (mapped once per frame)
 struct InteractionConstants
 {
 	uint FieldWidth;
@@ -313,29 +279,22 @@ struct InteractionConstants
 	float ClampMin;
 	float _Pad0;
 
-	// Sliding field mapping
-	float2 FieldOriginXZ; // world-space origin (meters) of LOCAL field window
-	float2 FieldWorldSizeXZ; // world coverage size (meters)
+	float2 FieldOriginXZ;
+	float2 FieldWorldSizeXZ;
 
-	// Ring mapping: which texel corresponds to FieldOriginXZ (0..W-1)
-	uint2 TexelOrigin; // ring offset in texels
+	uint2 TexelOrigin;
 	uint _Pad1;
 	uint _Pad2;
 };
 
-// Per-dispatch constants (updated many times per frame)
 struct InteractionDispatch
 {
-	// Rect in "LOCAL texel space" [0..W), [0..H) (not ring-space)
-	// We convert local->ring inside shader using TexelOrigin.
-	uint2 RectOffset; // local offset in texels
-	uint2 RectSize; // local size in texels
+	uint2 RectOffset;
+	uint2 RectSize;
 
-	// For stamp-based apply
-	uint StampIndex; // which stamp to apply
-	uint Mode; // 0 = ClearRect, 1 = ApplySingleStamp
+	uint StampIndex;
+	uint Mode;
 	uint2 _Pad;
 };
-
 
 #endif // HLSL_STRUCTURES_HLSLI

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
@@ -42,7 +43,12 @@ namespace shz
             IndirectArgsSystem& indirect,
             const InteractionSystem& interaction);
 
-        void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
+        // -----------------------------------------------------------------
+        // Species API
+        // -----------------------------------------------------------------
+        void ClearGrassDescs();
+        uint32 AddGrassDesc(const GrassDesc& desc);
+        uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
 
     private:
         // ------------------------------------------------------------
@@ -53,19 +59,24 @@ namespace shz
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
         // ------------------------------------------------------------
-        // Chunk pool config (64 x 64 visible window)
+        // Chunk pool config (VisibleDim = 2*HalfExtent)
         // ------------------------------------------------------------
-        uint  m_ChunkHalfExtent = 32; // => VisibleDim = 64
+        uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
         uint  m_SamplesPerChunk = 1024;
 
         // ------------------------------------------------------------
-        // Indirect slot for this system
+        // Per-species indirect mesh handles (per LOD)
         // ------------------------------------------------------------
-        IndirectArgsSystem::MeshHandle  m_IndirectLOD0;
-        IndirectArgsSystem::MeshHandle  m_IndirectLOD1;
-        IndirectArgsSystem::MeshHandle  m_IndirectLOD2;
+        struct SpeciesIndirect final
+        {
+            IndirectArgsSystem::MeshHandle LOD0 = {};
+            IndirectArgsSystem::MeshHandle LOD1 = {};
+            IndirectArgsSystem::MeshHandle LOD2 = {};
+        };
+
+        std::vector<SpeciesIndirect> m_SpeciesIndirect;
 
         // ------------------------------------------------------------
         // Interaction system reference
@@ -81,16 +92,25 @@ namespace shz
         RefCntAutoPtr<IPipelineState>         m_pFillNewPoolsCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pFillNewPoolsSRB;
 
+        RefCntAutoPtr<IPipelineState>         m_pClearSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pClearSpeciesSRB;
+
+        RefCntAutoPtr<IPipelineState>         m_pCountSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pCountSpeciesSRB;
+
+        RefCntAutoPtr<IPipelineState>         m_pPrefixSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSpeciesSRB;
+
         RefCntAutoPtr<IPipelineState>         m_pBuildInstancesCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pBuildInstancesSRB;
 
         // ------------------------------------------------------------
-        // Mesh desc
+        // Species descs
         // ------------------------------------------------------------
-        GrassDesc m_GrassDesc = {};
+        std::vector<GrassDesc> m_GrassDescs;
 
         // ------------------------------------------------------------
-        // Spawn settings (used ONLY when filling newly allocated pools)
+        // Spawn settings
         // ------------------------------------------------------------
         float m_YOffset = 0.00f;
         float m_Jitter = 0.95f;
