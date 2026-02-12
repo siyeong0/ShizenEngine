@@ -1,7 +1,5 @@
-// Engine/RenderSystem/Public/GrassSystem.h
 #pragma once
 #include <string>
-#include <vector>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
@@ -44,45 +42,56 @@ namespace shz
             IndirectArgsSystem& indirect,
             const InteractionSystem& interaction);
 
-        // Species API
-        void AddGrassDesc(const GrassDesc& desc) { m_Species.push_back(desc); }
-        void ClearGrassDescs() { m_Species.clear(); }
+        void SetGrassDesc(const GrassDesc& desc) { m_GrassDesc = desc; }
 
     private:
-        static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 16;
-        static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 18;
+        // ------------------------------------------------------------
+        // Limits (render instance buffers)
+        // ------------------------------------------------------------
+        static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
+        static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
-        uint  m_ChunkHalfExtent = 32;
+        // ------------------------------------------------------------
+        // Chunk pool config (64 x 64 visible window)
+        // ------------------------------------------------------------
+        uint  m_ChunkHalfExtent = 32; // => VisibleDim = 64
         float m_ChunkSize = 4.0f;
-        uint  m_SamplesPerChunk = 128;
 
-        // Per species indirect meshes (meshId is used for per-mesh count/offset)
-        struct SpeciesIndirect final
-        {
-            IndirectArgsSystem::MeshHandle LOD0 = {};
-            IndirectArgsSystem::MeshHandle LOD1 = {};
-            IndirectArgsSystem::MeshHandle LOD2 = {};
-        };
+        uint  m_SamplesPerChunk = 1024;
 
-        std::vector<GrassDesc>       m_Species = {};
-        std::vector<SpeciesIndirect> m_SpeciesIndirect = {};
+        // ------------------------------------------------------------
+        // Indirect slot for this system
+        // ------------------------------------------------------------
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD0;
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD1;
+        IndirectArgsSystem::MeshHandle  m_IndirectLOD2;
 
+        // ------------------------------------------------------------
+        // Interaction system reference
+        // ------------------------------------------------------------
         const InteractionSystem* m_pInteractionSystem = nullptr;
 
+        // ------------------------------------------------------------
+        // ChunkPool PSOs/SRBs (Compute only)
+        // ------------------------------------------------------------
         RefCntAutoPtr<IPipelineState>         m_pUpdatePoolsCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pUpdatePoolsSRB;
 
         RefCntAutoPtr<IPipelineState>         m_pFillNewPoolsCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pFillNewPoolsSRB;
 
-        RefCntAutoPtr<IPipelineState>         m_pCountInstancesCSO;
-        RefCntAutoPtr<IShaderResourceBinding> m_pCountInstancesSRB;
-
         RefCntAutoPtr<IPipelineState>         m_pBuildInstancesCSO;
         RefCntAutoPtr<IShaderResourceBinding> m_pBuildInstancesSRB;
 
-        // Spawn settings
+        // ------------------------------------------------------------
+        // Mesh desc
+        // ------------------------------------------------------------
+        GrassDesc m_GrassDesc = {};
+
+        // ------------------------------------------------------------
+        // Spawn settings (used ONLY when filling newly allocated pools)
+        // ------------------------------------------------------------
         float m_YOffset = 0.00f;
         float m_Jitter = 0.95f;
 
@@ -105,6 +114,9 @@ namespace shz
         float m_HeightMaxN = 1.00f;
         float m_HeightFadeN = 0.03f;
 
+        // ------------------------------------------------------------
+        // Shader path (single file, multiple entry points)
+        // ------------------------------------------------------------
         std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
     };
 } // namespace shz

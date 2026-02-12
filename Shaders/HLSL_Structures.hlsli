@@ -189,57 +189,60 @@ struct GrassBillboardInstance
 // ----------------------------------------------
 // Grass generation constants (Compute)
 // ----------------------------------------------
+// NOTE: Height decode is shared via HeightFieldConstants HF.
 struct GrassGenConstants
 {
-    float YOffset;
-    float LOD0Distance;
-    float LOD1Distance;
-    float LodHysteresis;
+	uint LOD0MeshId;
+	uint LOD1MeshId;
+	uint LOD2MeshId;
+	float YOffset;
+	
+	float LOD0Distance;
+	float LOD1Distance;
+	float LodHysteresis;
+	uint _pad0;
+	
+	float MinPitch;
+	float MaxPitch;
+	
+	// Chunk placement
+	uint ChunkVisibleDim;
+	float ChunkSize; // meters
+	
+	int ChunkHalfExtent; // half grid around camera
+	uint SamplesPerChunk;
+	uint NumPools;
+	float Jitter; // 0..1
 
-    float MinPitch;
-    float MaxPitch;
+	float MinScale;
+	float MaxScale;
+	float SpawnProb; // base probability
+	float SpawnRadius; // meters
 
-    uint ChunkVisibleDim;
-    float ChunkSize;
+	float BendStrengthMin;
+	float BendStrengthMax;
+	uint SeedSalt;
+	uint _pad3;
 
-    int ChunkHalfExtent;
-    uint SamplesPerChunk;
-    uint NumPools;
-    float Jitter;
+	// Density field (world tiled) tuning
+	float DensityContrast; // 0..0.49
+	float DensityPow; // curve
+	float _pad4;
+	float _pad5;
 
-    float MinScale;
-    float MaxScale;
-    float SpawnProb;
-    float SpawnRadius;
-
-    float BendStrengthMin;
-    float BendStrengthMax;
-    uint SeedSalt;
-    uint _pad3;
-
-    float DensityContrast;
-    float DensityPow;
-    float _pad4;
-    float _pad5;
-
-    float SlopeToDensity;
-    float HeightMinN;
-    float HeightMaxN;
-    float HeightFadeN;
-
-    float2 InteractionOriginXZ;
-    float2 InteractionInvWorldSizeXZ;
-
-    uint2 InteractionTexelOrigin;
-    float2 InteractionInvFieldSize;
-
-    // NEW
-    uint NumSpecies;
-    uint _padSpecies0;
-    uint _padSpecies1;
-    uint _padSpecies2;
+	// Slope/Height masks
+	float SlopeToDensity; // slope -> 0..1
+	float HeightMinN; // normalized 0..1
+	float HeightMaxN; // normalized 0..1
+	float HeightFadeN; // normalized fade width
+	
+	// Interaction field mapping (world->interaction local uv)
+	float2 InteractionOriginXZ;
+	float2 InteractionInvWorldSizeXZ; // 1 / FieldWorldSizeXZ
+	
+	uint2 InteractionTexelOrigin; // ring buffer origin (0..FieldSize-1)
+	float2 InteractionInvFieldSize; // 1/FieldSize (e.g. 1/4096)
 };
-
 
 // ----------------------------------------------
 // Grass rendering constants (VS/PS)
