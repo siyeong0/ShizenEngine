@@ -379,60 +379,94 @@ namespace shz
 					mesh.MoveBottomToOrigin(true);
 				};
 
-				GrassDesc gd = {};
-
-				// LOD0 : Mesh
 				{
-					AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
-					const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-					StaticMesh grassMesh;
-					BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-					uniform01(grassMesh);
-					for (auto matId : grassMesh.GetMaterialSlots())
+					GrassDesc gd = {};
+					// LOD0 : Mesh
 					{
-						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
+						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+						StaticMesh grassMesh;
+						BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+						uniform01(grassMesh);
+						for (auto matId : grassMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+						}
+						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					}
-					gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+					// LOD1 : Cross-plane
+					{
+						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
+						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
+						StaticMesh grassCrossMesh;
+						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+						uniform01(grassCrossMesh);
+						for (auto matId : grassCrossMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+						}
+						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
+					}
+					// LOD2 : Billboard
+					{
+						AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
+						StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+						for (auto matId : grassBiilboardMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+						}
+						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-					//AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
-					//const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-					//StaticMesh grassMesh;
-					//BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-					//uniform01(grassMesh);
-					//for (auto matId : grassMesh.GetMaterialSlots())
-					//{
-					//	Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-					//	mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-					//}
-					//gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+						// m_pGrassSystem->SetGrassDesc(gd);
+					}
 				}
-				// LOD1 : Cross-plane
-				{
-					AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
-					const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-					StaticMesh grassCrossMesh;
-					BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-					uniform01(grassCrossMesh);
-					for (auto matId : grassCrossMesh.GetMaterialSlots())
-					{
-						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
-					}
-					gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
-				}
-				// LOD2 : Billboard
-				{
-					AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
-					StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-					for (auto matId : grassBiilboardMesh.GetMaterialSlots())
-					{
-						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
-					}
-					gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 
-					m_pGrassSystem->SetGrassDesc(gd);
+				{
+					GrassDesc gd = {};
+					// LOD0 : Mesh
+					{
+						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
+						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+						StaticMesh grassMesh;
+						BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+						uniform01(grassMesh);
+						for (auto matId : grassMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+						}
+						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+					}
+					// LOD1 : Cross-plane
+					{
+						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower_cross.fbx");
+						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
+						StaticMesh grassCrossMesh;
+						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+						uniform01(grassCrossMesh);
+						for (auto matId : grassCrossMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+						}
+						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
+					}
+					// LOD2 : Billboard
+					{
+						AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/clips/l.png");
+						StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+						for (auto matId : grassBiilboardMesh.GetMaterialSlots())
+						{
+							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+						}
+						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
+
+						m_pGrassSystem->SetGrassDesc(gd);
+					}
 				}
 			}
 

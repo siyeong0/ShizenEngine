@@ -58,7 +58,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32; // => VisibleDim = 64
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 1024;
+        uint  m_SamplesPerChunk = 128;
 
         // ------------------------------------------------------------
         // Indirect slot for this system
