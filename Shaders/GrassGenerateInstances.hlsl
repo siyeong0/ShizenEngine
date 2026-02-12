@@ -556,7 +556,8 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	if (!AabbInsideFrustum(chunkMin, chunkMax))
 		return;
 
-	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	// float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	float2 camXZ = float2(0, 0);
 	float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
 
 	float2 dChunk = chunkCenterXZ - camXZ;

@@ -383,19 +383,7 @@ namespace shz
 
 				// LOD0 : Mesh
 				{
-					//AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
-					//const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-					//StaticMesh grassMesh;
-					//BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-					//uniform01(grassMesh);
-					//for (auto matId : grassMesh.GetMaterialSlots())
-					//{
-					//	Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-					//	mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-					//}
-					//gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
-
-					AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
+					AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
 					const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
 					StaticMesh grassMesh;
 					BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
@@ -406,6 +394,18 @@ namespace shz
 						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
 					}
 					gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+
+					//AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
+					//const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+					//StaticMesh grassMesh;
+					//BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+					//uniform01(grassMesh);
+					//for (auto matId : grassMesh.GetMaterialSlots())
+					//{
+					//	Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+					//	mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+					//}
+					//gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 				}
 				// LOD1 : Cross-plane
 				{
