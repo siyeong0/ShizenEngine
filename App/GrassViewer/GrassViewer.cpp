@@ -475,7 +475,7 @@ namespace shz
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 					}
-					// m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
 
