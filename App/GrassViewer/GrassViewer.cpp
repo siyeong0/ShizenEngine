@@ -475,7 +475,7 @@ namespace shz
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 					}
-					m_pGrassSystem->AddGrassDesc(gd);
+					// m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
 
@@ -851,26 +851,30 @@ namespace shz
 		{
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf"))),
+				// &(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/blender/sources/tree_gn/scene.gltf"))),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Assimp/Basic/Cube.fbx"))),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
-			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 0;
+			constexpr float4 SPAWN_RANGE = { -100.0f, -100.0f, 100.0f, 100.0f };
+			constexpr uint  NUM_TREES = 100;
+
+			float yOffset = 2.0f;
 
 			std::mt19937 rng(1337);
 			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);
 			std::uniform_real_distribution<float> distZ(SPAWN_RANGE.y, SPAWN_RANGE.w);
 			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
-			std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
+			// std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
+			std::uniform_real_distribution<float> distScale(0.01f, 0.025f);
 			std::uniform_int_distribution<uint>  distMesh(0, TREE_MESH_COUNT - 1);
 
 			for (uint i = 0; i < NUM_TREES; ++i)
 			{
 				const float x = distX(rng);
 				const float z = distZ(rng);
-				const float y = m_pTerrainSystem->SampleWorldHeight(x, z); // <-- changed
+				const float y = m_pTerrainSystem->SampleWorldHeight(x, z) + yOffset;
 
 				const float yaw = distYaw(rng);
 				const float scale = distScale(rng);
@@ -915,7 +919,7 @@ namespace shz
 			//uniform01(helmetMesh);
 			//const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetMesh);
 
-			constexpr uint32 kHelmetCount = 300;
+			constexpr uint32 kHelmetCount = 0;
 			constexpr float  kMinY = 20.0f;
 			constexpr float  kMaxY = 50.0f;
 

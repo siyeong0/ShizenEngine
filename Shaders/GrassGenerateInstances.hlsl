@@ -239,8 +239,6 @@ float ComputeDistanceSampleScale(float distSqr, float lod0Sqr, float spawnRadius
     float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
     t = saturate(t);
 	
-    t = t < 0.15 ? t * 5.0 : t * 0.3;
-
     return 1.0f - t;
 }
 
