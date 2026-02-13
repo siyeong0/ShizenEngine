@@ -345,11 +345,6 @@ namespace shz
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
 		}
-		// Normal
-		if (!m_CI.NormalPath.empty())
-		{
-			m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
-		}
 
 		// CPU height array
 		buildHeightU16FromHeightTexture(*m_HeightTex);
@@ -422,6 +417,75 @@ namespace shz
 
 				m_pLodIB[lod][mask] = renderer.CreateIndexBuffer(ib, &init);
 				ASSERT(m_pLodIB[lod][mask], "Create terrain IB failed (lod=%u mask=%u).", lod, mask);
+			}
+		}
+
+		// GPU resources
+		{
+			// Create height field texture R16_UNORM 
+			{
+				TextureDesc desc = {};
+				desc.Name = "TerrainHeight";
+				desc.Type = RESOURCE_DIM_TEX_2D;
+				desc.Width = m_Width;
+				desc.Height = m_Height;
+				desc.MipLevels = 1;
+				desc.ArraySize = 1;
+				desc.Format = TEX_FORMAT_R16_UNORM;
+				desc.Usage = USAGE_DEFAULT;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+
+				TextureSubResData sr = {};
+				sr.pData = m_HeightU16.data();
+				sr.Stride = m_Width * sizeof(uint16); // row pitch (tightly packed)
+				sr.DepthStride = 0;
+
+				TextureData initData = {};
+				initData.pSubResources = &sr;
+				initData.NumSubresources = 1;
+
+				renderer.AddTexture(STRING_HASH("TerrainHeight"), desc, &initData);
+				renderer.RegisterStaticTextureResource("g_HeightField", STRING_HASH("TerrainHeight"));
+			}
+
+			// Density texture for grass placement
+			{
+				AssetRef<Texture> soilRef = assetManager.RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/soil.png");
+				AssetPtr<Texture> soilPtr = assetManager.LoadBlocking(soilRef);
+
+				TextureDesc desc = {};
+				desc.Name = "TerrainSoil";
+				desc.Type = RESOURCE_DIM_TEX_2D;
+				desc.Width = soilPtr->GetWidth();
+				desc.Height = soilPtr->GetHeight();
+				desc.MipLevels = 1;
+				desc.ArraySize = 1;
+				desc.Format = TEX_FORMAT_R16_UNORM;
+				desc.Usage = USAGE_DEFAULT;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+
+				TextureSubResData subres = {};
+				subres.pData = soilPtr->GetData();
+				subres.Stride = static_cast<uint64>(soilPtr->GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+				subres.DepthStride = 0;
+				TextureData initData = {};
+				initData.pSubResources = &subres;
+				initData.NumSubresources = 1;
+
+				renderer.AddTexture(STRING_HASH("TerrainSoil"), desc, &initData);
+			}
+
+			// Constant buffers
+			{
+				BufferDesc cb = {};
+				cb.Name = "HeightFieldCB";
+				cb.Usage = USAGE_DYNAMIC;
+				cb.BindFlags = BIND_UNIFORM_BUFFER;
+				cb.CPUAccessFlags = CPU_ACCESS_WRITE;
+				cb.Size = sizeof(hlsl::HeightFieldConstants);
+
+				renderer.AddBuffer(STRING_HASH("HeightFieldCB"), cb);
+				renderer.RegisterStaticBufferCBV("HEIGHT_FIELD_CONSTANTS", STRING_HASH("HeightFieldCB"));
 			}
 		}
 	}
@@ -500,11 +564,6 @@ namespace shz
 			{
 				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
 				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
-			}
-			if (m_NormalTexRef.IsValid())
-			{
-				mat.SetTextureAssetRef("g_NormalTex", m_NormalTexRef);
-				materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
 			mat.SetUint("g_MaterialFlags", materialFlag);
 

@@ -197,52 +197,6 @@ namespace shz
 				m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
 			}
 
-			// Grass
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassRenderConstantsCB";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_UNIFORM_BUFFER;
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-				m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
-				m_pRenderer->RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
-			}
-
-			// Grass buffers
-			{
-				// Density texture for grass placement
-				{
-					AssetRef<Texture> perlinRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/Worley.jpg");
-					AssetPtr<Texture> perlinPtr = m_pAssetManager->LoadBlocking(perlinRef);
-					Texture perlin = Texture::ConvertGrayScale(*perlinPtr);
-
-					RefCntAutoPtr<ITexture> perlinTex;
-
-					TextureDesc desc = {};
-					desc.Name = "GrassDensityField";
-					desc.Type = RESOURCE_DIM_TEX_2D;
-					desc.Width = perlin.GetWidth();
-					desc.Height = perlin.GetHeight();
-					desc.MipLevels = 1;
-					desc.ArraySize = 1;
-					desc.Format = TEX_FORMAT_R8_UNORM;
-					desc.Usage = USAGE_DEFAULT;
-					desc.BindFlags = BIND_SHADER_RESOURCE;
-
-					TextureSubResData subres = {};
-					subres.pData = perlin.GetData();
-					subres.Stride = static_cast<uint64>(perlin.GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
-					subres.DepthStride = 0;
-					TextureData initData = {};
-					initData.pSubResources = &subres;
-					initData.NumSubresources = 1;
-
-					m_pRenderer->AddTexture(STRING_HASH("GrassDensityField"), desc, &initData);
-				}
-			}
-
 			// TAA History Ping-Pong
 			{
 				TextureDesc td = {};
@@ -270,79 +224,24 @@ namespace shz
 			m_pTerrainSystem = std::make_unique<TerrainSystem>();
 
 			TerrainSystem::CreateInfo tci = {};
-			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsHeightMap.png";
-			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/RollingHills/RollingHillsBitmap.png";
 
-			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/HeightMap.png";
-			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/Diffuse.png";
+			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
+			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
+			//tci.WorldSpacingX = 1.0f;
+			//tci.WorldSpacingZ = 1.0f;
+			//tci.HeightScale = 300.0f;
+			//tci.HeightOffset = -80.0f;
+			//tci.bCenterXZ = true;
 
-			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
-			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Normal.png";
-
-			tci.WorldSpacingX = 1.0f;
-			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 300.0f;
-			tci.HeightOffset = -80.0f;
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/diffuse.png";
+			tci.WorldSpacingX = 2.0f;
+			tci.WorldSpacingZ = 2.0f;
+			tci.HeightScale = 1600.0f;
+			tci.HeightOffset = -1000.0f;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);
-			// Create height field texture R16_UNORM 
-			{
-				const uint32 width = m_pTerrainSystem->GetWidth();
-				const uint32 height = m_pTerrainSystem->GetHeight();
-
-				const std::vector<uint16>& dataU16 = m_pTerrainSystem->GetHeightU16();
-				ASSERT(!dataU16.empty(), "TerrainHeightField data is empty.");
-				ASSERT(uint64(dataU16.size()) == uint64(width) * uint64(height), "TerrainHeightField data size mismatch.");
-
-				TextureDesc desc = {};
-				desc.Name = "HeightField";
-				desc.Type = RESOURCE_DIM_TEX_2D;
-				desc.Width = width;
-				desc.Height = height;
-				desc.MipLevels = 1;
-				desc.ArraySize = 1;
-
-				// Height map: 16-bit normalized [0..1] -> shader reads float
-				desc.Format = TEX_FORMAT_R16_UNORM;
-
-				desc.Usage = USAGE_DEFAULT;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-
-				TextureSubResData sr = {};
-				sr.pData = dataU16.data();
-				sr.Stride = width * sizeof(uint16); // row pitch (tightly packed)
-				sr.DepthStride = 0;
-
-				TextureData initData = {};
-				initData.pSubResources = &sr;
-				initData.NumSubresources = 1;
-
-				m_pRenderer->AddTexture(STRING_HASH("HeightField"), desc, &initData);
-				m_pRenderer->RegisterStaticTextureResource("g_HeightField", STRING_HASH("HeightField"));
-			}
-
-			// Create terrain normal texture
-			{
-				RefCntAutoPtr<ITexture> normalTex = m_pRenderer->CreateTexture(m_pTerrainSystem->GetNormalTextureRef());
-
-				m_pRenderer->AddTexture(STRING_HASH("TerrainNormal"), std::move(normalTex));
-				m_pRenderer->RegisterStaticTextureResource("g_TerrainNormal", STRING_HASH("TerrainNormal"));
-			}
-
-			// Constant buffers
-			{
-				BufferDesc cb = {};
-				cb.Name = "HeightFieldCB";
-				cb.Usage = USAGE_DYNAMIC;
-				cb.BindFlags = BIND_UNIFORM_BUFFER;
-				cb.CPUAccessFlags = CPU_ACCESS_WRITE;
-				cb.Size = sizeof(hlsl::HeightFieldConstants);
-
-				m_pRenderer->AddBuffer(STRING_HASH("HeightFieldCB"), cb);
-				m_pRenderer->RegisterStaticBufferCBV("HEIGHT_FIELD_CONSTANTS", STRING_HASH("HeightFieldCB"));
-			}
 		}
 
 		// Render Scene
@@ -624,9 +523,8 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			// m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			m_Camera.SetPos(float3(-20, -7, 0));
-			// m_Camera.SetRotation(-0.8f, 0.0f);
+			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			m_Camera.SetRotation(0.0f, 0.0f);
 			m_Camera.SetRotation(-2.63f, -0.13f);
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
@@ -634,7 +532,7 @@ namespace shz
 
 			m_Camera.SetProjAttribs(
 				0.1f,
-				5000.0f,
+				8000.0f,
 				(float)m_Viewport.Width / (float)m_Viewport.Height,
 				PI / 4.0f,
 				SURFACE_TRANSFORM_IDENTITY);
@@ -919,9 +817,9 @@ namespace shz
 			//uniform01(helmetMesh);
 			//const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetMesh);
 
-			constexpr uint32 kHelmetCount = 0;
-			constexpr float  kMinY = 20.0f;
-			constexpr float  kMaxY = 50.0f;
+			constexpr uint32 kHelmetCount = 100;
+			constexpr float  kMinY = 10.0f;
+			constexpr float  kMaxY = 20.0f;
 
 			constexpr int   kGridX = 6;
 			constexpr float kSpacingX = 1.0f;
@@ -941,7 +839,7 @@ namespace shz
 				const float x = kBaseX + (float)ix * kSpacingX;
 				const float z = kBaseZ + (float)iz * kSpacingZ;
 
-				const float y = distY(rng);
+				const float y = m_pTerrainSystem->SampleWorldHeight(x, z) + distY(rng);
 				const float yaw = distYaw(rng);
 
 				flecs::entity e = ecs.entity();

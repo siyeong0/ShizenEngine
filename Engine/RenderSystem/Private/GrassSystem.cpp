@@ -177,6 +177,18 @@ namespace shz
 			renderer.AddBuffer(STRING_HASH("GrassGenConstants"), bd);
 		}
 
+		{
+			BufferDesc bd = {};
+			bd.Name = "GrassRenderConstantsCB";
+			bd.Usage = USAGE_DYNAMIC;
+			bd.BindFlags = BIND_UNIFORM_BUFFER;
+			bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+			bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+			renderer.AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
+			renderer.RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
+		}
+
 		// ---------------------------------------------------------------------
 		// Allocate indirect mesh ranges per species + per LOD
 		// ---------------------------------------------------------------------
@@ -193,21 +205,21 @@ namespace shz
 			m_SpeciesIndirect[sp].LOD2 = indirect.AllocateMesh("GrassLOD2_Species", lod2Sections);
 
 			auto SetMeshTemplates = [&](const StaticMeshRenderData* mesh, uint32 baseSlot)
+			{
+				const uint32 sectionCount = (uint32)mesh->Sections.size();
+				for (uint32 si = 0u; si < sectionCount; ++si)
 				{
-					const uint32 sectionCount = (uint32)mesh->Sections.size();
-					for (uint32 si = 0u; si < sectionCount; ++si)
-					{
-						const auto& sec = mesh->Sections[si];
+					const auto& sec = mesh->Sections[si];
 
-						hlsl::IndirectArgsTemplate t = {};
-						t.IndexCountPerInstance = sec.IndexCount;
-						t.StartIndexLocation = sec.FirstIndex;
-						t.BaseVertexLocation = sec.BaseVertex;
-						t.StartInstanceLocation = 0;
+					hlsl::IndirectArgsTemplate t = {};
+					t.IndexCountPerInstance = sec.IndexCount;
+					t.StartIndexLocation = sec.FirstIndex;
+					t.BaseVertexLocation = sec.BaseVertex;
+					t.StartInstanceLocation = 0;
 
-						indirect.SetTemplate(baseSlot + si, t);
-					}
-				};
+					indirect.SetTemplate(baseSlot + si, t);
+				}
+			};
 
 			SetMeshTemplates(gd.pMeshLod0, m_SpeciesIndirect[sp].LOD0.BaseSlot);
 			SetMeshTemplates(gd.pCrossMeshLod1, m_SpeciesIndirect[sp].LOD1.BaseSlot);
@@ -247,18 +259,18 @@ namespace shz
 
 
 		auto uploadSpeciesMeshIdTable = [&](uint64 bufferId, const std::vector<uint32>& meshIds)
+		{
+			std::vector<uint8> bytes;
+			bytes.resize(size_t(MAX_GRASS_SPECIES) * sizeof(uint32), 0);
+
+			const uint32 count = (uint32)std::min<size_t>(meshIds.size(), MAX_GRASS_SPECIES);
+			if (count > 0)
 			{
-				std::vector<uint8> bytes;
-				bytes.resize(size_t(MAX_GRASS_SPECIES) * sizeof(uint32), 0);
+				std::memcpy(bytes.data(), meshIds.data(), size_t(count) * sizeof(uint32));
+			}
 
-				const uint32 count = (uint32)std::min<size_t>(meshIds.size(), MAX_GRASS_SPECIES);
-				if (count > 0)
-				{
-					std::memcpy(bytes.data(), meshIds.data(), size_t(count) * sizeof(uint32));
-				}
-
-				renderer.UpdateBuffer(bufferId, std::move(bytes));
-			};
+			renderer.UpdateBuffer(bufferId, std::move(bytes));
+		};
 
 		std::vector<uint32> lod0MeshIds(numSpecies);
 		std::vector<uint32> lod1MeshIds(numSpecies);
@@ -396,7 +408,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -466,9 +478,9 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_PoolChunkCoord"), RENDER_ACCESS_WRITE);
 				b.DeclareBufferUAV(STRING_HASH("Grass_VisibleCellTable"), RENDER_ACCESS_READ);
 
-				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -482,7 +494,7 @@ namespace shz
 				{
 					StateTransitionDesc tr =
 					{
-						renderer.GetTexture(STRING_HASH("HeightField")),
+						renderer.GetTexture(STRING_HASH("TerrainHeight")),
 						RESOURCE_STATE_UNKNOWN,
 						RESOURCE_STATE_SHADER_RESOURCE,
 						STATE_TRANSITION_FLAG_UPDATE_STATE
@@ -499,7 +511,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -581,11 +593,11 @@ namespace shz
 				}
 				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -617,7 +629,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -683,9 +695,9 @@ namespace shz
 
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodCounts"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -705,7 +717,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -788,7 +800,7 @@ namespace shz
 				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
@@ -796,7 +808,7 @@ namespace shz
 				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -830,7 +842,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -908,9 +920,9 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodOffsets"), RENDER_ACCESS_READ);
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodWriteCounters"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("GrassDensityField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("HeightField"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -930,7 +942,7 @@ namespace shz
 				disp.ThreadGroupCountZ = 1;
 				pContext->DispatchCompute(disp);
 			},
-			[this, &renderer]()
+				[this, &renderer]()
 			{
 				ShaderCreateInfo csCI = {};
 				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -1031,7 +1043,7 @@ namespace shz
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("GrassDensityField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
@@ -1039,7 +1051,7 @@ namespace shz
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("HeightField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesLodOffsets"))
 				{
