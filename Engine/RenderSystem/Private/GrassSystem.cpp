@@ -218,9 +218,9 @@ namespace shz
 				RenderScene::IndirectObjectDesc d = {};
 				d.bCastShadow = true;
 				d.PassKey = STRING_HASH("GBuffer");
-				d.bDepthPrepass = false;
 
 				// LOD0
+				d.bDepthPrepass = false;
 				d.pMesh = gd.pMeshLod0;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD0.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD0.MeshId;
@@ -228,6 +228,7 @@ namespace shz
 				scene.AddIndirect(d);
 
 				// LOD1
+				d.bDepthPrepass = false;
 				d.pMesh = gd.pCrossMeshLod1;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD1.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD1.MeshId;
@@ -235,6 +236,7 @@ namespace shz
 				scene.AddIndirect(d);
 
 				// LOD2
+				d.bDepthPrepass = false;
 				d.pMesh = gd.pBillboardMeshLod2;
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD2.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD2.MeshId;
