@@ -422,9 +422,8 @@ namespace shz
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
-
-						m_pGrassSystem->AddGrassDesc(gd);
 					}
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				{
@@ -470,9 +469,8 @@ namespace shz
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
-
-						m_pGrassSystem->AddGrassDesc(gd);
 					}
+					// m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
 
