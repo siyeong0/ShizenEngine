@@ -233,10 +233,10 @@ namespace shz
 			//tci.HeightOffset = -80.0f;
 			//tci.bCenterXZ = true;
 
-			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/height.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/diffuse.png";
-			tci.WorldSpacingX = 2.0f;
-			tci.WorldSpacingZ = 2.0f;
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
+			tci.WorldSpacingX = 1.0f;
+			tci.WorldSpacingZ = 1.0f;
 			tci.HeightScale = 1600.0f;
 			tci.HeightOffset = -1000.0f;
 			tci.bCenterXZ = true;

@@ -450,7 +450,7 @@ namespace shz
 
 			// Density texture for grass placement
 			{
-				AssetRef<Texture> soilRef = assetManager.RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/Mountain003/soil.png");
+				AssetRef<Texture> soilRef = assetManager.RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png");
 				AssetPtr<Texture> soilPtr = assetManager.LoadBlocking(soilRef);
 
 				TextureDesc desc = {};
