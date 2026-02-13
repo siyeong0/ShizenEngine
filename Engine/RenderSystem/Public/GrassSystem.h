@@ -64,7 +64,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 512;
+        uint  m_SamplesPerChunk = 300;
 
         // ------------------------------------------------------------
         // Per-species indirect mesh handles (per LOD)
