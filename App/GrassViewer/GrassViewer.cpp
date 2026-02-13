@@ -443,7 +443,6 @@ namespace shz
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-							mat.SetCullMode(CULL_MODE_NONE);
 						}
 						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					}
@@ -476,7 +475,7 @@ namespace shz
 						}
 						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
 					}
-					// m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
 
