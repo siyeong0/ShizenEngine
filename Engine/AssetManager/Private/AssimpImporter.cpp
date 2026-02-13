@@ -265,6 +265,10 @@ namespace shz
 
 	static inline float3 transformNormal(const aiMatrix3x3& nrm, const float3& n) noexcept
 	{
+		if (n.Length() < 1e-6f)
+		{
+			return float3(0.0f, 0.0f, 1.0f);
+		}
 		const float x = nrm.a1 * n.x + nrm.a2 * n.y + nrm.a3 * n.z;
 		const float y = nrm.b1 * n.x + nrm.b2 * n.y + nrm.b3 * n.z;
 		const float z = nrm.c1 * n.x + nrm.c2 * n.y + nrm.c3 * n.z;

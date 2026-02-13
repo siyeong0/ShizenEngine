@@ -38,7 +38,7 @@ float3 GetBaseColor(float2 uv)
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
 		baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv).rgb;
-	}
+    }
 	return baseColor;
 }
 
@@ -50,7 +50,7 @@ float GetOpacity(float2 uv)
 	float alpha = g_BaseColorFactor.a;
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
-		alpha *= g_BaseColorTex.SampleBias(g_LinearWrapSampler, uv, -2.0).a;
+		alpha *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv).a;
 	}
 	return alpha;
 #endif

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
-VisualStudioVersion = 16.0.36631.11
+VisualStudioVersion = 16.0.35229.62
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
@@ -60,7 +60,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GrassCrossPlane.vsh = Shaders\GrassCrossPlane.vsh
 		Shaders\GrassGenerateInstances.hlsl = Shaders\GrassGenerateInstances.hlsl
 		Shaders\GrassMesh.vsh = Shaders\GrassMesh.vsh
-		Shaders\GrassShadow.vsh = Shaders\GrassShadow.vsh
 		Shaders\HeightField.hlsli = Shaders\HeightField.hlsli
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\InteractionCompute.hlsl = Shaders\InteractionCompute.hlsl
