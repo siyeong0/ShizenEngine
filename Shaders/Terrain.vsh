@@ -19,8 +19,7 @@ static float sampleWorldHeightAt(float2 worldXZ, TerrainDrawConstants terrainDra
 		g_HeightField,
 		g_LinearClampSampler,
 		worldXZ,
-		terrainDrawCB.HeightUVScale,
-		terrainDrawCB.HeightUVBias,
+		0.0,
 		0.0);
 }
 
@@ -74,7 +73,6 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 
 	// Surface UV: entire terrain mapped to [0..1] then optional tiling
 	float2 uvWorld01 = (worldXZ - g_HeightFieldCB.WorldOriginXZ) / max(g_HeightFieldCB.WorldSizeXZ, 1e-6.xx);
-	uvWorld01 = uvWorld01 * terrainDrawCB.SurfaceUVScale + terrainDrawCB.SurfaceUVBias;
 
 	// Normal + tangent
 	float3 NFine = computeNormalAt(worldXZ, stepFine, terrainDrawCB);

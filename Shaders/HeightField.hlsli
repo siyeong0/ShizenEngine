@@ -37,10 +37,7 @@ float2 HF_GridToUV(float2 gridXZ)
 // 2) grid -> uv (texel center)
 // 3) extra scale/bias (optional)
 // 4) texel-center clamp (avoid border filtering)
-float2 HF_WorldXZToUV(
-    float2 worldXZ,
-    float2 uvScale,
-    float2 uvBias)
+float2 HF_WorldXZToUV(float2 worldXZ)
 {
     float2 grid = HF_WorldXZToGrid(worldXZ);
 
@@ -50,26 +47,26 @@ float2 HF_WorldXZToUV(
     grid = clamp(grid, 0.0.xx, gridMax);
 
     float2 uv = HF_GridToUV(grid);
-    uv = uv * uvScale + uvBias;
 
     uv = saturate(uv);
 	uv = HF_ClampUVToTexelCenter(uv, g_HeightFieldCB.HeightTexelSize);
     return uv;
 }
 
-float HF_SampleHeight01(Texture2D<float> heightTex, SamplerState clampSampler, float2 uv)
+float HF_SampleHeight01(Texture2D<float> heightTex, SamplerState clampSampler, float2 uv, float lod)
 {
     // uv is expected already texel-center clamped
-    return heightTex.SampleLevel(clampSampler, uv, 0).r;
+    return heightTex.SampleLevel(clampSampler, uv, lod).r;
 }
 
 float HF_SampleWorldHeight(
     Texture2D<float> heightTex,
     SamplerState clampSampler,
     float2 uv,
-    float yOffsetMeters)
+    float yOffsetMeters,
+    float lod)
 {
-    float h01 = HF_SampleHeight01(heightTex, clampSampler, uv);
+    float h01 = HF_SampleHeight01(heightTex, clampSampler, uv, lod);
 	return yOffsetMeters + (g_HeightFieldCB.HeightOffset + h01 * g_HeightFieldCB.HeightScale);
 }
 
@@ -77,13 +74,49 @@ float HF_SampleWorldHeightAtWorldXZ(
     Texture2D<float> heightTex,
     SamplerState clampSampler,
     float2 worldXZ,
-    float2 uvScale,
-    float2 uvBias,
-    float yOffsetMeters)
+    float yOffsetMeters,
+    float lod)
 {
-    float2 uv = HF_WorldXZToUV(worldXZ, uvScale, uvBias);
-    return HF_SampleWorldHeight(heightTex, clampSampler, uv, yOffsetMeters);
+    float2 uv = HF_WorldXZToUV(worldXZ);
+    return HF_SampleWorldHeight(heightTex, clampSampler, uv, yOffsetMeters, lod);
 }
 
+// Snap worldXZ to a coarser grid (same as Terrain VS)
+static float2 HF_SnapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
+{
+	float2 cell = hf.WorldSpacingXZ * stepMul;
+
+    // Convert to coarse-grid space and round to nearest integer cell.
+	float2 g = (worldXZ - hf.WorldOriginXZ) / max(cell, 1e-6.xx);
+	float2 gi = floor(g + 0.5.xx);
+
+	return hf.WorldOriginXZ + gi * cell;
+}
+
+// Sample "terrain final height" exactly like Terrain VS does.
+// - Uses same UV mapping (HeightUVScale/Bias), mip(0), clamp, and LOD morph.
+// - If you want grass to match terrain surface, use this for grass Y.
+//
+// Inputs:
+// - worldXZ: world XZ in meters
+// - terrainDrawCB: per-chunk draw constants (HeightUVScale/Bias, LodIndex, LodMorphAlpha, NormalSampleStep, ...)
+//
+// Returns:
+// - world height in meters
+static float SampleTerrainHeight(
+    Texture2D<float> heightTex, 
+    SamplerState clampSampler,
+    float2 worldXZ,
+    float lod)
+{
+	float hFine = HF_SampleWorldHeightAtWorldXZ(
+        heightTex,
+        clampSampler,
+        worldXZ,
+        0.0f,
+        lod);
+    
+	return hFine;
+}
 
 #endif // HEIGHTFIELD_HLSLI

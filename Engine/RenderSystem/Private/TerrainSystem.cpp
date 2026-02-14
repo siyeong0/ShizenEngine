@@ -849,11 +849,6 @@ namespace shz
 				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
 				dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
 
-				dc.HeightUVScale = float2{ 1, 1 };
-				dc.HeightUVBias = float2{ 0, 0 };
-				dc.SurfaceUVScale = float2{ 1, 1 };
-				dc.SurfaceUVBias = float2{ 0, 0 };
-
 				const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
 				dc.NormalSampleStep = normalSteps[lod];
 

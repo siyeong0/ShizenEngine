@@ -95,12 +95,6 @@ struct TerrainDrawConstants
 	float2 ChunkOriginXZ;
 	float2 ChunkSizeXZ;
 
-	float2 HeightUVScale;
-	float2 HeightUVBias;
-
-	float2 SurfaceUVScale;
-	float2 SurfaceUVBias;
-
 	float NormalSampleStep;
 
 	float LodMorphAlpha;

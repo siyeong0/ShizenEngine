@@ -249,15 +249,15 @@ namespace shz
 			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
 			//tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png";
 
-			tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/height.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/diffuse.png";
-			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/normal.png";
-			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/slope.png";
-			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/flow.png";
-			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/rocky.png";
-			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/grass.png";
-			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/vegetation.png";
-			tci.TreesPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain/trees.png";
+			tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/diffuse.png";
+			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/normal.png";
+			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/slope.png";
+			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/flow.png";
+			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/rocky.png";
+			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/grass.png";
+			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
+			tci.TreesPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/trees.png";
 
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
