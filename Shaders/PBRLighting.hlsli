@@ -115,7 +115,7 @@ static float3 Shade(
 
     float3 radiance = lightColor * lightIntensity;
 
-    float3 direct = (diffuseBRDF + specBRDF) * radiance * NdotL;
+	float3 direct = (diffuseBRDF + specBRDF) * radiance * saturate(NdotL + 0.1);
     direct *= shadow;
 
     float3 ibl = EvaluateIBL_PBR(N, V, baseColor, metallic, roughness, ao);
