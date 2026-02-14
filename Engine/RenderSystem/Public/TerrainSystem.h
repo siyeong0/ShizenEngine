@@ -76,6 +76,7 @@ namespace shz
 		float GetWorldSpacingX() const noexcept { return m_WorldSpacingX; }
 		float GetWorldSpacingZ() const noexcept { return m_WorldSpacingZ; }
 
+		float GetChunkSize() const noexcept { return m_ChunkSize; }
 		float GetHeightScale()  const noexcept { return m_HeightScale; }
 		float GetHeightOffset() const noexcept { return m_HeightOffset; }
 

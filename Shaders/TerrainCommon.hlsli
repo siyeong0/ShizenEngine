@@ -12,6 +12,9 @@ Texture2D g_TerrainRockyTex;
 Texture2D g_TerrainSoilTex;
 Texture2D g_TerrainVegetationTex;
 
+// Terrain mesh resolution per chunk is 16x16 quads.
+static const float TERRAIN_CHUNK_GRID_RES = 16.0f;
+
 // ----------------------------------------------
 // Terrain common helpers
 // ----------------------------------------------
@@ -71,6 +74,111 @@ float SampleWorldHeightAtWorldXZLevel(float2 worldXZ, float lod)
 {
 	float2 uv = WorldXZToTerrainUV(worldXZ);
 	return SampleTerrainHeightLevel(uv, lod);
+}
+
+// Sample height in [0..1] range, with triangle-accurate interpolation (matches the rendered mesh surface).
+float SampleTerrainSurfaceHeight01AtWorldXZ(float2 worldXZ)
+{
+	// Clamp worldXZ into terrain bounds (avoid sampling outside).
+	float2 hfMin = g_TerrainCB.WorldOriginXZ;
+	float2 hfMax = g_TerrainCB.WorldOriginXZ + g_TerrainCB.WorldSizeXZ;
+
+	// Keep a tiny margin to avoid hitting exact boundary issues.
+	float2 eps = 1e-3.xx;
+	worldXZ = clamp(worldXZ, hfMin + eps, hfMax - eps);
+
+	// Cell size of ONE quad in the rendered mesh.
+	float2 cellSize = g_TerrainCB.ChunkSizeXZ / TERRAIN_CHUNK_GRID_RES;
+
+	// Convert to "mesh grid space" (in units of quads).
+	float2 g = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(cellSize, 1e-6.xx);
+
+	int2 cell = int2((int) floor(g.x), (int) floor(g.y));
+	float2 f = frac(g); // local position inside the quad [0..1)
+
+	// Corner positions (world XZ) for the 4 grid vertices of this quad.
+	float2 p00 = g_TerrainCB.WorldOriginXZ + float2(cell) * cellSize;
+	float2 p10 = p00 + float2(cellSize.x, 0.0f);
+	float2 p01 = p00 + float2(0.0f, cellSize.y);
+	float2 p11 = p00 + cellSize;
+
+	// Vertex heights must match VS sampling path.
+	// In your VS: SampleWorldHeightAtWorldXZ(worldXZ) -> SampleLevel(0) in VS-safe TerrainCommon.
+	float h00 = SampleTerrainHeight01AtWorldXZLevel(p00, 0);
+	float h10 = SampleTerrainHeight01AtWorldXZLevel(p10, 0);
+	float h01 = SampleTerrainHeight01AtWorldXZLevel(p01, 0);
+	float h11 = SampleTerrainHeight01AtWorldXZLevel(p11, 0);
+
+	// Triangle-accurate interpolation (matches how the mesh rasterizes the quad).
+	float fx = f.x;
+	float fy = f.y;
+
+	// Diagonal: 00 -> 11
+	if (fx + fy <= 1.0f)
+	{
+		// tri: (00,10,01)
+		// bary: w00=1-fx-fy, w10=fx, w01=fy
+		return h00 * (1.0f - fx - fy) + h10 * fx + h01 * fy;
+	}
+	else
+	{
+		// tri: (11,01,10)
+		// bary: w11=fx+fy-1, w01=1-fx, w10=1-fy
+		float w11 = fx + fy - 1.0f;
+		return h11 * w11 + h01 * (1.0f - fx) + h10 * (1.0f - fy);
+	}
+}
+
+float SampleTerrainSurfaceHeightAtWorldXZ(float2 worldXZ)
+{
+	// Clamp worldXZ into terrain bounds (avoid sampling outside).
+	float2 hfMin = g_TerrainCB.WorldOriginXZ;
+	float2 hfMax = g_TerrainCB.WorldOriginXZ + g_TerrainCB.WorldSizeXZ;
+
+	// Keep a tiny margin to avoid hitting exact boundary issues.
+	float2 eps = 1e-3.xx;
+	worldXZ = clamp(worldXZ, hfMin + eps, hfMax - eps);
+
+	// Cell size of ONE quad in the rendered mesh.
+	float2 cellSize = g_TerrainCB.ChunkSizeXZ / TERRAIN_CHUNK_GRID_RES;
+
+	// Convert to "mesh grid space" (in units of quads).
+	float2 g = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(cellSize, 1e-6.xx);
+
+	int2 cell = int2((int) floor(g.x), (int) floor(g.y));
+	float2 f = frac(g); // local position inside the quad [0..1)
+
+	// Corner positions (world XZ) for the 4 grid vertices of this quad.
+	float2 p00 = g_TerrainCB.WorldOriginXZ + float2(cell) * cellSize;
+	float2 p10 = p00 + float2(cellSize.x, 0.0f);
+	float2 p01 = p00 + float2(0.0f, cellSize.y);
+	float2 p11 = p00 + cellSize;
+
+	// Vertex heights must match VS sampling path.
+	// In your VS: SampleWorldHeightAtWorldXZ(worldXZ) -> SampleLevel(0) in VS-safe TerrainCommon.
+	float h00 = SampleWorldHeightAtWorldXZLevel(p00, 0);
+	float h10 = SampleWorldHeightAtWorldXZLevel(p10, 0);
+	float h01 = SampleWorldHeightAtWorldXZLevel(p01, 0);
+	float h11 = SampleWorldHeightAtWorldXZLevel(p11, 0);
+
+	// Triangle-accurate interpolation (matches how the mesh rasterizes the quad).
+	float fx = f.x;
+	float fy = f.y;
+
+	// Diagonal: 00 -> 11
+	if (fx + fy <= 1.0f)
+	{
+		// tri: (00,10,01)
+		// bary: w00=1-fx-fy, w10=fx, w01=fy
+		return h00 * (1.0f - fx - fy) + h10 * fx + h01 * fy;
+	}
+	else
+	{
+		// tri: (11,01,10)
+		// bary: w11=fx+fy-1, w01=1-fx, w10=1-fy
+		float w11 = fx + fy - 1.0f;
+		return h11 * w11 + h01 * (1.0f - fx) + h10 * (1.0f - fy);
+	}
 }
 
 // Sample diffuse color

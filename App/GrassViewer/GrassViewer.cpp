@@ -644,6 +644,7 @@ namespace shz
 			hfc.WorldOriginXZ = float2{ m_pTerrainSystem->GetWorldOriginX(), m_pTerrainSystem->GetWorldOriginZ() };
 			hfc.WorldSizeXZ = float2{ m_pTerrainSystem->GetWorldSizeX(), m_pTerrainSystem->GetWorldSizeZ() };
 			hfc.WorldSpacingXZ = float2{ m_pTerrainSystem->GetWorldSpacingX(), m_pTerrainSystem->GetWorldSpacingZ() };
+			hfc.ChunkSizeXZ = float2{ m_pTerrainSystem->GetChunkSize(),m_pTerrainSystem->GetChunkSize() };
 			hfc.HeightScale = m_pTerrainSystem->GetHeightScale();
 			hfc.HeightOffset = m_pTerrainSystem->GetHeightOffset();
 			hfc.NormalUpBias = 2.0f;

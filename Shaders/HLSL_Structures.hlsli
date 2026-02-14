@@ -77,14 +77,17 @@ struct TerrainConstants
 {
 	float2 WorldOriginXZ;
 	float2 WorldSizeXZ;
-
+	float2 ChunkSizeXZ;
 	float2 WorldSpacingXZ;
+	
 	float2 HeightTexelSize;
-
 	float HeightScale;
 	float HeightOffset;
+	
 	uint CenterXZ;
 	float NormalUpBias;
+	uint _pad0;
+	uint _pad1;
 };
 
 // ----------------------------------------------
@@ -93,12 +96,8 @@ struct TerrainConstants
 struct TerrainDrawConstants
 {
 	float2 ChunkOriginXZ;
-	float2 ChunkSizeXZ;
-
-	float LodMorphAlpha;
 	uint LodIndex;
 	float _pad0;
-	float _pad1;
 };
 
 // ----------------------------------------------
@@ -161,16 +160,13 @@ struct GrassGenConstants
 	// Species count
 	uint NumSpecies;
 	float YOffset;
-	float _padA;
-	float _padB;
+	float NormalAlignStrength;
+	float _pad0;
 
 	float LOD0Distance;
 	float LOD1Distance;
 	float LodHysteresis;
-	float _pad0;
-
-	float MinPitch;
-	float MaxPitch;
+	float _pad1;
 
 	uint ChunkVisibleDim;
 	float ChunkSize;
@@ -188,12 +184,12 @@ struct GrassGenConstants
 	float BendStrengthMin;
 	float BendStrengthMax;
 	uint SeedSalt;
-	uint _pad3;
+	uint _pad2;
 
 	float DensityContrast;
 	float DensityPow;
+	float _pad3;
 	float _pad4;
-	float _pad5;
 
 	float SlopeToDensity;
 	float HeightMinN;

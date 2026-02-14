@@ -359,9 +359,8 @@ namespace shz
 
 					map->YOffset = m_YOffset;
 					map->Jitter = m_Jitter;
+					map->NormalAlignStrength = m_NormalAlignStrength;
 
-					map->MinPitch = m_MinPitch;
-					map->MaxPitch = m_MaxPitch;
 					map->MinScale = m_MinScale;
 					map->MaxScale = m_MaxScale;
 					map->SpawnProb = m_SpawnProb;

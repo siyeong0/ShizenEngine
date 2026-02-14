@@ -135,14 +135,6 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 // Height / Density / Interaction sampling
 // ---------------------------------------------------------------------------
 
-float SampleHeightNormalized(float2 worldXZ)
-{
-	// Height texture returns [0..1] already.
-	// Use a higher mip for stability (matches your previous intent).
-	float2 uv = WorldXZToTerrainUV(worldXZ);
-	return SampleTerrainHeight01Level(uv, 5.0f);
-}
-
 float RemapDensity(float d, float contrast01)
 {
 	float a = saturate(contrast01);
@@ -490,7 +482,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
 		float2 posXZ = chunkOriginXZ + localXZ;
 
-		float y = SampleWorldHeightAtWorldXZLevel(posXZ, 5.0f);
+		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
 
 		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
 
@@ -627,7 +619,7 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		float2 posXZ = p.Position.xz;
 
-		float hN = SampleHeightNormalized(posXZ);
+		float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
 		float heightMask = ComputeHeightMask(hN);
 		if (heightMask <= 0.001f)
 		{
@@ -711,6 +703,27 @@ bool GrassInstanceAabbInsideFrustum_LOD0(float3 posWS, float scale)
 	bmax += EPS.xxx;
 
 	return AabbInsideFrustum(bmin, bmax);
+}
+
+static float2 ComputeYawPitchFromNormal(float3 nWS, float yaw)
+{
+	nWS = normalize(nWS);
+
+    // Rotate normal into local space where +Z is "forward" for pitch calc
+    // yaw rotates around Y (up).
+	float s = sin(yaw);
+	float c = cos(yaw);
+
+    // inverse yaw rotation around Y
+	float3 nL;
+	nL.x = c * nWS.x + s * nWS.z;
+	nL.y = nWS.y;
+	nL.z = -s * nWS.x + c * nWS.z;
+
+    // Pitch: tilt forward/back so that local up aligns with normal
+	float pitch = atan2(nL.z, max(nL.y, 1e-6f));
+
+	return float2(yaw, pitch);
 }
 
 [numthreads(256, 1, 1)]
@@ -814,7 +827,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 		float2 posXZ = p.Position.xz;
 
-		float hN = SampleHeightNormalized(posXZ);
+		float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
 		float heightMask = ComputeHeightMask(hN);
 		if (heightMask <= 0.001f)
 		{
@@ -840,7 +853,25 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
 
 		float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
-		float pitch = lerp(g_CB.MinPitch, g_CB.MaxPitch, Rand01(seed ^ 0x7777u));
+
+		// Sample terrain normal at instance position.
+		float3 terrainN = SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f);
+		terrainN = normalize(terrainN);
+
+		// Compute slope amount: 0 on flat (0,1,0), 1 on vertical walls.
+		float slope01 = saturate(1.0f - terrainN.y);
+
+		// How much to align to the slope.
+		// Add this to GrassGenConstants if you want:
+		// float NormalAlignStrength; // 0..1
+		float align = saturate(slope01);
+		align *= saturate(g_CB.NormalAlignStrength);
+		
+		// Target pitch derived from the terrain normal, keeping yaw random.
+		float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
+		float pitchFromNormal = yp.y;
+		float pitch = normalize(pitchFromNormal * align);
+
 		float bend01 = lerp(g_CB.BendStrengthMin, g_CB.BendStrengthMax, Rand01(seed ^ 0x8888u));
 
 		uint seed8 = MakeSeed8(seed ^ 0x1234u);

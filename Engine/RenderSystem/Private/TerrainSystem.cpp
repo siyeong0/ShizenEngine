@@ -808,19 +808,10 @@ namespace shz
 				const float chunkOriginX = worldOriginX + float(cx) * m_ChunkSize;
 				const float chunkOriginZ = worldOriginZ + float(cz) * m_ChunkSize;
 
-				const float remainX = worldOriginX + worldSizeX - chunkOriginX;
-				const float remainZ = worldOriginZ + worldSizeZ - chunkOriginZ;
-
-				const float chunkSizeX = (remainX > 0.f) ? Min(m_ChunkSize, remainX) : 0.f;
-				const float chunkSizeZ = (remainZ > 0.f) ? Min(m_ChunkSize, remainZ) : 0.f;
-
-				if (chunkSizeX <= 1e-6f || chunkSizeZ <= 1e-6f)
-					continue;
-
 				// Frustum cull using conservative yMin/yMax
 				Box localBounds = {};
 				localBounds.Min = float3{ 0.f, yMin, 0.f };
-				localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
+				localBounds.Max = float3{ m_ChunkSize, yMax, m_ChunkSize };
 
 				Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.f, chunkOriginZ });
 				if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
@@ -836,13 +827,14 @@ namespace shz
 				if (nLod(int32(cx), int32(cz) + 1, lod) > lod) mask |= Stitch_Top;
 
 				// Distance for morph
-				const float cxw = chunkOriginX + 0.5f * chunkSizeX;
-				const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+				const float cxw = chunkOriginX + 0.5f * m_ChunkSize;
+				const float czw = chunkOriginZ + 0.5f * m_ChunkSize;
 				const float dx = cam.x - cxw;
 				const float dz = cam.z - czw;
 				const float dist = std::sqrt(dx * dx + dz * dz);
 
 				const float morph = morphForClampedLod(dist, lod);
+				// TODO: Morphing
 
 				// If batch key changed, flush previous
 				const BatchKey key = { uint8(lod), uint8(mask) };
@@ -857,10 +849,8 @@ namespace shz
 
 				hlsl::TerrainDrawConstants dc = {};
 				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
-				dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
 
 				dc.LodIndex = lod;
-				dc.LodMorphAlpha = morph;
 
 				instances.emplace_back(dc);
 			}

@@ -78,9 +78,11 @@ uint PackYaw16(float yawRad)
 	return (uint) round(saturate(y01) * 65535.0f);
 }
 
-uint PackPitch16(float pitchRad)
+// Pack pitch in radians into UNORM16 using symmetric range [-maxPitch..+maxPitch].
+uint PackPitch16(float pitchRad, float maxPitchRad)
 {
-	float p01 = (pitchRad / GRASS_PI) * 0.5f + 0.5f;
+	float m = max(maxPitchRad, 1e-6f);
+	float p01 = (pitchRad / m) * 0.5f + 0.5f; // [-m..m] -> [0..1]
 	return (uint) round(saturate(p01) * 65535.0f);
 }
 
@@ -110,11 +112,12 @@ float DecodeYaw16(uint yaw16)
 	return yaw01 * GRASS_TWO_PI;
 }
 
-float DecodePitch16(uint pitch16)
+// Decode pitch from UNORM16 into radians in range [-maxPitch..+maxPitch].
+float DecodePitch16(uint pitch16, float maxPitchRad)
 {
 	float p01 = DecodeUNorm16(pitch16);
-	float pSigned = p01 * 2.0f - 1.0f;
-	return pSigned * max(GRASS_PI, 1e-6f);
+	float pSigned = p01 * 2.0f - 1.0f; // [-1..1]
+	return pSigned * max(maxPitchRad, 1e-6f);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +140,7 @@ GrassMeshInstance MakeGrassMeshInstance(
 	o.Scale = scale;
 
 	uint yaw16 = PackYaw16(yawRad);
-	uint pitch16 = PackPitch16(pitchRad);
+	uint pitch16 = PackPitch16(pitchRad, DEFAULT_MAX_PITCH_RAD);
 	o.PackedAngles = (pitch16 << 16) | (yaw16 & 0xFFFFu);
 
 	o.PackedParams =
@@ -222,7 +225,7 @@ void DecodeGrassMeshInstance(
 	uint pitch16 = (inst.PackedAngles >> 16);
 
 	yawRad = DecodeYaw16(yaw16);
-	pitchRad = DecodePitch16(pitch16);
+	pitchRad = DecodePitch16(pitch16, DEFAULT_MAX_PITCH_RAD);
 
 	bend01 = DecodeUNorm8(inst.PackedParams >> 0);
 	press01 = DecodeUNorm8(inst.PackedParams >> 8);
