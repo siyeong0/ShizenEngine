@@ -6,13 +6,13 @@ Texture2D g_SoilBaseColorTex;
 Texture2D g_SoilNormalTex;
 Texture2D g_SoilRoughnessTex;
 Texture2D g_SoilAmbientOcclusionTex;
-Texture2D g_SoilDisplacementTex;
+Texture2D g_SoilDisplacementTex; // kept (unused for now)
 
 Texture2D g_RockyBaseColorTex;
 Texture2D g_RockyNormalTex;
 Texture2D g_RockyRoughnessTex;
 Texture2D g_RockyAmbientOcclusionTex;
-Texture2D g_RockyDisplacementTex;
+Texture2D g_RockyDisplacementTex; // kept (unused for now)
 
 BASE_PS_MAIN_ENTRY()
 {
@@ -20,32 +20,94 @@ BASE_PS_MAIN_ENTRY()
 	float4 currClip = GET_PSIN_CURR_CLIP();
 	float4 prevClip = GET_PSIN_PREV_CLIP();
 	float3 worldPos = GET_PSIN_WORLD_POS();
-	float2 uv = GET_PSIN_UV();
+	float2 globalUV = GET_PSIN_UV();
 	float3 normalWS = GET_PSIN_WORLD_NORMAL();
 	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
-	float4 baseColor = SampleTerrainDiffuse(uv);
-	float alpha = baseColor.a;
+    // ------------------------------------------------------------
+    // Tiling (see section below for "meters per tile" guidance)
+    // NOTE: Keep it a constant for now, later drive from material constant.
+    // ------------------------------------------------------------
+	const float TILE_REPEAT_SIZE = 2.0f; // "how many repeats across 0..1 globalUV"
+	float2 tileUV = frac(globalUV * 4096 / TILE_REPEAT_SIZE);
+
+	float slope = SampleTerrainSlope(globalUV);
+	float flow = SampleTerrainFlow(globalUV);
+
+	float soilWeight = SampleTerrainSoil(globalUV);
+	float rockWeight = SampleTerrainRocky(globalUV);
+
+    // Normalize weights (soil + rock)
+    {
+		float s = max(soilWeight + rockWeight, 1e-6f);
+		float invS = rcp(s);
+		soilWeight *= invS;
+		rockWeight *= invS;
+	}
+
+	float wSoil = soilWeight;
+	float wRock = rockWeight;
+
+    // Global terrain diffuse (single texture) as macro tint
+	float4 globalDiffuse4 = SampleTerrainDiffuse(globalUV);
+	float3 globalDiffuse = globalDiffuse4.rgb;
+
+    // BaseColor
+	float3 soilBC = g_SoilBaseColorTex.Sample(g_LinearWrapSampler, tileUV).rgb;
+	float3 rockBC = g_RockyBaseColorTex.Sample(g_LinearWrapSampler, tileUV).rgb;
+	float3 layerBC = soilBC * wSoil + rockBC * wRock;
+
+	float3 baseColor = layerBC * globalDiffuse;
+	baseColor *= g_BaseColorFactor.rgb;
+
+	float alpha = 1.0f;
 	float coverage = ClipPixelCoverage(alpha, svPos);
-	
-	float2 metallicRoughness = GetMetallicRoughness(uv);
-	float metallic = metallicRoughness.x;
-	float roughness = metallicRoughness.y;
-	float ao = GetAmbientOcclusion(uv);
-	float3 emissive = GetEmissive(uv);
-	float3 normal = GetNormal(uv, normalWS, tangentWS);
+
+    // Roughness (metallic = 0)
+	float soilR = g_SoilRoughnessTex.Sample(g_LinearWrapSampler, tileUV).r;
+	float rockR = g_RockyRoughnessTex.Sample(g_LinearWrapSampler, tileUV).r;
+	float roughness = saturate((soilR * wSoil + rockR * wRock) * g_RoughnessFactor);
+
+	float metallic = 0.0f;
+
+    // AO
+	float soilAO = g_SoilAmbientOcclusionTex.Sample(g_LinearWrapSampler, tileUV).r;
+	float rockAO = g_RockyAmbientOcclusionTex.Sample(g_LinearWrapSampler, tileUV).r;
+	float ao = soilAO * wSoil + rockAO * wRock;
+	ao = lerp(1.0f, ao, saturate(g_OcclusionStrength));
+
+    // Emissive
+	float3 emissive = g_EmissiveFactor * g_EmissiveIntensity;
+
+    // Normal (NormalDX decode)
+	float3 nSoilTS = g_SoilNormalTex.Sample(g_LinearWrapSampler, tileUV).xyz * 2.0f - 1.0f;
+	float3 nRockTS = g_RockyNormalTex.Sample(g_LinearWrapSampler, tileUV).xyz * 2.0f - 1.0f;
+
+	nSoilTS.xy *= g_NormalScale;
+	nRockTS.xy *= g_NormalScale;
+
+	nSoilTS.z = sqrt(saturate(1.0f - dot(nSoilTS.xy, nSoilTS.xy)));
+	nRockTS.z = sqrt(saturate(1.0f - dot(nRockTS.xy, nRockTS.xy)));
+
+	float3 nTS = normalize(nSoilTS * wSoil + nRockTS * wRock);
+
+	float3 N = normalize(normalWS);
+	float3 T = normalize(tangentWS);
+	float3 B = normalize(cross(N, T)); // flip if your tangent basis expects opposite handedness
+	float3x3 TBN = float3x3(T, B, N);
+
+	float3 normal = normalize(mul(nTS, TBN));
 
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);
-	
-	// Pack to GBuffer
-	SET_PSOUT_ALBEDO(baseColor);
-	SET_PSOUT_OPACITY(alpha);
-	SET_PSOUT_NORMAL(normal);
-	SET_PSOUT_METALLIC(metallic);
-	SET_PSOUT_ROUGHNESS(roughness);
-	SET_PSOUT_AO(ao);
-	SET_PSOUT_ALPHACOVERAGE(coverage);
-	SET_PSOUT_EMISSIVE(emissive);
-	SET_PSOUT_VELOCITY(currUV - prevUV);
+
+    SET_PSOUT_ALBEDO(baseColor);
+    SET_PSOUT_OPACITY(alpha);
+    SET_PSOUT_NORMAL(normal);
+    SET_PSOUT_METALLIC(metallic);
+    SET_PSOUT_ROUGHNESS(roughness);
+    SET_PSOUT_AO(ao);
+    SET_PSOUT_ALPHACOVERAGE(coverage);
+    SET_PSOUT_EMISSIVE(emissive);
+    SET_PSOUT_VELOCITY(currUV - prevUV);
 }

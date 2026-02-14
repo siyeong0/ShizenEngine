@@ -259,6 +259,9 @@ namespace shz
 			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
 			tci.TreesPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/trees.png";
 
+			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
+			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
+
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
 			tci.HeightScale = 3000.0f;

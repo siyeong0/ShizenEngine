@@ -340,39 +340,31 @@ namespace shz
 		m_HeightTex = assetManager.LoadBlocking<Texture>(m_HeightTexRef);
 		ASSERT(m_HeightTex && m_HeightTex->IsValid(), "Failed to load height Texture asset.");
 
-		// Diffuse
-		if (!m_CI.DiffusePath.empty())
-		{
-			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
-		}
-		if (!m_CI.NormalPath.empty())
-		{
-			m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
-		}
-		if (!m_CI.SlopePath.empty())
-		{
-			m_SlopeTexRef = assetManager.RegisterAsset<Texture>(m_CI.SlopePath);
-		}
-		if (!m_CI.FlowPath.empty())
-		{
-			m_FlowTexRef = assetManager.RegisterAsset<Texture>(m_CI.FlowPath);
-		}
-		if (!m_CI.RockyPath.empty())
-		{
-			m_RockyTexRef = assetManager.RegisterAsset<Texture>(m_CI.RockyPath);
-		}
-		if (!m_CI.SoilPath.empty())
-		{
-			m_SoilTexRef = assetManager.RegisterAsset<Texture>(m_CI.SoilPath);
-		}
-		if (!m_CI.VegetationPath.empty())
-		{
-			m_VegetationTexRef = assetManager.RegisterAsset<Texture>(m_CI.VegetationPath);
-		}
-		if (!m_CI.TreesPath.empty())
-		{
-			m_TreesTexRef = assetManager.RegisterAsset<Texture>(m_CI.TreesPath);
-		}
+		// Terrain layer textures
+		ASSERT(!m_CI.DiffusePath.empty(), "Invalid diffuse texture path.");
+		ASSERT(!m_CI.NormalPath.empty(), "Invalid normal texture path.");
+		ASSERT(!m_CI.SlopePath.empty(), "Invalid slope texture path.");
+		ASSERT(!m_CI.FlowPath.empty(), "Invalid flow texture path.");
+		ASSERT(!m_CI.RockyPath.empty(), "Invalid rocky texture path.");
+		ASSERT(!m_CI.SoilPath.empty(), "Invalid soil texture path.");
+		ASSERT(!m_CI.VegetationPath.empty(), "Invalid vegetation texture path.");
+		ASSERT(!m_CI.TreesPath.empty(), "Invalid trees texture path.");
+
+		m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
+		m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
+		m_SlopeTexRef = assetManager.RegisterAsset<Texture>(m_CI.SlopePath);
+		m_FlowTexRef = assetManager.RegisterAsset<Texture>(m_CI.FlowPath);
+		m_RockyTexRef = assetManager.RegisterAsset<Texture>(m_CI.RockyPath);
+		m_SoilTexRef = assetManager.RegisterAsset<Texture>(m_CI.SoilPath);
+		m_VegetationTexRef = assetManager.RegisterAsset<Texture>(m_CI.VegetationPath);
+		m_TreesTexRef = assetManager.RegisterAsset<Texture>(m_CI.TreesPath);
+
+		// Materials
+		ASSERT(!m_SoilMaterialPath.empty(), "Invalid soil material path.");
+		ASSERT(!m_RockyMaterialPath.empty(), "Invalid rocky material path.");
+
+		m_SoilMaterialPath = m_CI.SoilMaterialPath;
+		m_RockyMaterialPath = m_CI.RockyMaterialPath;
 
 		// CPU height array
 		buildHeightU16FromHeightTexture(*m_HeightTex);
@@ -529,29 +521,112 @@ namespace shz
 
 		// Material
 		{
-			renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
+			auto getLastFolderName = [](const std::string& path) -> std::string
+				{
+					ASSERT(!path.empty(), "Path is empty.");
+					std::string p = path;
 
-			m_TerrainMaterialId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
-			Material& mat = MaterialManager::GetInstance()->GetMaterial(m_TerrainMaterialId);
+					// Normalize trailing slashes.
+					while (!p.empty() && (p.back() == '/' || p.back() == '\\')) { p.pop_back(); }
+					ASSERT(!path.empty(), "Path is empty.");
 
-			mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
-			mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-			mat.SetFloat("g_EmissiveIntensity", 0.0f);
-			mat.SetFloat("g_RoughnessFactor", 0.85f);
-			mat.SetFloat("g_NormalScale", 1.0f);
-			mat.SetFloat("g_OcclusionStrength", 1.0f);
-			mat.SetFloat("g_AlphaCutoff", 0.5f);
-			mat.SetFloat("g_MetallicFactor", 0.0f);
+					const size_t slash0 = p.find_last_of("/\\");
+					if (slash0 == std::string::npos)
+					{
+						return p;
+					}
+					else
+					{
+						return p.substr(slash0 + 1);
+					}
+				};
 
-			uint materialFlag = 0;
-			if (m_DiffuseTexRef.IsValid())
+			auto joinPath = [](const std::string& a, const std::string& b) -> std::string
+				{
+					ASSERT(!b.empty(), "Path segment is empty.");
+					const char last = a.back();
+					if (last == '/' || last == '\\')
+					{
+						return a + b;
+					}
+					else
+					{
+						return a + "/" + b;
+					}
+				};
+
+			struct TerrainLayerPaths final
 			{
-				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
-				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
-			}
-			mat.SetUint("g_MaterialFlags", materialFlag);
+				std::string BaseColor;
+				std::string Normal;
+				std::string Roughness;
+				std::string AmbientOcclusion;
+				std::string Displacement;
+			};
 
-			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
+			auto buildTerrainLayerPaths = [&](const std::string& folderPath, bool bNormalDX) -> TerrainLayerPaths
+				{
+					TerrainLayerPaths out;
+
+					const std::string folderName = getLastFolderName(folderPath);
+					ASSERT(!folderName.empty(), "Terrain layer folder name is empty. Path is invalid.");
+					const std::string normalSuffix = bNormalDX ? "_NormalDX.png" : "_NormalGL.png";
+
+					out.BaseColor = joinPath(folderPath, folderName + "_Color.png");
+					out.Normal = joinPath(folderPath, folderName + normalSuffix);
+					out.Roughness = joinPath(folderPath, folderName + "_Roughness.png");
+					out.AmbientOcclusion = joinPath(folderPath, folderName + "_AmbientOcclusion.png");
+					out.Displacement = joinPath(folderPath, folderName + "_Displacement.png");
+
+					return out;
+				};
+
+			// Material
+			{
+				renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
+
+				m_TerrainMaterialId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
+				Material& mat = MaterialManager::GetInstance()->GetMaterial(m_TerrainMaterialId);
+
+				// ------------------------------------------------------------
+				// PBR factors (defaults)
+				// NOTE: With calibrated PBR sets (AmbientCG), factors are typically 1.
+				// ------------------------------------------------------------
+				mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
+				mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+				mat.SetFloat("g_EmissiveIntensity", 0.0f);
+				mat.SetFloat("g_RoughnessFactor", 1.0f);
+				mat.SetFloat("g_NormalScale", 1.0f);
+				mat.SetFloat("g_OcclusionStrength", 1.0f);
+				mat.SetFloat("g_AlphaCutoff", 0.5f);
+				mat.SetFloat("g_MetallicFactor", 0.0f);
+				mat.SetUint("g_MaterialFlags", 0);
+
+				// ------------------------------------------------------------
+				// Terrain layer textures (Soil + Rocky)
+				// ------------------------------------------------------------
+				const bool bNormalDX = true;
+
+				const TerrainLayerPaths soil = buildTerrainLayerPaths(m_SoilMaterialPath, bNormalDX);
+				const TerrainLayerPaths rocky = buildTerrainLayerPaths(m_RockyMaterialPath, bNormalDX);
+
+				// Soil
+				mat.SetTextureAssetRef("g_SoilBaseColorTex", assetManager.RegisterAsset<Texture>(soil.BaseColor));
+				mat.SetTextureAssetRef("g_SoilNormalTex", assetManager.RegisterAsset<Texture>(soil.Normal));
+				mat.SetTextureAssetRef("g_SoilRoughnessTex", assetManager.RegisterAsset<Texture>(soil.Roughness));
+				mat.SetTextureAssetRef("g_SoilAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(soil.AmbientOcclusion));
+				mat.SetTextureAssetRef("g_SoilDisplacementTex", assetManager.RegisterAsset<Texture>(soil.Displacement));
+
+				// Rocky
+				mat.SetTextureAssetRef("g_RockyBaseColorTex", assetManager.RegisterAsset<Texture>(rocky.BaseColor));
+				mat.SetTextureAssetRef("g_RockyNormalTex", assetManager.RegisterAsset<Texture>(rocky.Normal));
+				mat.SetTextureAssetRef("g_RockyRoughnessTex", assetManager.RegisterAsset<Texture>(rocky.Roughness));
+				mat.SetTextureAssetRef("g_RockyAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(rocky.AmbientOcclusion));
+				mat.SetTextureAssetRef("g_RockyDisplacementTex", assetManager.RegisterAsset<Texture>(rocky.Displacement));
+
+				// Constants
+				mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
+			}
 		}
 	}
 

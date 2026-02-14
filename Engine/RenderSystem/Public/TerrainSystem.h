@@ -36,6 +36,9 @@ namespace shz
 			std::string VegetationPath = {};
 			std::string TreesPath = {};
 
+			std::string SoilMaterialPath = {};
+			std::string RockyMaterialPath = {};
+
 			float ChunkSize = 64.0f;
 			float WorldSpacingX = 1.0f;
 			float WorldSpacingZ = 1.0f;
@@ -139,12 +142,16 @@ namespace shz
 		AssetPtr<Texture> m_HeightTex;
 		std::vector<uint16> m_HeightU16 = {};
 
-		// ------------------------------------------------------------
+		// Mesh data
 		RefCntAutoPtr<IBuffer> m_pGridVB;
 		RefCntAutoPtr<IBuffer> m_pLodIB[5][16];
 		uint32 m_LodIndexCount[5][16] = {};
 
+		// Material
 		MaterialId m_TerrainMaterialId = 0;
+
+		std::string m_SoilMaterialPath = {};
+		std::string m_RockyMaterialPath = {};
 
 		// shader paths
 		std::string m_TerrainVS = "Terrain.vsh";
