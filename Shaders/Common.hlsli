@@ -196,6 +196,13 @@ cbuffer DRAW_CONSTANTS
     DrawConstants g_DrawCB;
 };
 
+cbuffer TERRAIN_CONSTANTS
+{
+	TerrainConstants g_TerrainCB;
+};
+
+// Resources
+
 // Samplers
 SamplerState g_LinearWrapSampler;
 SamplerState g_LinearClampSampler;
@@ -224,18 +231,11 @@ float2 ClipToUV(float4 clip)
     return ndc * 0.5 + 0.5; // [0..1]
 }
 
-// Convert SV_Position (pixel space) to integer pixel coords.
-// Note: SV_Position.xy is already in pixel units in raster space for PS.
 uint2 SVPosToPixel(float4 svPos)
 {
     return (uint2) floor(svPos.xy);
 }
 
-//------------------------------------------------------------------------------
-// UE-like DitherTemporalAA style threshold
-//  - DO NOT move pattern in screen space (no pix shifting)
-//  - Time variation comes from scrambling/permutation only
-//------------------------------------------------------------------------------
 uint Hash_u32(uint x)
 {
     x ^= x >> 16;
@@ -246,28 +246,6 @@ uint Hash_u32(uint x)
     return x;
 }
 
-// Threshold in [0..1) from 4x4 Bayer, time-scrambled without moving pixels.
-// This avoids "pattern crawling/shimmer" from frame-based pixel shifts.
-//float DitherThreshold4x4(int2 pix)
-//{
-//    static const float bayer4[16] =
-//    {
-//        0, 8, 2, 10,
-//        12, 4, 14, 6,
-//        3, 11, 1, 9,
-//        15, 7, 13, 5
-//    };
-
-//    // fixed 4x4 cell
-//    int idx = (pix.x & 3) + ((pix.y & 3) << 2);
-
-//    // time-dependent permutation of 0..15
-//    uint f = (uint) g_FrameCB.FrameIndex;
-//    uint r = Hash_u32(f * 0x9e3779b9u + (uint) idx);
-//    int j = (int) (r & 15u);
-
-//    return (bayer4[j] + 0.5) / 16.0; // (0..1)
-//}
 float DitherThreshold4x4(int2 pix)
 {
     static const float bayer4[16] =
@@ -318,21 +296,6 @@ float4 ApplyTAAJittering(float4 clipSpace)
     clipSpace.xy += jitter;
     return clipSpace;
 }
-
-//float ClipPixelCoverage(float alpha, float4 svPos, float3 worldPos)
-//{
-//    float dist = length(g_FrameCB.CameraPosition - worldPos);
-//    float fade = saturate(dist / 100.0);
-//    float alphaCutoffNear = 0.6;
-//    float alphaCutoffFar = 0.3;
-//    float alphaCutoff = lerp(alphaCutoffNear, alphaCutoffFar, fade);
-//    float denom = max(1.0f - alphaCutoff, 1e-6f);
-//    float coverage = saturate((alpha - alphaCutoff) / denom);
-//    float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
-//    clip(coverage - t);
-	
-//    return coverage;
-//}
 
 float ClipPixelCoverage(float alpha, float4 svPos)
 {

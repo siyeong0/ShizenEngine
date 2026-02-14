@@ -1,12 +1,7 @@
+#include "Common.hlsli"
+
 #ifndef HEIGHTFIELD_HLSLI
 #define HEIGHTFIELD_HLSLI
-
-#include "HLSL_Structures.hlsli"
-
-cbuffer HEIGHT_FIELD_CONSTANTS
-{
-	HeightFieldConstants g_HeightFieldCB;
-};
 
 // ----------------------------------------------
 // HeightField common helpers
@@ -22,14 +17,14 @@ float2 HF_ClampUVToTexelCenter(float2 uv, float2 texelSize)
 // WorldXZ -> grid coords in "height texel space" (0..Width-1, 0..Height-1)
 float2 HF_WorldXZToGrid(float2 worldXZ)
 {
-	return (worldXZ - g_HeightFieldCB.WorldOriginXZ) / max(g_HeightFieldCB.WorldSpacingXZ, 1e-6.xx);
+	return (worldXZ - g_TerrainCB.WorldOriginXZ) / max(g_TerrainCB.WorldSpacingXZ, 1e-6.xx);
 }
 
 // Grid -> UV, sampling at texel centers.
 // uv = (grid + 0.5) / (Width, Height) == (grid + 0.5) * texelSize
 float2 HF_GridToUV(float2 gridXZ)
 {
-	return (gridXZ + 0.5.xx) * g_HeightFieldCB.HeightTexelSize;
+	return (gridXZ + 0.5.xx) * g_TerrainCB.HeightTexelSize;
 }
 
 // Spacing-aware mapping.
@@ -43,13 +38,13 @@ float2 HF_WorldXZToUV(float2 worldXZ)
 
     // Clamp grid into valid texel index range so we don't sample outside.
     // (Width-1, Height-1) in grid space is (WorldSize / Spacing).
-	float2 gridMax = max((g_HeightFieldCB.WorldSizeXZ / max(g_HeightFieldCB.WorldSpacingXZ, 1e-6.xx)), 0.0.xx);
+	float2 gridMax = max((g_TerrainCB.WorldSizeXZ / max(g_TerrainCB.WorldSpacingXZ, 1e-6.xx)), 0.0.xx);
     grid = clamp(grid, 0.0.xx, gridMax);
 
     float2 uv = HF_GridToUV(grid);
 
     uv = saturate(uv);
-	uv = HF_ClampUVToTexelCenter(uv, g_HeightFieldCB.HeightTexelSize);
+	uv = HF_ClampUVToTexelCenter(uv, g_TerrainCB.HeightTexelSize);
     return uv;
 }
 
@@ -67,7 +62,7 @@ float HF_SampleWorldHeight(
     float lod)
 {
     float h01 = HF_SampleHeight01(heightTex, clampSampler, uv, lod);
-	return yOffsetMeters + (g_HeightFieldCB.HeightOffset + h01 * g_HeightFieldCB.HeightScale);
+	return yOffsetMeters + (g_TerrainCB.HeightOffset + h01 * g_TerrainCB.HeightScale);
 }
 
 float HF_SampleWorldHeightAtWorldXZ(
@@ -82,7 +77,7 @@ float HF_SampleWorldHeightAtWorldXZ(
 }
 
 // Snap worldXZ to a coarser grid (same as Terrain VS)
-static float2 HF_SnapWorldXZ(float2 worldXZ, HeightFieldConstants hf, float stepMul)
+static float2 HF_SnapWorldXZ(float2 worldXZ, TerrainConstants hf, float stepMul)
 {
 	float2 cell = hf.WorldSpacingXZ * stepMul;
 

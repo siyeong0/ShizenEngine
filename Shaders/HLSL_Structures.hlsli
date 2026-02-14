@@ -73,7 +73,7 @@ struct ObjectConstants
 // ----------------------------------------------
 // HeightField (COMMON for Terrain/Grass/etc.)
 // ----------------------------------------------
-struct HeightFieldConstants
+struct TerrainConstants
 {
 	float2 WorldOriginXZ;
 	float2 WorldSizeXZ;
@@ -95,13 +95,10 @@ struct TerrainDrawConstants
 	float2 ChunkOriginXZ;
 	float2 ChunkSizeXZ;
 
-	float NormalSampleStep;
-
 	float LodMorphAlpha;
 	uint LodIndex;
 	float _pad0;
-
-	float4 DebugChunkColor;
+	float _pad1;
 };
 
 // ----------------------------------------------

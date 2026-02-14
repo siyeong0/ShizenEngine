@@ -116,7 +116,7 @@ namespace shz
 		uint32 m_Width = 0;
 		uint32 m_Height = 0;
 
-		float m_ChunkSize = 64.0f;
+		float m_ChunkSize = 32.0f;
 		float m_WorldSpacingX = 1.0f;
 		float m_WorldSpacingZ = 1.0f;
 

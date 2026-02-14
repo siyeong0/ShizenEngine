@@ -640,7 +640,7 @@ namespace shz
 
 		// Update TERRAIN_CONSTANTS
 		{
-			hlsl::HeightFieldConstants hfc = {};
+			hlsl::TerrainConstants hfc = {};
 			hfc.WorldOriginXZ = float2{ m_pTerrainSystem->GetWorldOriginX(), m_pTerrainSystem->GetWorldOriginZ() };
 			hfc.WorldSizeXZ = float2{ m_pTerrainSystem->GetWorldSizeX(), m_pTerrainSystem->GetWorldSizeZ() };
 			hfc.WorldSpacingXZ = float2{ m_pTerrainSystem->GetWorldSpacingX(), m_pTerrainSystem->GetWorldSpacingZ() };
@@ -652,7 +652,7 @@ namespace shz
 			const uint32 h = m_pTerrainSystem->GetHeight();
 			hfc.HeightTexelSize = float2{ 1.0f / float(w) , 1.0f / float(h) };
 
-			m_pRenderer->UpdateBuffer<hlsl::HeightFieldConstants>(STRING_HASH("HeightFieldCB"), hfc);
+			m_pRenderer->UpdateBuffer<hlsl::TerrainConstants>(STRING_HASH("TerrainCB"), hfc);
 		}
 	}
 

@@ -506,14 +506,14 @@ namespace shz
 			// Constant buffers
 			{
 				BufferDesc cb = {};
-				cb.Name = "HeightFieldCB";
+				cb.Name = "TerrainCB";
 				cb.Usage = USAGE_DYNAMIC;
 				cb.BindFlags = BIND_UNIFORM_BUFFER;
 				cb.CPUAccessFlags = CPU_ACCESS_WRITE;
-				cb.Size = sizeof(hlsl::HeightFieldConstants);
+				cb.Size = sizeof(hlsl::TerrainConstants);
 
-				renderer.AddBuffer(STRING_HASH("HeightFieldCB"), cb);
-				renderer.RegisterStaticBufferCBV("HEIGHT_FIELD_CONSTANTS", STRING_HASH("HeightFieldCB"));
+				renderer.AddBuffer(STRING_HASH("TerrainCB"), cb);
+				renderer.RegisterStaticBufferCBV("TERRAIN_CONSTANTS", STRING_HASH("TerrainCB"));
 			}
 		}
 	}
@@ -849,18 +849,8 @@ namespace shz
 				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
 				dc.ChunkSizeXZ = float2{ chunkSizeX,   chunkSizeZ };
 
-				const float normalSteps[5] = { 1.f, 2.f, 4.f, 8.f, 16.f };
-				dc.NormalSampleStep = normalSteps[lod];
-
 				dc.LodIndex = lod;
 				dc.LodMorphAlpha = morph;
-
-				// Debug chunk color
-				const uint32 h = (cx + 1) * 73856093u ^ (cz + 1) * 19349663u;
-				const float r = 0.25f + 0.75f * hash01(h ^ 0x1111u);
-				const float g = 0.25f + 0.75f * hash01(h ^ 0x2222u);
-				const float b = 0.25f + 0.75f * hash01(h ^ 0x3333u);
-				dc.DebugChunkColor = float4{ r, g, b, 1.0f };
 
 				instances.emplace_back(dc);
 			}

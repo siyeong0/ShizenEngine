@@ -1,5 +1,5 @@
 #include "Common.hlsli"
-#include "HeightField.hlsli"
+#include "TerrainCommon.hlsli"
 #include "GrassCommon.hlsli"
 
 cbuffer GRASS_GEN_CONSTANTS
@@ -105,7 +105,7 @@ uint Hash2i(int2 v, uint salt)
 // ---------------------------------------------------------------------------
 int2 WorldXZToChunkCoord(float2 worldXZ, float chunkSize)
 {
-	float2 rel = worldXZ - g_HeightFieldCB.WorldOriginXZ;
+	float2 rel = worldXZ - g_TerrainCB.WorldOriginXZ;
 	float inv = rcp(max(chunkSize, 1e-6f));
 	float2 c = floor(rel * inv);
 	return int2((int) c.x, (int) c.y);
@@ -113,13 +113,13 @@ int2 WorldXZToChunkCoord(float2 worldXZ, float chunkSize)
 
 float2 ChunkCoordToWorldOrigin(int2 chunkCoord, float chunkSize)
 {
-	return g_HeightFieldCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
+	return g_TerrainCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
 }
 
 bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 {
-	float2 hfMin = g_HeightFieldCB.WorldOriginXZ;
-	float2 hfMax = g_HeightFieldCB.WorldOriginXZ + g_HeightFieldCB.WorldSizeXZ;
+	float2 hfMin = g_TerrainCB.WorldOriginXZ;
+	float2 hfMax = g_TerrainCB.WorldOriginXZ + g_TerrainCB.WorldSizeXZ;
 
 	float2 o = chunkOriginXZ;
 	float2 e = o + chunkSize.xx;
