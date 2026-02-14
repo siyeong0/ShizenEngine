@@ -148,7 +148,7 @@ namespace shz
 
 		// shader paths
 		std::string m_TerrainVS = "Terrain.vsh";
-		std::string m_TerrainPS = "GBuffer.psh";
+		std::string m_TerrainPS = "Terrain.psh";
 
 		std::vector<Handle<RenderScene::TerrainObject>> m_SceneHandles;
 

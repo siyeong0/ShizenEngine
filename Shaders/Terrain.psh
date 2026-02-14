@@ -1,0 +1,51 @@
+#include "Common.hlsli"
+#include "PBRMaterial.hlsli"
+#include "TerrainCommon.hlsli"
+
+Texture2D g_SoilBaseColorTex;
+Texture2D g_SoilNormalTex;
+Texture2D g_SoilRoughnessTex;
+Texture2D g_SoilAmbientOcclusionTex;
+Texture2D g_SoilDisplacementTex;
+
+Texture2D g_RockyBaseColorTex;
+Texture2D g_RockyNormalTex;
+Texture2D g_RockyRoughnessTex;
+Texture2D g_RockyAmbientOcclusionTex;
+Texture2D g_RockyDisplacementTex;
+
+BASE_PS_MAIN_ENTRY()
+{
+	float4 svPos = GET_PSIN_POS();
+	float4 currClip = GET_PSIN_CURR_CLIP();
+	float4 prevClip = GET_PSIN_PREV_CLIP();
+	float3 worldPos = GET_PSIN_WORLD_POS();
+	float2 uv = GET_PSIN_UV();
+	float3 normalWS = GET_PSIN_WORLD_NORMAL();
+	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
+
+	float4 baseColor = SampleTerrainDiffuse(uv);
+	float alpha = baseColor.a;
+	float coverage = ClipPixelCoverage(alpha, svPos);
+	
+	float2 metallicRoughness = GetMetallicRoughness(uv);
+	float metallic = metallicRoughness.x;
+	float roughness = metallicRoughness.y;
+	float ao = GetAmbientOcclusion(uv);
+	float3 emissive = GetEmissive(uv);
+	float3 normal = GetNormal(uv, normalWS, tangentWS);
+
+	float2 currUV = ClipToUV(currClip);
+	float2 prevUV = ClipToUV(prevClip);
+	
+	// Pack to GBuffer
+	SET_PSOUT_ALBEDO(baseColor);
+	SET_PSOUT_OPACITY(alpha);
+	SET_PSOUT_NORMAL(normal);
+	SET_PSOUT_METALLIC(metallic);
+	SET_PSOUT_ROUGHNESS(roughness);
+	SET_PSOUT_AO(ao);
+	SET_PSOUT_ALPHACOVERAGE(coverage);
+	SET_PSOUT_EMISSIVE(emissive);
+	SET_PSOUT_VELOCITY(currUV - prevUV);
+}
