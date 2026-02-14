@@ -138,19 +138,18 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 // ---------------------------------------------------------------------------
 float2 WorldXZToHeightUV(float2 worldXZ)
 {
-	return HF_WorldXZToUV(worldXZ, float2(1.0f, 1.0f), float2(0.0f, 0.0f));
+	return HF_WorldXZToUV(worldXZ);
 }
 
 float SampleHeightNormalized(float2 worldXZ)
 {
 	float2 uv = WorldXZToHeightUV(worldXZ);
-	return HF_SampleHeight01(g_HeightField, g_LinearClampSampler, uv);
+	return HF_SampleHeight01(g_HeightField, g_LinearClampSampler, uv, 5.0);
 }
 
 float SampleWorldHeight(float2 worldXZ)
 {
-	float2 uv = WorldXZToHeightUV(worldXZ);
-	return HF_SampleWorldHeight(g_HeightField, g_LinearClampSampler, uv, g_CB.YOffset);
+	return SampleTerrainHeight(g_HeightField, g_LinearClampSampler, worldXZ, 5.0);
 }
 
 float RemapDensity(float d, float contrast01)
