@@ -260,7 +260,7 @@ namespace shz
 			tci.TreesPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/trees.png";
 
 			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
-			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rocks007_4K-PNG";
+			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
