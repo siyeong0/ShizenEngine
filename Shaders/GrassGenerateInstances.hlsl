@@ -65,8 +65,6 @@ StructuredBuffer<uint> g_SpeciesLOD1MeshId;
 StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 
 // Inputs
-Texture2D<float> g_HeightField;
-Texture2D<float> g_DensityField;
 Texture2D<float> g_InteractionField;
 
 // ---------------------------------------------------------------------------
@@ -136,20 +134,13 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 // ---------------------------------------------------------------------------
 // Height / Density / Interaction sampling
 // ---------------------------------------------------------------------------
-float2 WorldXZToHeightUV(float2 worldXZ)
-{
-	return HF_WorldXZToUV(worldXZ);
-}
 
 float SampleHeightNormalized(float2 worldXZ)
 {
-	float2 uv = WorldXZToHeightUV(worldXZ);
-	return HF_SampleHeight01(g_HeightField, g_LinearClampSampler, uv, 5.0);
-}
-
-float SampleWorldHeight(float2 worldXZ)
-{
-	return SampleTerrainHeight(g_HeightField, g_LinearClampSampler, worldXZ, 5.0);
+	// Height texture returns [0..1] already.
+	// Use a higher mip for stability (matches your previous intent).
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainHeight01Level(uv, 5.0f);
 }
 
 float RemapDensity(float d, float contrast01)
@@ -161,8 +152,10 @@ float RemapDensity(float d, float contrast01)
 
 float SampleWorldDensity(float2 worldXZ, float mipLevel)
 {
-	float2 uv = WorldXZToHeightUV(worldXZ);
-	float d = g_DensityField.SampleLevel(g_LinearWrapSampler, uv, mipLevel).r;
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+
+	// Use TerrainCommon helper (clamp sampler & consistent UV handling).
+	float d = SampleTerrainVegetationLevel(uv, mipLevel);
 
 	d = saturate(d);
 	d = RemapDensity(d, g_CB.DensityContrast);
@@ -231,14 +224,14 @@ static const uint SAMPLES_MAX_CLAMP = 4096u;
 
 float ComputeDistanceSampleScale(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
-    float dist = sqrt(max(distSqr, 0.0f));
-    float lod0 = sqrt(max(lod0Sqr, 0.0f));
-    float spawnR = sqrt(max(spawnRadiusSqr, 0.0f));
+	float dist = sqrt(max(distSqr, 0.0f));
+	float lod0 = sqrt(max(lod0Sqr, 0.0f));
+	float spawnR = sqrt(max(spawnRadiusSqr, 0.0f));
 
-    float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
-    t = saturate(t);
-	
-    return 1.0f - t;
+	float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
+	t = saturate(t);
+
+	return 1.0f - t;
 }
 
 uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, float spawnRadiusSqr)
@@ -253,8 +246,6 @@ uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, floa
 
 // ---------------------------------------------------------------------------
 // Mesh counter reserve helpers (wave optimized, grouped by meshId)
-// - One atomic per unique meshId in the wave.
-// - Keeps correctness of mesh counters while reducing atomics drastically.
 // ---------------------------------------------------------------------------
 struct BallotMask
 {
@@ -300,7 +291,6 @@ bool BallotTestLane(BallotMask b, uint lane)
 
 uint BallotFirstLane(BallotMask b)
 {
-	// Assumes BallotAny(b) == true.
 	if (b.M.x != 0u)
 	{
 		return 0u + firstbitlow(b.M.x);
@@ -316,7 +306,6 @@ uint BallotFirstLane(BallotMask b)
 	return 96u + firstbitlow(b.M.w);
 }
 
-// Returns base for THIS lane's meshId group (value returned by InterlockedAdd for that meshId group).
 uint WaveReserveMeshCounter_Grouped(uint meshId)
 {
 	uint lane = WaveGetLaneIndex();
@@ -361,10 +350,12 @@ uint MakeSeed8(uint seed)
 {
 	return (WangHash(seed) >> 24) & 0xFFu;
 }
+
 uint MakeVariantId(uint seed)
 {
 	return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
 }
+
 uint MakeAtlasIndex(uint seed)
 {
 	return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
@@ -457,7 +448,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
-			g_PoolPositions[base + s].Position = float3(0.0, INVALID_NAN, 0.0);
+			g_PoolPositions[base + s].Position = float3(0.0f, INVALID_NAN, 0.0f);
 			g_PoolPositions[base + s].SpeciesId = 0u;
 		}
 
@@ -470,7 +461,8 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		return;
 	}
 
-	float chunkHeight = SampleWorldHeight(chunkOriginXZ);
+	// Cache chunk height at a stable mip (was "5.0" in your previous code).
+	float chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginXZ, 5.0f);
 
 	if (tid.x == 0u)
 	{
@@ -498,7 +490,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
 		float2 posXZ = chunkOriginXZ + localXZ;
 
-		float y = SampleWorldHeight(posXZ);
+		float y = SampleWorldHeightAtWorldXZLevel(posXZ, 5.0f);
 
 		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
 
@@ -516,7 +508,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 // ---------------------------------------------------------------------------
 // Entry B-1) ClearSpeciesCountersCS
-// - Clears counts + offsets + write counters
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
@@ -534,8 +525,6 @@ void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
 
 // ---------------------------------------------------------------------------
 // Entry B-2) CountInstancesFromPoolsCS
-// - Uses same thinning rules as Build
-// - Writes g_SpeciesLodCounts[species*3 + lod] ++
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -566,7 +555,7 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	float chunkHeight = pc.ChunkHeight;
 	if (chunkHeight == 0.0f)
 	{
-		chunkHeight = SampleWorldHeight(chunkOriginClamped);
+		chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
 	}
 
 	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
@@ -672,8 +661,6 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 // ---------------------------------------------------------------------------
 // Entry B-3) PrefixSpeciesOffsetsCS
-// - Exclusive scan per LOD across species
-// - Writes g_SpeciesLodOffsets and clears g_SpeciesLodWriteCounters
 // ---------------------------------------------------------------------------
 [numthreads(1, 1, 1)]
 void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
@@ -710,18 +697,7 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 
 // ---------------------------------------------------------------------------
 // Entry C) BuildInstancesFromPoolsCS
-// - THINNING HERE
-// - Packs by species using offsets + writeCounters
-// - Still increments mesh-based counters (wave-grouped) for IndirectArgs compatibility
-// - NEW: Per-instance frustum cull for LOD0 (conservative AABB, ignores rotation)
 // ---------------------------------------------------------------------------
-
-// Assumption for per-instance bounds:
-// - Mesh local AABB size is always 1x1x1.
-// - Pivot is at the BASE center on ground (typical grass):
-//     localMin = (-0.5, 0.0, -0.5), localMax = (0.5, 1.0, 0.5)
-// - Uniform scale = scale
-// If your pivot is centered instead, change Y extents to [-0.5..0.5] * scale.
 bool GrassInstanceAabbInsideFrustum_LOD0(float3 posWS, float scale)
 {
 	float hx = 0.5f * scale;
@@ -730,7 +706,6 @@ bool GrassInstanceAabbInsideFrustum_LOD0(float3 posWS, float scale)
 	float3 bmin = posWS + float3(-hx, 0.0f, -hz);
 	float3 bmax = posWS + float3(hx, 1.0f * scale, hz);
 
-	// Conservative: expand a tiny bit to avoid precision popping.
 	static const float EPS = 0.02f;
 	bmin -= EPS.xxx;
 	bmax += EPS.xxx;
@@ -767,7 +742,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 	float chunkHeight = pc.ChunkHeight;
 	if (chunkHeight == 0.0f)
 	{
-		chunkHeight = SampleWorldHeight(chunkOriginClamped);
+		chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
 	}
 
 	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
@@ -859,9 +834,6 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 			continue;
 		}
 
-		// ------------------------------------------------------------
-		// Material/random params
-		// ------------------------------------------------------------
 		float3 posWS = p.Position;
 
 		float scaleT = Rand01(seed ^ 0x5555u);
@@ -875,39 +847,23 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint variantId = MakeVariantId(seed);
 		uint atlasIndex = MakeAtlasIndex(seed);
 
-		// ------------------------------------------------------------
-		// LOD decision (distance to camera)
-		// ------------------------------------------------------------
 		float2 dxz = posWS.xz - camXZ;
 		float distSqr = dot(dxz, dxz);
 
 		uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
 
-		// ------------------------------------------------------------
-		// Per-instance frustum culling
-		// - Uses conservative AABB (ignores rotation, includes scale)
-		// ------------------------------------------------------------
 		if (!GrassInstanceAabbInsideFrustum_LOD0(posWS, scale))
 		{
 			continue;
 		}
 
-		// Pick meshId by species + lod (keeps IndirectArgs flow unchanged)
 		uint meshId =
 			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[speciesId] :
 			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[speciesId] :
 							   g_SpeciesLOD2MeshId[speciesId];
 
-		// ------------------------------------------------------------
-		// Mesh counter reserve (wave grouped by meshId)
-		// ------------------------------------------------------------
-		uint baseMesh = WaveReserveMeshCounter_Grouped(meshId);
-		// (void) baseMesh;
+		WaveReserveMeshCounter_Grouped(meshId);
 
-		// ------------------------------------------------------------
-		// Species packing: atomic add per (species,lod) to get local index
-		// Layout: idx = speciesId*3 + lod
-		// ------------------------------------------------------------
 		uint idx = speciesId * 3u + lodIndex;
 
 		uint local = 0u;

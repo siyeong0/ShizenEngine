@@ -255,7 +255,7 @@ namespace shz
 			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/slope.png";
 			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/flow.png";
 			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/rocky.png";
-			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/grass.png";
+			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/soil.png";
 			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
 			tci.TreesPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/trees.png";
 

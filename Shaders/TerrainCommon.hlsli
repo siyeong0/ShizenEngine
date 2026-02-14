@@ -1,117 +1,237 @@
 #include "Common.hlsli"
 
-#ifndef HEIGHTFIELD_HLSLI
-#define HEIGHTFIELD_HLSLI
+#ifndef TERRAIN_COMMOM_HLSLI
+#define TERRAIN_COMMOM_HLSLI
+
+Texture2D g_TerrainHeightTex;
+Texture2D g_TerrainDiffuseTex;
+Texture2D g_TerrainNormalTex;
+Texture2D g_TerrainSlopeTex;
+Texture2D g_TerrainFlowTex;
+Texture2D g_TerrainRockyTex;
+Texture2D g_TerrainSoilTex;
+Texture2D g_TerrainVegetationTex;
 
 // ----------------------------------------------
-// HeightField common helpers
+// Terrain common helpers
 // ----------------------------------------------
 
-// Keep UV inside [0.5 texel, 1 - 0.5 texel] to avoid border filtering artifacts.
-float2 HF_ClampUVToTexelCenter(float2 uv, float2 texelSize)
+float2 WorldXZToTerrainUV(float2 worldXZ)
 {
-    float2 halfTexel = 0.5f * texelSize;
-    return clamp(uv, halfTexel, 1.0f - halfTexel);
+	float2 gridXZ = (worldXZ - g_TerrainCB.WorldOriginXZ) / g_TerrainCB.WorldSpacingXZ;
+	float2 uv = saturate((gridXZ + 0.5.xx) * g_TerrainCB.HeightTexelSize);
+	float2 halfTexel = 0.5f * g_TerrainCB.HeightTexelSize;
+	uv = clamp(uv, halfTexel, 1.0f - halfTexel);
+	return uv;
 }
 
-// WorldXZ -> grid coords in "height texel space" (0..Width-1, 0..Height-1)
-float2 HF_WorldXZToGrid(float2 worldXZ)
+// Sample height in [0..1] range
+float SampleTerrainHeight01(float2 uv)
 {
-	return (worldXZ - g_TerrainCB.WorldOriginXZ) / max(g_TerrainCB.WorldSpacingXZ, 1e-6.xx);
+	return g_TerrainHeightTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
 }
 
-// Grid -> UV, sampling at texel centers.
-// uv = (grid + 0.5) / (Width, Height) == (grid + 0.5) * texelSize
-float2 HF_GridToUV(float2 gridXZ)
+float SampleTerrainHeight01Level(float2 uv, float lod)
 {
-	return (gridXZ + 0.5.xx) * g_TerrainCB.HeightTexelSize;
+	return g_TerrainHeightTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
 }
 
-// Spacing-aware mapping.
-// 1) world -> grid (spacing)
-// 2) grid -> uv (texel center)
-// 3) extra scale/bias (optional)
-// 4) texel-center clamp (avoid border filtering)
-float2 HF_WorldXZToUV(float2 worldXZ)
+float SampleTerrainHeight01AtWorldXZ(float2 worldXZ)
 {
-    float2 grid = HF_WorldXZToGrid(worldXZ);
-
-    // Clamp grid into valid texel index range so we don't sample outside.
-    // (Width-1, Height-1) in grid space is (WorldSize / Spacing).
-	float2 gridMax = max((g_TerrainCB.WorldSizeXZ / max(g_TerrainCB.WorldSpacingXZ, 1e-6.xx)), 0.0.xx);
-    grid = clamp(grid, 0.0.xx, gridMax);
-
-    float2 uv = HF_GridToUV(grid);
-
-    uv = saturate(uv);
-	uv = HF_ClampUVToTexelCenter(uv, g_TerrainCB.HeightTexelSize);
-    return uv;
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainHeight01(uv);
 }
 
-float HF_SampleHeight01(Texture2D<float> heightTex, SamplerState clampSampler, float2 uv, float lod)
+float SampleTerrainHeight01AtWorldXZLevel(float2 worldXZ, float lod)
 {
-    // uv is expected already texel-center clamped
-    return heightTex.SampleLevel(clampSampler, uv, lod).r;
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainHeight01Level(uv, lod);
 }
 
-float HF_SampleWorldHeight(
-    Texture2D<float> heightTex,
-    SamplerState clampSampler,
-    float2 uv,
-    float yOffsetMeters,
-    float lod)
+// Sample height in world units (meters)
+float SampleTerrainHeight(float2 uv)
 {
-    float h01 = HF_SampleHeight01(heightTex, clampSampler, uv, lod);
-	return yOffsetMeters + (g_TerrainCB.HeightOffset + h01 * g_TerrainCB.HeightScale);
+	float h01 = SampleTerrainHeight01(uv);
+	return g_TerrainCB.HeightOffset + h01 * g_TerrainCB.HeightScale;
 }
 
-float HF_SampleWorldHeightAtWorldXZ(
-    Texture2D<float> heightTex,
-    SamplerState clampSampler,
-    float2 worldXZ,
-    float yOffsetMeters,
-    float lod)
+float SampleTerrainHeightLevel(float2 uv, float lod)
 {
-    float2 uv = HF_WorldXZToUV(worldXZ);
-    return HF_SampleWorldHeight(heightTex, clampSampler, uv, yOffsetMeters, lod);
+	float h01 = SampleTerrainHeight01Level(uv, lod);
+	return g_TerrainCB.HeightOffset + h01 * g_TerrainCB.HeightScale;
 }
 
-// Snap worldXZ to a coarser grid (same as Terrain VS)
-static float2 HF_SnapWorldXZ(float2 worldXZ, TerrainConstants hf, float stepMul)
+float SampleWorldHeightAtWorldXZ(float2 worldXZ)
 {
-	float2 cell = hf.WorldSpacingXZ * stepMul;
-
-    // Convert to coarse-grid space and round to nearest integer cell.
-	float2 g = (worldXZ - hf.WorldOriginXZ) / max(cell, 1e-6.xx);
-	float2 gi = floor(g + 0.5.xx);
-
-	return hf.WorldOriginXZ + gi * cell;
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainHeight(uv);
 }
 
-// Sample "terrain final height" exactly like Terrain VS does.
-// - Uses same UV mapping (HeightUVScale/Bias), mip(0), clamp, and LOD morph.
-// - If you want grass to match terrain surface, use this for grass Y.
-//
-// Inputs:
-// - worldXZ: world XZ in meters
-// - terrainDrawCB: per-chunk draw constants (HeightUVScale/Bias, LodIndex, LodMorphAlpha, NormalSampleStep, ...)
-//
-// Returns:
-// - world height in meters
-static float SampleTerrainHeight(
-    Texture2D<float> heightTex, 
-    SamplerState clampSampler,
-    float2 worldXZ,
-    float lod)
+float SampleWorldHeightAtWorldXZLevel(float2 worldXZ, float lod)
 {
-	float hFine = HF_SampleWorldHeightAtWorldXZ(
-        heightTex,
-        clampSampler,
-        worldXZ,
-        0.0f,
-        lod);
-    
-	return hFine;
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainHeightLevel(uv, lod);
 }
 
-#endif // HEIGHTFIELD_HLSLI
+// Sample diffuse color
+float4 SampleTerrainDiffuse(float2 uv)
+{
+	return g_TerrainDiffuseTex.SampleLevel(g_LinearClampSampler, uv, 0);
+}
+
+float4 SampleTerrainDiffuseLevel(float2 uv, float lod)
+{
+	return g_TerrainDiffuseTex.SampleLevel(g_LinearClampSampler, uv, lod);
+}
+
+float4 SampleTerrainDiffuseAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainDiffuse(uv);
+}
+
+float4 SampleTerrainDiffuseAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainDiffuseLevel(uv, lod);
+}
+
+// Sample normal in [-1..1] range
+float3 SampleTerrainNormal(float2 uv)
+{
+	return g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, 0).rgb * 2.0f - 1.0f;
+}
+
+float3 SampleTerrainNormalLevel(float2 uv, float lod)
+{
+	return g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, lod).rgb * 2.0f - 1.0f;
+}
+
+float3 SampleTerrainNormalAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainNormal(uv);
+}
+
+float3 SampleTerrainNormalAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainNormalLevel(uv, lod);
+}
+
+// Sample slope
+float SampleTerrainSlope(float2 uv)
+{
+	return g_TerrainSlopeTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
+}
+
+float SampleTerrainSlopeLevel(float2 uv, float lod)
+{
+	return g_TerrainSlopeTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
+}
+
+float SampleTerrainSlopeAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainSlope(uv);
+}
+
+float SampleTerrainSlopeAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainSlopeLevel(uv, lod);
+}
+
+// Sample flow
+float SampleTerrainFlow(float2 uv)
+{
+	return g_TerrainFlowTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
+}
+
+float SampleTerrainFlowLevel(float2 uv, float lod)
+{
+	return g_TerrainFlowTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
+}
+
+float SampleTerrainFlowAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainFlow(uv);
+}
+
+float SampleTerrainFlowAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainFlowLevel(uv, lod);
+}
+
+// Sample rocky mask
+float SampleTerrainRocky(float2 uv)
+{
+	return g_TerrainRockyTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
+}
+
+float SampleTerrainRockyLevel(float2 uv, float lod)
+{
+	return g_TerrainRockyTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
+}
+
+float SampleTerrainRockyAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainRocky(uv);
+}
+
+float SampleTerrainRockyAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainRockyLevel(uv, lod);
+}
+
+// Sample soil mask
+float SampleTerrainSoil(float2 uv)
+{
+	return g_TerrainSoilTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
+}
+
+float SampleTerrainSoilLevel(float2 uv, float lod)
+{
+	return g_TerrainSoilTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
+}
+
+float SampleTerrainSoilAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainSoil(uv);
+}
+
+float SampleTerrainSoilAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainSoilLevel(uv, lod);
+}
+
+// Sample vegetation mask
+float SampleTerrainVegetation(float2 uv)
+{
+	return g_TerrainVegetationTex.SampleLevel(g_LinearClampSampler, uv, 0).r;
+}
+
+float SampleTerrainVegetationLevel(float2 uv, float lod)
+{
+	return g_TerrainVegetationTex.SampleLevel(g_LinearClampSampler, uv, lod).r;
+}
+
+float SampleTerrainVegetationAtWorldXZ(float2 worldXZ)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainVegetation(uv);
+}
+
+float SampleTerrainVegetationAtWorldXZLevel(float2 worldXZ, float lod)
+{
+	float2 uv = WorldXZToTerrainUV(worldXZ);
+	return SampleTerrainVegetationLevel(uv, lod);
+}
+
+#endif // TERRAIN_COMMOM_HLSLI

@@ -450,7 +450,7 @@ namespace shz
 
 		// GPU resources
 		{
-			// Create height field texture R16_UNORM 
+			// Height
 			{
 				TextureDesc desc = {};
 				desc.Name = "TerrainHeight";
@@ -473,35 +473,45 @@ namespace shz
 				initData.NumSubresources = 1;
 
 				renderer.AddTexture(STRING_HASH("TerrainHeight"), desc, &initData);
-				renderer.RegisterStaticTextureResource("g_HeightField", STRING_HASH("TerrainHeight"));
+				renderer.RegisterStaticTextureResource("g_TerrainHeightTex", STRING_HASH("TerrainHeight"));
 			}
 
-			// Density texture for grass placement
-			{
-				AssetRef<Texture> vegetationRef = m_VegetationTexRef;
-				AssetPtr<Texture> vegetationPtr = assetManager.LoadBlocking(vegetationRef);
+			auto registerTextureFromAsset = [&](const char* resourceName, const AssetRef<Texture>& texRef)
+				{
+					if (!texRef.IsValid())
+					{
+						return;
+					}
+					AssetPtr<Texture> texPtr = assetManager.LoadBlocking(texRef);
+					ASSERT(texPtr && texPtr->IsValid(), "Failed to load Texture asset for resource '%s'.", resourceName);
+					TextureDesc desc = {};
+					desc.Name = resourceName;
+					desc.Type = RESOURCE_DIM_TEX_2D;
+					desc.Width = texPtr->GetWidth();
+					desc.Height = texPtr->GetHeight();
+					desc.MipLevels = 1;
+					desc.ArraySize = 1;
+					desc.Format = texPtr->GetFormat();
+					desc.Usage = USAGE_DEFAULT;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+					TextureSubResData subres = {};
+					subres.pData = texPtr->GetData();
+					subres.Stride = static_cast<uint64>(texPtr->GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+					subres.DepthStride = 0;
+					TextureData initData = {};
+					initData.pSubResources = &subres;
+					initData.NumSubresources = 1;
+					renderer.AddTexture(STRING_HASH(resourceName), desc, &initData);
+					renderer.RegisterStaticTextureResource(("g_" + std::string(resourceName) + "Tex").c_str(), STRING_HASH(resourceName));
+				};
 
-				TextureDesc desc = {};
-				desc.Name = "TerrainVegetation";
-				desc.Type = RESOURCE_DIM_TEX_2D;
-				desc.Width = vegetationPtr->GetWidth();
-				desc.Height = vegetationPtr->GetHeight();
-				desc.MipLevels = 1;
-				desc.ArraySize = 1;
-				desc.Format = vegetationPtr->GetFormat();
-				desc.Usage = USAGE_DEFAULT;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-
-				TextureSubResData subres = {};
-				subres.pData = vegetationPtr->GetData();
-				subres.Stride = static_cast<uint64>(vegetationPtr->GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
-				subres.DepthStride = 0;
-				TextureData initData = {};
-				initData.pSubResources = &subres;
-				initData.NumSubresources = 1;
-
-				renderer.AddTexture(STRING_HASH("TerrainVegetation"), desc, &initData);
-			}
+			registerTextureFromAsset("TerrainDiffuse", m_DiffuseTexRef);
+			registerTextureFromAsset("TerrainNormal", m_NormalTexRef);
+			registerTextureFromAsset("TerrainSlope", m_SlopeTexRef);
+			registerTextureFromAsset("TerrainFlow", m_FlowTexRef);
+			registerTextureFromAsset("TerrainRocky", m_RockyTexRef);
+			registerTextureFromAsset("TerrainSoil", m_SoilTexRef);
+			registerTextureFromAsset("TerrainVegetation", m_VegetationTexRef);
 
 			// Constant buffers
 			{
@@ -515,6 +525,33 @@ namespace shz
 				renderer.AddBuffer(STRING_HASH("TerrainCB"), cb);
 				renderer.RegisterStaticBufferCBV("TERRAIN_CONSTANTS", STRING_HASH("TerrainCB"));
 			}
+		}
+
+		// Material
+		{
+			renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
+
+			m_TerrainMaterialId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
+			Material& mat = MaterialManager::GetInstance()->GetMaterial(m_TerrainMaterialId);
+
+			mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
+			mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
+			mat.SetFloat("g_EmissiveIntensity", 0.0f);
+			mat.SetFloat("g_RoughnessFactor", 0.85f);
+			mat.SetFloat("g_NormalScale", 1.0f);
+			mat.SetFloat("g_OcclusionStrength", 1.0f);
+			mat.SetFloat("g_AlphaCutoff", 0.5f);
+			mat.SetFloat("g_MetallicFactor", 0.0f);
+
+			uint materialFlag = 0;
+			if (m_DiffuseTexRef.IsValid())
+			{
+				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
+				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
+			}
+			mat.SetUint("g_MaterialFlags", materialFlag);
+
+			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
 		}
 	}
 
@@ -571,33 +608,6 @@ namespace shz
 	{
 		ASSERT(pScene, "RenderScene is null.");
 
-		if (m_TerrainMaterialId == 0)
-		{
-			renderer.RegisterMaterialTemplate("Terrain", m_TerrainVS, m_TerrainPS, MATERIAL_BLEND_MODE_OPAQUE);
-
-			m_TerrainMaterialId = MaterialManager::GetInstance()->CreateMaterial("TerrainMaterial", "Terrain");
-			Material& mat = MaterialManager::GetInstance()->GetMaterial(m_TerrainMaterialId);
-
-			mat.SetFloat4("g_BaseColorFactor", float4(1.0f, 1.0f, 1.0f, 1.0f));
-			mat.SetFloat3("g_EmissiveFactor", float3(0.f, 0.f, 0.f));
-			mat.SetFloat("g_EmissiveIntensity", 0.0f);
-			mat.SetFloat("g_RoughnessFactor", 0.85f);
-			mat.SetFloat("g_NormalScale", 1.0f);
-			mat.SetFloat("g_OcclusionStrength", 1.0f);
-			mat.SetFloat("g_AlphaCutoff", 0.5f);
-			mat.SetFloat("g_MetallicFactor", 0.0f);
-
-			uint materialFlag = 0;
-			if (m_DiffuseTexRef.IsValid())
-			{
-				mat.SetTextureAssetRef("g_BaseColorTex", m_DiffuseTexRef);
-				materialFlag |= hlsl::MAT_HAS_BASECOLOR;
-			}
-			mat.SetUint("g_MaterialFlags", materialFlag);
-
-			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
-		}
-
 		const float worldOriginX = GetWorldOriginX();
 		const float worldOriginZ = GetWorldOriginZ();
 		const float worldSizeX = GetWorldSizeX();
@@ -617,9 +627,9 @@ namespace shz
 		}
 
 		auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
-		{
-			return cz * numChunksX + cx;
-		};
+			{
+				return cz * numChunksX + cx;
+			};
 
 		// LOD ranges
 		struct LodRange final { float End; };
@@ -633,25 +643,25 @@ namespace shz
 		};
 
 		auto selectLodOnly = [&](float dist) -> uint32
-		{
-			if (dist < lodRanges[0].End) return 0;
-			if (dist < lodRanges[1].End) return 1;
-			if (dist < lodRanges[2].End) return 2;
-			if (dist < lodRanges[3].End) return 3;
-			return 4;
-		};
+			{
+				if (dist < lodRanges[0].End) return 0;
+				if (dist < lodRanges[1].End) return 1;
+				if (dist < lodRanges[2].End) return 2;
+				if (dist < lodRanges[3].End) return 3;
+				return 4;
+			};
 
 		auto morphForClampedLod = [&](float dist, uint32 lod) -> float
-		{
-			if (lod >= 4) return 0.0f;
+			{
+				if (lod >= 4) return 0.0f;
 
-			const float d1 = lodRanges[lod].End;
-			const float d0 = d1 * 0.85f;
+				const float d1 = lodRanges[lod].End;
+				const float d0 = d1 * 0.85f;
 
-			const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
-			const float s = t * t * (3.0f - 2.0f * t); // smoothstep
-			return s;
-		};
+				const float t = Clamp01((dist - d0) / Max(1e-6f, (d1 - d0)));
+				const float s = t * t * (3.0f - 2.0f * t); // smoothstep
+				return s;
+			};
 
 		// Build LOD grid
 		std::vector<uint8> lodGrid;
@@ -708,15 +718,15 @@ namespace shz
 						uint8& a = lodGrid[idx2D(cx, cz)];
 
 						auto clampPair = [&](uint32 nx, uint32 nz)
-						{
-							if (nx >= numChunksX || nz >= numChunksZ)
-								return;
+							{
+								if (nx >= numChunksX || nz >= numChunksZ)
+									return;
 
-							uint8& b = lodGrid[idx2D(nx, nz)];
+								uint8& b = lodGrid[idx2D(nx, nz)];
 
-							if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
-							if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
-						};
+								if (b > uint8(a + 1)) { b = uint8(a + 1); changed = true; }
+								if (a > uint8(b + 1)) { a = uint8(b + 1); changed = true; }
+							};
 
 						if (cx > 0)             clampPair(cx - 1, cz);
 						if (cx + 1 < numChunksX) clampPair(cx + 1, cz);
@@ -754,10 +764,10 @@ namespace shz
 		batches.reserve(64);
 
 		auto hash01 = [](uint32 v) -> float
-		{
-			v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16;
-			return float(v & 0x00FFFFFFu) / 16777216.0f;
-		};
+			{
+				v ^= v >> 16; v *= 0x7feb352d; v ^= v >> 15; v *= 0x846ca68b; v ^= v >> 16;
+				return float(v & 0x00FFFFFFu) / 16777216.0f;
+			};
 
 		const float yMin = m_HeightOffset;
 		const float yMax = m_HeightOffset + m_HeightScale;
@@ -765,31 +775,31 @@ namespace shz
 		const float3 cam = view.CameraPosition;
 
 		auto nLod = [&](int32 nx, int32 nz, uint32 lodHere) -> uint32
-		{
-			if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
-				return lodHere;
-			return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
-		};
+			{
+				if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
+					return lodHere;
+				return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
+			};
 
 		BatchKey currentKey = { 255u, 255u };
 		uint32 currentBatchStart = 0;
 
 		auto flushBatch = [&](const BatchKey& key)
-		{
-			const uint32 end = uint32(instances.size());
-			const uint32 count = end - currentBatchStart;
-			if (count == 0)
-				return;
+			{
+				const uint32 end = uint32(instances.size());
+				const uint32 count = end - currentBatchStart;
+				if (count == 0)
+					return;
 
-			Batch b = {};
-			b.Lod = key.Lod;
-			b.Mask = key.Mask;
-			b.StartInstance = currentBatchStart;
-			b.InstanceCount = count;
-			batches.push_back(b);
+				Batch b = {};
+				b.Lod = key.Lod;
+				b.Mask = key.Mask;
+				b.StartInstance = currentBatchStart;
+				b.InstanceCount = count;
+				batches.push_back(b);
 
-			currentBatchStart = end;
-		};
+				currentBatchStart = end;
+			};
 
 		for (uint32 cz = 0; cz < numChunksZ; ++cz)
 		{

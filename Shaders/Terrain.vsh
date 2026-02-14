@@ -3,9 +3,8 @@
 
 StructuredBuffer<TerrainDrawConstants> g_TerrainDrawConstants;
 
-Texture2D<float> g_HeightField;
-
-static float2 snapWorldXZ(float2 worldXZ, TerrainConstants hf, float stepMul)
+// Snap a world position to a coarser grid (used for LOD morph).
+static float2 SnapWorldXZ(float2 worldXZ, TerrainConstants hf, float stepMul)
 {
 	float2 cell = hf.WorldSpacingXZ * stepMul;
 	float2 g = (worldXZ - hf.WorldOriginXZ) / max(cell, 1e-6.xx);
@@ -13,77 +12,76 @@ static float2 snapWorldXZ(float2 worldXZ, TerrainConstants hf, float stepMul)
 	return hf.WorldOriginXZ + gi * cell;
 }
 
-static float sampleWorldHeightAt(float2 worldXZ, TerrainDrawConstants terrainDrawCB)
-{
-	return HF_SampleWorldHeightAtWorldXZ(
-		g_HeightField,
-		g_LinearClampSampler,
-		worldXZ,
-		0.0,
-		0.0);
-}
-
-static float3 computeNormalAt(float2 worldXZ, float stepMul, TerrainDrawConstants terrainDrawCB)
+// Compute a terrain normal via central differences.
+// Uses height sampling at a mip roughly matching stepMul to reduce aliasing.
+static float3 ComputeNormalAt(float2 worldXZ, float stepMul, TerrainDrawConstants terrainDrawCB)
 {
 	float2 spacing = g_TerrainCB.WorldSpacingXZ * stepMul;
 
-	float2 dx = float2(spacing.x, 0.0);
-	float2 dz = float2(0.0, spacing.y);
+	float2 dx = float2(spacing.x, 0.0f);
+	float2 dz = float2(0.0f, spacing.y);
 
-	float hL = sampleWorldHeightAt(worldXZ - dx, terrainDrawCB);
-	float hR = sampleWorldHeightAt(worldXZ + dx, terrainDrawCB);
-	float hD = sampleWorldHeightAt(worldXZ - dz, terrainDrawCB);
-	float hU = sampleWorldHeightAt(worldXZ + dz, terrainDrawCB);
+	// Map stepMul (1,2,4,8...) to mip level (0,1,2,3...).
+	float lod = max(log2(max(stepMul, 1.0f)), 0.0f);
 
-	float dHdx = (hR - hL) / max(2.0 * spacing.x, 1e-6);
-	float dHdz = (hU - hD) / max(2.0 * spacing.y, 1e-6);
+	float hL = SampleWorldHeightAtWorldXZLevel(worldXZ - dx, lod);
+	float hR = SampleWorldHeightAtWorldXZLevel(worldXZ + dx, lod);
+	float hD = SampleWorldHeightAtWorldXZLevel(worldXZ - dz, lod);
+	float hU = SampleWorldHeightAtWorldXZLevel(worldXZ + dz, lod);
 
-	float up = max(0.001, g_TerrainCB.NormalUpBias);
+	float dHdx = (hR - hL) / max(2.0f * spacing.x, 1e-6f);
+	float dHdz = (hU - hD) / max(2.0f * spacing.y, 1e-6f);
+
+	float up = max(0.001f, g_TerrainCB.NormalUpBias);
 	return normalize(float3(-dHdx, up, -dHdz));
 }
 
 BASE_VS_MAIN_ENTRY(InstanceID)
 {
 	TerrainDrawConstants terrainDrawCB = g_TerrainDrawConstants[g_DrawCB.StartInstanceLocation + InstanceID];
-	
+
 	float3 vertexPosition = GET_VERTEX_POS();
-	
-	// Local grid [0..1] within this chunk
-	float2 grid01 = vertexPosition.xz * (1.0 / 16.0);
+
+	// Local grid [0..1] within this chunk (assuming 16x16 grid like before).
+	float2 grid01 = vertexPosition.xz * (1.0f / 16.0f);
 
 	// Chunk-local -> world XZ (meters)
 	float2 worldXZ = terrainDrawCB.ChunkOriginXZ + grid01 * terrainDrawCB.ChunkSizeXZ;
 
-	// LOD morph
-	float stepFine = float(1 << terrainDrawCB.LodIndex); // 1, 2, 4, 8, ...
-	float stepCoarse = stepFine * 2.0;
+	// LOD morph: fine/coarse step in world-grid units.
+	float stepFine = (float) (1u << terrainDrawCB.LodIndex); // 1, 2, 4, 8, ...
+	float stepCoarse = stepFine * 2.0f;
 
 	float alpha = saturate(terrainDrawCB.LodMorphAlpha);
 	if (terrainDrawCB.LodIndex >= 4)
-		alpha = 0.0;
+	{
+		alpha = 0.0f;
+	}
 
-	float hFine = sampleWorldHeightAt(worldXZ, terrainDrawCB);
+	// Height: blend between coarse snapped and fine.
+	float hFine = SampleWorldHeightAtWorldXZ(worldXZ);
 
-	float2 worldXZCoarse = snapWorldXZ(worldXZ, g_TerrainCB, stepCoarse);
-	float hCoarse = sampleWorldHeightAt(worldXZCoarse, terrainDrawCB);
+	float2 worldXZCoarse = SnapWorldXZ(worldXZ, g_TerrainCB, stepCoarse);
+	float hCoarse = SampleWorldHeightAtWorldXZ(worldXZCoarse);
 
 	float wy = lerp(hCoarse, hFine, alpha);
 
 	float3 worldPos = float3(worldXZ.x, wy, worldXZ.y);
 
-	// Surface UV: entire terrain mapped to [0..1] then optional tiling
+	// UV over full terrain [0..1] (optional tiling can be applied later in PS)
 	float2 uvWorld01 = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(g_TerrainCB.WorldSizeXZ, 1e-6.xx);
 
-	// Normal + tangent
-	float3 NFine = computeNormalAt(worldXZ, stepFine, terrainDrawCB);
-	float3 NCoarse = computeNormalAt(worldXZCoarse, stepCoarse, terrainDrawCB);
-	float3 N = normalize(lerp(NCoarse, NFine, alpha));
+	// Normal (blend fine/coarse)
+	float3 nFine = ComputeNormalAt(worldXZ, stepFine, terrainDrawCB);
+	float3 nCoarse = ComputeNormalAt(worldXZCoarse, stepCoarse, terrainDrawCB);
+	float3 nWS = normalize(lerp(nCoarse, nFine, alpha));
 
-	float3 T = float3(1.0, 0.0, 0.0);
-	T = normalize(T - N * dot(N, T));
+	// Simple tangent (world X axis projected to tangent plane)
+	float3 tWS = float3(1.0f, 0.0f, 0.0f);
+	tWS = normalize(tWS - nWS * dot(nWS, tWS));
 
 	SET_VSOUT_WORLD_POS_STATIC(float4(worldPos, 1.0f));
 	SET_VSOUT_UV(uvWorld01);
-	SET_VSOUT_WORLD_NORMAL(N);
-	SET_VSOUT_WORLD_TANGENT(T);
+	SET_VSOUT_WORLD_NORMAL(nWS);
+	SET_VSOUT_WORLD_TANGENT(tWS);
 }

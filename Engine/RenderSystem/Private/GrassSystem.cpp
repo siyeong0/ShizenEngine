@@ -527,8 +527,6 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_PoolDirty",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_HeightField",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_DensityField",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				rl.Variables = vars;
 				rl.NumVariables = _countof(vars);
@@ -578,14 +576,6 @@ namespace shz
 				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolPositions"))
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolPositions")));
-				}
-				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -733,9 +723,7 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLodCounts",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_DensityField",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_HeightField",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				rl.Variables = vars;
 				rl.NumVariables = _countof(vars);
@@ -786,17 +774,9 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_SpeciesLodCounts")));
 				}
-				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
 					v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -958,9 +938,7 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_DensityField",              SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_InteractionField",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_HeightField",               SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLodOffsets",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLodWriteCounters",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD0MeshId", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -1029,17 +1007,9 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectMeshInstanceCountBuffer")));
 				}
-				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
 					v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
-				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_HeightField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainHeight")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesLodOffsets"))
 				{
