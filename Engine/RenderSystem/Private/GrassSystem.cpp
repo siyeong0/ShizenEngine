@@ -177,18 +177,6 @@ namespace shz
 			renderer.AddBuffer(STRING_HASH("GrassGenConstants"), bd);
 		}
 
-		{
-			BufferDesc bd = {};
-			bd.Name = "GrassRenderConstantsCB";
-			bd.Usage = USAGE_DYNAMIC;
-			bd.BindFlags = BIND_UNIFORM_BUFFER;
-			bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-			bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-			renderer.AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
-			renderer.RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
-		}
-
 		// ---------------------------------------------------------------------
 		// Allocate indirect mesh ranges per species + per LOD
 		// ---------------------------------------------------------------------

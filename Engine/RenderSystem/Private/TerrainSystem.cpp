@@ -346,6 +346,12 @@ namespace shz
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
 		}
 
+		// Soil
+		if (!m_CI.SoilPath.empty())
+		{
+			m_SoilTexRef = assetManager.RegisterAsset<Texture>(m_CI.SoilPath);
+		}
+
 		// CPU height array
 		buildHeightU16FromHeightTexture(*m_HeightTex);
 		ASSERT(m_Width > 0 && m_Height > 0, "Terrain height texture has invalid dimensions.");
@@ -450,7 +456,7 @@ namespace shz
 
 			// Density texture for grass placement
 			{
-				AssetRef<Texture> soilRef = assetManager.RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png");
+				AssetRef<Texture> soilRef = m_SoilTexRef;
 				AssetPtr<Texture> soilPtr = assetManager.LoadBlocking(soilRef);
 
 				TextureDesc desc = {};

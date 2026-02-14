@@ -27,17 +27,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	uint atlasFrame;
 	uint flags;
 
-	DecodeGrassCrossPlaneInstance(
-        rawInst,
-        posWS,
-        scale,
-        yaw,
-        bend01,
-        press,
-        variantId,
-        seed8,
-        atlasFrame,
-        flags);
+	DecodeGrassCrossPlaneInstance(rawInst, posWS, scale, yaw, bend01, press, variantId, seed8, atlasFrame, flags);
 
 	float3 p = vertexPosition * scale;
 	float3 n = vertexNormal;

@@ -215,6 +215,18 @@ namespace shz
 				td.Name = "TAA_History1";
 				m_pRenderer->AddTexture(STRING_HASH("TAA_History1"), td);
 			}
+
+			{
+				BufferDesc bd = {};
+				bd.Name = "GrassRenderConstantsCB";
+				bd.Usage = USAGE_DYNAMIC;
+				bd.BindFlags = BIND_UNIFORM_BUFFER;
+				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+				bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+				m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
+				m_pRenderer->RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
+			}
 		}
 
 		// -----------------------------------------------------------------
@@ -235,10 +247,12 @@ namespace shz
 
 			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/height.png";
 			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
+			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png";
+
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 1600.0f;
-			tci.HeightOffset = -1000.0f;
+			tci.HeightScale = 1000.0f;
+			tci.HeightOffset = -500.0;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);
@@ -599,12 +613,12 @@ namespace shz
 			ren.Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
 
 			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
-			ren.WindStrength = 1.45f;
-			ren.WindSpeed = 1.75f;
+			ren.WindStrength = 0.30f;
+			ren.WindSpeed = 2.25f;
 
-			ren.WindFreq = 1.755f;
+			ren.WindFreq = 3.255f;
 			ren.WindGust = 0.42f;
-			ren.MaxBendAngle = 0.40f;
+			ren.MaxBendAngle = 0.35f;
 			ren._pad1 = 0.0f;
 
 			ren.InteractionBendAngle = 1.0f;

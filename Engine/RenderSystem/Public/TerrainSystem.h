@@ -28,6 +28,7 @@ namespace shz
 		{
 			std::string HeightMapPath = {};
 			std::string DiffusePath = {};
+			std::string SoilPath = {};
 
 			float ChunkSize = 64.0f;
 			float WorldSpacingX = 1.0f;
@@ -120,6 +121,7 @@ namespace shz
 
 		AssetRef<Texture> m_HeightTexRef = {};
 		AssetRef<Texture> m_DiffuseTexRef = {};
+		AssetRef<Texture> m_SoilTexRef = {};
 
 		AssetPtr<Texture> m_HeightTex;
 
