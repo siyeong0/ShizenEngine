@@ -64,7 +64,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 300;
+        uint  m_SamplesPerChunk = 200;
 
         // ------------------------------------------------------------
         // Per-species indirect mesh handles (per LOD)
@@ -112,13 +112,13 @@ namespace shz
         // ------------------------------------------------------------
         // Spawn settings
         // ------------------------------------------------------------
-        float m_YOffset = 0.00f;
+        float m_YOffset = -0.05f;
         float m_Jitter = 0.95f;
 
         float m_MinPitch = -0.2f;
         float m_MaxPitch = 0.2f;
-        float m_MinScale = 0.35f;
-        float m_MaxScale = 0.55f;
+        float m_MinScale = 0.15f;
+        float m_MaxScale = 0.25f;
         float m_SpawnProb = 1.0f;
         float m_SpawnRadius = 128.0f;
 

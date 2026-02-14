@@ -261,7 +261,7 @@ namespace shz
 
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 3200.0f;
+			tci.HeightScale = 3000.0f;
 			tci.HeightOffset = -1000.0f;
 			tci.bCenterXZ = true;
 
