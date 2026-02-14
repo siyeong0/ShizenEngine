@@ -324,7 +324,7 @@ namespace shz
 		Cleanup();
 		m_CI = ci;
 
-		ASSERT(!m_CI.HeightMapPath.empty(), "TerrainSystem HeightMapPath is empty.");
+		ASSERT(!m_CI.HeightPath.empty(), "TerrainSystem HeightMapPath is empty.");
 		ASSERT(m_CI.WorldSpacingX > 0.f && m_CI.WorldSpacingZ > 0.f, "Invalid spacing.");
 		ASSERT(m_CI.HeightScale >= 0.f, "HeightScale must be >= 0.");
 
@@ -336,7 +336,7 @@ namespace shz
 		m_bCenterXZ = m_CI.bCenterXZ;
 
 		// Height texture (CPU)
-		m_HeightTexRef = assetManager.RegisterAsset<Texture>(m_CI.HeightMapPath);
+		m_HeightTexRef = assetManager.RegisterAsset<Texture>(m_CI.HeightPath);
 		m_HeightTex = assetManager.LoadBlocking<Texture>(m_HeightTexRef);
 		ASSERT(m_HeightTex && m_HeightTex->IsValid(), "Failed to load height Texture asset.");
 
@@ -345,11 +345,33 @@ namespace shz
 		{
 			m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
 		}
-
-		// Soil
+		if (!m_CI.NormalPath.empty())
+		{
+			m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
+		}
+		if (!m_CI.SlopePath.empty())
+		{
+			m_SlopeTexRef = assetManager.RegisterAsset<Texture>(m_CI.SlopePath);
+		}
+		if (!m_CI.FlowPath.empty())
+		{
+			m_FlowTexRef = assetManager.RegisterAsset<Texture>(m_CI.FlowPath);
+		}
+		if (!m_CI.RockyPath.empty())
+		{
+			m_RockyTexRef = assetManager.RegisterAsset<Texture>(m_CI.RockyPath);
+		}
 		if (!m_CI.SoilPath.empty())
 		{
 			m_SoilTexRef = assetManager.RegisterAsset<Texture>(m_CI.SoilPath);
+		}
+		if (!m_CI.VegetationPath.empty())
+		{
+			m_VegetationTexRef = assetManager.RegisterAsset<Texture>(m_CI.VegetationPath);
+		}
+		if (!m_CI.TreesPath.empty())
+		{
+			m_TreesTexRef = assetManager.RegisterAsset<Texture>(m_CI.TreesPath);
 		}
 
 		// CPU height array
@@ -456,29 +478,29 @@ namespace shz
 
 			// Density texture for grass placement
 			{
-				AssetRef<Texture> soilRef = m_SoilTexRef;
-				AssetPtr<Texture> soilPtr = assetManager.LoadBlocking(soilRef);
+				AssetRef<Texture> vegetationRef = m_VegetationTexRef;
+				AssetPtr<Texture> vegetationPtr = assetManager.LoadBlocking(vegetationRef);
 
 				TextureDesc desc = {};
-				desc.Name = "TerrainSoil";
+				desc.Name = "TerrainVegetation";
 				desc.Type = RESOURCE_DIM_TEX_2D;
-				desc.Width = soilPtr->GetWidth();
-				desc.Height = soilPtr->GetHeight();
+				desc.Width = vegetationPtr->GetWidth();
+				desc.Height = vegetationPtr->GetHeight();
 				desc.MipLevels = 1;
 				desc.ArraySize = 1;
-				desc.Format = soilPtr->GetFormat();
+				desc.Format = vegetationPtr->GetFormat();
 				desc.Usage = USAGE_DEFAULT;
 				desc.BindFlags = BIND_SHADER_RESOURCE;
 
 				TextureSubResData subres = {};
-				subres.pData = soilPtr->GetData();
-				subres.Stride = static_cast<uint64>(soilPtr->GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+				subres.pData = vegetationPtr->GetData();
+				subres.Stride = static_cast<uint64>(vegetationPtr->GetWidth()) * GetTextureFormatAttribs(desc.Format).GetElementSize();
 				subres.DepthStride = 0;
 				TextureData initData = {};
 				initData.pSubResources = &subres;
 				initData.NumSubresources = 1;
 
-				renderer.AddTexture(STRING_HASH("TerrainSoil"), desc, &initData);
+				renderer.AddTexture(STRING_HASH("TerrainVegetation"), desc, &initData);
 			}
 
 			// Constant buffers

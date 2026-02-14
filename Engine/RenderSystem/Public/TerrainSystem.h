@@ -26,9 +26,15 @@ namespace shz
 	public:
 		struct CreateInfo final
 		{
-			std::string HeightMapPath = {};
+			std::string HeightPath = {};
 			std::string DiffusePath = {};
+			std::string NormalPath = {};
+			std::string SlopePath = {};
+			std::string FlowPath = {};
+			std::string RockyPath = {};
 			std::string SoilPath = {};
+			std::string VegetationPath = {};
+			std::string TreesPath = {};
 
 			float ChunkSize = 64.0f;
 			float WorldSpacingX = 1.0f;
@@ -121,10 +127,15 @@ namespace shz
 
 		AssetRef<Texture> m_HeightTexRef = {};
 		AssetRef<Texture> m_DiffuseTexRef = {};
+		AssetRef<Texture> m_NormalTexRef = {};
+		AssetRef<Texture> m_SlopeTexRef = {};
+		AssetRef<Texture> m_FlowTexRef = {};
+		AssetRef<Texture> m_RockyTexRef = {};
 		AssetRef<Texture> m_SoilTexRef = {};
+		AssetRef<Texture> m_VegetationTexRef = {};
+		AssetRef<Texture> m_TreesTexRef = {};
 
 		AssetPtr<Texture> m_HeightTex;
-
 		std::vector<uint16> m_HeightU16 = {};
 
 		// ------------------------------------------------------------

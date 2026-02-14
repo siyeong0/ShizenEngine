@@ -466,7 +466,7 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_PoolChunkCoord"), RENDER_ACCESS_WRITE);
 				b.DeclareBufferUAV(STRING_HASH("Grass_VisibleCellTable"), RENDER_ACCESS_READ);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
 				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
@@ -585,7 +585,7 @@ namespace shz
 				}
 				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -683,7 +683,7 @@ namespace shz
 
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodCounts"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
 				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
@@ -788,7 +788,7 @@ namespace shz
 				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
@@ -908,7 +908,7 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodOffsets"), RENDER_ACCESS_READ);
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodWriteCounters"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainSoil"));
+				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
 				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
@@ -1031,7 +1031,7 @@ namespace shz
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_DensityField"))
 				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainSoil")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					v->Set(renderer.GetTextureSRV(STRING_HASH("TerrainVegetation")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
 				{
