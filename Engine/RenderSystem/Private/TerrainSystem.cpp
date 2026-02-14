@@ -466,7 +466,7 @@ namespace shz
 				desc.Height = soilPtr->GetHeight();
 				desc.MipLevels = 1;
 				desc.ArraySize = 1;
-				desc.Format = TEX_FORMAT_R16_UNORM;
+				desc.Format = soilPtr->GetFormat();
 				desc.Usage = USAGE_DEFAULT;
 				desc.BindFlags = BIND_SHADER_RESOURCE;
 

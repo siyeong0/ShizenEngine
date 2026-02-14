@@ -245,14 +245,18 @@ namespace shz
 			//tci.HeightOffset = -80.0f;
 			//tci.bCenterXZ = true;
 
-			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/height.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
-			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png";
+			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/height.png";
+			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
+			//tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png";
+
+			tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/CanyonRiver/height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/CanyonRiver/diffuse.png";
+			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/CanyonRiver/grass.png";
 
 			tci.WorldSpacingX = 1.0f;
 			tci.WorldSpacingZ = 1.0f;
-			tci.HeightScale = 1000.0f;
-			tci.HeightOffset = -500.0;
+			tci.HeightScale = 1600.0f;
+			tci.HeightOffset = -500.0f;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);

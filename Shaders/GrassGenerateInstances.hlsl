@@ -225,7 +225,7 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 // ---------------------------------------------------------------------------
 // Distance-based sample scaling (used in Count/Build)
 // ---------------------------------------------------------------------------
-static const float CHUNK_DENSITY_MIP = 3.0f;
+static const float CHUNK_DENSITY_MIP = 2.0f;
 static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 static const uint SAMPLES_MIN_FAR = 16u;
 static const uint SAMPLES_MAX_CLAMP = 4096u;
