@@ -30,7 +30,7 @@ static const float MIP_BIAS_FAR = 2.0f;
 // -----------------------------------------------------------------------------
 // POM controls (rock only)
 // -----------------------------------------------------------------------------
-static const float POM_HEIGHT_METERS = 0.10f; // Keep small (terrain POM should be subtle)
+static const float POM_HEIGHT_METERS = 0.05f; // Keep small (terrain POM should be subtle)
 static const float POM_FADE_START = 6.0f;
 static const float POM_FADE_END = 25.0f;
 static const int POM_STEPS_MIN = 8;
