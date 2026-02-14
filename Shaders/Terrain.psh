@@ -6,13 +6,101 @@ Texture2D g_SoilBaseColorTex;
 Texture2D g_SoilNormalTex;
 Texture2D g_SoilRoughnessTex;
 Texture2D g_SoilAmbientOcclusionTex;
-Texture2D g_SoilDisplacementTex; // kept (unused for now)
+Texture2D g_SoilDisplacementTex; // Reserved: unused (future height blend / parallax)
 
 Texture2D g_RockyBaseColorTex;
 Texture2D g_RockyNormalTex;
 Texture2D g_RockyRoughnessTex;
 Texture2D g_RockyAmbientOcclusionTex;
-Texture2D g_RockyDisplacementTex; // kept (unused for now)
+Texture2D g_RockyDisplacementTex; // Reserved: unused (future height blend / parallax)
+
+// -----------------------------------------------------------------------------
+// Controls (tune later; can be moved to material constants)
+// -----------------------------------------------------------------------------
+static const float MICRO_METERS_PER_TILE = 4.0f; // Micro detail scale (meters per tile)
+static const float RAND_CELL_METERS = 8.0f; // Randomization cell size (meters)
+static const float MACRO_NOISE_METERS = 64.0f; // Low-frequency noise scale (meters)
+
+static const float FADE_START_METERS = 30.0f; // Start fading micro detail
+static const float FADE_END_METERS = 140.0f; // Fully faded micro detail
+
+// Mip bias range for distance-based filtering (reduces moire + visible repetition at distance)
+static const float MIP_BIAS_NEAR = 0.0f;
+static const float MIP_BIAS_FAR = 2.0f;
+
+// -----------------------------------------------------------------------------
+// Randomized micro tiling sampler
+// - Computes a per-cell random UV transform (offset + mirror + 90-degree rotation).
+// - Samples soil/rock textures for that cell.
+// - Uses mipBias for distance-based filtering.
+// -----------------------------------------------------------------------------
+void SampleCellVariant(
+	float2 ci,
+	float3 worldPos,
+	float mipBias,
+	out float3 outSoilBC,
+	out float3 outRockBC,
+	out float outSoilR,
+	out float outRockR,
+	out float outSoilAO,
+	out float outRockAO,
+	out float3 outSoilNTS,
+	out float3 outRockNTS)
+{
+	// Hash -> random parameters per cell
+	float h1 = frac(sin(dot(ci, float2(127.1f, 311.7f))) * 43758.5453f);
+	float h2 = frac(sin(dot(ci, float2(269.5f, 183.3f))) * 43758.5453f);
+
+	// Random offset in meters within the cell [0..RAND_CELL_METERS)
+	float2 offM = frac(float2(h1, h2)) * RAND_CELL_METERS;
+
+	// Rotation index 0..3 (90-degree steps)
+	float rotIdxF = floor(frac(h1 * 13.37f) * 4.0f);
+	int rotIdx = (int) rotIdxF;
+
+	// Mirror flags
+	float mx = (frac(h2 * 7.91f) < 0.5f) ? -1.0f : 1.0f;
+	float my = (frac(h1 * 5.37f) < 0.5f) ? -1.0f : 1.0f;
+
+	// Build micro UV from world meters (micro scale) + per-cell offset (meters)
+	float2 uvM = (worldPos.xz + offM) / MICRO_METERS_PER_TILE;
+
+	// Apply mirror
+	uvM.x *= mx;
+	uvM.y *= my;
+
+	// Apply rotation in 90-degree steps
+	float2 u = uvM;
+	if (rotIdx == 1)
+	{
+		u = float2(uvM.y, -uvM.x);
+	}
+	if (rotIdx == 2)
+	{
+		u = float2(-uvM.x, -uvM.y);
+	}
+	if (rotIdx == 3)
+	{
+		u = float2(-uvM.y, uvM.x);
+	}
+
+	float2 tileUV = frac(u);
+
+	// BaseColor (use mip bias as well to soften far repetition/moire)
+	outSoilBC = g_SoilBaseColorTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).rgb;
+	outRockBC = g_RockyBaseColorTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).rgb;
+
+	// Roughness/AO (mip bias helps reduce moire in the distance)
+	outSoilR = g_SoilRoughnessTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).r;
+	outRockR = g_RockyRoughnessTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).r;
+
+	outSoilAO = g_SoilAmbientOcclusionTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).r;
+	outRockAO = g_RockyAmbientOcclusionTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).r;
+
+	// Normal (decoded to [-1..1]; micro strength is applied later in PS)
+	outSoilNTS = g_SoilNormalTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).xyz * 2.0f - 1.0f;
+	outRockNTS = g_RockyNormalTex.SampleBias(g_LinearWrapSampler, tileUV, mipBias).xyz * 2.0f - 1.0f;
+}
 
 BASE_PS_MAIN_ENTRY()
 {
@@ -24,21 +112,17 @@ BASE_PS_MAIN_ENTRY()
 	float3 normalWS = GET_PSIN_WORLD_NORMAL();
 	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
-    // ------------------------------------------------------------
-    // Tiling (see section below for "meters per tile" guidance)
-    // NOTE: Keep it a constant for now, later drive from material constant.
-    // ------------------------------------------------------------
-	const float TILE_REPEAT_SIZE = 2.0f; // "how many repeats across 0..1 globalUV"
-	float2 tileUV = frac(globalUV * 4096 / TILE_REPEAT_SIZE);
-
+	// -------------------------------------------------------------------------
+	// Terrain weights (macro classification)
+	// -------------------------------------------------------------------------
 	float slope = SampleTerrainSlope(globalUV);
 	float flow = SampleTerrainFlow(globalUV);
 
 	float soilWeight = SampleTerrainSoil(globalUV);
 	float rockWeight = SampleTerrainRocky(globalUV);
 
-    // Normalize weights (soil + rock)
-    {
+	// Normalize weights (soil + rock)
+	{
 		float s = max(soilWeight + rockWeight, 1e-6f);
 		float invS = rcp(s);
 		soilWeight *= invS;
@@ -48,43 +132,140 @@ BASE_PS_MAIN_ENTRY()
 	float wSoil = soilWeight;
 	float wRock = rockWeight;
 
-    // Global terrain diffuse (single texture) as macro tint
-	float4 globalDiffuse4 = SampleTerrainDiffuse(globalUV);
-	float3 globalDiffuse = globalDiffuse4.rgb;
+	// -------------------------------------------------------------------------
+	// Macro tint (global diffuse) + subtle low-frequency procedural noise
+	// -------------------------------------------------------------------------
+	float3 globalDiffuse = SampleTerrainDiffuse(globalUV).rgb;
 
-    // BaseColor
-	float3 soilBC = g_SoilBaseColorTex.Sample(g_LinearWrapSampler, tileUV).rgb;
-	float3 rockBC = g_RockyBaseColorTex.Sample(g_LinearWrapSampler, tileUV).rgb;
+	float macroNoise01 = 0.0f;
+	{
+		float2 p = worldPos.xz / MACRO_NOISE_METERS;
+		float2 ip = floor(p);
+		float2 fp = frac(p);
+
+		// Smooth interpolation (Hermite)
+		fp = fp * fp * (3.0f - 2.0f * fp);
+
+		// 4-corner hash -> value noise
+		float2 c00 = ip + float2(0.0f, 0.0f);
+		float2 c10 = ip + float2(1.0f, 0.0f);
+		float2 c01 = ip + float2(0.0f, 1.0f);
+		float2 c11 = ip + float2(1.0f, 1.0f);
+
+		float h00 = frac(sin(dot(c00, float2(127.1f, 311.7f))) * 43758.5453f);
+		float h10 = frac(sin(dot(c10, float2(127.1f, 311.7f))) * 43758.5453f);
+		float h01 = frac(sin(dot(c01, float2(127.1f, 311.7f))) * 43758.5453f);
+		float h11 = frac(sin(dot(c11, float2(127.1f, 311.7f))) * 43758.5453f);
+
+		float hx0 = lerp(h00, h10, fp.x);
+		float hx1 = lerp(h01, h11, fp.x);
+		macroNoise01 = lerp(hx0, hx1, fp.y);
+	}
+
+	// Very subtle modulation (0.95~1.05)
+	float macroMul = lerp(0.95f, 1.05f, macroNoise01);
+	float3 macroTint = globalDiffuse * macroMul;
+
+	// -------------------------------------------------------------------------
+	// Distance fade (micro strength + mip bias)
+	// -------------------------------------------------------------------------
+	float2 camXZ = g_FrameCB.CameraPosition.xz;
+	float distXZ = length(worldPos.xz - camXZ);
+
+	float fadeT = saturate((distXZ - FADE_START_METERS) / max(FADE_END_METERS - FADE_START_METERS, 1e-6f));
+	float microStrength = 1.0f - fadeT;
+
+	float mipBias = lerp(MIP_BIAS_NEAR, MIP_BIAS_FAR, fadeT);
+
+	// -------------------------------------------------------------------------
+	// Randomized micro tiling (seam-free via 4-cell blending)
+	// - Samples 4 neighboring cells and bilerp by the local cell coordinates.
+	// -------------------------------------------------------------------------
+	float2 cellP = worldPos.xz / RAND_CELL_METERS;
+	float2 cellI = floor(cellP);
+	float2 cellF = frac(cellP);
+
+	// Smooth blend across cell boundaries
+	float2 cellW = cellF * cellF * (3.0f - 2.0f * cellF);
+
+	float3 soilBC00, rockBC00, soilN00, rockN00;
+	float soilR00, rockR00, soilAO00, rockAO00;
+
+	float3 soilBC10, rockBC10, soilN10, rockN10;
+	float soilR10, rockR10, soilAO10, rockAO10;
+
+	float3 soilBC01, rockBC01, soilN01, rockN01;
+	float soilR01, rockR01, soilAO01, rockAO01;
+
+	float3 soilBC11, rockBC11, soilN11, rockN11;
+	float soilR11, rockR11, soilAO11, rockAO11;
+
+	SampleCellVariant(cellI + float2(0.0f, 0.0f), worldPos, mipBias, soilBC00, rockBC00, soilR00, rockR00, soilAO00, rockAO00, soilN00, rockN00);
+	SampleCellVariant(cellI + float2(1.0f, 0.0f), worldPos, mipBias, soilBC10, rockBC10, soilR10, rockR10, soilAO10, rockAO10, soilN10, rockN10);
+	SampleCellVariant(cellI + float2(0.0f, 1.0f), worldPos, mipBias, soilBC01, rockBC01, soilR01, rockR01, soilAO01, rockAO01, soilN01, rockN01);
+	SampleCellVariant(cellI + float2(1.0f, 1.0f), worldPos, mipBias, soilBC11, rockBC11, soilR11, rockR11, soilAO11, rockAO11, soilN11, rockN11);
+
+	// Bilerp across cells
+	float3 soilBCx0 = lerp(soilBC00, soilBC10, cellW.x);
+	float3 soilBCx1 = lerp(soilBC01, soilBC11, cellW.x);
+	float3 soilBC = lerp(soilBCx0, soilBCx1, cellW.y);
+
+	float3 rockBCx0 = lerp(rockBC00, rockBC10, cellW.x);
+	float3 rockBCx1 = lerp(rockBC01, rockBC11, cellW.x);
+	float3 rockBC = lerp(rockBCx0, rockBCx1, cellW.y);
+
+	float soilRx0 = lerp(soilR00, soilR10, cellW.x);
+	float soilRx1 = lerp(soilR01, soilR11, cellW.x);
+	float soilR = lerp(soilRx0, soilRx1, cellW.y);
+
+	float rockRx0 = lerp(rockR00, rockR10, cellW.x);
+	float rockRx1 = lerp(rockR01, rockR11, cellW.x);
+	float rockR = lerp(rockRx0, rockRx1, cellW.y);
+
+	float soilAOx0 = lerp(soilAO00, soilAO10, cellW.x);
+	float soilAOx1 = lerp(soilAO01, soilAO11, cellW.x);
+	float soilAO = lerp(soilAOx0, soilAOx1, cellW.y);
+
+	float rockAOx0 = lerp(rockAO00, rockAO10, cellW.x);
+	float rockAOx1 = lerp(rockAO01, rockAO11, cellW.x);
+	float rockAO = lerp(rockAOx0, rockAOx1, cellW.y);
+
+	float3 soilNTSx0 = lerp(soilN00, soilN10, cellW.x);
+	float3 soilNTSx1 = lerp(soilN01, soilN11, cellW.x);
+	float3 nSoilTS = lerp(soilNTSx0, soilNTSx1, cellW.y);
+
+	float3 rockNTSx0 = lerp(rockN00, rockN10, cellW.x);
+	float3 rockNTSx1 = lerp(rockN01, rockN11, cellW.x);
+	float3 nRockTS = lerp(rockNTSx0, rockNTSx1, cellW.y);
+
+	// -------------------------------------------------------------------------
+	// Layer blend (weight-only; no height blend)
+	// -------------------------------------------------------------------------
 	float3 layerBC = soilBC * wSoil + rockBC * wRock;
 
-	float3 baseColor = layerBC * globalDiffuse;
+	float3 baseColor = layerBC * macroTint;
 	baseColor *= g_BaseColorFactor.rgb;
 
 	float alpha = 1.0f;
 	float coverage = ClipPixelCoverage(alpha, svPos);
 
-    // Roughness (metallic = 0)
-	float soilR = g_SoilRoughnessTex.Sample(g_LinearWrapSampler, tileUV).r;
-	float rockR = g_RockyRoughnessTex.Sample(g_LinearWrapSampler, tileUV).r;
 	float roughness = saturate((soilR * wSoil + rockR * wRock) * g_RoughnessFactor);
-
 	float metallic = 0.0f;
 
-    // AO
-	float soilAO = g_SoilAmbientOcclusionTex.Sample(g_LinearWrapSampler, tileUV).r;
-	float rockAO = g_RockyAmbientOcclusionTex.Sample(g_LinearWrapSampler, tileUV).r;
 	float ao = soilAO * wSoil + rockAO * wRock;
 	ao = lerp(1.0f, ao, saturate(g_OcclusionStrength));
 
-    // Emissive
 	float3 emissive = g_EmissiveFactor * g_EmissiveIntensity;
 
-    // Normal (NormalDX decode)
-	float3 nSoilTS = g_SoilNormalTex.Sample(g_LinearWrapSampler, tileUV).xyz * 2.0f - 1.0f;
-	float3 nRockTS = g_RockyNormalTex.Sample(g_LinearWrapSampler, tileUV).xyz * 2.0f - 1.0f;
+	// -------------------------------------------------------------------------
+	// Normal (NormalDX decode)
+	// - Micro normal strength fades out with distance.
+	// - Z is reconstructed after scaling XY to keep the normal length stable.
+	// -------------------------------------------------------------------------
+	float normalScale = g_NormalScale * microStrength;
 
-	nSoilTS.xy *= g_NormalScale;
-	nRockTS.xy *= g_NormalScale;
+	nSoilTS.xy *= normalScale;
+	nRockTS.xy *= normalScale;
 
 	nSoilTS.z = sqrt(saturate(1.0f - dot(nSoilTS.xy, nSoilTS.xy)));
 	nRockTS.z = sqrt(saturate(1.0f - dot(nRockTS.xy, nRockTS.xy)));
@@ -93,21 +274,22 @@ BASE_PS_MAIN_ENTRY()
 
 	float3 N = normalize(normalWS);
 	float3 T = normalize(tangentWS);
-	float3 B = normalize(cross(N, T)); // flip if your tangent basis expects opposite handedness
+	float3 B = normalize(cross(N, T));
 	float3x3 TBN = float3x3(T, B, N);
 
 	float3 normal = normalize(mul(nTS, TBN));
 
+	// Velocity
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);
 
-    SET_PSOUT_ALBEDO(baseColor);
-    SET_PSOUT_OPACITY(alpha);
-    SET_PSOUT_NORMAL(normal);
-    SET_PSOUT_METALLIC(metallic);
-    SET_PSOUT_ROUGHNESS(roughness);
-    SET_PSOUT_AO(ao);
-    SET_PSOUT_ALPHACOVERAGE(coverage);
-    SET_PSOUT_EMISSIVE(emissive);
-    SET_PSOUT_VELOCITY(currUV - prevUV);
+	SET_PSOUT_ALBEDO(baseColor);
+	SET_PSOUT_OPACITY(alpha);
+	SET_PSOUT_NORMAL(normal);
+	SET_PSOUT_METALLIC(metallic);
+	SET_PSOUT_ROUGHNESS(roughness);
+	SET_PSOUT_AO(ao);
+	SET_PSOUT_ALPHACOVERAGE(coverage);
+	SET_PSOUT_EMISSIVE(emissive);
+	SET_PSOUT_VELOCITY(currUV - prevUV);
 }
