@@ -426,8 +426,6 @@ namespace shz
 	// Per-frame Update
 	void TerrainSystem::Update(Renderer& renderer, RenderScene* pScene, const View& view)
 	{
-		bench::Timer timer;
-
 		ASSERT(pScene, "RenderScene is null.");
 		ASSERT(m_Width > 0u && m_Height > 0u, "Invalid terrain height dimensions.");
 		ASSERT(m_NumLods > 0u, "Invalid number of LODs.");
@@ -756,9 +754,6 @@ namespace shz
 			Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
 			m_SceneHandles.push_back(handle);
 		}
-
-		auto t = timer.ElapsedMs();
-		std::cout << t << " ms" << std::endl;
 	}
 
 	float TerrainSystem::GetWorldOriginX() const noexcept

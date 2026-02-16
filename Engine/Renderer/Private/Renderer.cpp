@@ -547,7 +547,7 @@ namespace shz
 		}
 
 		auto t = timer.ElapsedMs();
-		// std::cout << t << " ms - Visibility: " << visibleObjectIndexMain.size() << " main, " << visibleObjectIndexShadow.size() << " shadow." << std::endl;
+		std::cout << t << " ms - Visibility: " << visibleObjectIndexMain.size() << " main, " << visibleObjectIndexShadow.size() << " shadow." << std::endl;
 
 		// ------------------------------------------------------------
 		// Common barriers
