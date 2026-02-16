@@ -1561,7 +1561,7 @@ namespace shz
 			StaticMeshLevel level;
 			BuildStaticMeshAsset(assimpAsset, &level , {}, materialTempalteName, nullptr, m_pAssetManager);
 			staticMesh.AddLevel(std::move(level), lodFactor);
-			lodFactor *= 0.5f;
+			lodFactor *= 0.4f;
 		}
 
 		return CreateStaticMeshRenderData(staticMesh);
@@ -1581,7 +1581,7 @@ namespace shz
 			StaticMeshLevel level;
 			BuildStaticMeshAsset(assimpAsset, &level, {}, materialTemplateName, nullptr, m_pAssetManager);
 			staticMesh.AddLevel(std::move(level), lodFactor);
-			lodFactor *= 0.5f;
+			lodFactor *= 0.4f;
 		}
 
 		return CreateStaticMeshRenderData(staticMesh);
