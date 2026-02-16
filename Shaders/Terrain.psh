@@ -27,14 +27,16 @@ static const float FADE_END_METERS = 140.0f; // Fully faded micro detail
 static const float MIP_BIAS_NEAR = 0.0f;
 static const float MIP_BIAS_FAR = 2.0f;
 
+static const float MACRO_TINT_STRENTH_BASE = 0.5f; // Base strength of macro tint (global diffuse)
+
 // -----------------------------------------------------------------------------
 // POM controls (now applies to BOTH soil and rock)
 // -----------------------------------------------------------------------------
 static const float POM_HEIGHT_METERS = 0.1f; // Keep small (terrain POM should be subtle)
 static const float POM_FADE_START = 6.0f;
 static const float POM_FADE_END = 25.0f;
-static const int POM_STEPS_MIN = 8;
-static const int POM_STEPS_MAX = 20;
+static const int POM_STEPS_MIN = 4;
+static const int POM_STEPS_MAX = 8;
 
 // Suppress POM near randomized-cell edges to hide cross-cell blend seams.
 // edgeDist01: 0 at edge, 0.5 at center
@@ -363,7 +365,9 @@ BASE_PS_MAIN_ENTRY()
     // -------------------------------------------------------------------------
 	float3 layerBC = soilBC * wSoil + rockBC * wRock;
 
-	float3 baseColor = layerBC * macroTint;
+	float fadeTint = lerp(MACRO_TINT_STRENTH_BASE, 1.0f, fadeT);
+	
+	float3 baseColor = lerp(layerBC, macroTint, fadeTint);
 	baseColor *= g_BaseColorFactor.rgb;
 
 	float alpha = 1.0f;

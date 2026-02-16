@@ -252,7 +252,7 @@ namespace shz
 
 			tci.ChunkSize = 64.0f;
 			tci.CellSize = 1.0f;
-			tci.WorldSpacing = 0.61f;
+			tci.WorldSpacing = 1.22f;
 			tci.HeightScale = 1500.0f;
 			tci.HeightOffset = -500.0f;
 			tci.bCenterXZ = true;
