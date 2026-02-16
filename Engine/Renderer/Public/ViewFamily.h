@@ -16,6 +16,9 @@ namespace shz
         Matrix4x4 PrevProjMatrix;
         Matrix4x4 PrevViewProjMatrix;
 
+		float FieldOfViewY;
+		float AspectRatio;
+
         Rect Viewport;
         float32 NearPlane;
         float32 FarPlane;

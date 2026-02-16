@@ -30,8 +30,8 @@ namespace shz
 	{
 		OrientedBox obb = {};
 
-		const Vector3 localCenter = (localAabb.Min + localAabb.Max) * 0.5f;
-		const Vector3 localHalf = (localAabb.Max - localAabb.Min) * 0.5f;
+		const Vector3 localCenter = (localAabb.Min() + localAabb.Max()) * 0.5f;
+		const Vector3 localHalf = (localAabb.Max() - localAabb.Min()) * 0.5f;
 
 		// World center
 		{

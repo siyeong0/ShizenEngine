@@ -16,6 +16,7 @@
 
 #include "Engine/Core/Math/Public/Quaternion.h"
 #include "Engine/Core/Math/Public/Box.h"
+#include "Engine/Core/Math/Public/Sphere.h"
 #include "Engine/Core/Math/Public/OrientedBox.h"
 #include "Engine/Core/Math/Public/Plane.h"
 #include "Engine/Core/Math/Public/ViewFrustum.h"
@@ -305,7 +306,6 @@ namespace std
 	{
 		size_t operator()(const shz::Quaternion& q) const noexcept
 		{
-			// 필드명이 x,y,z,w 라고 가정 (다르면 맞춰줘)
 			return shz::hash::hash_values(q.x, q.y, q.z, q.w);
 		}
 	};
@@ -316,8 +316,8 @@ namespace std
 		size_t operator()(const shz::Box& b) const noexcept
 		{
 			return shz::hash::hash_values(
-				b.Min.x, b.Min.y, b.Min.z,
-				b.Max.x, b.Max.y, b.Max.z);
+				b.Min().x, b.Min().y, b.Min().z,
+				b.Max().x, b.Max().y, b.Max().z);
 		}
 	};
 } // namespace std

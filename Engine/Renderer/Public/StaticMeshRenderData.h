@@ -6,13 +6,14 @@
 #include "Engine/Core/Common/Public/HashUtils.hpp"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
+#include "Engine/RuntimeData/Public/StaticMesh.h"
 #include "Engine/RuntimeData/Public/Material.h"
 
 #include "Engine/RHI/Interface/IBuffer.h"
 
 namespace shz
 {
-	struct StaticMeshRenderData final
+	struct StaticMeshLevelRenderData final
 	{
 		RefCntAutoPtr<IBuffer> VertexBuffer = {};
 		RefCntAutoPtr<IBuffer> IndexBuffer = {};
@@ -22,7 +23,7 @@ namespace shz
 		uint32 IndexCount = 0;
 		VALUE_TYPE IndexType = VT_UINT32;
 
-		Box LocalBounds = {};
+		StaticMeshBounds LocalBounds = {};
 
 		struct Section final
 		{
@@ -31,43 +32,63 @@ namespace shz
 			uint32 BaseVertex = 0;
 			MaterialId MaterialId;
 
-			Box LocalBounds = {};
+			StaticMeshBounds LocalBounds = {};
 		};
 		std::vector<Section> Sections = {};
 
-		StaticMeshRenderData() = default;
-		StaticMeshRenderData(const StaticMeshRenderData&) = delete;
-		StaticMeshRenderData(StaticMeshRenderData&&) = default;
-		StaticMeshRenderData& operator=(const StaticMeshRenderData&) = delete;
-		StaticMeshRenderData& operator=(StaticMeshRenderData&&) = default;
+		StaticMeshLevelRenderData() = default;
+		StaticMeshLevelRenderData(const StaticMeshLevelRenderData&) = delete;
+		StaticMeshLevelRenderData(StaticMeshLevelRenderData&&) = default;
+		StaticMeshLevelRenderData& operator=(const StaticMeshLevelRenderData&) = delete;
+		StaticMeshLevelRenderData& operator=(StaticMeshLevelRenderData&&) = default;
 	};
 
+	struct StaticMeshRenderData final
+	{
+		std::vector<StaticMeshLevelRenderData> Levels = {};
+		std::vector<float> LODScreenSizes = {};
+
+		std::vector<StaticMeshLevelRenderData>& GetLevels() noexcept { return Levels; }
+		const std::vector<StaticMeshLevelRenderData>& GetLevels() const noexcept { return Levels; }
+		const StaticMeshLevelRenderData& GetLevel(uint32 lod) const noexcept { return Levels[lod]; }
+
+		uint32 GetLevelCount() const noexcept { return static_cast<uint32>(Levels.size()); }
+
+		StaticMeshLevelRenderData& operator[](size_t idx) { return Levels[idx]; }
+		const StaticMeshLevelRenderData& operator[](size_t idx) const { return Levels[idx]; }
+
+		const StaticMeshBounds& GetLocalBounds() const { return Levels[0].LocalBounds; }
+	};
+
+	// ------------------------------------------------------------
+	// Hashing support
+	// ------------------------------------------------------------
+
 	template <typename HasherType>
-	struct HashCombiner<HasherType, StaticMeshRenderData::Section> : HashCombinerBase<HasherType>
+	struct HashCombiner<HasherType, StaticMeshLevelRenderData::Section> : HashCombinerBase<HasherType>
 	{
 		HashCombiner(HasherType& Hasher)
 			: HashCombinerBase<HasherType>{ Hasher }
 		{}
 
-		void operator()(const StaticMeshRenderData::Section& s) const
+		void operator()(const StaticMeshLevelRenderData::Section& s) const
 		{
 			this->m_Hasher(
 				s.FirstIndex,
 				s.IndexCount,
 				s.BaseVertex,
-				s.MaterialId,
-				s.LocalBounds);
+				s.MaterialId);
 		}
 	};
 
 	template <typename HasherType>
-	struct HashCombiner<HasherType, StaticMeshRenderData> : HashCombinerBase<HasherType>
+	struct HashCombiner<HasherType, StaticMeshLevelRenderData> : HashCombinerBase<HasherType>
 	{
 		HashCombiner(HasherType& Hasher)
 			: HashCombinerBase<HasherType>{ Hasher }
 		{}
 
-		void operator()(const StaticMeshRenderData& v) const
+		void operator()(const StaticMeshLevelRenderData& v) const
 		{
 			this->m_Hasher(
 				v.VertexBuffer,
@@ -75,8 +96,7 @@ namespace shz
 				v.VertexStride,
 				v.VertexCount,
 				v.IndexCount,
-				v.IndexType,
-				v.LocalBounds);
+				v.IndexType);
 
 			// Sections (order-sensitive)
 			this->m_Hasher(v.Sections.size());
@@ -87,6 +107,21 @@ namespace shz
 		}
 	};
 
+	template <typename HasherType>
+	struct HashCombiner < HasherType, StaticMeshRenderData> : HashCombinerBase<HasherType>
+	{
+		HashCombiner(HasherType& Hasher)
+			: HashCombinerBase<HasherType>{ Hasher }
+		{}
+		void operator()(const StaticMeshRenderData& v) const
+		{
+			this->m_Hasher(v.Levels.size());
+			for (const auto& lvl : v.Levels)
+			{
+				this->m_Hasher(lvl);
+			}
+		}
+	};
 }
 
 namespace std
@@ -103,7 +138,8 @@ namespace std
     }
 
 
-	DEFINE_HASH(shz::StaticMeshRenderData::Section);
+	DEFINE_HASH(shz::StaticMeshLevelRenderData::Section);
+	DEFINE_HASH(shz::StaticMeshLevelRenderData);
 	DEFINE_HASH(shz::StaticMeshRenderData);
 
 #undef DEFINE_HASH

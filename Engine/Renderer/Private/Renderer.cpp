@@ -528,7 +528,7 @@ namespace shz
 				const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(i);
 				ASSERT(obj.pMesh, "Invalid scene object.");
 
-				const Box& localBounds = obj.pMesh->LocalBounds;
+				const Box& localBounds = obj.pMesh->GetLocalBounds().GetBox();
 
 				if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 				{
@@ -630,9 +630,15 @@ namespace shz
 			return this->AcquireMaterialPipelineBinding(matId, rpKey);
 		};
 
+		RenderScene::ViewLodParams viewLodParams = {};
+		viewLodParams.View = view.ViewMatrix;
+		viewLodParams.TanHalfFovY = Tan(view.FieldOfViewY * 0.5f);
+		viewLodParams.ViewportHeight = viewportSize.y;
+
 		// GBuffer
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
+			viewLodParams,
 			visibleObjectIndexMain,
 			pipelineResolver,
 			m_PassCtx.MainDrawPackets,
@@ -643,9 +649,19 @@ namespace shz
 		// Forward
 		scene.BuildDrawPackets(
 			STRING_HASH("Forward"),
+			viewLodParams,
 			visibleObjectIndexMain,
 			pipelineResolver,
 			m_PassCtx.ForwardDrawPackets,
+			instanceRemap);
+
+		// Depth prepass
+		scene.BuildDrawPackets(
+			STRING_HASH("DepthPrepass"),
+			viewLodParams,
+			visibleObjectIndexMain,
+			pipelineResolver,
+			m_PassCtx.DepthPrepassDrawPackets,
 			instanceRemap);
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
@@ -659,14 +675,6 @@ namespace shz
 			instanceRemap);
 
 		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);*/
-
-		// Depth prepass
-		scene.BuildDrawPackets(
-			STRING_HASH("DepthPrepass"),
-			visibleObjectIndexMain,
-			pipelineResolver,
-			m_PassCtx.DepthPrepassDrawPackets,
-			instanceRemap);
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
@@ -1433,6 +1441,8 @@ namespace shz
 			key = std::rand(); // TODO: better hash or REMOVE CreateStaticMesh overload
 		}
 
+		StaticMeshRenderData out = {};
+
 		struct PackedStaticVertex final
 		{
 			float3 Pos;
@@ -1441,81 +1451,88 @@ namespace shz
 			float3 Tangent;
 		};
 
-		std::vector<PackedStaticVertex> packed;
-		// Build packed vertex buffer data
+		for (const auto& level : mesh.GetLevels())
 		{
-			const uint32 vtxCount = mesh.GetVertexCount();
-			packed.resize(vtxCount);
 
-			const std::vector<float3>& positions = mesh.GetPositions();
-			const std::vector<float3>& normals = mesh.GetNormals();
-			const std::vector<float3>& tangents = mesh.GetTangents();
-			const std::vector<float2>& texCoords = mesh.GetTexCoords();
-
-			const bool bHasNormals = (!normals.empty() && normals.size() == positions.size());
-			const bool bHasTangents = (!tangents.empty() && tangents.size() == positions.size());
-			const bool bHasUV = (!texCoords.empty() && texCoords.size() == positions.size());
-
-			for (uint32 i = 0; i < vtxCount; ++i)
+			std::vector<PackedStaticVertex> packed;
+			// Build packed vertex buffer data
 			{
-				PackedStaticVertex v{};
-				v.Pos = positions[i];
-				v.Normal = bHasNormals ? normals[i] : float3(0.0f, 1.0f, 0.0f);
-				v.Tangent = bHasTangents ? tangents[i] : float3(1.0f, 0.0f, 0.0f);
-				v.UV = bHasUV ? texCoords[i] : float2(0.0f, 0.0f);
-				packed[i] = v;
+				const uint32 vtxCount = level.GetVertexCount();
+				packed.resize(vtxCount);
+
+				const std::vector<float3>& positions = level.GetPositions();
+				const std::vector<float3>& normals = level.GetNormals();
+				const std::vector<float3>& tangents = level.GetTangents();
+				const std::vector<float2>& texCoords = level.GetTexCoords();
+
+				const bool bHasNormals = (!normals.empty() && normals.size() == positions.size());
+				const bool bHasTangents = (!tangents.empty() && tangents.size() == positions.size());
+				const bool bHasUV = (!texCoords.empty() && texCoords.size() == positions.size());
+
+				for (uint32 i = 0; i < vtxCount; ++i)
+				{
+					PackedStaticVertex v{};
+					v.Pos = positions[i];
+					v.Normal = bHasNormals ? normals[i] : float3(0.0f, 1.0f, 0.0f);
+					v.Tangent = bHasTangents ? tangents[i] : float3(1.0f, 0.0f, 0.0f);
+					v.UV = bHasUV ? texCoords[i] : float2(0.0f, 0.0f);
+					packed[i] = v;
+				}
 			}
+
+			auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
+				{
+					BufferDesc desc = {};
+					desc.Name = name;
+					desc.Size = dataSize;
+					desc.Usage = USAGE_IMMUTABLE;
+					desc.BindFlags = bindFlags;
+					BufferData initData = {};
+					initData.pData = pData;
+					initData.DataSize = dataSize;
+					RefCntAutoPtr<IBuffer> pBuffer;
+					device->CreateBuffer(desc, &initData, &pBuffer);
+					return pBuffer;
+				};
+
+			const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
+			RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
+			ASSERT(pVB, "Failed to create vertex buffer for StaticMesh.");
+
+			const void* pIndexData = level.GetIndexData();
+			const uint32 ibBytes = level.GetIndexDataSizeBytes();
+			ASSERT(pIndexData && ibBytes > 0, "Invalid index data in StaticMeshAsset.");
+
+			RefCntAutoPtr<IBuffer> pIB = createImmutableBuffer(m_pDevice, "StaticMesh_IB", BIND_INDEX_BUFFER, pIndexData, ibBytes);
+			ASSERT(pIB, "Failed to create index buffer for StaticMesh.");
+
+			StaticMeshLevelRenderData levelRenderData = {};
+			levelRenderData.VertexBuffer = pVB;
+			levelRenderData.IndexBuffer = pIB;
+			levelRenderData.VertexStride = static_cast<uint32>(sizeof(PackedStaticVertex));
+			levelRenderData.VertexCount = level.GetVertexCount();
+			levelRenderData.IndexCount = level.GetIndexCount();
+			levelRenderData.IndexType = level.GetIndexType();
+			levelRenderData.LocalBounds = level.GetBounds();
+
+			levelRenderData.Sections.reserve(level.GetSections().size());
+			for (const auto& s : level.GetSections())
+			{
+				StaticMeshLevelRenderData::Section d{};
+				d.FirstIndex = s.FirstIndex;
+				d.IndexCount = s.IndexCount;
+				d.BaseVertex = s.BaseVertex;
+				d.LocalBounds = s.LocalBounds;
+				d.MaterialId = level.GetMaterialSlot(s.MaterialSlot);
+				levelRenderData.Sections.push_back(d);
+			}
+
+			pushBarrier(levelRenderData.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
+			pushBarrier(levelRenderData.IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+
+			out.Levels.emplace_back(std::move(levelRenderData));
 		}
-
-		auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-		{
-			BufferDesc desc = {};
-			desc.Name = name;
-			desc.Size = dataSize;
-			desc.Usage = USAGE_IMMUTABLE;
-			desc.BindFlags = bindFlags;
-			BufferData initData = {};
-			initData.pData = pData;
-			initData.DataSize = dataSize;
-			RefCntAutoPtr<IBuffer> pBuffer;
-			device->CreateBuffer(desc, &initData, &pBuffer);
-			return pBuffer;
-		};
-
-		const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
-		RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
-		ASSERT(pVB, "Failed to create vertex buffer for StaticMesh.");
-
-		const void* pIndexData = mesh.GetIndexData();
-		const uint32 ibBytes = mesh.GetIndexDataSizeBytes();
-		ASSERT(pIndexData && ibBytes > 0, "Invalid index data in StaticMeshAsset.");
-
-		RefCntAutoPtr<IBuffer> pIB = createImmutableBuffer(m_pDevice, "StaticMesh_IB", BIND_INDEX_BUFFER, pIndexData, ibBytes);
-		ASSERT(pIB, "Failed to create index buffer for StaticMesh.");
-
-		StaticMeshRenderData out = {};
-		out.VertexBuffer = pVB;
-		out.IndexBuffer = pIB;
-		out.VertexStride = static_cast<uint32>(sizeof(PackedStaticVertex));
-		out.VertexCount = mesh.GetVertexCount();
-		out.IndexCount = mesh.GetIndexCount();
-		out.IndexType = mesh.GetIndexType();
-		out.LocalBounds = mesh.GetBounds();
-
-		out.Sections.reserve(mesh.GetSections().size());
-		for (const auto& s : mesh.GetSections())
-		{
-			StaticMeshRenderData::Section d{};
-			d.FirstIndex = s.FirstIndex;
-			d.IndexCount = s.IndexCount;
-			d.BaseVertex = s.BaseVertex;
-			d.LocalBounds = s.LocalBounds;
-			d.MaterialId = mesh.GetMaterialSlot(s.MaterialSlot);
-			out.Sections.push_back(d);
-		}
-
-		pushBarrier(out.VertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER);
-		pushBarrier(out.IndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER);
+		out.LODScreenSizes = mesh.GetLodScreenSizes();
 
 		m_StaticMeshCache.Store(key, std::move(out));
 		return m_StaticMeshCache.Acquire(key);
@@ -1523,9 +1540,49 @@ namespace shz
 
 	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const AssetRef<AssimpAsset>& assimpRef, const std::string& materialTempalteName, const std::string& name)
 	{
-		const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(assimpRef);
 		StaticMesh staticMesh;
-		BuildStaticMeshAsset(assimpAsset, &staticMesh, {}, materialTempalteName, nullptr, m_pAssetManager);
+		const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(assimpRef);
+		StaticMeshLevel level;
+		BuildStaticMeshAsset(assimpAsset, &level, {}, materialTempalteName, nullptr, m_pAssetManager);
+
+		staticMesh.AddLevel(std::move(level), 1.0f);
+		return CreateStaticMeshRenderData(staticMesh);
+	}
+
+	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const std::vector<AssetRef<AssimpAsset>>& assimpRefs, const std::string& materialTempalteName, const std::string& name)
+	{
+		ASSERT(!assimpRefs.empty(), "Assimp asset list is empty.");
+
+		StaticMesh staticMesh;
+		float lodFactor = 0.5f;
+		for (const AssetRef<AssimpAsset>& assimpRef : assimpRefs)
+		{
+			const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(assimpRef);
+			StaticMeshLevel level;
+			BuildStaticMeshAsset(assimpAsset, &level , {}, materialTempalteName, nullptr, m_pAssetManager);
+			staticMesh.AddLevel(std::move(level), lodFactor);
+			lodFactor *= 0.5f;
+		}
+
+		return CreateStaticMeshRenderData(staticMesh);
+	}
+	const StaticMeshRenderData& Renderer::CreateStaticMeshRenderData(const std::vector<AssetRef<AssimpAsset>>& assimpRefs, const std::vector<std::string>& materialTempalteNames, const std::string& name)
+	{
+		ASSERT(!assimpRefs.empty(), "Assimp asset list is empty.");
+		ASSERT(assimpRefs.size() == materialTempalteNames.size(), "Assimp asset count and material template name count must match.");
+
+		StaticMesh staticMesh;
+		float lodFactor = 0.5f;
+		for (size_t i = 0; i < assimpRefs.size(); ++i)
+		{
+			const AssetRef<AssimpAsset>& assimpRef = assimpRefs[i];
+			const std::string& materialTemplateName = (i < materialTempalteNames.size()) ? materialTempalteNames[i] : "";
+			const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(assimpRef);
+			StaticMeshLevel level;
+			BuildStaticMeshAsset(assimpAsset, &level, {}, materialTemplateName, nullptr, m_pAssetManager);
+			staticMesh.AddLevel(std::move(level), lodFactor);
+			lodFactor *= 0.5f;
+		}
 
 		return CreateStaticMeshRenderData(staticMesh);
 	}

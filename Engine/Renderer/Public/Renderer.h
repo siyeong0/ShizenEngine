@@ -221,6 +221,8 @@ namespace shz
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<StaticMesh>& assetRef, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const StaticMesh& mesh, uint64 key = 0, const std::string& name = "");
 		const StaticMeshRenderData& CreateStaticMeshRenderData(const AssetRef<AssimpAsset>& assimpRef, const std::string& materialTempalteName = "DefaultLit", const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const std::vector<AssetRef<AssimpAsset>>& assimpRefs, const std::string& materialTempalteName = "DefaultLit", const std::string& name = "");
+		const StaticMeshRenderData& CreateStaticMeshRenderData(const std::vector<AssetRef<AssimpAsset>>& assimpRefs, const std::vector<std::string>& materialTempalteNames, const std::string& name = "");
 
 		// Shader
 		void CreateShader(ShaderCreateInfo& sci, IShader** ppOutShader);

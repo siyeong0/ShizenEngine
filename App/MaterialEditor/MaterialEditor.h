@@ -69,8 +69,8 @@ namespace shz
 			// ------------------------------------------------------------
 			// Source 1) Native mesh (shzmesh.json)
 			// ------------------------------------------------------------
-			AssetRef<StaticMesh> MeshRef = {};
-			AssetPtr<StaticMesh> MeshPtr = {};
+			AssetRef<StaticMeshLevel> MeshRef = {};
+			AssetPtr<StaticMeshLevel> MeshPtr = {};
 
 			// ------------------------------------------------------------
 			// Source 2) Imported mesh (fbx/gltf/...)
@@ -79,10 +79,10 @@ namespace shz
 			AssetPtr<AssimpAsset> AssimpPtr = {};
 
 			// CPU mesh pointer for current main object
-			StaticMesh* ImportedCpuMesh = nullptr; // owns CPU mesh when imported
+			StaticMeshLevel* ImportedCpuMesh = nullptr; // owns CPU mesh when imported
 
 			// GPU + Scene
-			const StaticMeshRenderData* pMeshRD = {};
+			const StaticMeshLevelRenderData* pMeshRD = {};
 			Handle<RenderScene::SceneObject> ObjectId = {};
 
 			uint64 RebuildKey = 1;

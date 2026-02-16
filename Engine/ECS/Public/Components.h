@@ -86,7 +86,7 @@ namespace shz
 	//
 	COMPONENT CMeshRenderer final
 	{
-		AssetRef<StaticMesh> MeshRef = {};
+		AssetRef<StaticMeshLevel> MeshRef = {};
 		Handle<RenderScene::SceneObject> RenderObjectHandle = {};
 
 		bool bCastShadow = true;

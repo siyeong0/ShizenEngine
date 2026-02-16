@@ -1023,9 +1023,7 @@ namespace shz
 				const float chunkSizeZ = (remainZ > 0.0f) ? Min(m_ChunkSize, remainZ) : 0.0f;
 
 				// Frustum cull using actual size.
-				Box localBounds = {};
-				localBounds.Min = float3{ 0.0f, yMin, 0.0f };
-				localBounds.Max = float3{ chunkSizeX, yMax, chunkSizeZ };
+				Box localBounds(float3{ 0.0f, yMin, 0.0f }, float3{ chunkSizeX, yMax, chunkSizeZ });
 
 				Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.0f, chunkOriginZ });
 				if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))

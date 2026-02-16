@@ -33,9 +33,7 @@ namespace shz
 	uint32 GrassSystem::AddGrassDesc(const GrassDesc& desc)
 	{
 		ASSERT(m_GrassDescs.size() < MAX_GRASS_SPECIES, "Max grass species exceeded.");
-		ASSERT(desc.pMeshLod0, "GrassDesc.pMeshLod0 is null");
-		ASSERT(desc.pCrossMeshLod1, "GrassDesc.pCrossMeshLod1 is null");
-		ASSERT(desc.pBillboardMeshLod2, "GrassDesc.pBillboardMeshLod2 is null");
+		ASSERT(desc.pMesh, "Mesh is null");
 
 		m_GrassDescs.push_back(desc);
 
@@ -184,20 +182,20 @@ namespace shz
 		{
 			const GrassDesc& gd = m_GrassDescs[sp];
 
-			const uint32 lod0Sections = (uint32)gd.pMeshLod0->Sections.size();
-			const uint32 lod1Sections = (uint32)gd.pCrossMeshLod1->Sections.size();
-			const uint32 lod2Sections = (uint32)gd.pBillboardMeshLod2->Sections.size();
+			const uint32 lod0Sections = (uint32)gd.pMesh->GetLevel(0).Sections.size();
+			const uint32 lod1Sections = (uint32)gd.pMesh->GetLevel(1).Sections.size();
+			const uint32 lod2Sections = (uint32)gd.pMesh->GetLevel(2).Sections.size();
 
 			m_SpeciesIndirect[sp].LOD0 = indirect.AllocateMesh("GrassLOD0_Species", lod0Sections);
 			m_SpeciesIndirect[sp].LOD1 = indirect.AllocateMesh("GrassLOD1_Species", lod1Sections);
 			m_SpeciesIndirect[sp].LOD2 = indirect.AllocateMesh("GrassLOD2_Species", lod2Sections);
 
-			auto SetMeshTemplates = [&](const StaticMeshRenderData* mesh, uint32 baseSlot)
+			auto SetMeshTemplates = [&](const StaticMeshLevelRenderData& mesh, uint32 baseSlot)
 			{
-				const uint32 sectionCount = (uint32)mesh->Sections.size();
+				const uint32 sectionCount = (uint32)mesh.Sections.size();
 				for (uint32 si = 0u; si < sectionCount; ++si)
 				{
-					const auto& sec = mesh->Sections[si];
+					const auto& sec = mesh.Sections[si];
 
 					hlsl::IndirectArgsTemplate t = {};
 					t.IndexCountPerInstance = sec.IndexCount;
@@ -209,9 +207,9 @@ namespace shz
 				}
 			};
 
-			SetMeshTemplates(gd.pMeshLod0, m_SpeciesIndirect[sp].LOD0.BaseSlot);
-			SetMeshTemplates(gd.pCrossMeshLod1, m_SpeciesIndirect[sp].LOD1.BaseSlot);
-			SetMeshTemplates(gd.pBillboardMeshLod2, m_SpeciesIndirect[sp].LOD2.BaseSlot);
+			SetMeshTemplates(gd.pMesh->GetLevel(0), m_SpeciesIndirect[sp].LOD0.BaseSlot);
+			SetMeshTemplates(gd.pMesh->GetLevel(1), m_SpeciesIndirect[sp].LOD1.BaseSlot);
+			SetMeshTemplates(gd.pMesh->GetLevel(2), m_SpeciesIndirect[sp].LOD2.BaseSlot);
 
 			// Register indirect objects to RenderScene (one per species per LOD)
 			{
@@ -221,7 +219,7 @@ namespace shz
 
 				// LOD0
 				d.bDepthPrepass = false;
-				d.pMesh = gd.pMeshLod0;
+				d.pMesh = &gd.pMesh->GetLevel(0);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD0.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD0.MeshId;
 				d.StartInstanceLocation = sp * 3u + 0u;
@@ -229,7 +227,7 @@ namespace shz
 
 				// LOD1
 				d.bDepthPrepass = false;
-				d.pMesh = gd.pCrossMeshLod1;
+				d.pMesh = &gd.pMesh->GetLevel(1);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD1.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD1.MeshId;
 				d.StartInstanceLocation = sp * 3u + 1u;
@@ -237,7 +235,7 @@ namespace shz
 
 				// LOD2
 				d.bDepthPrepass = false;
-				d.pMesh = gd.pBillboardMeshLod2;
+				d.pMesh = &gd.pMesh->GetLevel(2);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD2.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD2.MeshId;
 				d.StartInstanceLocation = sp * 3u + 2u;

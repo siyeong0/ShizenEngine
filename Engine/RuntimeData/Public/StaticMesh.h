@@ -8,7 +8,17 @@
 
 namespace shz
 {
-	class StaticMesh final
+	struct StaticMeshBounds
+	{
+		float3 Center;
+		float3 Extents;
+		float Radius;
+
+		Box GetBox() const { return Box(Center - Extents, Center + Extents); }
+		Sphere GetSphere() const { return Sphere(Center, Radius); }
+	};
+
+	class StaticMeshLevel final
 	{
 	public:
 		struct Section final
@@ -18,16 +28,16 @@ namespace shz
 			uint32 BaseVertex = 0;     // Optional for some pipelines
 			uint32 MaterialSlot = 0;     // Index into material slots
 
-			Box LocalBounds = {};
+			StaticMeshBounds LocalBounds = {};
 		};
 
 	public:
-		StaticMesh() = default;
-		StaticMesh(const StaticMesh&) = default;
-		StaticMesh(StaticMesh&&) noexcept = default;
-		StaticMesh& operator=(const StaticMesh&) = default;
-		StaticMesh& operator=(StaticMesh&&) noexcept = default;
-		~StaticMesh() = default;
+		StaticMeshLevel() = default;
+		StaticMeshLevel(const StaticMeshLevel&) = default;
+		StaticMeshLevel(StaticMeshLevel&&) noexcept = default;
+		StaticMeshLevel& operator=(const StaticMeshLevel&) = default;
+		StaticMeshLevel& operator=(StaticMeshLevel&&) noexcept = default;
+		~StaticMeshLevel() = default;
 
 		// ------------------------------------------------------------
 		// Geometry setters
@@ -95,13 +105,20 @@ namespace shz
 		bool HasCPUData() const noexcept;
 
 		void RecomputeBounds();
-		const Box& GetBounds() const noexcept { return m_Bounds; }
+		const StaticMeshBounds& GetBounds() const noexcept { return m_Bounds; }
+		Box GetBoxBounds() const noexcept { return m_Bounds.GetBox(); }
+		Sphere GetSphereBounds() const noexcept { return m_Bounds.GetSphere(); }
 
 		// ------------------------------------------------------------
 		// Memory policy
 		// ------------------------------------------------------------
 		void StripCPUData();
 		void Clear();
+
+		// ------------------------------------------------------------
+		// Geometry helpers
+		// ------------------------------------------------------------
+		static StaticMeshLevel CreateBillboard(AssetRef<Texture> texureRef, const std::string& templateName, MATERIAL_BLEND_MODE blendMode, float2 scale = { 1.0f, 1.0f }, float2 pivot = { 0.5f, 0.5f });
 
 	private:
 		uint32 GetIndexAt(uint32 i) const noexcept;
@@ -120,8 +137,30 @@ namespace shz
 		std::vector<Section> m_Sections;
 		std::vector<MaterialId> m_MaterialSlots;
 
-		Box m_Bounds = {};
+		StaticMeshBounds m_Bounds = {};
 	};
 
-	StaticMesh CreateBillboard(AssetRef<Texture> texureRef, const std::string& templateName, MATERIAL_BLEND_MODE blendMode, float2 scale = { 1.0f, 1.0f }, float2 pivot = { 0.5f, 0.5f });
+	class StaticMesh
+	{
+	public:
+		void AddLevel(StaticMeshLevel&& level, float screenSizeLOD)
+		{
+			m_Levels.push_back(std::move(level));
+			m_LodScreenSizes.push_back(screenSizeLOD);
+		}
+
+		const StaticMeshLevel& GetLevel(uint32 lod) const noexcept { return m_Levels[lod]; }
+		const float GetLodScreenSize(uint32 lod) const noexcept { return m_LodScreenSizes[lod]; }
+
+		uint32 GetLevelCount() const noexcept { return static_cast<uint32>(m_Levels.size()); }
+
+		const std::vector<StaticMeshLevel>& GetLevels() const noexcept { return m_Levels; }
+		const std::vector<float>& GetLodScreenSizes() const noexcept { return m_LodScreenSizes; }
+
+		const StaticMeshLevel& operator[](size_t idx) const { return m_Levels[idx]; }
+
+	private:
+		std::vector<StaticMeshLevel> m_Levels;
+		std::vector<float> m_LodScreenSizes;
+	};
 } // namespace shz

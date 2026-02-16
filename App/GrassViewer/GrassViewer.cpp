@@ -47,6 +47,9 @@ namespace shz
 			v.ProjMatrix = cam.GetProjMatrix();
 			v.ViewProjMatrix = v.ViewMatrix * v.ProjMatrix;
 
+			v.FieldOfViewY = cam.GetProjAttribs().FOV;
+			v.AspectRatio = cam.GetProjAttribs().AspectRatio;
+
 			v.Viewport.left = 0;
 			v.Viewport.top = 0;
 			v.Viewport.right = vp.Width;
@@ -75,7 +78,7 @@ namespace shz
 		{
 			ASSERT(m_pAssetManager, "AssetManager is null.");
 			m_pAssetManager->Initialize();
-			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
+			m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshLevel>::TypeID, StaticMeshImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
 			m_pAssetManager->RegisterImporter(AssetTypeTraits<AssimpAsset>::TypeID, AssimpImporter{});
@@ -284,111 +287,115 @@ namespace shz
 				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 
-				auto uniform01 = [](StaticMesh& mesh)
+				auto uniform01 = [](StaticMeshLevel& mesh)
 					{
 						mesh.RecomputeBounds();
-						const Box& b = mesh.GetBounds();
-						float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+						const Box& b = mesh.GetBoxBounds();
+						float yScale01 = 1.0f / (b.Max().y - b.Min().y);
 						mesh.ApplyUniformScale(yScale01);
 						mesh.MoveBottomToOrigin(true);
 					};
 
 				{
 					GrassDesc gd = {};
+					StaticMesh grassMesh;
 					// LOD0 : Mesh
 					{
 						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
 						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-						StaticMesh grassMesh;
-						BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-						uniform01(grassMesh);
-						for (auto matId : grassMesh.GetMaterialSlots())
+						StaticMeshLevel grassMeshLevel;
+						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+						uniform01(grassMeshLevel);
+						for (auto matId : grassMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 						}
-						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
 					}
 					// LOD1 : Cross-plane
 					{
 						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
 						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-						StaticMesh grassCrossMesh;
-						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-						uniform01(grassCrossMesh);
-						for (auto matId : grassCrossMesh.GetMaterialSlots())
+						StaticMeshLevel grassCrossMeshLevel;
+						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+						uniform01(grassCrossMeshLevel);
+						for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 						}
-						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
+						grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
 					}
 					// LOD2 : Billboard
 					{
 						AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
-						StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-						for (auto matId : grassBiilboardMesh.GetMaterialSlots())
+						StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+						for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 						}
-						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
+						grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
 					}
+					gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				{
 					GrassDesc gd = {};
+					StaticMesh grassMesh;
 					// LOD0 : Mesh
 					{
 						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
 						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-						StaticMesh grassMesh;
-						BuildStaticMeshAsset(grassAssimp, &grassMesh, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-						uniform01(grassMesh);
-						for (auto matId : grassMesh.GetMaterialSlots())
+						StaticMeshLevel grassMeshLevel;
+						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+						uniform01(grassMeshLevel);
+						for (auto matId : grassMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 						}
-						gd.pMeshLod0 = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
 					}
 					// LOD1 : Cross-plane
 					{
 						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower_cross.fbx");
 						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-						StaticMesh grassCrossMesh;
-						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMesh, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-						uniform01(grassCrossMesh);
-						for (auto matId : grassCrossMesh.GetMaterialSlots())
+						StaticMeshLevel grassCrossMeshLevel;
+						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+						uniform01(grassCrossMeshLevel);
+						for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 						}
-						gd.pCrossMeshLod1 = &m_pRenderer->CreateStaticMeshRenderData(grassCrossMesh);
+						grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
 					}
 					// LOD2 : Billboard
 					{
 						AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/clips/l.png");
-						StaticMesh grassBiilboardMesh = CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-						for (auto matId : grassBiilboardMesh.GetMaterialSlots())
+						StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+						for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 						}
-						gd.pBillboardMeshLod2 = &m_pRenderer->CreateStaticMeshRenderData(grassBiilboardMesh);
+						grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
 					}
+					gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
@@ -741,24 +748,15 @@ namespace shz
 			Count
 		};
 
-		struct TreeSizeMeshes
-		{
-			const StaticMeshRenderData* LOD2[3] = {};
-		};
-
-		auto loadTreeSizeLOD2 = [&](const char* sizeFolder) -> TreeSizeMeshes
+		auto loadTree = [&](const std::string& folderName) -> const StaticMeshRenderData*
 			{
-				TreeSizeMeshes out = {};
-				for (int v = 1; v <= 3; ++v)
+				std::vector<AssetRef<AssimpAsset>> treeMeshRefs(4);
+				for (uint lod = 0; lod < 4; ++lod)
 				{
-					std::string path =
-						std::string("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/") +
-						sizeFolder + "_" + std::to_string(v) + "/lod3.fbx";
-
-					out.LOD2[v - 1] =
-						&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>(path)));
+					std::string path = std::string("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/") + folderName + "/lod" + std::to_string(lod) + ".fbx";
+					treeMeshRefs[lod] = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
 				}
-				return out;
+				return &m_pRenderer->CreateStaticMeshRenderData(treeMeshRefs);
 			};
 
 		auto pickSizeByBucket = [&](uint32 bucket, std::mt19937& rng) -> ETreeSize
@@ -935,13 +933,12 @@ namespace shz
 				std::cout << " >=1  (bucket4): " << c4 << "\n";
 			}
 
-			// Load only LOD2 meshes (size: large/big/medium/small/sapling, variant: _1/_2/_3)
-			TreeSizeMeshes sizeMeshes[(int)ETreeSize::Count] = {};
-			sizeMeshes[(int)ETreeSize::Large] = loadTreeSizeLOD2("large");
-			sizeMeshes[(int)ETreeSize::Big] = loadTreeSizeLOD2("big");
-			sizeMeshes[(int)ETreeSize::Medium] = loadTreeSizeLOD2("medium");
-			sizeMeshes[(int)ETreeSize::Small] = loadTreeSizeLOD2("small");
-			sizeMeshes[(int)ETreeSize::Sapling] = loadTreeSizeLOD2("sapling");
+			const StaticMeshRenderData* sizeMeshes[(int)ETreeSize::Count] = {};
+			sizeMeshes[(int)ETreeSize::Large] = loadTree("large_1");
+			sizeMeshes[(int)ETreeSize::Big] = loadTree("big_1");
+			sizeMeshes[(int)ETreeSize::Medium] = loadTree("medium_1");
+			sizeMeshes[(int)ETreeSize::Small] = loadTree("small_1");
+			sizeMeshes[(int)ETreeSize::Sapling] = loadTree("sapling_1");
 
 			constexpr float4 SPAWN_RANGE = { -5000.0f, -5000.0f, 5000.0f, 5000.0f };
 
@@ -968,15 +965,9 @@ namespace shz
 					}
 
 					const uint32 bucket = valueToBucket(value);
-
-					// Pick size (bucket-limited, weighted)
 					const ETreeSize size = pickSizeByBucket(bucket, rng);
+					const StaticMeshRenderData* pMeshRD = sizeMeshes[(int)size];
 
-					// Variant uniform within same size
-					const int v = 0; // distVariant(rng);
-					const StaticMeshRenderData* pMeshRD = sizeMeshes[(int)size].LOD2[v];
-
-					// Texel -> world XZ in SPAWN_RANGE
 					float2 domainUV = float2((float)x / (float)mip0.Width, (float)y / (float)mip0.Height);
 					float2 worldXZ = m_pTerrainSystem->DomainUVToWorldXZ(domainUV);
 
@@ -998,76 +989,6 @@ namespace shz
 			}
 
 			std::cout << "Spawned trees: " << spawned << "\n";
-		}
-
-		// -------------------------------------------------------------------------
-		// Helmets: render + dynamic physics box collider
-		// -------------------------------------------------------------------------
-		{
-			AssetRef<StaticMesh> helmetRef =
-				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
-
-			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
-
-			constexpr uint32 kHelmetCount = 100;
-			constexpr float  kMinY = 10.0f;
-			constexpr float  kMaxY = 20.0f;
-
-			constexpr int   kGridX = 6;
-			constexpr float kSpacingX = 1.0f;
-			constexpr float kSpacingZ = 1.0f;
-			constexpr float kBaseX = -10.0f;
-			constexpr float kBaseZ = 10.0f;
-
-			std::mt19937 rng(1337);
-			std::uniform_real_distribution<float> distY(kMinY, kMaxY);
-			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
-
-			for (uint32 i = 0; i < kHelmetCount; ++i)
-			{
-				const int ix = (int)(i % kGridX);
-				const int iz = (int)(i / kGridX);
-
-				const float x = kBaseX + (float)ix * kSpacingX;
-				const float z = kBaseZ + (float)iz * kSpacingZ;
-
-				const float y = m_pTerrainSystem->SampleWorldHeight(x, z) + distY(rng);
-				const float yaw = distYaw(rng);
-
-				flecs::entity e = ecs.entity();
-				e.set<CName>({ "Helmet" });
-
-				CTransform tr = {};
-				tr.Position = { x, y, z };
-				tr.Rotation = { 0.0f, yaw, 0.0f };
-				tr.Scale = { 1.0f, 1.0f, 1.0f };
-				e.set<CTransform>(tr);
-
-				CMeshRenderer mr = {};
-				mr.MeshRef = helmetRef;
-				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					helmetMeshRD,
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					true);
-				e.set<CMeshRenderer>(mr);
-
-				CBoxCollider box = {};
-				box.Box = helmetMeshRD.LocalBounds;
-				box.bIsSensor = false;
-				e.set<CBoxCollider>(box);
-
-				CRigidbody rb = {};
-				rb.BodyType = ERigidbodyType::Dynamic;
-				rb.Layer = 1; // Moving
-				rb.Mass = 1.0f;
-				rb.LinearDamping = 0.0f;
-				rb.AngularDamping = 0.0f;
-				rb.bEnableGravity = true;
-				rb.bAllowSleeping = false;
-				rb.bStartActive = true;
-				e.set<CRigidbody>(rb);
-			}
 		}
 	}
 } // namespace shz

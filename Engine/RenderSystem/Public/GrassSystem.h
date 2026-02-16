@@ -23,9 +23,7 @@ namespace shz
         float LOD1Distance = 35.0f;
         float LodHysteresis = 1.0f;
 
-        const StaticMeshRenderData* pMeshLod0 = nullptr;
-        const StaticMeshRenderData* pCrossMeshLod1 = nullptr;
-        const StaticMeshRenderData* pBillboardMeshLod2 = nullptr;
+        const StaticMeshRenderData* pMesh = nullptr;
     };
 
     class GrassSystem final

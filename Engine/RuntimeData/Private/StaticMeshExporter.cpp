@@ -35,8 +35,8 @@ namespace shz
 	static inline json boxToJson(const Box& b)
 	{
 		return json{
-			{"Min", {b.Min.x, b.Min.y, b.Min.z}},
-			{"Max", {b.Max.x, b.Max.y, b.Max.z}},
+			{"Min", {b.Min().x, b.Min().y, b.Min().z}},
+			{"Max", {b.Max().x, b.Max().y, b.Max().z}},
 		};
 	}
 
@@ -76,7 +76,7 @@ namespace shz
 			return false;
 		}
 
-		const StaticMesh* mesh = AssetObjectCast<StaticMesh>(pObject);
+		const StaticMeshLevel* mesh = AssetObjectCast<StaticMeshLevel>(pObject);
 		if (!mesh)
 		{
 			setErr(pOutError, "StaticMeshAssetExporter: type mismatch (not StaticMeshAsset).");
@@ -141,18 +141,17 @@ namespace shz
 		j["Indices"] = json{ {"Offset", idxOff}, {"Count", (uint64)mesh->GetIndexCount()} };
 
 		// Bounds
-		j["Bounds"] = boxToJson(mesh->GetBounds());
+		j["Bounds"] = boxToJson(mesh->GetBoxBounds());
 
 		// Sections
 		j["Sections"] = json::array();
-		for (const StaticMesh::Section& s : mesh->GetSections())
+		for (const StaticMeshLevel::Section& s : mesh->GetSections())
 		{
 			j["Sections"].push_back(json{
 				{"FirstIndex", s.FirstIndex},
 				{"IndexCount", s.IndexCount},
 				{"BaseVertex", s.BaseVertex},
 				{"MaterialSlot", s.MaterialSlot},
-				{"LocalBounds", boxToJson(s.LocalBounds)},
 				});
 		}
 

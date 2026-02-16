@@ -10,7 +10,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Geometry setters
 	// ------------------------------------------------------------
-	void StaticMesh::ReserveVertices(uint32 count)
+	void StaticMeshLevel::ReserveVertices(uint32 count)
 	{
 		m_Positions.reserve(count);
 		m_Normals.reserve(count);
@@ -21,7 +21,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Indices
 	// ------------------------------------------------------------
-	void StaticMesh::SetIndicesU32(std::vector<uint32>&& indices)
+	void StaticMeshLevel::SetIndicesU32(std::vector<uint32>&& indices)
 	{
 		m_IndexType = VT_UINT32;
 		m_IndicesU32 = std::move(indices);
@@ -29,7 +29,7 @@ namespace shz
 		m_IndicesU16.clear();
 	}
 
-	void StaticMesh::SetIndicesU16(std::vector<uint16>&& indices)
+	void StaticMeshLevel::SetIndicesU16(std::vector<uint16>&& indices)
 	{
 		m_IndexType = VT_UINT16;
 		m_IndicesU16 = std::move(indices);
@@ -37,7 +37,7 @@ namespace shz
 		m_IndicesU32.clear();
 	}
 
-	void StaticMesh::ApplyUniformScale(float s)
+	void StaticMeshLevel::ApplyUniformScale(float s)
 	{
 		ASSERT(!m_Positions.empty(), "Mesh is not initialized.");
 		ASSERT(s > 1e-6f && std::isfinite(s), "Invalid scale factor.");
@@ -51,13 +51,13 @@ namespace shz
 		RecomputeBounds();
 	}
 
-	void StaticMesh::MoveBottomToOrigin(bool centerXZ)
+	void StaticMeshLevel::MoveBottomToOrigin(bool centerXZ)
 	{
 		ASSERT(!m_Positions.empty(), "Mesh is not initialized.");
 
-		const Box& b = m_Bounds;
-		float3 minV = b.Min;
-		float3 maxV = b.Max;
+		const Box& b = GetBoxBounds();
+		float3 minV = b.Min();
+		float3 maxV = b.Max();
 
 		// Y: move lowest point to 0
 		float3 offset = float3(0, -minV.y, 0);
@@ -80,7 +80,7 @@ namespace shz
 	}
 
 
-	const void* StaticMesh::GetIndexData() const noexcept
+	const void* StaticMeshLevel::GetIndexData() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -100,7 +100,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMesh::GetIndexDataSizeBytes() const noexcept
+	uint32 StaticMeshLevel::GetIndexDataSizeBytes() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -114,7 +114,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMesh::GetIndexCount() const noexcept
+	uint32 StaticMeshLevel::GetIndexCount() const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -126,7 +126,7 @@ namespace shz
 		}
 	}
 
-	uint32 StaticMesh::GetIndexAt(uint32 i) const noexcept
+	uint32 StaticMeshLevel::GetIndexAt(uint32 i) const noexcept
 	{
 		if (m_IndexType == VT_UINT32)
 		{
@@ -141,13 +141,13 @@ namespace shz
 	// ------------------------------------------------------------
 	// Material slots
 	// ------------------------------------------------------------
-	MaterialId& StaticMesh::GetMaterialSlot(uint32 slot) noexcept
+	MaterialId& StaticMeshLevel::GetMaterialSlot(uint32 slot) noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];
 	}
 
-	const MaterialId& StaticMesh::GetMaterialSlot(uint32 slot) const noexcept
+	const MaterialId& StaticMeshLevel::GetMaterialSlot(uint32 slot) const noexcept
 	{
 		ASSERT(slot < static_cast<uint32>(m_MaterialSlots.size()), "Material slot index out of range.");
 		return m_MaterialSlots[slot];
@@ -156,7 +156,7 @@ namespace shz
 	// ------------------------------------------------------------
 	// Validation / policy
 	// ------------------------------------------------------------
-	bool StaticMesh::IsValid() const noexcept
+	bool StaticMeshLevel::IsValid() const noexcept
 	{
 		// Positions are required.
 		if (m_Positions.empty())
@@ -225,7 +225,7 @@ namespace shz
 		return true;
 	}
 
-	bool StaticMesh::HasCPUData() const noexcept
+	bool StaticMeshLevel::HasCPUData() const noexcept
 	{
 		if (m_Positions.empty())
 		{
@@ -243,14 +243,14 @@ namespace shz
 	// ------------------------------------------------------------
 	// Bounds
 	// ------------------------------------------------------------
-	void StaticMesh::RecomputeBounds()
+	void StaticMeshLevel::RecomputeBounds()
 	{
 		if (m_Positions.empty())
 		{
-			m_Bounds = Box{};
+			m_Bounds = {};
 			for (Section& sec : m_Sections)
 			{
-				sec.LocalBounds = Box{};
+				sec.LocalBounds = {};
 			}
 			return;
 		}
@@ -276,12 +276,17 @@ namespace shz
 			if (p.z > maxV.z) { maxV.z = p.z; }
 		}
 
-		m_Bounds = Box(minV, maxV);
+		m_Bounds.Center = 0.5f * (minV + maxV);
+		m_Bounds.Extents = 0.5f * (maxV - minV);
+		m_Bounds.Radius = sqrtf(
+			m_Bounds.Extents.x * m_Bounds.Extents.x +
+			m_Bounds.Extents.y * m_Bounds.Extents.y +
+			m_Bounds.Extents.z * m_Bounds.Extents.z);
 
 		RecomputeSectionBounds();
 	}
 
-	void StaticMesh::RecomputeSectionBounds()
+	void StaticMeshLevel::RecomputeSectionBounds()
 	{
 		if (m_Sections.empty())
 		{
@@ -292,7 +297,7 @@ namespace shz
 		{
 			for (Section& sec : m_Sections)
 			{
-				sec.LocalBounds = Box{};
+				sec.LocalBounds = {};
 			}
 			return;
 		}
@@ -301,7 +306,7 @@ namespace shz
 		{
 			if (sec.IndexCount == 0)
 			{
-				sec.LocalBounds = Box{};
+				sec.LocalBounds = {};
 				continue;
 			}
 
@@ -336,14 +341,19 @@ namespace shz
 				if (p.z > maxV.z) { maxV.z = p.z; }
 			}
 
-			sec.LocalBounds = Box(minV, maxV);
+			sec.LocalBounds.Center = 0.5f * (minV + maxV);
+			sec.LocalBounds.Extents = 0.5f * (maxV - minV);
+			sec.LocalBounds.Radius = sqrtf(
+				sec.LocalBounds.Extents.x * sec.LocalBounds.Extents.x +
+				sec.LocalBounds.Extents.y * sec.LocalBounds.Extents.y +
+				sec.LocalBounds.Extents.z * sec.LocalBounds.Extents.z);
 		}
 	}
 
 	// ------------------------------------------------------------
 	// Memory
 	// ------------------------------------------------------------
-	void StaticMesh::StripCPUData()
+	void StaticMeshLevel::StripCPUData()
 	{
 		m_Positions.clear();
 		m_Normals.clear();
@@ -354,7 +364,7 @@ namespace shz
 		m_IndicesU16.clear();
 	}
 
-	void StaticMesh::Clear()
+	void StaticMeshLevel::Clear()
 	{
 		m_Positions.clear();
 		m_Normals.clear();
@@ -368,7 +378,7 @@ namespace shz
 		m_MaterialSlots.clear();
 
 		m_IndexType = VT_UINT32;
-		m_Bounds = Box{};
+		m_Bounds = {};
 	}
 
 
@@ -428,49 +438,49 @@ namespace shz
 			return inPts;
 
 		auto DistPointToSeg = [](const float2& p, const float2& a, const float2& b) -> float
-		{
-			const float2 ab = b - a;
-			const float2 ap = p - a;
-			const float ab2 = ab.x * ab.x + ab.y * ab.y;
-			if (ab2 < 1e-20f)
 			{
-				const float2 d = p - a;
+				const float2 ab = b - a;
+				const float2 ap = p - a;
+				const float ab2 = ab.x * ab.x + ab.y * ab.y;
+				if (ab2 < 1e-20f)
+				{
+					const float2 d = p - a;
+					return sqrtf(d.x * d.x + d.y * d.y);
+				}
+				float t = (ap.x * ab.x + ap.y * ab.y) / ab2;
+				t = std::max(0.0f, std::min(1.0f, t));
+				const float2 q = a + ab * t;
+				const float2 d = p - q;
 				return sqrtf(d.x * d.x + d.y * d.y);
-			}
-			float t = (ap.x * ab.x + ap.y * ab.y) / ab2;
-			t = std::max(0.0f, std::min(1.0f, t));
-			const float2 q = a + ab * t;
-			const float2 d = p - q;
-			return sqrtf(d.x * d.x + d.y * d.y);
-		};
+			};
 
 		std::vector<uint8> keep(n, 0);
 
 		std::function<void(int, int)> Recurse = [&](int i0, int i1)
-		{
-			float dmax = 0.0f;
-			int imax = -1;
-
-			const float2 a = inPts[i0];
-			const float2 b = inPts[i1];
-
-			for (int i = i0 + 1; i < i1; ++i)
 			{
-				const float d = DistPointToSeg(inPts[i], a, b);
-				if (d > dmax)
+				float dmax = 0.0f;
+				int imax = -1;
+
+				const float2 a = inPts[i0];
+				const float2 b = inPts[i1];
+
+				for (int i = i0 + 1; i < i1; ++i)
 				{
-					dmax = d;
-					imax = i;
+					const float d = DistPointToSeg(inPts[i], a, b);
+					if (d > dmax)
+					{
+						dmax = d;
+						imax = i;
+					}
 				}
-			}
 
-			if (imax >= 0 && dmax > epsilon)
-			{
-				keep[imax] = 1;
-				Recurse(i0, imax);
-				Recurse(imax, i1);
-			}
-		};
+				if (imax >= 0 && dmax > epsilon)
+				{
+					keep[imax] = 1;
+					Recurse(i0, imax);
+					Recurse(imax, i1);
+				}
+			};
 
 		keep[0] = 1;
 		keep[n - 1] = 1;
@@ -500,26 +510,26 @@ namespace shz
 		for (int i = 0; i < n; ++i) V[i] = i;
 
 		auto IsEar = [&](int iPrev, int iCur, int iNext) -> bool
-		{
-			const float2 a = polyCCW[iPrev];
-			const float2 b = polyCCW[iCur];
-			const float2 c = polyCCW[iNext];
-
-			if (!IsConvexCCW(a, b, c))
-				return false;
-
-			for (int k = 0; k < (int)V.size(); ++k)
 			{
-				const int idx = V[k];
-				if (idx == iPrev || idx == iCur || idx == iNext)
-					continue;
+				const float2 a = polyCCW[iPrev];
+				const float2 b = polyCCW[iCur];
+				const float2 c = polyCCW[iNext];
 
-				if (PointInTri(polyCCW[idx], a, b, c))
+				if (!IsConvexCCW(a, b, c))
 					return false;
-			}
 
-			return true;
-		};
+				for (int k = 0; k < (int)V.size(); ++k)
+				{
+					const int idx = V[k];
+					if (idx == iPrev || idx == iCur || idx == iNext)
+						continue;
+
+					if (PointInTri(polyCCW[idx], a, b, c))
+						return false;
+				}
+
+				return true;
+			};
 
 		outIndices.clear();
 		outIndices.reserve((n - 2) * 3);
@@ -566,13 +576,13 @@ namespace shz
 	// ------------------------------------------------------------
 	// CreateBillboard (StaticMesh-level)
 	// ------------------------------------------------------------
-	StaticMesh CreateBillboard(AssetRef<Texture> texureRef, const std::string& templateName, MATERIAL_BLEND_MODE blendMode, float2 scale, float2 pivot)
+	StaticMeshLevel StaticMeshLevel::CreateBillboard(AssetRef<Texture> texureRef, const std::string& templateName, MATERIAL_BLEND_MODE blendMode, float2 scale, float2 pivot)
 	{
 		ASSERT(scale.x > 0.0f && scale.y > 0.0f, "Scale value must be positive.");
 		ASSERT(pivot.x >= 0.0f && pivot.y >= 0.0f && pivot.x <= 1.0f && pivot.y <= 1.0f,
 			"pivot value range must be 0~1.");
 
-		StaticMesh mesh;
+		StaticMeshLevel mesh;
 
 		// Build quad mesh
 		{
@@ -599,12 +609,12 @@ namespace shz
 			mesh.SetTexCoords(std::move(uv));
 			mesh.SetIndicesU32(std::move(idx));
 
-			StaticMesh::Section sec = {};
+			StaticMeshLevel::Section sec = {};
 			sec.FirstIndex = 0;
 			sec.IndexCount = 6;
 			sec.BaseVertex = 0;
 			sec.MaterialSlot = 0;
-			mesh.SetSections(std::vector<StaticMesh::Section>{ sec });
+			mesh.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
 
 			mesh.RecomputeBounds();
 		}
@@ -616,7 +626,7 @@ namespace shz
 		mat.SetUint("g_MaterialFlags", 1);
 
 		mat.SetFloat4("g_BaseColorFactor", float4{ 1.0f,1.0f,1.0f,1.0f });
-		mat.SetFloat3("g_EmissiveFactor", float3{1.0f, 1.0f, 1.0f});
+		mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
 		mat.SetFloat("g_EmissiveIntensity", 0.0f);
 		mat.SetFloat("g_RoughnessFactor", 0.5f);
 		mat.SetFloat("g_NormalScale", 1.0f);

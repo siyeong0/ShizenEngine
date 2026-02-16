@@ -1054,7 +1054,7 @@ namespace shz
 	// ------------------------------------------------------------
 	bool BuildStaticMeshAsset(
 		const AssimpAsset& assimpAsset,
-		StaticMesh* pOutMesh,
+		StaticMeshLevel* pOutMesh,
 		const AssimpImportSettings& setting,
 		const std::string& materialTemplateName,
 		std::string* outError,
@@ -1188,7 +1188,7 @@ namespace shz
 		tangents.reserve(totalVertexCount);
 		texCoords.reserve(totalVertexCount);
 
-		std::vector<StaticMesh::Section> sections;
+		std::vector<StaticMeshLevel::Section> sections;
 		sections.reserve(setting.bMergeMeshes ? scene->mNumMeshes : 1);
 
 		auto importMeshAsSection = [&](const aiMesh* mesh, const aiMatrix4x4& global)
@@ -1229,7 +1229,7 @@ namespace shz
 					texCoords.push_back(float2(0.0f, 0.0f));
 			}
 
-			StaticMesh::Section sec = {};
+			StaticMeshLevel::Section sec = {};
 			sec.BaseVertex = baseVertex;         // 인덱스는 로컬이므로 draw에서 BaseVertex 사용
 			sec.MaterialSlot = mesh->mMaterialIndex;
 
@@ -1303,7 +1303,7 @@ namespace shz
 		pOutMesh->SetNormals(static_cast<std::vector<float3>&&>(normals));
 		pOutMesh->SetTangents(static_cast<std::vector<float3>&&>(tangents));
 		pOutMesh->SetTexCoords(static_cast<std::vector<float2>&&>(texCoords));
-		pOutMesh->SetSections(static_cast<std::vector<StaticMesh::Section>&&>(sections));
+		pOutMesh->SetSections(static_cast<std::vector<StaticMeshLevel::Section>&&>(sections));
 
 		pOutMesh->RecomputeBounds();
 

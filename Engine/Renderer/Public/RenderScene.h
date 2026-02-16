@@ -2,6 +2,7 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include <algorithm>
 
 #include "Primitives/BasicTypes.h"
 #include "Primitives/Handle.hpp"
@@ -24,7 +25,7 @@ namespace shz
 	{
 	public:
 		// ------------------------------------------------------------
-		// SceneObject (기존)
+		// SceneObject
 		// ------------------------------------------------------------
 		struct SceneObject final
 		{
@@ -38,9 +39,7 @@ namespace shz
 		};
 
 		// ------------------------------------------------------------
-		// TerrainObject (요구한 형태)
-		// - TerrainSystem이 프러스텀 컬링/LOD 후 "그릴 청크"를 Add/Remove로 관리
-		// - Renderer는 BuildTerrainDrawPackets 로 패킷만 뽑아감
+		// TerrainObject
 		// ------------------------------------------------------------
 		struct TerrainObject final
 		{
@@ -75,7 +74,7 @@ namespace shz
 
 		struct IndirectObjectDesc final
 		{
-			const StaticMeshRenderData* pMesh = nullptr;
+			const StaticMeshLevelRenderData* pMesh = nullptr;
 			bool bCastShadow = true;
 			bool bDepthPrepass = true;
 
@@ -96,6 +95,17 @@ namespace shz
 			bool bEnabled = true;
 		};
 
+		// ------------------------------------------------------------
+		// View params for LOD selection in BuildDrawPackets
+		// ------------------------------------------------------------
+		struct ViewLodParams final
+		{
+			Matrix4x4 View = Matrix4x4::Identity(); // World -> View
+			float TanHalfFovY = 1.0f;
+			float ViewportHeight = 1080.0f; // pixels (optional for future)
+			bool bViewForwardIsPositiveZ = true; // if false, forward is -Z
+		};
+
 	public:
 		RenderScene() = default;
 		RenderScene(const RenderScene&) = delete;
@@ -105,7 +115,7 @@ namespace shz
 		void Reset();
 
 		// ------------------------------------------------------------
-		// Scene Objects (기존)
+		// Scene Objects
 		// ------------------------------------------------------------
 		Handle<SceneObject> AddObject(
 			const StaticMeshRenderData& rd,
@@ -121,7 +131,7 @@ namespace shz
 		uint32 GetObjectCount() const noexcept { return static_cast<uint32>(m_ObjectDense.size()); }
 
 		// ------------------------------------------------------------
-		// Terrain Objects (신규)
+		// Terrain Objects
 		// ------------------------------------------------------------
 		Handle<TerrainObject> AddTerrain(const TerrainObject& obj);
 		void RemoveTerrain(Handle<TerrainObject> h);
@@ -133,7 +143,7 @@ namespace shz
 		const std::vector<TerrainObject>& GetTerrains() const noexcept { return m_TerrainDense; }
 
 		// ------------------------------------------------------------
-		// Indirect / Lights (기존)
+		// Indirect / Lights
 		// ------------------------------------------------------------
 		Handle<IndirectObject> AddIndirect(const IndirectObjectDesc& desc);
 		void RemoveIndirect(Handle<IndirectObject> h);
@@ -153,7 +163,7 @@ namespace shz
 		const std::vector<LightObject>& GetLights() const noexcept { return m_LightDense; }
 
 		// ------------------------------------------------------------
-		// ObjectConstants (기존)
+		// ObjectConstants
 		// ------------------------------------------------------------
 		const std::vector<hlsl::ObjectConstants>& GetObjectConstantsTableCPU() const noexcept { return m_ObjectTableCPU; }
 
@@ -175,10 +185,11 @@ namespace shz
 		}
 
 		// ------------------------------------------------------------
-		// Static mesh draw packets (기존)
+		// Static mesh draw packets
 		// ------------------------------------------------------------
 		void BuildDrawPackets(
 			uint64 passKey,
+			const ViewLodParams& view,
 			const std::vector<uint32>& visibleObjectDenseIndices,
 			const std::function<const struct MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets,
@@ -199,6 +210,7 @@ namespace shz
 		struct BatchView final
 		{
 			const StaticMeshRenderData* pMesh = {};
+			uint32 LodIndex = 0;
 			uint32 SectionIndex = 0;
 			MaterialId MaterialId = 0;
 
@@ -209,7 +221,7 @@ namespace shz
 		bool TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept;
 
 		// ------------------------------------------------------------
-		// Interaction stamps (기존)
+		// Interaction stamps
 		// ------------------------------------------------------------
 		void AddInteractionStamp(const hlsl::InteractionStamp& stamp) { m_InteractionStamps.emplace_back(stamp); }
 		void ConsumeInteractionStamps(std::vector<hlsl::InteractionStamp>* out) { out->swap(m_InteractionStamps); m_InteractionStamps.clear(); }
@@ -246,11 +258,12 @@ namespace shz
 		uint32 findDenseIndex(Handle<T> h, const std::vector<Slot<T>>& slots) const noexcept;
 
 		// ------------------------------------------------------------
-		// Batch Key (mesh objects)
+		// Batch Key (mesh objects) - LOD SPECIFIC
 		// ------------------------------------------------------------
 		struct DrawBatchKey final
 		{
 			const void* MeshPtr = nullptr;
+			uint32 LodIndex = 0;
 			uint32 SectionIndex = 0;
 			uint64 PassKey = 0;
 			MaterialId MatId = 0;
@@ -259,6 +272,7 @@ namespace shz
 			bool operator==(const DrawBatchKey& rhs) const noexcept
 			{
 				return MeshPtr == rhs.MeshPtr
+					&& LodIndex == rhs.LodIndex
 					&& SectionIndex == rhs.SectionIndex
 					&& PassKey == rhs.PassKey
 					&& MatId == rhs.MatId
@@ -271,6 +285,7 @@ namespace shz
 			size_t operator()(const DrawBatchKey& k) const noexcept
 			{
 				size_t h = reinterpret_cast<size_t>(k.MeshPtr);
+				h ^= (static_cast<size_t>(k.LodIndex) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				h ^= (static_cast<size_t>(k.SectionIndex) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				h ^= (static_cast<size_t>(k.PassKey) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
 				h ^= (static_cast<size_t>(k.MatId) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2));
@@ -289,14 +304,18 @@ namespace shz
 		{
 			SectionHandle Main = {};
 			SectionHandle Shadow = {};
+			SectionHandle Depth = {};
 		};
 
 		struct BatchInstance final
 		{
 			uint32 OcIndex = 0;
 			uint32 OwnerObjectDenseIndex = 0;
-			uint16 OwnerSectionSlot = 0;
-			uint8  OwnerPassSlot = 0; // 0:Main, 1:Shadow
+
+			uint16 OwnerLodIndex = 0;
+			uint16 OwnerSectionIndex = 0;
+
+			uint8  OwnerPassSlot = 0; // 0:Main, 1:Shadow, 2:Depth
 		};
 
 		struct Batch final
@@ -304,6 +323,7 @@ namespace shz
 			DrawBatchKey Key = {};
 
 			const StaticMeshRenderData* pMesh = nullptr;
+			uint32 LodIndex = 0;
 			uint32 SectionIndex = 0;
 			MaterialId MaterialId = 0;
 			uint64 PassKey = 0;
@@ -318,7 +338,9 @@ namespace shz
 		{
 			SceneObject Obj = {};
 			uint32 OcIndex = INVALID_INDEX;
-			std::vector<SectionHandles> Sections;
+
+			// [lod][section] -> handles for (Main/Shadow/Depth)
+			std::vector<std::vector<SectionHandles>> SectionsByLod;
 		};
 
 	private:
@@ -329,12 +351,26 @@ namespace shz
 		uint64 classifyMainPassKey(MaterialId matId) const noexcept;
 		bool   shouldRenderInShadow(MaterialId matId) const noexcept;
 
-		uint32 getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, uint64 passKey, bool bCastShadow);
+		uint32 getOrCreateBatch(
+			const DrawBatchKey& key,
+			const StaticMeshRenderData& mesh,
+			uint32 lodIndex,
+			uint32 sectionIndex,
+			MaterialId matId,
+			uint64 passKey,
+			bool bCastShadow);
+
 		void addObjectToBatches(uint32 objectDenseIndex);
 		void removeObjectFromBatches(uint32 objectDenseIndex);
 		void batchRemoveInstance(uint32 batchId, uint32 instanceIndex);
 
-		static DrawBatchKey makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, bool bCastShadow);
+		static DrawBatchKey makeBatchKey(
+			uint64 passKey,
+			const StaticMeshRenderData& mesh,
+			uint32 lodIndex,
+			uint32 sectionIndex,
+			MaterialId matId,
+			bool bCastShadow);
 
 	private:
 		// Objects
@@ -361,7 +397,7 @@ namespace shz
 		std::vector<LightObject> m_LightDense;
 		std::vector<Handle<LightObject>> m_LightHandles;
 
-		// 
+		//
 		std::unordered_map<struct DrawBatchKey, uint32, struct DrawBatchKeyHasher> m_BatchLookup;
 		std::vector<struct Batch> m_Batches;
 

@@ -5,6 +5,8 @@
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 #include "Engine/Renderer/Public/Renderer.h"
 
+#include <cmath>
+
 namespace shz
 {
 	// ------------------------------------------------------------
@@ -82,9 +84,6 @@ namespace shz
 	{
 		const Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 
-		// Simple policy:
-		// - Opaque/Masked => GBuffer
-		// - Transparent  => Forward
 		switch (mat.GetBlendMode())
 		{
 		case MATERIAL_BLEND_MODE_OPAQUE:
@@ -102,9 +101,6 @@ namespace shz
 	bool RenderScene::shouldRenderInShadow(MaterialId matId) const noexcept
 	{
 		const Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-
-		// Common policy: transparent materials typically do not cast shadow.
-		// Masked can cast shadow.
 		return (mat.GetBlendMode() != MATERIAL_BLEND_MODE_TRANSPARENT);
 	}
 
@@ -134,18 +130,15 @@ namespace shz
 
 		rec.OcIndex = allocOcIndex();
 
-		// Dense store
 		m_ObjectDense.emplace_back(std::move(rec));
 		m_ObjectHandles.emplace_back(h);
 
-		// Bind slot/sparse
 		slot.Owner = std::move(owner);
 		slot.DenseIndex = denseIndex;
 		slot.bOccupied = true;
 
 		m_ObjectSparse[handleIndex] = denseIndex;
 
-		// Insert into batches (section split happens here)
 		addObjectToBatches(denseIndex);
 
 		return h;
@@ -159,7 +152,6 @@ namespace shz
 		ASSERT(denseIndex < static_cast<uint32>(m_ObjectDense.size()), "Dense index out of range.");
 		ASSERT(m_ObjectHandles[denseIndex] == h, "Dense handle mismatch (internal corruption).");
 
-		// 1) remove from batches & free OcIndex
 		{
 			ObjectRecord& rec = m_ObjectDense[denseIndex];
 			removeObjectFromBatches(denseIndex);
@@ -167,7 +159,6 @@ namespace shz
 			rec.OcIndex = INVALID_INDEX;
 		}
 
-		// 2) dense swap-remove
 		const uint32 lastIndex = static_cast<uint32>(m_ObjectDense.size() - 1);
 		if (denseIndex != lastIndex)
 		{
@@ -185,28 +176,30 @@ namespace shz
 			ASSERT(movedHandleIndex < static_cast<uint32>(m_ObjectSparse.size()), "Moved sparse missing.");
 			m_ObjectSparse[movedHandleIndex] = denseIndex;
 
-			// Fix reverse references for moved object's instances (main + shadow handles)
+			// Fix backrefs (batch instances -> owner dense index)
 			ObjectRecord& movedRec = m_ObjectDense[denseIndex];
-			for (uint32 si = 0; si < static_cast<uint32>(movedRec.Sections.size()); ++si)
+
+			for (uint32 lod = 0; lod < static_cast<uint32>(movedRec.SectionsByLod.size()); ++lod)
 			{
-				const SectionHandles& shs = movedRec.Sections[si];
-
-				// Main
-				if (shs.Main.BatchId != INVALID_INDEX && shs.Main.InstanceIndex != INVALID_INDEX)
+				auto& secVec = movedRec.SectionsByLod[lod];
+				for (uint32 si = 0; si < static_cast<uint32>(secVec.size()); ++si)
 				{
-					ASSERT(shs.Main.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: main batchId OOB.");
-					Batch& b = m_Batches[shs.Main.BatchId];
-					ASSERT(shs.Main.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: main instanceIndex OOB.");
-					b.Instances[shs.Main.InstanceIndex].OwnerObjectDenseIndex = denseIndex;
-				}
+					const SectionHandles& shs = secVec[si];
 
-				// Shadow
-				if (shs.Shadow.BatchId != INVALID_INDEX && shs.Shadow.InstanceIndex != INVALID_INDEX)
-				{
-					ASSERT(shs.Shadow.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: shadow batchId OOB.");
-					Batch& b = m_Batches[shs.Shadow.BatchId];
-					ASSERT(shs.Shadow.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: shadow instanceIndex OOB.");
-					b.Instances[shs.Shadow.InstanceIndex].OwnerObjectDenseIndex = denseIndex;
+					auto Fix = [&](const SectionHandle& hnd)
+						{
+							if (hnd.BatchId != INVALID_INDEX && hnd.InstanceIndex != INVALID_INDEX)
+							{
+								ASSERT(hnd.BatchId < static_cast<uint32>(m_Batches.size()), "Moved object: batchId OOB.");
+								Batch& b = m_Batches[hnd.BatchId];
+								ASSERT(hnd.InstanceIndex < static_cast<uint32>(b.Instances.size()), "Moved object: instanceIndex OOB.");
+								b.Instances[hnd.InstanceIndex].OwnerObjectDenseIndex = denseIndex;
+							}
+						};
+
+					Fix(shs.Main);
+					Fix(shs.Shadow);
+					Fix(shs.Depth);
 				}
 			}
 		}
@@ -214,7 +207,6 @@ namespace shz
 		m_ObjectDense.pop_back();
 		m_ObjectHandles.pop_back();
 
-		// 3) clear handle slot/sparse
 		const uint32 handleIndex = h.GetIndex();
 		ASSERT(handleIndex < static_cast<uint32>(m_ObjectSlots.size()), "Handle slot missing.");
 		Slot<SceneObject>& slot = m_ObjectSlots[handleIndex];
@@ -235,7 +227,6 @@ namespace shz
 
 		ObjectRecord& rec = m_ObjectDense[denseIndex];
 
-		// Safest: remove -> replace mesh -> reinsert
 		removeObjectFromBatches(denseIndex);
 		rec.Obj.pMesh = &mesh;
 		addObjectToBatches(denseIndex);
@@ -435,7 +426,6 @@ namespace shz
 		return &m_IndirectDense[(size_t)dense];
 	}
 
-
 	// ------------------------------------------------------------
 	// Lights
 	// ------------------------------------------------------------
@@ -531,99 +521,8 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Draw list build
+	// Indirect packets
 	// ------------------------------------------------------------
-	void RenderScene::BuildDrawPackets(
-		uint64 passKey,
-		const std::vector<uint32>& visibleObjectDenseIndices,
-		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
-		std::vector<DrawPacket>& outPackets,
-		std::vector<uint32>& outInstanceRemap) const
-	{
-		outPackets.clear();
-		outInstanceRemap.clear();
-
-		BuildTerrainDrawPackets(passKey, resolver, outPackets);
-
-		if (visibleObjectDenseIndices.empty())
-		{
-			return;
-		}
-
-		// OcIndex visibility mask
-		std::vector<uint8> ocVisible;
-		ocVisible.resize(m_ObjectTableCPU.size(), 0);
-
-		for (uint32 objDense : visibleObjectDenseIndices)
-		{
-			ASSERT(objDense < static_cast<uint32>(m_ObjectDense.size()), "Object dense index OOB.");
-			const uint32 oc = m_ObjectDense[objDense].OcIndex;
-			ASSERT(oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()), "Invalid OcIndex.");
-			ocVisible[oc] = 1;
-		}
-
-		// Iterate batches -> select instances whose OcIndex is visible
-		for (uint32 batchId = 0; batchId < static_cast<uint32>(m_Batches.size()); ++batchId)
-		{
-			const Batch& b = m_Batches[batchId];
-			if (b.IsEmpty())
-			{
-				continue;
-			}
-			if (b.PassKey != passKey)
-			{
-				continue;
-			}
-
-			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
-			uint32 count = 0;
-
-			for (const BatchInstance& inst : b.Instances)
-			{
-				const uint32 oc = inst.OcIndex;
-				ASSERT(oc < static_cast<uint32>(ocVisible.size()), "OcIndex OOB.");
-				if (ocVisible[oc])
-				{
-					outInstanceRemap.push_back(oc);
-					++count;
-				}
-			}
-
-			if (count == 0)
-			{
-				continue;
-			}
-
-			// Resolve PSO/SRB
-
-			const MaterialPipelineBinding& pb = resolver(b.MaterialId, passKey);
-			ASSERT(pb.pPSO && pb.pSRB, "Pipeline binding is null.");
-
-			// Build DrawPacket
-			ASSERT(b.pMesh, "Batch mesh is null.");
-			ASSERT(b.SectionIndex < static_cast<uint32>(b.pMesh->Sections.size()), "SectionIndex OOB.");
-			const auto& sec = b.pMesh->Sections[b.SectionIndex];
-
-			DrawPacket pkt = {};
-			pkt.VertexBuffer = b.pMesh->VertexBuffer;
-			pkt.IndexBuffer = b.pMesh->IndexBuffer;
-			pkt.PSO = pb.pPSO;
-			pkt.SRB = pb.pSRB;
-
-			pkt.StartInstanceLocation = start;
-
-			pkt.DrawAttribs = {};
-			pkt.DrawAttribs.IndexType = b.pMesh->IndexType;
-			pkt.DrawAttribs.NumIndices = sec.IndexCount;
-			pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
-			pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
-			pkt.DrawAttribs.NumInstances = count;
-			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
-
-			outPackets.emplace_back(pkt);
-		}
-	}
-
 	void RenderScene::BuildIndirectDrawPackets(
 		uint64 passKey,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
@@ -634,9 +533,7 @@ namespace shz
 		for (const IndirectObject& io : m_IndirectDense)
 		{
 			if (!io.bEnabled)
-			{
 				continue;
-			}
 
 			const IndirectObjectDesc& d = io.Desc;
 
@@ -645,25 +542,17 @@ namespace shz
 			const bool bIsDepthPrepass = (passKey == STRING_HASH("DepthPrepass")) && d.bDepthPrepass;
 
 			if (!bIsMainPass && !bIsShadowPass && !bIsDepthPrepass)
-			{
 				continue;
-			}
 
 			ASSERT(d.pMesh, "IndirectObject mesh is null.");
-			const StaticMeshRenderData* mesh = d.pMesh;
+			const StaticMeshLevelRenderData* mesh = d.pMesh;
 
 			const uint32 sectionCount = static_cast<uint32>(mesh->Sections.size());
-			if (sectionCount == 0)
-			{
-				continue;
-			}
+			ASSERT(sectionCount > 0, "IndirectObject mesh has no sections.");
 
-			// Policy:
-			// - One indirect args slot per mesh section.
-			// - Slot range must be contiguous: [IndirectBaseSlot .. IndirectBaseSlot + sectionCount).
 			for (uint32 si = 0; si < sectionCount; ++si)
 			{
-				const StaticMeshRenderData::Section& sec = mesh->Sections[si];
+				const StaticMeshLevelRenderData::Section& sec = mesh->Sections[si];
 
 				const uint32 slot = d.IndirectBaseSlot + si;
 				ASSERT(slot < MAX_NUM_INDIRECTS, "Indirect slot out of range. base=%u si=%u", d.IndirectBaseSlot, si);
@@ -677,8 +566,6 @@ namespace shz
 				pkt.PSO = pb.pPSO;
 				pkt.SRB = pb.pSRB;
 
-				// Indirect args:
-				// - 20 bytes per slot at offset = slot * 20
 				pkt.DrawAttribs = {};
 				pkt.DrawAttribs.IndexType = mesh->IndexType;
 
@@ -689,9 +576,6 @@ namespace shz
 				pkt.DrawAttribs.pAttribsBuffer = nullptr;
 				pkt.DrawAttribs.AttribsBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
 
-				// Counter buffer:
-				// - We use slot draw-count buffer (0 or 1).
-				// - If counter == 0 -> the draw is skipped.
 				pkt.DrawAttribs.pCounterBuffer = nullptr;
 				pkt.DrawAttribs.CounterOffset = static_cast<uint64>(slot) * 4u;
 				pkt.DrawAttribs.CounterBufferStateTransitionMode = RESOURCE_STATE_TRANSITION_MODE_VERIFY;
@@ -703,16 +587,16 @@ namespace shz
 		}
 	}
 
-
+	// ------------------------------------------------------------
+	// Terrain packets
+	// ------------------------------------------------------------
 	void RenderScene::BuildTerrainDrawPackets(
 		uint64 passKey,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets) const
 	{
 		if (!(passKey == STRING_HASH("GBuffer") || passKey == STRING_HASH("Shadow") || passKey == STRING_HASH("DepthPrepass")))
-		{
 			return;
-		}
 
 		for (const TerrainObject& t : m_TerrainDense)
 		{
@@ -743,12 +627,177 @@ namespace shz
 		}
 	}
 
+	// ------------------------------------------------------------
+	// LOD helpers
+	// ------------------------------------------------------------
+	static inline float ComputeScreenSizeFromSphere_ViewSpace(float zPositive, float radius, float tanHalfFovY)
+	{
+		const float dist = std::max(zPositive, 1e-3f);
+		const float ss = (radius / dist) * (1.0f / std::max(tanHalfFovY, 1e-6f));
+		return ss;
+	}
+
+	static inline uint32 ChooseLODByScreenSize(const StaticMeshRenderData& meshRD, float screenSize)
+	{
+		if (meshRD.Levels.empty())
+			return 0;
+		if (meshRD.LODScreenSizes.empty())
+			return 0;
+
+		const uint32 levelCount = static_cast<uint32>(meshRD.Levels.size());
+		const uint32 threshCount = static_cast<uint32>(meshRD.LODScreenSizes.size());
+		const uint32 n = std::min(levelCount, threshCount);
+
+		for (uint32 lod = 0; lod < n; ++lod)
+		{
+			if (screenSize >= meshRD.LODScreenSizes[lod])
+				return lod;
+		}
+
+		return levelCount - 1;
+	}
+
+	// ------------------------------------------------------------
+	// Draw list build
+	// (batches are LOD-SPECIFIC now; we filter instances by chosen LOD)
+	// ------------------------------------------------------------
+	void RenderScene::BuildDrawPackets(
+		uint64 passKey,
+		const ViewLodParams& view,
+		const std::vector<uint32>& visibleObjectDenseIndices,
+		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
+		std::vector<DrawPacket>& outPackets,
+		std::vector<uint32>& outInstanceRemap) const
+	{
+		outPackets.clear();
+		outInstanceRemap.clear();
+
+		BuildTerrainDrawPackets(passKey, resolver, outPackets);
+
+		if (visibleObjectDenseIndices.empty())
+			return;
+
+		// Oc visibility + chosen LOD per OcIndex
+		std::vector<uint8> ocVisible;
+		ocVisible.resize(m_ObjectTableCPU.size(), 0);
+
+		// Store chosen lod for each OcIndex (only valid if ocVisible[oc]==1)
+		std::vector<uint16> ocChosenLod;
+		ocChosenLod.resize(m_ObjectTableCPU.size(), 0);
+
+		for (uint32 objDense : visibleObjectDenseIndices)
+		{
+			ASSERT(objDense < static_cast<uint32>(m_ObjectDense.size()), "Object dense index OOB.");
+			const ObjectRecord& rec = m_ObjectDense[objDense];
+			const uint32 oc = rec.OcIndex;
+
+			ASSERT(oc != INVALID_INDEX && oc < static_cast<uint32>(ocVisible.size()), "Invalid OcIndex.");
+			ocVisible[oc] = 1;
+
+			const SceneObject& obj = rec.Obj;
+			ASSERT(obj.pMesh, "Visible object mesh is null.");
+
+			const StaticMeshRenderData& meshRD = *obj.pMesh;
+			ASSERT(!meshRD.Levels.empty(), "StaticMeshRenderData has no levels.");
+
+			const StaticMeshLevelRenderData& lvl0 = meshRD.Levels[0];
+			const float3 localC = lvl0.LocalBounds.Center;
+			const float  radius = lvl0.LocalBounds.Radius;
+
+			const float4 cVS4 = float4(localC, 1.0f) * obj.World * view.View;
+			float z = cVS4.z;
+			if (!view.bViewForwardIsPositiveZ)
+				z = -z;
+
+			const float screenSize = ComputeScreenSizeFromSphere_ViewSpace(std::max(z, 1e-3f), radius, view.TanHalfFovY);
+			const uint32 lod = ChooseLODByScreenSize(meshRD, screenSize);
+
+			ocChosenLod[oc] = static_cast<uint16>(lod);
+		}
+
+		// Iterate batches (already LOD-specific)
+		for (uint32 batchId = 0; batchId < static_cast<uint32>(m_Batches.size()); ++batchId)
+		{
+			const Batch& b = m_Batches[batchId];
+			if (b.IsEmpty())
+				continue;
+
+			if (b.PassKey != passKey)
+				continue;
+
+			ASSERT(b.pMesh, "Batch mesh is null.");
+			const StaticMeshRenderData& meshRD = *b.pMesh;
+
+			ASSERT(b.LodIndex < static_cast<uint32>(meshRD.Levels.size()), "Batch LodIndex OOB.");
+			const StaticMeshLevelRenderData& lvl = meshRD.Levels[b.LodIndex];
+
+			ASSERT(b.SectionIndex < static_cast<uint32>(lvl.Sections.size()), "Batch SectionIndex OOB for this LOD.");
+			const auto& sec = lvl.Sections[b.SectionIndex];
+
+			const MaterialPipelineBinding& pb = resolver(b.MaterialId, passKey);
+			ASSERT(pb.pPSO && pb.pSRB, "Pipeline binding is null.");
+
+			// Count visible instances that chose this LOD
+			uint32 visibleCount = 0;
+			for (const BatchInstance& inst : b.Instances)
+			{
+				const uint32 oc = inst.OcIndex;
+				ASSERT(oc < static_cast<uint32>(ocVisible.size()), "OcIndex OOB.");
+				if (!ocVisible[oc])
+					continue;
+
+				if (ocChosenLod[oc] != b.LodIndex)
+					continue;
+
+				visibleCount++;
+			}
+
+			if (visibleCount == 0)
+				continue;
+
+			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
+			outInstanceRemap.resize(static_cast<size_t>(start) + visibleCount);
+
+			uint32 w = start;
+			for (const BatchInstance& inst : b.Instances)
+			{
+				const uint32 oc = inst.OcIndex;
+				if (!ocVisible[oc])
+					continue;
+				if (ocChosenLod[oc] != b.LodIndex)
+					continue;
+
+				outInstanceRemap[w++] = oc;
+			}
+			ASSERT(w == start + visibleCount, "Instance remap write mismatch.");
+
+			DrawPacket pkt = {};
+			pkt.VertexBuffer = lvl.VertexBuffer;
+			pkt.IndexBuffer = lvl.IndexBuffer;
+			pkt.PSO = pb.pPSO;
+			pkt.SRB = pb.pSRB;
+
+			pkt.StartInstanceLocation = start;
+
+			pkt.DrawAttribs = {};
+			pkt.DrawAttribs.IndexType = lvl.IndexType;
+			pkt.DrawAttribs.NumIndices = sec.IndexCount;
+			pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
+			pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
+			pkt.DrawAttribs.NumInstances = visibleCount;
+			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
+
+			outPackets.emplace_back(pkt);
+		}
+	}
+
 	bool RenderScene::TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept
 	{
 		ASSERT(batchId < static_cast<uint32>(m_Batches.size()), "Batch ID out of bounds.");
 
 		const Batch& b = m_Batches[batchId];
 		outView.pMesh = b.pMesh;
+		outView.LodIndex = b.LodIndex;
 		outView.SectionIndex = b.SectionIndex;
 		outView.MaterialId = b.MaterialId;
 		outView.bCastShadow = b.bCastShadow;
@@ -782,17 +831,13 @@ namespace shz
 	void RenderScene::freeOcIndex(uint32 ocIndex)
 	{
 		if (ocIndex == INVALID_INDEX)
-		{
 			return;
-		}
 
 		ASSERT(ocIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "freeOcIndex out of range.");
 		m_FreeOcIndices.push_back(ocIndex);
 
 		if (ocIndex < static_cast<uint32>(m_OcDirty.size()))
-		{
 			m_OcDirty[ocIndex] = 0;
-		}
 	}
 
 	void RenderScene::markOcDirty(uint32 ocIndex)
@@ -810,10 +855,17 @@ namespace shz
 	// ------------------------------------------------------------
 	// Batch key
 	// ------------------------------------------------------------
-	RenderScene::DrawBatchKey RenderScene::makeBatchKey(uint64 passKey, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, bool bCastShadow)
+	RenderScene::DrawBatchKey RenderScene::makeBatchKey(
+		uint64 passKey,
+		const StaticMeshRenderData& mesh,
+		uint32 lodIndex,
+		uint32 sectionIndex,
+		MaterialId matId,
+		bool bCastShadow)
 	{
 		DrawBatchKey k = {};
 		k.MeshPtr = &mesh;
+		k.LodIndex = lodIndex;
 		k.SectionIndex = sectionIndex;
 		k.PassKey = passKey;
 		k.MatId = matId;
@@ -821,7 +873,14 @@ namespace shz
 		return k;
 	}
 
-	uint32 RenderScene::getOrCreateBatch(const DrawBatchKey& key, const StaticMeshRenderData& mesh, uint32 sectionIndex, MaterialId matId, uint64 passKey, bool bCastShadow)
+	uint32 RenderScene::getOrCreateBatch(
+		const DrawBatchKey& key,
+		const StaticMeshRenderData& mesh,
+		uint32 lodIndex,
+		uint32 sectionIndex,
+		MaterialId matId,
+		uint64 passKey,
+		bool bCastShadow)
 	{
 		auto it = m_BatchLookup.find(key);
 		if (it != m_BatchLookup.end())
@@ -834,6 +893,7 @@ namespace shz
 		Batch b = {};
 		b.Key = key;
 		b.pMesh = &mesh;
+		b.LodIndex = lodIndex;
 		b.SectionIndex = sectionIndex;
 		b.MaterialId = matId;
 		b.PassKey = passKey;
@@ -858,10 +918,17 @@ namespace shz
 
 			ASSERT(moved.OwnerObjectDenseIndex < static_cast<uint32>(m_ObjectDense.size()), "batchRemoveInstance: moved owner out of range.");
 			ObjectRecord& movedOwner = m_ObjectDense[moved.OwnerObjectDenseIndex];
-			ASSERT(moved.OwnerSectionSlot < movedOwner.Sections.size(), "batchRemoveInstance: moved owner section slot out of range.");
 
-			SectionHandles& shs = movedOwner.Sections[moved.OwnerSectionSlot];
-			SectionHandle* pHandle = (moved.OwnerPassSlot == 0) ? &shs.Main : &shs.Shadow;
+			ASSERT(moved.OwnerLodIndex < movedOwner.SectionsByLod.size(), "batchRemoveInstance: moved owner lod OOB.");
+			auto& lodSecs = movedOwner.SectionsByLod[moved.OwnerLodIndex];
+
+			ASSERT(moved.OwnerSectionIndex < lodSecs.size(), "batchRemoveInstance: moved owner section OOB.");
+			SectionHandles& shs = lodSecs[moved.OwnerSectionIndex];
+
+			SectionHandle* pHandle = nullptr;
+			if (moved.OwnerPassSlot == 0) pHandle = &shs.Main;
+			else if (moved.OwnerPassSlot == 1) pHandle = &shs.Shadow;
+			else pHandle = &shs.Depth;
 
 			ASSERT(pHandle->BatchId == batchId, "batchRemoveInstance: moved handle batch mismatch.");
 			ASSERT(pHandle->InstanceIndex == lastIndex, "batchRemoveInstance: moved handle instance mismatch.");
@@ -885,91 +952,97 @@ namespace shz
 		ASSERT(rec.OcIndex != INVALID_INDEX, "Object has no OcIndex.");
 		ASSERT(rec.OcIndex < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
 
-		// ObjectConstants CPU mirror update (최초 1회)
+		// OC table
 		m_ObjectTableCPU[rec.OcIndex].World = obj.World;
 		m_ObjectTableCPU[rec.OcIndex].WorldInvTranspose = obj.WorldInvTranspose;
 		m_ObjectTableCPU[rec.OcIndex].PrevWorld = Matrix4x4::Identity();
 		markOcDirty(rec.OcIndex);
 
-		const uint32 sectionCount = static_cast<uint32>(obj.pMesh->Sections.size());
+		const StaticMeshRenderData& meshRD = *obj.pMesh;
+		ASSERT(!meshRD.Levels.empty(), "StaticMeshRenderData has no levels.");
 
-		rec.Sections.clear();
-		rec.Sections.resize(sectionCount);
+		const uint32 lodCount = static_cast<uint32>(meshRD.Levels.size());
 
-		for (uint32 si = 0; si < sectionCount; ++si)
+		rec.SectionsByLod.clear();
+		rec.SectionsByLod.resize(lodCount);
+
+		// For each LOD, create per-section handles and push instances to LOD-specific batches
+		for (uint32 lod = 0; lod < lodCount; ++lod)
 		{
-			const auto& sec = obj.pMesh->Sections[si];
+			const StaticMeshLevelRenderData& lvl = meshRD.Levels[lod];
+			const uint32 sectionCount = static_cast<uint32>(lvl.Sections.size());
 
-			// NOTE:
-			// StaticMeshRenderData::Section은 MaterialId를 가진다고 가정한다.
-			// (이 필드명은 네 실제 구조에 맞게 바꿔 끼워라.)
-			const MaterialId matId = sec.MaterialId;
+			rec.SectionsByLod[lod].clear();
+			rec.SectionsByLod[lod].resize(sectionCount);
 
-			// -----------------------------
-			// Main pass batch
-			// -----------------------------
+			for (uint32 si = 0; si < sectionCount; ++si)
 			{
-				const uint64 mainPassKey = classifyMainPassKey(matId);
+				const auto& sec = lvl.Sections[si];
+				const MaterialId matId = sec.MaterialId;
 
-				BatchInstance inst = {};
-				inst.OcIndex = rec.OcIndex;
-				inst.OwnerObjectDenseIndex = objectDenseIndex;
-				inst.OwnerSectionSlot = static_cast<uint16>(si);
-				inst.OwnerPassSlot = 0;
+				// Main pass (classified per LOD material)
+				{
+					const uint64 mainPassKey = classifyMainPassKey(matId);
 
-				const DrawBatchKey key = makeBatchKey(mainPassKey, *obj.pMesh, si, matId, obj.bCastShadow);
-				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, mainPassKey, obj.bCastShadow);
+					BatchInstance inst = {};
+					inst.OcIndex = rec.OcIndex;
+					inst.OwnerObjectDenseIndex = objectDenseIndex;
+					inst.OwnerLodIndex = static_cast<uint16>(lod);
+					inst.OwnerSectionIndex = static_cast<uint16>(si);
+					inst.OwnerPassSlot = 0;
 
-				Batch& batch = m_Batches[batchId];
-				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
-				batch.Instances.emplace_back(inst);
+					const DrawBatchKey key = makeBatchKey(mainPassKey, meshRD, lod, si, matId, obj.bCastShadow);
+					const uint32 batchId = getOrCreateBatch(key, meshRD, lod, si, matId, mainPassKey, obj.bCastShadow);
 
-				rec.Sections[si].Main.BatchId = batchId;
-				rec.Sections[si].Main.InstanceIndex = instIndex;
-			}
+					Batch& batch = m_Batches[batchId];
+					const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+					batch.Instances.emplace_back(inst);
 
-			// -----------------------------
-			// Shadow pass batch (optional)
-			// -----------------------------
-			if (obj.bCastShadow && shouldRenderInShadow(matId))
-			{
-				BatchInstance inst = {};
-				inst.OcIndex = rec.OcIndex;
-				inst.OwnerObjectDenseIndex = objectDenseIndex;
-				inst.OwnerSectionSlot = static_cast<uint16>(si);
-				inst.OwnerPassSlot = 1;
+					rec.SectionsByLod[lod][si].Main.BatchId = batchId;
+					rec.SectionsByLod[lod][si].Main.InstanceIndex = instIndex;
+				}
 
-				const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), *obj.pMesh, si, matId, obj.bCastShadow);
-				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, STRING_HASH("Shadow"), obj.bCastShadow);
+				// Shadow pass (only if cast shadow && material supports shadow)
+				if (obj.bCastShadow && shouldRenderInShadow(matId))
+				{
+					BatchInstance inst = {};
+					inst.OcIndex = rec.OcIndex;
+					inst.OwnerObjectDenseIndex = objectDenseIndex;
+					inst.OwnerLodIndex = static_cast<uint16>(lod);
+					inst.OwnerSectionIndex = static_cast<uint16>(si);
+					inst.OwnerPassSlot = 1;
 
-				Batch& batch = m_Batches[batchId];
-				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
-				batch.Instances.emplace_back(inst);
+					const DrawBatchKey key = makeBatchKey(STRING_HASH("Shadow"), meshRD, lod, si, matId, obj.bCastShadow);
+					const uint32 batchId = getOrCreateBatch(key, meshRD, lod, si, matId, STRING_HASH("Shadow"), obj.bCastShadow);
 
-				rec.Sections[si].Shadow.BatchId = batchId;
-				rec.Sections[si].Shadow.InstanceIndex = instIndex;
-			}
+					Batch& batch = m_Batches[batchId];
+					const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+					batch.Instances.emplace_back(inst);
 
-			// -----------------------------
-			// Depth pre-pass batch
-			// -----------------------------
-			if (obj.bDepthPrepass)
-			{
-				BatchInstance inst = {};
-				inst.OcIndex = rec.OcIndex;
-				inst.OwnerObjectDenseIndex = objectDenseIndex;
-				inst.OwnerSectionSlot = static_cast<uint16>(si);
-				inst.OwnerPassSlot = 1;
+					rec.SectionsByLod[lod][si].Shadow.BatchId = batchId;
+					rec.SectionsByLod[lod][si].Shadow.InstanceIndex = instIndex;
+				}
 
-				const DrawBatchKey key = makeBatchKey(STRING_HASH("DepthPrepass"), *obj.pMesh, si, matId, obj.bCastShadow);
-				const uint32 batchId = getOrCreateBatch(key, *obj.pMesh, si, matId, STRING_HASH("DepthPrepass"), obj.bCastShadow);
+				// Depth prepass (kept same rule as before: by object flag only)
+				if (obj.bDepthPrepass)
+				{
+					BatchInstance inst = {};
+					inst.OcIndex = rec.OcIndex;
+					inst.OwnerObjectDenseIndex = objectDenseIndex;
+					inst.OwnerLodIndex = static_cast<uint16>(lod);
+					inst.OwnerSectionIndex = static_cast<uint16>(si);
+					inst.OwnerPassSlot = 2;
 
-				Batch& batch = m_Batches[batchId];
-				const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
-				batch.Instances.emplace_back(inst);
+					const DrawBatchKey key = makeBatchKey(STRING_HASH("DepthPrepass"), meshRD, lod, si, matId, obj.bCastShadow);
+					const uint32 batchId = getOrCreateBatch(key, meshRD, lod, si, matId, STRING_HASH("DepthPrepass"), obj.bCastShadow);
 
-				rec.Sections[si].Shadow.BatchId = batchId;
-				rec.Sections[si].Shadow.InstanceIndex = instIndex;
+					Batch& batch = m_Batches[batchId];
+					const uint32 instIndex = static_cast<uint32>(batch.Instances.size());
+					batch.Instances.emplace_back(inst);
+
+					rec.SectionsByLod[lod][si].Depth.BatchId = batchId;
+					rec.SectionsByLod[lod][si].Depth.InstanceIndex = instIndex;
+				}
 			}
 		}
 	}
@@ -980,24 +1053,35 @@ namespace shz
 
 		ObjectRecord& rec = m_ObjectDense[objectDenseIndex];
 
-		for (uint32 si = 0; si < static_cast<uint32>(rec.Sections.size()); ++si)
+		for (uint32 lod = 0; lod < static_cast<uint32>(rec.SectionsByLod.size()); ++lod)
 		{
-			SectionHandles& shs = rec.Sections[si];
+			auto& secVec = rec.SectionsByLod[lod];
 
-			if (shs.Main.BatchId != INVALID_INDEX && shs.Main.InstanceIndex != INVALID_INDEX)
+			for (uint32 si = 0; si < static_cast<uint32>(secVec.size()); ++si)
 			{
-				batchRemoveInstance(shs.Main.BatchId, shs.Main.InstanceIndex);
-				shs.Main = {};
-			}
+				SectionHandles& shs = secVec[si];
 
-			if (shs.Shadow.BatchId != INVALID_INDEX && shs.Shadow.InstanceIndex != INVALID_INDEX)
-			{
-				batchRemoveInstance(shs.Shadow.BatchId, shs.Shadow.InstanceIndex);
-				shs.Shadow = {};
+				if (shs.Main.BatchId != INVALID_INDEX && shs.Main.InstanceIndex != INVALID_INDEX)
+				{
+					batchRemoveInstance(shs.Main.BatchId, shs.Main.InstanceIndex);
+					shs.Main = {};
+				}
+
+				if (shs.Shadow.BatchId != INVALID_INDEX && shs.Shadow.InstanceIndex != INVALID_INDEX)
+				{
+					batchRemoveInstance(shs.Shadow.BatchId, shs.Shadow.InstanceIndex);
+					shs.Shadow = {};
+				}
+
+				if (shs.Depth.BatchId != INVALID_INDEX && shs.Depth.InstanceIndex != INVALID_INDEX)
+				{
+					batchRemoveInstance(shs.Depth.BatchId, shs.Depth.InstanceIndex);
+					shs.Depth = {};
+				}
 			}
 		}
 
-		rec.Sections.clear();
+		rec.SectionsByLod.clear();
 	}
 
 	// ------------------------------------------------------------
@@ -1015,15 +1099,10 @@ namespace shz
 
 		const Slot<T>& slot = slots[idx];
 		if (!slot.bOccupied)
-		{
 			return INVALID_INDEX;
-		}
 
-		// CRITICAL: ensure this handle matches the slot owner (index + generation)
 		if (slot.Owner.Get() != h)
-		{
 			return INVALID_INDEX;
-		}
 
 		return slot.DenseIndex;
 	}

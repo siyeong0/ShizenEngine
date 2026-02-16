@@ -30,7 +30,7 @@ namespace shz
 	// ------------------------------------------------------------
 	bool BuildStaticMeshAsset(
 		const AssimpAsset& assimpAsset,
-		StaticMesh* pOutMesh,
+		StaticMeshLevel* pOutMesh,
 		const AssimpImportSettings& settings,
 		const std::string& materialTemplateName,
 		std::string* outError = nullptr,

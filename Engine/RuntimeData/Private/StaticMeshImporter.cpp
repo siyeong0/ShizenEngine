@@ -113,7 +113,7 @@ namespace shz
 			return {};
 		}
 
-		StaticMesh mesh;
+		StaticMeshLevel mesh;
 
 		// Streams
 		const auto& streams = j.at("Streams");
@@ -161,16 +161,14 @@ namespace shz
 		// Sections
 		if (j.contains("Sections"))
 		{
-			std::vector<StaticMesh::Section> secs;
+			std::vector<StaticMeshLevel::Section> secs;
 			for (const auto& sj : j["Sections"])
 			{
-				StaticMesh::Section s;
+				StaticMeshLevel::Section s;
 				s.FirstIndex = sj.value("FirstIndex", 0u);
 				s.IndexCount = sj.value("IndexCount", 0u);
 				s.BaseVertex = sj.value("BaseVertex", 0u);
 				s.MaterialSlot = sj.value("MaterialSlot", 0u);
-				if (sj.contains("LocalBounds"))
-					s.LocalBounds = jsonToBox(sj["LocalBounds"]);
 				secs.push_back(std::move(s));
 			}
 			mesh.SetSections(std::move(secs));
@@ -245,7 +243,6 @@ namespace shz
 			mesh.SetMaterialSlots(std::move(mats));
 		}
 
-		// Bounds: 저장된 값은 참고만 하고, 안전하게 재계산
 		mesh.RecomputeBounds();
 
 		if (!mesh.IsValid())
@@ -268,6 +265,6 @@ namespace shz
 			*pOutResidentBytes = bytes;
 		}
 
-		return std::make_unique<TypedAssetObject<StaticMesh>>(static_cast<StaticMesh&&>(mesh));
+		return std::make_unique<TypedAssetObject<StaticMeshLevel>>(static_cast<StaticMeshLevel&&>(mesh));
 	}
 }

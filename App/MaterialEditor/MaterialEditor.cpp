@@ -207,12 +207,12 @@ namespace shz
 		m_Main.Scale = scale;
 		m_Main.bCastShadow = bCastShadow;
 
-		StaticMesh* cpu = nullptr;
+		StaticMeshLevel* cpu = nullptr;
 
 		// 1) Native mesh: *.shzmesh.json
 		if (IsShzMeshJsonPath(m_Main.Path))
 		{
-			m_Main.MeshRef = m_pAssetManager->RegisterAsset<StaticMesh>(m_Main.Path);
+			m_Main.MeshRef = m_pAssetManager->RegisterAsset<StaticMeshLevel>(m_Main.Path);
 			m_Main.MeshPtr = m_pAssetManager->LoadBlocking(m_Main.MeshRef);
 
 			cpu = m_Main.MeshPtr.Get();
@@ -231,7 +231,7 @@ namespace shz
 			if (!assimp)
 				return false;
 
-			m_Main.ImportedCpuMesh = new StaticMesh();
+			m_Main.ImportedCpuMesh = new StaticMeshLevel();
 			ASSERT(m_Main.ImportedCpuMesh, "ImportedCpuMesh alloc failed.");
 
 			AssimpImportSettings settings = {};
@@ -258,7 +258,7 @@ namespace shz
 
 		if (m_bUniformScale)
 		{
-			float uniformScale = ComputeUniformScale(cpu->GetBounds());
+			float uniformScale = ComputeUniformScale(cpu->GetBoxBounds());
 			m_Main.Scale = float3{ uniformScale, uniformScale, uniformScale };
 		}
 
@@ -279,7 +279,7 @@ namespace shz
 		ASSERT(m_pRenderer, "Renderer is null.");
 		ASSERT(m_pRenderScene, "RenderScene is null.");
 
-		StaticMesh* cpu = m_Main.ImportedCpuMesh;
+		StaticMeshLevel* cpu = m_Main.ImportedCpuMesh;
 		if (!cpu)
 			return false;
 
@@ -568,7 +568,7 @@ namespace shz
 		}
 
 		// Copy CPU mesh as baked output
-		StaticMesh baked = *m_Main.ImportedCpuMesh;
+		StaticMeshLevel baked = *m_Main.ImportedCpuMesh;
 
 		const uint32 slotCount = baked.GetMaterialSlotCount();
 		for (uint32 slot = 0; slot < slotCount; ++slot)
@@ -611,7 +611,7 @@ namespace shz
 				SyncSlotUiFromMaterial(ui, mat);
 		}
 
-		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMesh>>(std::move(baked));
+		m_pMainBuiltObjForSave = std::make_unique<TypedAssetObject<StaticMeshLevel>>(std::move(baked));
 		return true;
 	}
 
@@ -651,7 +651,7 @@ namespace shz
 		StaticMeshExporter exporter = {};
 
 		AssetMeta meta = {};
-		meta.TypeID = AssetTypeTraits<StaticMesh>::TypeID;
+		meta.TypeID = AssetTypeTraits<StaticMeshLevel>::TypeID;
 		meta.SourcePath = m_Main.Path.empty() ? m_MainMeshPath : m_Main.Path;
 
 		std::string err;
@@ -682,12 +682,12 @@ namespace shz
 		// AssetManager
 		m_pAssetManager = std::make_unique<AssetManager>();
 		ASSERT(m_pAssetManager, "AssetManager is null.");
-		m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshImporter{});
+		m_pAssetManager->RegisterImporter(AssetTypeTraits<StaticMeshLevel>::TypeID, StaticMeshImporter{});
 		m_pAssetManager->RegisterImporter(AssetTypeTraits<Texture>::TypeID, TextureImporter{});
 		m_pAssetManager->RegisterImporter(AssetTypeTraits<Material>::TypeID, MaterialImporter{});
 		m_pAssetManager->RegisterImporter(AssetTypeTraits<AssimpAsset>::TypeID, AssimpImporter{});
 
-		m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMesh>::TypeID, StaticMeshExporter{});
+		m_pAssetManager->RegisterExporter(AssetTypeTraits<StaticMeshLevel>::TypeID, StaticMeshExporter{});
 		m_pAssetManager->RegisterExporter(AssetTypeTraits<Material>::TypeID, MaterialExporter{});
 
 		// Renderer + shader factory
@@ -755,7 +755,7 @@ namespace shz
 			AssetRef<AssimpAsset> floorRef = m_pAssetManager->RegisterAsset<AssimpAsset>(m_FloorMeshPath);
 			AssetPtr<AssimpAsset> floorPtr = m_pAssetManager->LoadBlocking(floorRef);
 
-			StaticMesh cpuFloorMesh = {};
+			StaticMeshLevel cpuFloorMesh = {};
 			(void)BuildStaticMeshAsset(
 				*floorPtr,
 				&cpuFloorMesh,
@@ -1033,7 +1033,7 @@ namespace shz
 			{
 				if (m_bUniformScale)
 				{
-					float uniformScale = ComputeUniformScale(m_Main.ImportedCpuMesh->GetBounds());
+					float uniformScale = ComputeUniformScale(m_Main.ImportedCpuMesh->GetBoxBounds());
 					m_Main.Scale = float3{ uniformScale, uniformScale, uniformScale };
 				}
 				else
@@ -1155,7 +1155,7 @@ namespace shz
 			return;
 		}
 
-		StaticMesh* cpu = m_Main.ImportedCpuMesh;
+		StaticMeshLevel* cpu = m_Main.ImportedCpuMesh;
 		if (!cpu)
 		{
 			ImGui::TextDisabled("Load a StaticMesh first.");
