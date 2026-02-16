@@ -460,7 +460,6 @@ namespace shz
 		ASSERT(!m_CI.RockyPath.empty(), "Invalid rocky texture path.");
 		ASSERT(!m_CI.SoilPath.empty(), "Invalid soil texture path.");
 		ASSERT(!m_CI.VegetationPath.empty(), "Invalid vegetation texture path.");
-		ASSERT(!m_CI.TreesPath.empty(), "Invalid trees texture path.");
 
 		m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
 		m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
@@ -1114,7 +1113,7 @@ namespace shz
 			object.IndexCount = m_LodIndexCount[lod][mask];
 
 			object.InstanceCount = b.InstanceCount;
-			object.FirstInstanceLocation = b.StartInstance;
+			object.StartInstanceLocation = b.StartInstance;
 
 			object.MaterialId = m_TerrainMaterialId;
 
@@ -1219,6 +1218,19 @@ namespace shz
 		const float u = (worldXZ.x - originX) / sizeX;
 		const float v = (worldXZ.y - originZ) / sizeZ;
 		return float2{ Clamp01(u), Clamp01(v) };
+	}
+
+	float2 TerrainSystem::DomainUVToWorldXZ(const float2& uv) const noexcept
+	{
+		const float originX = GetWorldOriginX();
+		const float originZ = GetWorldOriginZ();
+
+		const float sizeX = GetWorldSizeX();
+		const float sizeZ = GetWorldSizeZ();
+
+		const float x = originX + Clamp01(uv.x) * sizeX;
+		const float z = originZ + Clamp01(uv.y) * sizeZ;
+		return float2{ x, z };
 	}
 
 	float TerrainSystem::GetNormalizedHeightAt(uint32 x, uint32 z) const

@@ -119,19 +119,19 @@ namespace shz
 			static constexpr uint32 NUM_GBUFFERS = 4;
 			{
 				auto createGBufferTextureDesc = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> TextureDesc
-				{
-					TextureDesc td = {};
-					td.Name = name;
-					td.Type = RESOURCE_DIM_TEX_2D;
-					td.Width = w;
-					td.Height = h;
-					td.MipLevels = 1;
-					td.Format = fmt;
-					td.SampleCount = 1;
-					td.Usage = USAGE_DEFAULT;
-					td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-					return td;
-				};
+					{
+						TextureDesc td = {};
+						td.Name = name;
+						td.Type = RESOURCE_DIM_TEX_2D;
+						td.Width = w;
+						td.Height = h;
+						td.MipLevels = 1;
+						td.Format = fmt;
+						td.SampleCount = 1;
+						td.Usage = USAGE_DEFAULT;
+						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+						return td;
+					};
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
@@ -285,13 +285,13 @@ namespace shz
 				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMesh& mesh)
-				{
-					mesh.RecomputeBounds();
-					const Box& b = mesh.GetBounds();
-					float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-					mesh.ApplyUniformScale(yScale01);
-					mesh.MoveBottomToOrigin(true);
-				};
+					{
+						mesh.RecomputeBounds();
+						const Box& b = mesh.GetBounds();
+						float yScale01 = 1.0f / (b.Max.y - b.Min.y);
+						mesh.ApplyUniformScale(yScale01);
+						mesh.MoveBottomToOrigin(true);
+					};
 
 				{
 					GrassDesc gd = {};
@@ -694,22 +694,180 @@ namespace shz
 
 		auto& ecs = m_pEcs->World();
 
-		// ------------------------------------------------------------
+		// -------------------------------------------------------------------------
+		// Helpers (lambdas)
+		// -------------------------------------------------------------------------
+		auto loadTexture = [&](const std::string& path) -> const Texture&
+			{
+				AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>(path);
+				return *m_pAssetManager->LoadBlocking(ref);
+			};
+
+		auto getPixelStrideBytes = [&](const Texture& tex) -> uint32
+			{
+				const TEXTURE_FORMAT fmt = tex.GetFormat();
+				const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
+
+				// Diligent: ComponentSize = bytes per component, NumComponents = channels
+				const uint32 compSize = a.ComponentSize;
+				const uint32 numComp = (a.NumComponents > 0) ? a.NumComponents : 1;
+				return compSize * numComp;
+			};
+
+		auto getMip0 = [&](const Texture& tex) -> const TextureMip&
+			{
+				ASSERT(!tex.GetMips().empty(), "Texture has no mips.");
+				return tex.GetMips()[0];
+			};
+
+		auto valueToBucket = [&](uint8 value) -> uint32
+			{
+				// 0: >200, 1: >=150, 2: >=100, 3: >=50, 4: >=1, else: skip
+				if (value > 200) return 0;
+				if (value >= 150) return 1;
+				if (value >= 100) return 2;
+				if (value >= 50)  return 3;
+				if (value >= 1)   return 4;
+				return 999;
+			};
+
+		enum class ETreeSize : uint8
+		{
+			Large,
+			Big,
+			Medium,
+			Small,
+			Sapling,
+			Count
+		};
+
+		struct TreeSizeMeshes
+		{
+			const StaticMeshRenderData* LOD2[3] = {};
+		};
+
+		auto loadTreeSizeLOD2 = [&](const char* sizeFolder) -> TreeSizeMeshes
+			{
+				TreeSizeMeshes out = {};
+				for (int v = 1; v <= 3; ++v)
+				{
+					std::string path =
+						std::string("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/") +
+						sizeFolder + "_" + std::to_string(v) + "/lod3.fbx";
+
+					out.LOD2[v - 1] =
+						&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>(path)));
+				}
+				return out;
+			};
+
+		auto pickSizeByBucket = [&](uint32 bucket, std::mt19937& rng) -> ETreeSize
+			{
+				std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+				const float r = dist01(rng);
+
+				switch (bucket)
+				{
+				case 0:
+					// Large 25% / Big 30% / Medium 25% / Small 15% / Sapling 5%
+					if (r < 0.25f) return ETreeSize::Large;
+					if (r < 0.55f) return ETreeSize::Big;
+					if (r < 0.80f) return ETreeSize::Medium;
+					if (r < 0.95f) return ETreeSize::Small;
+					return ETreeSize::Sapling;
+
+				case 1:
+					// Large 10% / Big 25% / Medium 40% / Small 20% / Sapling 5%
+					if (r < 0.10f) return ETreeSize::Large;
+					if (r < 0.35f) return ETreeSize::Big;
+					if (r < 0.75f) return ETreeSize::Medium;
+					if (r < 0.95f) return ETreeSize::Small;
+					return ETreeSize::Sapling;
+
+				case 2:
+					// Large 5% / Big 10% / Medium 50% / Small 25% / Sapling 10%
+					if (r < 0.05f) return ETreeSize::Large;
+					if (r < 0.15f) return ETreeSize::Big;
+					if (r < 0.65f) return ETreeSize::Medium;
+					if (r < 0.90f) return ETreeSize::Small;
+					return ETreeSize::Sapling;
+
+				case 3:
+					// Large 5% / Big 5% / Medium 25% / Small 50% / Sapling 15%
+					if (r < 0.05f) return ETreeSize::Large;
+					if (r < 0.10f) return ETreeSize::Big;
+					if (r < 0.35f) return ETreeSize::Medium;
+					if (r < 0.85f) return ETreeSize::Small;
+					return ETreeSize::Sapling;
+
+				case 4:
+					// Large 0% / Big 5% / Medium 15% / Small 30% / Sapling 50%
+					if (r < 0.05f) return ETreeSize::Big;
+					if (r < 0.20f) return ETreeSize::Medium;
+					if (r < 0.50f) return ETreeSize::Small;
+					return ETreeSize::Sapling;
+				default:
+					ASSERT(false, "Invalid bucket value.");
+					return ETreeSize::Medium;
+				}
+			};
+
+		auto pickScaleBySize = [&](ETreeSize size, std::mt19937& rng) -> float
+			{
+				switch (size)
+				{
+				case ETreeSize::Large: { std::uniform_real_distribution<float> d(0.90f, 1.15f); return d(rng); }
+				case ETreeSize::Big: { std::uniform_real_distribution<float> d(0.90f, 1.12f); return d(rng); }
+				case ETreeSize::Medium: { std::uniform_real_distribution<float> d(0.90f, 1.10f); return d(rng); }
+				case ETreeSize::Small: { std::uniform_real_distribution<float> d(0.90f, 1.08f); return d(rng); }
+				case ETreeSize::Sapling: { std::uniform_real_distribution<float> d(0.90f, 1.06f); return d(rng); }
+				default: return 1.0f;
+				}
+			};
+
+		auto addRenderOnlyStaticMeshEntity = [&](
+			const char* name,
+			const StaticMeshRenderData& meshRD,
+			const float3& pos,
+			const float3& rot,
+			const float3& scl,
+			bool bCastShadow) -> flecs::entity
+			{
+				flecs::entity e = ecs.entity();
+				e.set<CName>({ name });
+
+				CTransform tr = {};
+				tr.Position = pos;
+				tr.Rotation = rot;
+				tr.Scale = scl;
+				e.set<CTransform>(tr);
+
+				CMeshRenderer mr = {};
+				mr.MeshRef = {};
+				mr.bCastShadow = bCastShadow;
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+					meshRD,
+					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+					bCastShadow);
+				e.set<CMeshRenderer>(mr);
+
+				return e;
+			};
+
+		// -------------------------------------------------------------------------
 		// Physics Terrain: HeightFieldCollider + Static Rigidbody
-		// ------------------------------------------------------------
+		// -------------------------------------------------------------------------
 		{
 			const uint32 W = m_pTerrainSystem->GetWidth();
 			const uint32 H = m_pTerrainSystem->GetHeight();
 
 			ASSERT(W == H, "HeightField collider: width/height must be equal (square) for your current pipeline.");
 
-			// Convert to float heights (world meters)
 			std::vector<float> samples;
 			m_pTerrainSystem->BuildPhysicsHeightSamples(samples);
 			ASSERT(samples.size() == size_t(W) * size_t(H), "HeightField samples size mismatch.");
 
 			const float spacing = m_pTerrainSystem->GetWorldSpacing();
-
 			const float worldOriginX = m_pTerrainSystem->GetWorldOriginX();
 			const float worldOriginZ = m_pTerrainSystem->GetWorldOriginZ();
 
@@ -740,79 +898,116 @@ namespace shz
 			e.set<CHeightFieldCollider>(hf);
 		}
 
-		// ------------------------------------------------------------
-		// Trees: render-only ECS entities (same as before)
-		// ------------------------------------------------------------
+		// -------------------------------------------------------------------------
+		// Trees: placement texture driven, LOD2 fixed, size-by-bucket + variant uniform
+		// -------------------------------------------------------------------------
 		{
-			const StaticMeshRenderData* pTreeMeshes[] =
+			const std::string treePlacementTexPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/trees.png";
+			const Texture& treePlacementTex = loadTexture(treePlacementTexPath);
+
+			const TextureMip& mip0 = getMip0(treePlacementTex);
+			const uint32 pixelStrideBytes = getPixelStrideBytes(treePlacementTex);
+
+			// Analyze counts (optional)
 			{
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod0.fbx"))),
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod1.fbx"))),
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod2.fbx"))),
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod3.fbx"))),
-			};
+				uint32 c0 = 0, c1 = 0, c2 = 0, c3 = 0, c4 = 0;
 
-			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
+				for (uint32 y = 0; y < mip0.Height; ++y)
+				{
+					for (uint32 x = 0; x < mip0.Width; ++x)
+					{
+						const uint32 idx = (y * mip0.Width + x) * pixelStrideBytes;
+						const uint8 value = mip0.Data[idx + 0];
 
-			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 1000;
+						if (value > 200) c0++;
+						else if (value >= 150) c1++;
+						else if (value >= 100) c2++;
+						else if (value >= 50)  c3++;
+						else if (value >= 1)   c4++;
+					}
+				}
+
+				std::cout << "Tree placement tex analysis (pixel count per threshold):\n";
+				std::cout << " >200 (bucket0): " << c0 << "\n";
+				std::cout << " >=150(bucket1): " << c1 << "\n";
+				std::cout << " >=100(bucket2): " << c2 << "\n";
+				std::cout << " >=50 (bucket3): " << c3 << "\n";
+				std::cout << " >=1  (bucket4): " << c4 << "\n";
+			}
+
+			// Load only LOD2 meshes (size: large/big/medium/small/sapling, variant: _1/_2/_3)
+			TreeSizeMeshes sizeMeshes[(int)ETreeSize::Count] = {};
+			sizeMeshes[(int)ETreeSize::Large] = loadTreeSizeLOD2("large");
+			sizeMeshes[(int)ETreeSize::Big] = loadTreeSizeLOD2("big");
+			sizeMeshes[(int)ETreeSize::Medium] = loadTreeSizeLOD2("medium");
+			sizeMeshes[(int)ETreeSize::Small] = loadTreeSizeLOD2("small");
+			sizeMeshes[(int)ETreeSize::Sapling] = loadTreeSizeLOD2("sapling");
+
+			constexpr float4 SPAWN_RANGE = { -5000.0f, -5000.0f, 5000.0f, 5000.0f };
 
 			float yOffset = 0.0f;
 			std::mt19937 rng(1337);
-			std::uniform_real_distribution<float> distX(SPAWN_RANGE.x, SPAWN_RANGE.z);
-			std::uniform_real_distribution<float> distZ(SPAWN_RANGE.y, SPAWN_RANGE.w);
+
 			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
-			std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
-			std::uniform_int_distribution<uint>  distMesh(0, TREE_MESH_COUNT - 1);
+			std::uniform_real_distribution<float> distJitter(-0.45f, 0.45f);
+			std::uniform_int_distribution<int>    distVariant(0, 2);
 
-			for (uint i = 0; i < NUM_TREES; ++i)
+			uint32 spawned = 0;
+
+			for (uint32 y = 0; y < mip0.Height; ++y)
 			{
-				const float x = distX(rng);
-				const float z = distZ(rng);
-				const float y = m_pTerrainSystem->SampleWorldHeight(x, z) + yOffset;
- 
-				const float yaw = distYaw(rng);
-				const float scale = distScale(rng);
-				const uint meshIdx = distMesh(rng);
+				for (uint32 x = 0; x < mip0.Width; ++x)
+				{
+					const uint32 idx = (y * mip0.Width + x) * pixelStrideBytes;
 
-				flecs::entity e = ecs.entity();
-				e.set<CName>({ "Tree" });
+					// Use first channel as grayscale
+					const uint8 value = mip0.Data[idx + 0];
+					if (value < 1)
+					{
+						continue;
+					}
 
-				CTransform tr = {};
-				tr.Position = { x, y, z };
-				tr.Rotation = { 0.0f, yaw, 0.0f };
-				tr.Scale = { scale, scale, scale };
-				e.set<CTransform>(tr);
+					const uint32 bucket = valueToBucket(value);
 
-				CMeshRenderer mr = {};
-				mr.MeshRef = {};
-				mr.bCastShadow = true;
+					// Pick size (bucket-limited, weighted)
+					const ETreeSize size = pickSizeByBucket(bucket, rng);
 
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					*pTreeMeshes[meshIdx],
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					mr.bCastShadow);
-				e.set<CMeshRenderer>(mr);
+					// Variant uniform within same size
+					const int v = 0; // distVariant(rng);
+					const StaticMeshRenderData* pMeshRD = sizeMeshes[(int)size].LOD2[v];
+
+					// Texel -> world XZ in SPAWN_RANGE
+					float2 domainUV = float2((float)x / (float)mip0.Width, (float)y / (float)mip0.Height);
+					float2 worldXZ = m_pTerrainSystem->DomainUVToWorldXZ(domainUV);
+
+					const float worldY = m_pTerrainSystem->SampleWorldHeight(worldXZ.x, worldXZ.y) + yOffset;
+
+					const float yaw = distYaw(rng);
+					const float scl = pickScaleBySize(size, rng);
+
+					addRenderOnlyStaticMeshEntity(
+						"Tree",
+						*pMeshRD,
+						{ worldXZ.x, worldY, worldXZ.y },
+						{ 0.0f, yaw, 0.0f },
+						{ scl, scl, scl },
+						true);
+
+					++spawned;
+				}
 			}
+
+			std::cout << "Spawned trees: " << spawned << "\n";
 		}
 
-		// ------------------------------------------------------------
+		// -------------------------------------------------------------------------
 		// Helmets: render + dynamic physics box collider
-		// ------------------------------------------------------------
+		// -------------------------------------------------------------------------
 		{
-			AssetRef<StaticMesh> helmetRef = m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
+			AssetRef<StaticMesh> helmetRef =
+				m_pAssetManager->RegisterAsset<StaticMesh>("C:/Dev/ShizenEngine/Assets/Exported/DamagedHelmet.shzmesh.json");
+
 			const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetRef);
-			//StaticMesh& helmetMesh = *m_pAssetManager->LoadBlocking(helmetRef);
-			//auto uniform01 = [](StaticMesh& mesh)
-			//{
-			//	mesh.RecomputeBounds();
-			//	const Box& b = mesh.GetBounds();
-			//	float yScale01 = 1.0f / (b.Max.y - b.Min.y);
-			//	mesh.ApplyUniformScale(yScale01);
-			//	mesh.MoveBottomToOrigin(true);
-			//};
-			//uniform01(helmetMesh);
-			//const StaticMeshRenderData& helmetMeshRD = m_pRenderer->CreateStaticMeshRenderData(helmetMesh);
 
 			constexpr uint32 kHelmetCount = 100;
 			constexpr float  kMinY = 10.0f;
@@ -875,5 +1070,4 @@ namespace shz
 			}
 		}
 	}
-
 } // namespace shz

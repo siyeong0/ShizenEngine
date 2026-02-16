@@ -610,13 +610,14 @@ namespace shz
 			pkt.PSO = pb.pPSO;
 			pkt.SRB = pb.pSRB;
 
+			pkt.StartInstanceLocation = start;
+
 			pkt.DrawAttribs = {};
 			pkt.DrawAttribs.IndexType = b.pMesh->IndexType;
 			pkt.DrawAttribs.NumIndices = sec.IndexCount;
 			pkt.DrawAttribs.FirstIndexLocation = sec.FirstIndex;
 			pkt.DrawAttribs.BaseVertex = static_cast<int32>(sec.BaseVertex);
 			pkt.DrawAttribs.NumInstances = count;
-			pkt.DrawAttribs.FirstInstanceLocation = start;
 			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
 			outPackets.emplace_back(pkt);
@@ -728,13 +729,14 @@ namespace shz
 			pkt.PSO = pb.pPSO;
 			pkt.SRB = pb.pSRB;
 
+			pkt.StartInstanceLocation = t.StartInstanceLocation;
+
 			pkt.DrawAttribs = {};
 			pkt.DrawAttribs.IndexType = t.IndexType;
 			pkt.DrawAttribs.NumIndices = t.IndexCount;
 			pkt.DrawAttribs.FirstIndexLocation = 0;
 			pkt.DrawAttribs.BaseVertex = 0;
 			pkt.DrawAttribs.NumInstances = t.InstanceCount;
-			pkt.DrawAttribs.FirstInstanceLocation = t.FirstInstanceLocation;
 			pkt.DrawAttribs.Flags = DRAW_FLAG_VERIFY_ALL;
 
 			outPackets.emplace_back(pkt);

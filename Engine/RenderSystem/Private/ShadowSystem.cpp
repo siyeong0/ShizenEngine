@@ -112,7 +112,7 @@ namespace shz
 							MAP_FLAG_DISCARD);
 
 						hlsl::DrawConstants* dst = map;
-						dst->StartInstanceLocation = dia.FirstInstanceLocation;
+						dst->StartInstanceLocation = pkt.StartInstanceLocation;
 					}
 
 					pContext->DrawIndexed(dia);

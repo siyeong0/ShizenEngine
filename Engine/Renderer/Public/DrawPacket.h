@@ -23,6 +23,8 @@ namespace shz
 		IShaderResourceBinding* SRB = nullptr;
 
 		DrawIndexedAttribs DrawAttribs = {};
+
+		uint32 StartInstanceLocation = 0;
 	};
 
 	struct DrawIndirectPacket final

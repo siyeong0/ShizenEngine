@@ -50,7 +50,7 @@ namespace shz
 			uint32 IndexCount = 0;
 			VALUE_TYPE IndexType = VT_UINT32;
 
-			uint32 FirstInstanceLocation = 0;
+			uint32 StartInstanceLocation = 0;
 			uint32 InstanceCount = 0;
 
 			MaterialId MaterialId = 0;

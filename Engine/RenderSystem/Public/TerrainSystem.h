@@ -94,6 +94,7 @@ namespace shz
 		bool IsCenterXZ() const noexcept { return m_bCenterXZ; }
 
 		float2 WorldXZToDomainUV(const float2& worldXZ) const noexcept;
+		float2 DomainUVToWorldXZ(const float2& uv) const noexcept;
 
 		// --------------------------------------------------------------------
 		// CPU height data
