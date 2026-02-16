@@ -237,18 +237,6 @@ namespace shz
 
 			TerrainSystem::CreateInfo tci = {};
 
-			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Height.png";
-			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Canyon/Diffuse.png";
-			//tci.WorldSpacingX = 1.0f;
-			//tci.WorldSpacingZ = 1.0f;
-			//tci.HeightScale = 300.0f;
-			//tci.HeightOffset = -80.0f;
-			//tci.bCenterXZ = true;
-
-			//tci.HeightMapPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/height.png";
-			//tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/diffuse.png";
-			//tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Mountain001/soil.png";
-
 			tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/height.png";
 			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/diffuse.png";
 			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/normal.png";
@@ -262,12 +250,10 @@ namespace shz
 			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
 			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 
-			tci.ChunkQuadsPerSide = 128;
-			tci.QuadSizeX = 0.5f;
-			tci.QuadSizeZ = 0.5f;
-			tci.WorldSpacingX = 0.5f;
-			tci.WorldSpacingZ = 0.5f;
-			tci.HeightScale = 3000.0f;
+			tci.ChunkSize = 64.0f;
+			tci.CellSize = 1.0f;
+			tci.WorldSpacing = 1.0f;
+			tci.HeightScale = 2500.0f;
 			tci.HeightOffset = -1000.0f;
 			tci.bCenterXZ = true;
 
@@ -723,8 +709,7 @@ namespace shz
 			m_pTerrainSystem->BuildPhysicsHeightSamples(samples);
 			ASSERT(samples.size() == size_t(W) * size_t(H), "HeightField samples size mismatch.");
 
-			const float spacingX = m_pTerrainSystem->GetWorldSpacingX();
-			const float spacingZ = m_pTerrainSystem->GetWorldSpacingZ();
+			const float spacing = m_pTerrainSystem->GetWorldSpacing();
 
 			const float worldOriginX = m_pTerrainSystem->GetWorldOriginX();
 			const float worldOriginZ = m_pTerrainSystem->GetWorldOriginZ();
@@ -748,8 +733,8 @@ namespace shz
 			CHeightFieldCollider hf = {};
 			hf.Width = W;
 			hf.Height = H;
-			hf.CellSizeX = spacingX;
-			hf.CellSizeZ = spacingZ;
+			hf.CellSizeX = spacing;
+			hf.CellSizeZ = spacing;
 			hf.HeightScale = 1.0f;   // samples already in world meters
 			hf.HeightOffset = 0.0f;
 			hf.Heights = std::move(samples);

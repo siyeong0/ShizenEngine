@@ -71,14 +71,18 @@ struct ObjectConstants
 };
 
 // ----------------------------------------------
-// HeightField (COMMON for Terrain/Grass/etc.)
+// Terrain
 // ----------------------------------------------
 struct TerrainConstants
 {
 	float2 WorldOriginXZ;
 	float2 WorldSizeXZ;
-	float2 ChunkSizeXZ;
-	float2 WorldSpacingXZ;
+
+	float ChunkSize;
+	float InvChunkSize;
+
+	float WorldSpacing;
+	float InvWorldSpacing;
 
 	float2 HeightTexelSize;
 	float HeightScale;
@@ -87,17 +91,18 @@ struct TerrainConstants
 	uint CenterXZ;
 	float NormalUpBias;
 	uint ChunkGridRes;
-	float InvChunkGridRes; 
+	float InvChunkGridRes;
 };
 
-// ----------------------------------------------
-// Terrain
-// ----------------------------------------------
 struct TerrainDrawConstants
 {
 	float2 ChunkOriginXZ;
 	uint LodIndex;
-	float _pad0;
+	uint _pad0;
+
+    // NOTE: Last row/column can be partial -> keep per-axis size to prevent edge UV drift.
+	float2 ChunkSizeXZ;
+	float2 InvChunkSizeXZ;
 };
 
 // ----------------------------------------------
