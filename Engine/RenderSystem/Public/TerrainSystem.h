@@ -121,13 +121,10 @@ namespace shz
 		void BuildPhysicsHeightSamples(std::vector<float>& outHeightsWorldMeters) const;
 
 	private:
-		// --------------------------------------------------------------------
-		// Requested: keep these private and keep decl/def order identical
-		// --------------------------------------------------------------------
 		void buildHeightU16FromHeightTexture(const Texture& heightTex);
 
 		void buildGridVertices(uint32 chunkGridRes, std::vector<struct TerrainVertex>& outVerts) const;
-		void buildGridIndicesLOD_Stitched(
+		void buildGridIndices(
 			uint32 chunkGridRes,
 			uint32 step,
 			uint8  stitchMask,
@@ -139,12 +136,6 @@ namespace shz
 			const char* resourceName,
 			const AssetRef<Texture>& texRef,
 			const char* shaderStaticName /* "g_TerrainDiffuseTex" etc */);
-
-		// --------------------------------------------------------------------
-		// Derived helpers
-		// --------------------------------------------------------------------
-		static constexpr bool IsPowerOfTwoU32(uint32 v) noexcept { return (v != 0u) && ((v & (v - 1u)) == 0u); }
-		static uint32 Log2U32(uint32 v) noexcept;
 
 	private:
 		CreateInfo m_CI = {};

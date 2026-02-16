@@ -38,24 +38,9 @@ namespace shz
 		STITCH_BOTTOM = 1 << 2,
 		STITCH_TOP = 1 << 3,
 	};
-
-	// ------------------------------------------------------------------------
-	// Small helpers
-	// ------------------------------------------------------------------------
-	static inline float U16ToNormalized(uint16 v) noexcept
-	{
-		return static_cast<float>(v) * (1.0f / 65535.0f);
-	}
-
-	static inline uint16 NormalizedToU16(float n) noexcept
-	{
-		const float c = Clamp01(n);
-		const float scaled = c * 65535.0f;
-		const uint32 iv = static_cast<uint32>(scaled + 0.5f);
-		return static_cast<uint16>((iv > 65535u) ? 65535u : iv);
-	}
-
-	uint32 TerrainSystem::Log2U32(uint32 v) noexcept
+	
+	// Helpers
+	uint32 log2U32(uint32 v) noexcept
 	{
 		uint32 r = 0;
 		while (v > 1u)
@@ -66,347 +51,20 @@ namespace shz
 		return r;
 	}
 
-	// ------------------------------------------------------------------------
-	// TerrainSystem private: buildGridVertices (DECL/DEF order matched)
-	// ------------------------------------------------------------------------
-	void TerrainSystem::buildGridVertices(uint32 chunkGridRes, std::vector<TerrainVertex>& outVerts) const
+	static inline float u16ToNormalized(uint16 v) noexcept
 	{
-		const uint32 vertsPerSide = chunkGridRes + 1u;
-
-		outVerts.clear();
-		outVerts.reserve(size_t(vertsPerSide) * size_t(vertsPerSide));
-
-		for (uint32 z = 0; z < vertsPerSide; ++z)
-		{
-			for (uint32 x = 0; x < vertsPerSide; ++x)
-			{
-				const float u = float(x) / float(chunkGridRes);
-				const float v = float(z) / float(chunkGridRes);
-
-				TerrainVertex vtx = {};
-				vtx.Pos = float3{ float(x), 0.0f, float(z) };
-				vtx.UV = float2{ u, v };
-				vtx.Normal = float3{ 0.0f, 1.0f, 0.0f };
-				vtx.Tangent = float3{ 1.0f, 0.0f, 0.0f };
-				outVerts.emplace_back(vtx);
-			}
-		}
+		return static_cast<float>(v) * (1.0f / 65535.0f);
 	}
 
-	// ------------------------------------------------------------------------
-	// TerrainSystem private: buildGridIndicesLOD_Stitched (DECL/DEF order matched)
-	// ------------------------------------------------------------------------
-	void TerrainSystem::buildGridIndicesLOD_Stitched(
-		uint32 chunkGridRes,
-		uint32 step,
-		uint8  stitchMask,
-		std::vector<uint16>& outIdxU16) const
+	static inline uint16 normalizedToU16(float n) noexcept
 	{
-		outIdxU16.clear();
-
-		ASSERT(chunkGridRes >= 2u, "chunkGridRes too small.");
-		ASSERT(step >= 1u, "Invalid step.");
-		ASSERT((chunkGridRes % step) == 0u, "Step must divide chunkGridRes.");
-
-		const uint32 vertsPerSide = chunkGridRes + 1u;
-
-		// Enforce uint16 indexing.
-		ASSERT(vertsPerSide * vertsPerSide <= 65535u,
-			"Grid is too large for uint16 indices. Reduce resolution (ChunkGridRes) or add uint32 index path.");
-
-		auto vid = [&](uint32 gx, uint32 gz) -> uint16
-			{
-				ASSERT(gx <= chunkGridRes && gz <= chunkGridRes, "Grid index out of range.");
-				return uint16(gz * vertsPerSide + gx);
-			};
-
-		// Winding stabilizer (XZ cross sign).
-		const int32 refSign = +1;
-
-		auto cross2XZSign = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz) -> int32
-			{
-				const int32 x1 = int32(bx) - int32(ax);
-				const int32 z1 = int32(bz) - int32(az);
-				const int32 x2 = int32(cx) - int32(ax);
-				const int32 z2 = int32(cz) - int32(az);
-
-				const int32 c = x1 * z2 - z1 * x2;
-				return (c > 0) ? +1 : (c < 0 ? -1 : 0);
-			};
-
-		auto pushTriGrid = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz)
-			{
-				uint16 a = vid(ax, az);
-				uint16 b = vid(bx, bz);
-				uint16 c = vid(cx, cz);
-
-				const int32 sgn = cross2XZSign(ax, az, bx, bz, cx, cz);
-				if (sgn != 0 && sgn != refSign)
-				{
-					std::swap(b, c);
-				}
-
-				outIdxU16.push_back(a);
-				outIdxU16.push_back(b);
-				outIdxU16.push_back(c);
-			};
-
-		auto pushQuadStd = [&](uint32 x0, uint32 z0)
-			{
-				const uint32 x1 = x0 + step;
-				const uint32 z1 = z0 + step;
-
-				pushTriGrid(x0, z0, x1, z0, x0, z1);
-				pushTriGrid(x1, z0, x1, z1, x0, z1);
-			};
-
-		if (step == chunkGridRes)
-		{
-			outIdxU16.reserve(6);
-			pushQuadStd(0, 0);
-			ASSERT((outIdxU16.size() % 3u) == 0u, "Index count must be multiple of 3.");
-			return;
-		}
-
-		const bool bStitchL = (stitchMask & STITCH_LEFT) != 0;
-		const bool bStitchR = (stitchMask & STITCH_RIGHT) != 0;
-		const bool bStitchB = (stitchMask & STITCH_BOTTOM) != 0;
-		const bool bStitchT = (stitchMask & STITCH_TOP) != 0;
-
-		const uint32 s = step;
-		const uint32 s2 = step * 2u;
-
-		outIdxU16.reserve(size_t(chunkGridRes) * size_t(chunkGridRes) * 6u);
-
-		// Interior (exclude outer ring).
-		const uint32 quadsInThisLod = chunkGridRes / step;
-		if (quadsInThisLod > 2u)
-		{
-			for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
-			{
-				for (uint32 qx = 1u; qx < quadsInThisLod - 1u; ++qx)
-				{
-					pushQuadStd(qx * step, qz * step);
-				}
-			}
-		}
-
-		auto emitStitchStripX = [&](uint32 zBoundary, uint32 zInner, uint32 xBegin, uint32 xEnd)
-			{
-				for (uint32 x = xBegin; (x + s2) <= xEnd; x += s2)
-				{
-					const uint32 x0 = x;
-					const uint32 x1 = x + s;
-					const uint32 x2 = x + s2;
-
-					pushTriGrid(x0, zBoundary, x2, zBoundary, x1, zInner);
-					pushTriGrid(x0, zBoundary, x1, zInner, x0, zInner);
-					pushTriGrid(x2, zBoundary, x2, zInner, x1, zInner);
-				}
-			};
-
-		auto emitStitchStripZ = [&](uint32 xBoundary, uint32 xInner, uint32 zBegin, uint32 zEnd)
-			{
-				for (uint32 z = zBegin; (z + s2) <= zEnd; z += s2)
-				{
-					const uint32 z0 = z;
-					const uint32 z1 = z + s;
-					const uint32 z2 = z + s2;
-
-					pushTriGrid(xBoundary, z0, xBoundary, z2, xInner, z1);
-					pushTriGrid(xBoundary, z0, xInner, z1, xInner, z0);
-					pushTriGrid(xBoundary, z2, xInner, z2, xInner, z1);
-				}
-			};
-
-		const bool bCornerBL = bStitchB && bStitchL;
-		const bool bCornerBR = bStitchB && bStitchR;
-		const bool bCornerTL = bStitchT && bStitchL;
-		const bool bCornerTR = bStitchT && bStitchR;
-
-		const uint32 Q = chunkGridRes;
-
-		// Corner patches.
-		if (bCornerBL)
-		{
-			uint32 x0 = 0u;   uint32 z0 = 0u;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
-			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			pushTriGrid(x0, z0, x1, z1, x0, z2);
-			pushTriGrid(x0, z0, x1, z1, x2, z0);
-			pushTriGrid(x2, z0, x1, z1, x2, z1);
-			pushTriGrid(x0, z2, x1, z1, x1, z2);
-		}
-		if (bCornerBR)
-		{
-			uint32 x0 = Q - s2; uint32 z0 = 0u;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
-			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			pushTriGrid(x0, z0, x1, z1, x2, z0);
-			pushTriGrid(x2, z2, x1, z1, x2, z0);
-			pushTriGrid(x0, z0, x1, z1, x0, z1);
-			pushTriGrid(x1, z2, x1, z1, x2, z2);
-		}
-		if (bCornerTL)
-		{
-			uint32 x0 = 0u;   uint32 z0 = Q - s2;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
-			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			pushTriGrid(x0, z0, x1, z1, x0, z2);
-			pushTriGrid(x2, z2, x1, z1, x0, z2);
-			pushTriGrid(x0, z0, x1, z1, x1, z0);
-			pushTriGrid(x2, z1, x1, z1, x2, z2);
-		}
-		if (bCornerTR)
-		{
-			uint32 x0 = Q - s2; uint32 z0 = Q - s2;
-			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
-			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
-			pushTriGrid(x2, z2, x1, z1, x0, z2);
-			pushTriGrid(x2, z2, x1, z1, x2, z0);
-			pushTriGrid(x0, z1, x1, z1, x0, z2);
-			pushTriGrid(x1, z0, x1, z1, x2, z0);
-		}
-
-		// Bottom edge.
-		if (!bStitchB)
-		{
-			const uint32 qxBegin = bStitchL ? 1u : 0u;
-			const uint32 qxEnd = bStitchR ? (quadsInThisLod - 1u) : quadsInThisLod;
-
-			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
-			{
-				pushQuadStd(qx * step, 0u);
-			}
-		}
-		else
-		{
-			const uint32 xBegin = bCornerBL ? s2 : 0u;
-			const uint32 xEnd = bCornerBR ? (Q - s2) : Q;
-			emitStitchStripX(0u, s, xBegin, xEnd);
-		}
-
-		// Top edge.
-		if (!bStitchT)
-		{
-			const uint32 qxBegin = bStitchL ? 1u : 0u;
-			const uint32 qxEnd = bStitchR ? (quadsInThisLod - 1u) : quadsInThisLod;
-
-			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
-			{
-				pushQuadStd(qx * step, Q - step);
-			}
-		}
-		else
-		{
-			const uint32 xBegin = bCornerTL ? s2 : 0u;
-			const uint32 xEnd = bCornerTR ? (Q - s2) : Q;
-			emitStitchStripX(Q, Q - s, xBegin, xEnd);
-		}
-
-		// Left edge.
-		if (quadsInThisLod >= 2u)
-		{
-			if (!bStitchL)
-			{
-				for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
-				{
-					pushQuadStd(0u, qz * step);
-				}
-			}
-			else
-			{
-				const uint32 zBegin = bCornerBL ? s2 : 0u;
-				const uint32 zEnd = bCornerTL ? (Q - s2) : Q;
-				emitStitchStripZ(0u, s, zBegin, zEnd);
-			}
-		}
-
-		// Right edge.
-		if (quadsInThisLod >= 2u)
-		{
-			if (!bStitchR)
-			{
-				for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
-				{
-					pushQuadStd(Q - step, qz * step);
-				}
-			}
-			else
-			{
-				const uint32 zBegin = bCornerBR ? s2 : 0u;
-				const uint32 zEnd = bCornerTR ? (Q - s2) : Q;
-				emitStitchStripZ(Q, Q - s, zBegin, zEnd);
-			}
-		}
-
-		ASSERT((outIdxU16.size() % 3u) == 0u, "Index count must be multiple of 3.");
+		const float c = Clamp01(n);
+		const float scaled = c * 65535.0f;
+		const uint32 iv = static_cast<uint32>(scaled + 0.5f);
+		return static_cast<uint16>((iv > 65535u) ? 65535u : iv);
 	}
 
-	// ------------------------------------------------------------------------
-	// TerrainSystem private: uploadTextureAssetWithMips (DECL/DEF order matched)
-	// ------------------------------------------------------------------------
-	bool TerrainSystem::uploadTextureAssetWithMips(
-		Renderer& renderer,
-		AssetManager& assetManager,
-		const char* resourceName,
-		const AssetRef<Texture>& texRef,
-		const char* shaderStaticName)
-	{
-		if (!texRef.IsValid())
-		{
-			return false;
-		}
-
-		AssetPtr<Texture> texPtr = assetManager.LoadBlocking(texRef);
-		ASSERT(texPtr && texPtr->IsValid(), "Failed to load Texture asset for resource '%s'.", resourceName);
-
-		const auto& mips = texPtr->GetMips();
-		ASSERT(!mips.empty(), "TextureAsset '%s' has no mips.", resourceName);
-
-		TextureDesc desc = {};
-		desc.Name = resourceName;
-		desc.Type = RESOURCE_DIM_TEX_2D;
-		desc.Width = mips[0].Width;
-		desc.Height = mips[0].Height;
-		desc.MipLevels = static_cast<uint32>(mips.size());
-		desc.ArraySize = 1;
-		desc.Format = texPtr->GetFormat();
-		desc.Usage = USAGE_DEFAULT;
-		desc.BindFlags = BIND_SHADER_RESOURCE;
-
-		const auto& fmtAttrib = GetTextureFormatAttribs(desc.Format);
-		const uint32 elemSize = fmtAttrib.GetElementSize();
-		ASSERT(elemSize > 0u, "Invalid element size for texture '%s'.", resourceName);
-
-		std::vector<TextureSubResData> subres;
-		subres.resize(mips.size());
-
-		for (size_t i = 0; i < mips.size(); ++i)
-		{
-			const TextureMip& mip = mips[i];
-			ASSERT(mip.Width > 0 && mip.Height > 0, "Invalid mip size for '%s' mip=%zu.", resourceName, i);
-			ASSERT(!mip.Data.empty(), "Mip data empty for '%s' mip=%zu.", resourceName, i);
-
-			TextureSubResData sr = {};
-			sr.pData = mip.Data.data();
-			sr.Stride = static_cast<uint64>(mip.Width) * static_cast<uint64>(elemSize);
-			sr.DepthStride = 0;
-			subres[i] = sr;
-		}
-
-		TextureData initData = {};
-		initData.pSubResources = subres.data();
-		initData.NumSubresources = static_cast<uint32>(subres.size());
-
-		renderer.AddTexture(STRING_HASH(resourceName), desc, &initData);
-		renderer.RegisterStaticTextureResource(shaderStaticName, STRING_HASH(resourceName));
-		return true;
-	}
-
-	// ------------------------------------------------------------------------
 	// Lifecycle
-	// ------------------------------------------------------------------------
 	void TerrainSystem::Initialize(Renderer& renderer, AssetManager& assetManager, const CreateInfo& ci)
 	{
 		Cleanup();
@@ -434,7 +92,7 @@ namespace shz
 			ASSERT(std::fabs(resolution - float(res)) < 1e-3f, "ChunkSizeMeters/CellSizeMeters must be an integer. (ChunkSize=%.3f, CellSize=%.3f, resF=%.3f)", m_ChunkSize, m_CellSize, resolution);
 
 			ASSERT(res >= 2u, "Derived ChunkGridRes too small.");
-			ASSERT(IsPowerOfTwoU32(res), "Derived ChunkGridRes must be power-of-two. (res=%u)", res);
+			ASSERT((res != 0u) && ((res & (res - 1u)) == 0u), "Derived ChunkGridRes must be power-of-two. (res=%u)", res);
 
 			// Enforce uint16 indexability: (resolution+1)^2 <= 65535.
 			const uint32 vertsPerSide = res + 1u;
@@ -444,7 +102,7 @@ namespace shz
 		}
 
 		// LOD count: log2(res) + 1.
-		m_NumLods = Log2U32(m_ChunkGridRes) + 1u;
+		m_NumLods = log2U32(m_ChunkGridRes) + 1u;
 		ASSERT(m_NumLods <= MAX_TERRAIN_LODS, "Too many terrain LODs. Increase MAX_TERRAIN_LODS.");
 
 		// Height texture (CPU).
@@ -529,7 +187,7 @@ namespace shz
 			for (uint32 mask = 0; mask < NUM_STITCH_MASKS; ++mask)
 			{
 				std::vector<uint16> idx;
-				buildGridIndicesLOD_Stitched(m_ChunkGridRes, step, uint8(mask), idx);
+				buildGridIndices(m_ChunkGridRes, step, uint8(mask), idx);
 
 				m_LodIndexCount[lod][mask] = uint32(idx.size());
 
@@ -765,27 +423,7 @@ namespace shz
 		m_NumLods = 0u;
 	}
 
-	float TerrainSystem::GetWorldOriginX() const noexcept
-	{
-		if (m_bCenterXZ)
-		{
-			return -0.5f * GetWorldSizeX();
-		}
-		return 0.0f;
-	}
-
-	float TerrainSystem::GetWorldOriginZ() const noexcept
-	{
-		if (m_bCenterXZ)
-		{
-			return -0.5f * GetWorldSizeZ();
-		}
-		return 0.0f;
-	}
-
-	// ------------------------------------------------------------------------
 	// Per-frame Update
-	// ------------------------------------------------------------------------
 	void TerrainSystem::Update(Renderer& renderer, RenderScene* pScene, const View& view)
 	{
 		bench::Timer timer;
@@ -1123,89 +761,22 @@ namespace shz
 		std::cout << t << " ms" << std::endl;
 	}
 
-	// ------------------------------------------------------------------------
-	// CPU height build from Texture (base mip) (DECL/DEF order matched)
-	// ------------------------------------------------------------------------
-	static inline uint8  ReadR_U8(const uint8* p)   noexcept { return p[0]; }
-	static inline uint16 ReadR_U16(const uint16* p) noexcept { return p[0]; }
-	static inline float  ReadR_F32(const float* p)  noexcept { return p[0]; }
-
-	void TerrainSystem::buildHeightU16FromHeightTexture(const Texture& heightTex)
+	float TerrainSystem::GetWorldOriginX() const noexcept
 	{
-		ASSERT(heightTex.IsValid(), "Height texture is invalid.");
-		ASSERT(!heightTex.GetMips().empty(), "Height texture has no mips.");
-
-		const uint32 w = heightTex.GetWidth();
-		const uint32 h = heightTex.GetHeight();
-		ASSERT(w > 0u && h > 0u, "Invalid height texture dimensions.");
-
-		const TEXTURE_FORMAT fmt = heightTex.GetFormat();
-		const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
-
-		ASSERT(a.NumComponents > 0u && a.ComponentSize > 0u, "Invalid format attribs.");
-		ASSERT(a.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed formats are not supported.");
-
-		const uint32 bytesPerPixel = a.NumComponents * a.ComponentSize;
-
-		const TextureMip& mip0 = heightTex.GetMips()[0];
-		ASSERT(mip0.Width == w && mip0.Height == h, "Mip0 size mismatch.");
-		ASSERT(!mip0.Data.empty(), "Mip0 data empty.");
-
-		const uint64 expectedMinBytes = uint64(w) * uint64(h) * uint64(bytesPerPixel);
-		ASSERT(uint64(mip0.Data.size()) >= expectedMinBytes, "Mip0 data smaller than expected.");
-
-		m_Width = w;
-		m_Height = h;
-		m_HeightU16.assign(size_t(w) * size_t(h), 0u);
-
-		const uint8* src = mip0.Data.data();
-		const uint64 rowStride = uint64(w) * uint64(bytesPerPixel);
-
-		if (a.ComponentSize == 1u)
+		if (m_bCenterXZ)
 		{
-			const float inv = 1.0f / 255.0f;
-			for (uint32 z = 0u; z < h; ++z)
-			{
-				const uint8* row = src + size_t(z) * size_t(rowStride);
-				for (uint32 x = 0u; x < w; ++x)
-				{
-					const uint8* px = row + size_t(x) * bytesPerPixel;
-					const uint8 r = ReadR_U8(px);
-					m_HeightU16[size_t(z) * size_t(w) + x] = NormalizedToU16(Clamp01(float(r) * inv));
-				}
-			}
+			return -0.5f * GetWorldSizeX();
 		}
-		else if (a.ComponentSize == 2u)
+		return 0.0f;
+	}
+
+	float TerrainSystem::GetWorldOriginZ() const noexcept
+	{
+		if (m_bCenterXZ)
 		{
-			const float inv = 1.0f / 65535.0f;
-			for (uint32 z = 0u; z < h; ++z)
-			{
-				const uint8* rowBytes = src + size_t(z) * size_t(rowStride);
-				for (uint32 x = 0u; x < w; ++x)
-				{
-					const uint16* px = reinterpret_cast<const uint16*>(rowBytes + size_t(x) * bytesPerPixel);
-					const uint16 r = ReadR_U16(px);
-					m_HeightU16[size_t(z) * size_t(w) + x] = NormalizedToU16(Clamp01(float(r) * inv));
-				}
-			}
+			return -0.5f * GetWorldSizeZ();
 		}
-		else if (a.ComponentSize == 4u)
-		{
-			for (uint32 z = 0u; z < h; ++z)
-			{
-				const uint8* rowBytes = src + size_t(z) * size_t(rowStride);
-				for (uint32 x = 0u; x < w; ++x)
-				{
-					const float* px = reinterpret_cast<const float*>(rowBytes + size_t(x) * bytesPerPixel);
-					const float r = ReadR_F32(px);
-					m_HeightU16[size_t(z) * size_t(w) + x] = NormalizedToU16(Clamp01(r));
-				}
-			}
-		}
-		else
-		{
-			ASSERT(false, "Unsupported component size.");
-		}
+		return 0.0f;
 	}
 
 	float2 TerrainSystem::WorldXZToDomainUV(const float2& worldXZ) const noexcept
@@ -1238,7 +809,7 @@ namespace shz
 	{
 		ASSERT(x < m_Width, "X out of range.");
 		ASSERT(z < m_Height, "Z out of range.");
-		return U16ToNormalized(m_HeightU16[size_t(z) * size_t(m_Width) + x]);
+		return u16ToNormalized(m_HeightU16[size_t(z) * size_t(m_Width) + x]);
 	}
 
 	float TerrainSystem::GetWorldHeightAt(uint32 x, uint32 z) const
@@ -1294,5 +865,412 @@ namespace shz
 			const float n = float(m_HeightU16[i]) / 65535.0f;
 			outHeightsWorldMeters[i] = n * m_HeightScale + m_HeightOffset;
 		}
+	}
+
+	void TerrainSystem::buildHeightU16FromHeightTexture(const Texture& heightTex)
+	{
+		ASSERT(heightTex.IsValid(), "Height texture is invalid.");
+		ASSERT(!heightTex.GetMips().empty(), "Height texture has no mips.");
+
+		const uint32 w = heightTex.GetWidth();
+		const uint32 h = heightTex.GetHeight();
+		ASSERT(w > 0u && h > 0u, "Invalid height texture dimensions.");
+
+		const TEXTURE_FORMAT fmt = heightTex.GetFormat();
+		const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
+
+		ASSERT(a.NumComponents > 0u && a.ComponentSize > 0u, "Invalid format attribs.");
+		ASSERT(a.ComponentType != COMPONENT_TYPE_COMPRESSED, "Compressed formats are not supported.");
+
+		const uint32 bytesPerPixel = a.NumComponents * a.ComponentSize;
+
+		const TextureMip& mip0 = heightTex.GetMips()[0];
+		ASSERT(mip0.Width == w && mip0.Height == h, "Mip0 size mismatch.");
+		ASSERT(!mip0.Data.empty(), "Mip0 data empty.");
+
+		const uint64 expectedMinBytes = uint64(w) * uint64(h) * uint64(bytesPerPixel);
+		ASSERT(uint64(mip0.Data.size()) >= expectedMinBytes, "Mip0 data smaller than expected.");
+
+		m_Width = w;
+		m_Height = h;
+		m_HeightU16.assign(size_t(w) * size_t(h), 0u);
+
+		const uint8* src = mip0.Data.data();
+		const uint64 rowStride = uint64(w) * uint64(bytesPerPixel);
+
+		if (a.ComponentSize == 1u)
+		{
+			const float inv = 1.0f / 255.0f;
+			for (uint32 z = 0u; z < h; ++z)
+			{
+				const uint8* row = src + size_t(z) * size_t(rowStride);
+				for (uint32 x = 0u; x < w; ++x)
+				{
+					const uint8* px = row + size_t(x) * bytesPerPixel;
+					const uint8 r = px[0];
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(float(r) * inv));
+				}
+			}
+		}
+		else if (a.ComponentSize == 2u)
+		{
+			const float inv = 1.0f / 65535.0f;
+			for (uint32 z = 0u; z < h; ++z)
+			{
+				const uint8* rowBytes = src + size_t(z) * size_t(rowStride);
+				for (uint32 x = 0u; x < w; ++x)
+				{
+					const uint16* px = reinterpret_cast<const uint16*>(rowBytes + size_t(x) * bytesPerPixel);
+					const uint16 r = px[0];
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(float(r) * inv));
+				}
+			}
+		}
+		else if (a.ComponentSize == 4u)
+		{
+			for (uint32 z = 0u; z < h; ++z)
+			{
+				const uint8* rowBytes = src + size_t(z) * size_t(rowStride);
+				for (uint32 x = 0u; x < w; ++x)
+				{
+					const float* px = reinterpret_cast<const float*>(rowBytes + size_t(x) * bytesPerPixel);
+					const float r = px[0];
+					m_HeightU16[size_t(z) * size_t(w) + x] = normalizedToU16(Clamp01(r));
+				}
+			}
+		}
+		else
+		{
+			ASSERT(false, "Unsupported component size.");
+		}
+	}
+
+	void TerrainSystem::buildGridVertices(uint32 chunkGridRes, std::vector<TerrainVertex>& outVerts) const
+	{
+		const uint32 vertsPerSide = chunkGridRes + 1u;
+
+		outVerts.clear();
+		outVerts.reserve(size_t(vertsPerSide) * size_t(vertsPerSide));
+
+		for (uint32 z = 0; z < vertsPerSide; ++z)
+		{
+			for (uint32 x = 0; x < vertsPerSide; ++x)
+			{
+				const float u = float(x) / float(chunkGridRes);
+				const float v = float(z) / float(chunkGridRes);
+
+				TerrainVertex vtx = {};
+				vtx.Pos = float3{ float(x), 0.0f, float(z) };
+				vtx.UV = float2{ u, v };
+				vtx.Normal = float3{ 0.0f, 1.0f, 0.0f };
+				vtx.Tangent = float3{ 1.0f, 0.0f, 0.0f };
+				outVerts.emplace_back(vtx);
+			}
+		}
+	}
+
+	void TerrainSystem::buildGridIndices(
+		uint32 chunkGridRes,
+		uint32 step,
+		uint8  stitchMask,
+		std::vector<uint16>& outIdxU16) const
+	{
+		outIdxU16.clear();
+
+		ASSERT(chunkGridRes >= 2u, "chunkGridRes too small.");
+		ASSERT(step >= 1u, "Invalid step.");
+		ASSERT((chunkGridRes % step) == 0u, "Step must divide chunkGridRes.");
+
+		const uint32 vertsPerSide = chunkGridRes + 1u;
+
+		// Enforce uint16 indexing.
+		ASSERT(vertsPerSide * vertsPerSide <= 65535u,
+			"Grid is too large for uint16 indices. Reduce resolution (ChunkGridRes) or add uint32 index path.");
+
+		auto vid = [&](uint32 gx, uint32 gz) -> uint16
+			{
+				ASSERT(gx <= chunkGridRes && gz <= chunkGridRes, "Grid index out of range.");
+				return uint16(gz * vertsPerSide + gx);
+			};
+
+		// Winding stabilizer (XZ cross sign).
+		const int32 refSign = +1;
+
+		auto cross2XZSign = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz) -> int32
+			{
+				const int32 x1 = int32(bx) - int32(ax);
+				const int32 z1 = int32(bz) - int32(az);
+				const int32 x2 = int32(cx) - int32(ax);
+				const int32 z2 = int32(cz) - int32(az);
+
+				const int32 c = x1 * z2 - z1 * x2;
+				return (c > 0) ? +1 : (c < 0 ? -1 : 0);
+			};
+
+		auto pushTriGrid = [&](uint32 ax, uint32 az, uint32 bx, uint32 bz, uint32 cx, uint32 cz)
+			{
+				uint16 a = vid(ax, az);
+				uint16 b = vid(bx, bz);
+				uint16 c = vid(cx, cz);
+
+				const int32 sgn = cross2XZSign(ax, az, bx, bz, cx, cz);
+				if (sgn != 0 && sgn != refSign)
+				{
+					std::swap(b, c);
+				}
+
+				outIdxU16.push_back(a);
+				outIdxU16.push_back(b);
+				outIdxU16.push_back(c);
+			};
+
+		auto pushQuadStd = [&](uint32 x0, uint32 z0)
+			{
+				const uint32 x1 = x0 + step;
+				const uint32 z1 = z0 + step;
+
+				pushTriGrid(x0, z0, x1, z0, x0, z1);
+				pushTriGrid(x1, z0, x1, z1, x0, z1);
+			};
+
+		if (step == chunkGridRes)
+		{
+			outIdxU16.reserve(6);
+			pushQuadStd(0, 0);
+			ASSERT((outIdxU16.size() % 3u) == 0u, "Index count must be multiple of 3.");
+			return;
+		}
+
+		const bool bStitchL = (stitchMask & STITCH_LEFT) != 0;
+		const bool bStitchR = (stitchMask & STITCH_RIGHT) != 0;
+		const bool bStitchB = (stitchMask & STITCH_BOTTOM) != 0;
+		const bool bStitchT = (stitchMask & STITCH_TOP) != 0;
+
+		const uint32 s = step;
+		const uint32 s2 = step * 2u;
+
+		outIdxU16.reserve(size_t(chunkGridRes) * size_t(chunkGridRes) * 6u);
+
+		// Interior (exclude outer ring).
+		const uint32 quadsInThisLod = chunkGridRes / step;
+		if (quadsInThisLod > 2u)
+		{
+			for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
+			{
+				for (uint32 qx = 1u; qx < quadsInThisLod - 1u; ++qx)
+				{
+					pushQuadStd(qx * step, qz * step);
+				}
+			}
+		}
+
+		auto emitStitchStripX = [&](uint32 zBoundary, uint32 zInner, uint32 xBegin, uint32 xEnd)
+			{
+				for (uint32 x = xBegin; (x + s2) <= xEnd; x += s2)
+				{
+					const uint32 x0 = x;
+					const uint32 x1 = x + s;
+					const uint32 x2 = x + s2;
+
+					pushTriGrid(x0, zBoundary, x2, zBoundary, x1, zInner);
+					pushTriGrid(x0, zBoundary, x1, zInner, x0, zInner);
+					pushTriGrid(x2, zBoundary, x2, zInner, x1, zInner);
+				}
+			};
+
+		auto emitStitchStripZ = [&](uint32 xBoundary, uint32 xInner, uint32 zBegin, uint32 zEnd)
+			{
+				for (uint32 z = zBegin; (z + s2) <= zEnd; z += s2)
+				{
+					const uint32 z0 = z;
+					const uint32 z1 = z + s;
+					const uint32 z2 = z + s2;
+
+					pushTriGrid(xBoundary, z0, xBoundary, z2, xInner, z1);
+					pushTriGrid(xBoundary, z0, xInner, z1, xInner, z0);
+					pushTriGrid(xBoundary, z2, xInner, z2, xInner, z1);
+				}
+			};
+
+		const bool bCornerBL = bStitchB && bStitchL;
+		const bool bCornerBR = bStitchB && bStitchR;
+		const bool bCornerTL = bStitchT && bStitchL;
+		const bool bCornerTR = bStitchT && bStitchR;
+
+		const uint32 Q = chunkGridRes;
+
+		// Corner patches.
+		if (bCornerBL)
+		{
+			uint32 x0 = 0u;   uint32 z0 = 0u;
+			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
+			pushTriGrid(x0, z0, x1, z1, x0, z2);
+			pushTriGrid(x0, z0, x1, z1, x2, z0);
+			pushTriGrid(x2, z0, x1, z1, x2, z1);
+			pushTriGrid(x0, z2, x1, z1, x1, z2);
+		}
+		if (bCornerBR)
+		{
+			uint32 x0 = Q - s2; uint32 z0 = 0u;
+			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
+			pushTriGrid(x0, z0, x1, z1, x2, z0);
+			pushTriGrid(x2, z2, x1, z1, x2, z0);
+			pushTriGrid(x0, z0, x1, z1, x0, z1);
+			pushTriGrid(x1, z2, x1, z1, x2, z2);
+		}
+		if (bCornerTL)
+		{
+			uint32 x0 = 0u;   uint32 z0 = Q - s2;
+			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
+			pushTriGrid(x0, z0, x1, z1, x0, z2);
+			pushTriGrid(x2, z2, x1, z1, x0, z2);
+			pushTriGrid(x0, z0, x1, z1, x1, z0);
+			pushTriGrid(x2, z1, x1, z1, x2, z2);
+		}
+		if (bCornerTR)
+		{
+			uint32 x0 = Q - s2; uint32 z0 = Q - s2;
+			uint32 x1 = x0 + s; uint32 z1 = z0 + s;
+			uint32 x2 = x0 + s2; uint32 z2 = z0 + s2;
+			pushTriGrid(x2, z2, x1, z1, x0, z2);
+			pushTriGrid(x2, z2, x1, z1, x2, z0);
+			pushTriGrid(x0, z1, x1, z1, x0, z2);
+			pushTriGrid(x1, z0, x1, z1, x2, z0);
+		}
+
+		// Bottom edge.
+		if (!bStitchB)
+		{
+			const uint32 qxBegin = bStitchL ? 1u : 0u;
+			const uint32 qxEnd = bStitchR ? (quadsInThisLod - 1u) : quadsInThisLod;
+
+			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
+			{
+				pushQuadStd(qx * step, 0u);
+			}
+		}
+		else
+		{
+			const uint32 xBegin = bCornerBL ? s2 : 0u;
+			const uint32 xEnd = bCornerBR ? (Q - s2) : Q;
+			emitStitchStripX(0u, s, xBegin, xEnd);
+		}
+
+		// Top edge.
+		if (!bStitchT)
+		{
+			const uint32 qxBegin = bStitchL ? 1u : 0u;
+			const uint32 qxEnd = bStitchR ? (quadsInThisLod - 1u) : quadsInThisLod;
+
+			for (uint32 qx = qxBegin; qx < qxEnd; ++qx)
+			{
+				pushQuadStd(qx * step, Q - step);
+			}
+		}
+		else
+		{
+			const uint32 xBegin = bCornerTL ? s2 : 0u;
+			const uint32 xEnd = bCornerTR ? (Q - s2) : Q;
+			emitStitchStripX(Q, Q - s, xBegin, xEnd);
+		}
+
+		// Left edge.
+		if (quadsInThisLod >= 2u)
+		{
+			if (!bStitchL)
+			{
+				for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
+				{
+					pushQuadStd(0u, qz * step);
+				}
+			}
+			else
+			{
+				const uint32 zBegin = bCornerBL ? s2 : 0u;
+				const uint32 zEnd = bCornerTL ? (Q - s2) : Q;
+				emitStitchStripZ(0u, s, zBegin, zEnd);
+			}
+		}
+
+		// Right edge.
+		if (quadsInThisLod >= 2u)
+		{
+			if (!bStitchR)
+			{
+				for (uint32 qz = 1u; qz < quadsInThisLod - 1u; ++qz)
+				{
+					pushQuadStd(Q - step, qz * step);
+				}
+			}
+			else
+			{
+				const uint32 zBegin = bCornerBR ? s2 : 0u;
+				const uint32 zEnd = bCornerTR ? (Q - s2) : Q;
+				emitStitchStripZ(Q, Q - s, zBegin, zEnd);
+			}
+		}
+
+		ASSERT((outIdxU16.size() % 3u) == 0u, "Index count must be multiple of 3.");
+	}
+
+	bool TerrainSystem::uploadTextureAssetWithMips(
+		Renderer& renderer,
+		AssetManager& assetManager,
+		const char* resourceName,
+		const AssetRef<Texture>& texRef,
+		const char* shaderStaticName)
+	{
+		if (!texRef.IsValid())
+		{
+			return false;
+		}
+
+		AssetPtr<Texture> texPtr = assetManager.LoadBlocking(texRef);
+		ASSERT(texPtr && texPtr->IsValid(), "Failed to load Texture asset for resource '%s'.", resourceName);
+
+		const auto& mips = texPtr->GetMips();
+		ASSERT(!mips.empty(), "TextureAsset '%s' has no mips.", resourceName);
+
+		TextureDesc desc = {};
+		desc.Name = resourceName;
+		desc.Type = RESOURCE_DIM_TEX_2D;
+		desc.Width = mips[0].Width;
+		desc.Height = mips[0].Height;
+		desc.MipLevels = static_cast<uint32>(mips.size());
+		desc.ArraySize = 1;
+		desc.Format = texPtr->GetFormat();
+		desc.Usage = USAGE_DEFAULT;
+		desc.BindFlags = BIND_SHADER_RESOURCE;
+
+		const auto& fmtAttrib = GetTextureFormatAttribs(desc.Format);
+		const uint32 elemSize = fmtAttrib.GetElementSize();
+		ASSERT(elemSize > 0u, "Invalid element size for texture '%s'.", resourceName);
+
+		std::vector<TextureSubResData> subres;
+		subres.resize(mips.size());
+
+		for (size_t i = 0; i < mips.size(); ++i)
+		{
+			const TextureMip& mip = mips[i];
+			ASSERT(mip.Width > 0 && mip.Height > 0, "Invalid mip size for '%s' mip=%zu.", resourceName, i);
+			ASSERT(!mip.Data.empty(), "Mip data empty for '%s' mip=%zu.", resourceName, i);
+
+			TextureSubResData sr = {};
+			sr.pData = mip.Data.data();
+			sr.Stride = static_cast<uint64>(mip.Width) * static_cast<uint64>(elemSize);
+			sr.DepthStride = 0;
+			subres[i] = sr;
+		}
+
+		TextureData initData = {};
+		initData.pSubResources = subres.data();
+		initData.NumSubresources = static_cast<uint32>(subres.size());
+
+		renderer.AddTexture(STRING_HASH(resourceName), desc, &initData);
+		renderer.RegisterStaticTextureResource(shaderStaticName, STRING_HASH(resourceName));
+		return true;
 	}
 } // namespace shz
