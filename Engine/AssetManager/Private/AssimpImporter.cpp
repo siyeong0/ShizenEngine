@@ -729,9 +729,13 @@ namespace shz
 		{
 			aiString n;
 			if (mat->Get(AI_MATKEY_NAME, n) == AI_SUCCESS && n.length > 0)
+			{
 				name = n.C_Str();
+			}
 			else
+			{
 				name = std::string("Material_") + std::to_string(materialIndex);
+			}
 		}
 
 		const std::string templateName = matTmpl;
@@ -762,7 +766,9 @@ namespace shz
 		{
 			aiString am;
 			if (mat->Get(AI_MATKEY_GLTF_ALPHAMODE, am) == AI_SUCCESS && am.length > 0)
+			{
 				alphaMode = am.C_Str();
+			}
 		}
 #endif
 
@@ -771,7 +777,9 @@ namespace shz
 		{
 			float v = alphaCutoff;
 			if (mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, v) == AI_SUCCESS)
+			{
 				alphaCutoff = v;
+			}
 		}
 #endif
 
@@ -780,7 +788,9 @@ namespace shz
 		{
 			int v = 0;
 			if (mat->Get(AI_MATKEY_TWOSIDED, v) == AI_SUCCESS)
+			{
 				twoSided = (v != 0);
+			}
 		}
 #endif
 
@@ -805,7 +815,9 @@ namespace shz
 		{
 			float opacity = 1.0f;
 			if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
+			{
 				baseColor[3] *= opacity;
+			}
 		}
 
 		material.SetFloat4("g_BaseColorFactor", baseColor);
@@ -833,14 +845,18 @@ namespace shz
 			{
 				float v = metallic;
 				if (mat->Get(AI_MATKEY_METALLIC_FACTOR, v) == AI_SUCCESS)
+				{
 					metallic = v;
+				}
 			}
 #endif
 #if defined(AI_MATKEY_ROUGHNESS_FACTOR)
 			{
 				float v = roughness;
 				if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, v) == AI_SUCCESS)
+				{
 					roughness = v;
+				}
 			}
 #endif
 			material.SetFloat("g_MetallicFactor", metallic);
@@ -854,14 +870,21 @@ namespace shz
 		// Decide blend/cull/depth
 		MATERIAL_BLEND_MODE blendMode = MATERIAL_BLEND_MODE_OPAQUE;
 		if (ieq(alphaMode, "BLEND"))
+		{
 			blendMode = MATERIAL_BLEND_MODE_TRANSPARENT;
+		}
 		else if (ieq(alphaMode, "MASK"))
+		{
+			twoSided = true;
 			blendMode = MATERIAL_BLEND_MODE_MASKED;
+		}
 		else
 		{
 			// exporter didn't emit alphaMode but alpha<1
 			if (baseColor[3] < 0.999f)
+			{
 				blendMode = MATERIAL_BLEND_MODE_TRANSPARENT;
+			}
 		}
 
 		material.SetBlendMode(blendMode);

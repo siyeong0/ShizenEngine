@@ -747,13 +747,16 @@ namespace shz
 		{
 			const StaticMeshRenderData* pTreeMeshes[] =
 			{
-				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/beech_tree/scene.gltf"))),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod0.fbx"))),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod1.fbx"))),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod2.fbx"))),
+				&(m_pRenderer->CreateStaticMeshRenderData(m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/sapling_3/lod3.fbx"))),
 			};
 
 			constexpr uint TREE_MESH_COUNT = sizeof(pTreeMeshes) / sizeof(pTreeMeshes[0]);
 
 			constexpr float4 SPAWN_RANGE = { -500.0f, -500.0f, 500.0f, 500.0f };
-			constexpr uint  NUM_TREES = 10000;
+			constexpr uint  NUM_TREES = 1000;
 
 			float yOffset = 0.0f;
 			std::mt19937 rng(1337);
@@ -768,7 +771,7 @@ namespace shz
 				const float x = distX(rng);
 				const float z = distZ(rng);
 				const float y = m_pTerrainSystem->SampleWorldHeight(x, z) + yOffset;
-
+ 
 				const float yaw = distYaw(rng);
 				const float scale = distScale(rng);
 				const uint meshIdx = distMesh(rng);
