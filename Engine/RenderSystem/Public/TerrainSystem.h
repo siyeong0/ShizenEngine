@@ -38,7 +38,6 @@ namespace shz
 			std::string RockyPath = {};
 			std::string SoilPath = {};
 			std::string VegetationPath = {};
-			std::string TreesPath = {};
 
 			// PBR layer folders (Soil/Rocky)
 			std::string SoilMaterialPath = {};
@@ -180,7 +179,6 @@ namespace shz
 		AssetRef<Texture> m_RockyTexRef = {};
 		AssetRef<Texture> m_SoilTexRef = {};
 		AssetRef<Texture> m_VegetationTexRef = {};
-		AssetRef<Texture> m_TreesTexRef = {};
 
 		AssetPtr<Texture> m_HeightTex;
 		std::vector<uint16> m_HeightU16 = {};

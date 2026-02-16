@@ -469,7 +469,6 @@ namespace shz
 		m_RockyTexRef = assetManager.RegisterAsset<Texture>(m_CI.RockyPath);
 		m_SoilTexRef = assetManager.RegisterAsset<Texture>(m_CI.SoilPath);
 		m_VegetationTexRef = assetManager.RegisterAsset<Texture>(m_CI.VegetationPath);
-		m_TreesTexRef = assetManager.RegisterAsset<Texture>(m_CI.TreesPath);
 
 		// Materials.
 		ASSERT(!m_CI.SoilMaterialPath.empty(), "Invalid soil material path.");
@@ -743,7 +742,6 @@ namespace shz
 		m_RockyTexRef = {};
 		m_SoilTexRef = {};
 		m_VegetationTexRef = {};
-		m_TreesTexRef = {};
 
 		m_HeightTex.Reset();
 
