@@ -456,7 +456,8 @@ namespace shz
 
 			// Update: Transform -> RenderScene sync
 			{
-				auto sys = m_pEcs->World().system<CTransform, CMeshRenderer>("Render.SyncTransforms")
+				auto sys = m_pEcs->World().observer<CTransform, CMeshRenderer>("Render.SyncTransforms")
+					.event(flecs::OnSet)
 					.each([this](CTransform& tr, CMeshRenderer& mr)
 						{
 							if (!mr.RenderObjectHandle.IsValid())

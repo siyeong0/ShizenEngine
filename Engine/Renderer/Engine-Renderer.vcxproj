@@ -155,10 +155,12 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Public\DrawPacket.h" />
+    <ClInclude Include="Public\LooseGrid.h" />
     <ClInclude Include="Public\PipelineStateManager.h" />
     <ClInclude Include="Public\RenderGraphTypes.h" />
     <ClInclude Include="Public\RenderPassBuilder.h" />
     <ClInclude Include="Public\RenderPassContext.h" />
+    <ClInclude Include="Public\StaticBVH.h" />
     <ClInclude Include="Public\StaticMeshRenderData.h" />
     <ClInclude Include="Public\RenderResourceCache.hpp" />
     <ClInclude Include="Public\Renderer.h" />
@@ -173,10 +175,12 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Private\LooseGrid.cpp" />
     <ClCompile Include="Private\PipelineStateManager.cpp" />
     <ClCompile Include="Private\Renderer.cpp" />
     <ClCompile Include="Private\RenderResourceRegistry.cpp" />
     <ClCompile Include="Private\RenderScene.cpp" />
+    <ClCompile Include="Private\StaticBVH.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
