@@ -79,15 +79,15 @@ struct TerrainConstants
 	float2 WorldSizeXZ;
 	float2 ChunkSizeXZ;
 	float2 WorldSpacingXZ;
-	
+
 	float2 HeightTexelSize;
 	float HeightScale;
 	float HeightOffset;
-	
+
 	uint CenterXZ;
 	float NormalUpBias;
-	uint _pad0;
-	uint _pad1;
+	uint ChunkGridRes;
+	float InvChunkGridRes; 
 };
 
 // ----------------------------------------------

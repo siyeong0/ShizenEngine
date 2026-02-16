@@ -12,9 +12,6 @@ Texture2D g_TerrainRockyTex;
 Texture2D g_TerrainSoilTex;
 Texture2D g_TerrainVegetationTex;
 
-// Terrain mesh resolution per chunk is 16x16 quads.
-static const float TERRAIN_CHUNK_GRID_RES = 16.0f;
-
 // ----------------------------------------------
 // Terrain common helpers
 // ----------------------------------------------
@@ -88,7 +85,7 @@ float SampleTerrainSurfaceHeight01AtWorldXZ(float2 worldXZ)
 	worldXZ = clamp(worldXZ, hfMin + eps, hfMax - eps);
 
 	// Cell size of ONE quad in the rendered mesh.
-	float2 cellSize = g_TerrainCB.ChunkSizeXZ / TERRAIN_CHUNK_GRID_RES;
+	float2 cellSize = g_TerrainCB.ChunkSizeXZ * g_TerrainCB.InvChunkGridRes;
 
 	// Convert to "mesh grid space" (in units of quads).
 	float2 g = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(cellSize, 1e-6.xx);
@@ -140,7 +137,7 @@ float SampleTerrainSurfaceHeightAtWorldXZ(float2 worldXZ)
 	worldXZ = clamp(worldXZ, hfMin + eps, hfMax - eps);
 
 	// Cell size of ONE quad in the rendered mesh.
-	float2 cellSize = g_TerrainCB.ChunkSizeXZ / TERRAIN_CHUNK_GRID_RES;
+	float2 cellSize = g_TerrainCB.ChunkSizeXZ * g_TerrainCB.InvChunkGridRes;
 
 	// Convert to "mesh grid space" (in units of quads).
 	float2 g = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(cellSize, 1e-6.xx);

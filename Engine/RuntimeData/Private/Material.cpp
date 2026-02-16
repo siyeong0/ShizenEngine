@@ -364,6 +364,7 @@ namespace shz
 
 		// Raster options
 		{
+			// gpDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 			gpDesc.RasterizerDesc.CullMode = GetCullMode();
 			gpDesc.RasterizerDesc.FrontCounterClockwise = GetFrontCounterClockwise();
 		}

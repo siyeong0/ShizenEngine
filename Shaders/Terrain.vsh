@@ -43,7 +43,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	float3 vertexPosition = GET_VERTEX_POS();
 
 	// Local grid [0..1] within this chunk 
-	float2 grid01 = vertexPosition.xz * (1.0f / TERRAIN_CHUNK_GRID_RES);
+	float2 grid01 = vertexPosition.xz * g_TerrainCB.InvChunkGridRes;
 
 	// Chunk-local -> world XZ (meters)
 	float2 worldXZ = terrainDrawCB.ChunkOriginXZ + grid01 * g_TerrainCB.ChunkSizeXZ;

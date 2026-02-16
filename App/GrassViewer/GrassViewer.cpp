@@ -262,8 +262,11 @@ namespace shz
 			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
 			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 
-			tci.WorldSpacingX = 1.0f;
-			tci.WorldSpacingZ = 1.0f;
+			tci.ChunkQuadsPerSide = 128;
+			tci.QuadSizeX = 0.5f;
+			tci.QuadSizeZ = 0.5f;
+			tci.WorldSpacingX = 0.5f;
+			tci.WorldSpacingZ = 0.5f;
 			tci.HeightScale = 3000.0f;
 			tci.HeightOffset = -1000.0f;
 			tci.bCenterXZ = true;
@@ -639,24 +642,6 @@ namespace shz
 			ren.InteractionWindFade = 0.95f;
 
 			m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), ren);
-		}
-
-		// Update TERRAIN_CONSTANTS
-		{
-			hlsl::TerrainConstants hfc = {};
-			hfc.WorldOriginXZ = float2{ m_pTerrainSystem->GetWorldOriginX(), m_pTerrainSystem->GetWorldOriginZ() };
-			hfc.WorldSizeXZ = float2{ m_pTerrainSystem->GetWorldSizeX(), m_pTerrainSystem->GetWorldSizeZ() };
-			hfc.WorldSpacingXZ = float2{ m_pTerrainSystem->GetWorldSpacingX(), m_pTerrainSystem->GetWorldSpacingZ() };
-			hfc.ChunkSizeXZ = float2{ m_pTerrainSystem->GetChunkSize(),m_pTerrainSystem->GetChunkSize() };
-			hfc.HeightScale = m_pTerrainSystem->GetHeightScale();
-			hfc.HeightOffset = m_pTerrainSystem->GetHeightOffset();
-			hfc.NormalUpBias = 2.0f;
-
-			const uint32 w = m_pTerrainSystem->GetWidth();
-			const uint32 h = m_pTerrainSystem->GetHeight();
-			hfc.HeightTexelSize = float2{ 1.0f / float(w) , 1.0f / float(h) };
-
-			m_pRenderer->UpdateBuffer<hlsl::TerrainConstants>(STRING_HASH("TerrainCB"), hfc);
 		}
 	}
 
