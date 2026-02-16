@@ -2,6 +2,8 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdint>
+#include <chrono>
+
 #include "Primitives/FormatString.hpp"
 #include "Primitives/DebugUtilities.hpp"
 
@@ -60,3 +62,22 @@ inline void AlignedFree(void* p)
 	std::free(p);
 #endif
 }
+
+// Profiling
+namespace bench
+{
+	struct Timer final
+	{
+		using clock = std::chrono::high_resolution_clock;
+		clock::time_point Start;
+
+		Timer() : Start(clock::now()) {}
+
+		double ElapsedMs() const
+		{
+			const auto end = clock::now();
+			const std::chrono::duration<double, std::milli> ms = end - Start;
+			return ms.count();
+		}
+	};
+} // namespace bench

@@ -512,6 +512,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Visibility (dense object indices)
 		// ------------------------------------------------------------
+		bench::Timer timer;
 		std::vector<uint32> visibleObjectIndexMain = {};
 		std::vector<uint32> visibleObjectIndexShadow = {};
 		{
@@ -544,6 +545,9 @@ namespace shz
 				}
 			}
 		}
+
+		auto t = timer.ElapsedMs();
+		// std::cout << t << " ms - Visibility: " << visibleObjectIndexMain.size() << " main, " << visibleObjectIndexShadow.size() << " shadow." << std::endl;
 
 		// ------------------------------------------------------------
 		// Common barriers

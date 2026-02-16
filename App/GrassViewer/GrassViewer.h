@@ -75,13 +75,22 @@ namespace shz
 		std::unique_ptr<InteractionSystem> m_pInteractionSystem;
 		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 
-		ViewportState     m_Viewport = {};
-		ViewFamily        m_ViewFamily = {};
+		ViewportState m_Viewport = {};
+		ViewFamily m_ViewFamily = {};
 		FirstPersonCamera m_Camera = {};
 
 		RenderScene::LightObject         m_GlobalLight = {};
 		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
 		float m_Speed = 3.0f;
+
+		// Profiling
+		double m_UpdateMs = 0.0;
+		double m_RenderMs = 0.0;
+
+		double m_UpdateMsEMA = 0.0;
+		double m_RenderMsEMA = 0.0;
+
+		float  m_TimingEmaAlpha = 0.12f;
 	};
 } // namespace shz

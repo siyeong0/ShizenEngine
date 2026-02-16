@@ -788,11 +788,11 @@ namespace shz
 	// ------------------------------------------------------------------------
 	void TerrainSystem::Update(Renderer& renderer, RenderScene* pScene, const View& view)
 	{
+		bench::Timer timer;
+
 		ASSERT(pScene, "RenderScene is null.");
-		if (m_Width == 0u || m_Height == 0u || m_NumLods == 0u)
-		{
-			return;
-		}
+		ASSERT(m_Width > 0u && m_Height > 0u, "Invalid terrain height dimensions.");
+		ASSERT(m_NumLods > 0u, "Invalid number of LODs.");
 
 		const float worldOriginX = GetWorldOriginX();
 		const float worldOriginZ = GetWorldOriginZ();
@@ -1118,6 +1118,9 @@ namespace shz
 			Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
 			m_SceneHandles.push_back(handle);
 		}
+
+		auto t = timer.ElapsedMs();
+		std::cout << t << " ms" << std::endl;
 	}
 
 	// ------------------------------------------------------------------------

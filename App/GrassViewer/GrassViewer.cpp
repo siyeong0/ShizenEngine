@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <random>
+#include <chrono>
 #include <cmath>
 #include <unordered_set>
 
@@ -578,6 +579,8 @@ namespace shz
 
 	void GrassViewer::Render()
 	{
+		bench::Timer timer;
+
 		ASSERT(m_pRenderer, "Renderer is null.");
 		ASSERT(m_pRenderScene, "RenderScene is null.");
 
@@ -586,10 +589,16 @@ namespace shz
 		m_pRenderer->BeginFrame();
 		m_pRenderer->Render(*m_pRenderScene, m_ViewFamily);
 		m_pRenderer->EndFrame();
+
+		m_RenderMs = timer.ElapsedMs();
+		const double a = (double)std::clamp(m_TimingEmaAlpha, 0.0f, 1.0f);
+		m_RenderMsEMA = a * m_RenderMs + (1.0 - a) * m_RenderMsEMA;
 	}
 
 	void GrassViewer::Update(double currTime, double elapsedTime, bool doUpdateUI)
 	{
+		bench::Timer timer;
+
 		SampleBase::Update(currTime, elapsedTime, doUpdateUI);
 
 		ASSERT(m_pRenderScene, "RenderScene is null.");
@@ -635,6 +644,10 @@ namespace shz
 
 			m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), ren);
 		}
+
+		m_UpdateMs = timer.ElapsedMs();
+		const double a = (double)std::clamp(m_TimingEmaAlpha, 0.0f, 1.0f);
+		m_UpdateMsEMA = a * m_UpdateMs + (1.0 - a) * m_UpdateMsEMA;
 	}
 
 	void GrassViewer::ReleaseSwapChainBuffers()
@@ -674,6 +687,16 @@ namespace shz
 
 			ImGui::Separator();
 			ImGui::TextDisabled("FPS: %.1f", ImGui::GetIO().Framerate);
+
+			ImGui::Separator();
+			ImGui::Text("CPU Timings (ms)");
+			ImGui::Text("Update: %.3f (EMA %.3f)", (float)m_UpdateMs, (float)m_UpdateMsEMA);
+			ImGui::Text("Render:  %.3f (EMA %.3f)", (float)m_RenderMs, (float)m_RenderMsEMA);
+			ImGui::Text("Frame:   %.3f (EMA %.3f)",
+				(float)(m_UpdateMs + m_RenderMs),
+				(float)(m_UpdateMsEMA + m_RenderMsEMA));
+
+			ImGui::SliderFloat("Timing EMA Alpha", &m_TimingEmaAlpha, 0.01f, 0.5f, "%.3f");
 
 			ImGui::Separator();
 
