@@ -337,9 +337,8 @@ namespace shz
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------
-		// Update Frame/Shadow constants + compute lightViewProj
+		// Viewport / frustum
 		// ------------------------------------------------------------
-
 		float2 viewportSize =
 		{
 			static_cast<float>(view.Viewport.right - view.Viewport.left),
@@ -398,9 +397,9 @@ namespace shz
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
 			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-			{
-				return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-			};
+				{
+					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+				};
 
 			float3 shadowCornersWS[8] = {};
 			{
@@ -510,44 +509,17 @@ namespace shz
 		m_PassCtx.ShadowViewFrustum = frustumShadow;
 
 		// ------------------------------------------------------------
-		// Visibility (dense object indices)
+		// Visibility (moved into RenderScene)
 		// ------------------------------------------------------------
 		bench::Timer timer;
-		std::vector<uint32> visibleObjectIndexMain = {};
-		std::vector<uint32> visibleObjectIndexShadow = {};
-		{
-			const uint32 count = scene.GetObjectDenseCount();
-
-			visibleObjectIndexMain.clear();
-			visibleObjectIndexShadow.clear();
-
-			visibleObjectIndexMain.reserve(count);
-			visibleObjectIndexShadow.reserve(count);
-
-			for (uint32 i = 0; i < count; ++i)
-			{
-				const RenderScene::SceneObject& obj = scene.GetObjectByDenseIndex(i);
-				ASSERT(obj.pMesh, "Invalid scene object.");
-
-				const Box& localBounds = obj.pMesh->GetLocalBounds().GetBox();
-
-				if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-				{
-					visibleObjectIndexMain.push_back(i);
-				}
-
-				if (obj.bCastShadow)
-				{
-					if (IntersectsFrustum(frustumShadow, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-					{
-						visibleObjectIndexShadow.push_back(i);
-					}
-				}
-			}
-		}
-
+		RenderScene::VisibilityLists vis = {};
+		scene.BuildVisibilityLists(frustumMain, frustumShadow, vis);
 		auto t = timer.ElapsedMs();
-		std::cout << t << " ms - Visibility: " << visibleObjectIndexMain.size() << " main, " << visibleObjectIndexShadow.size() << " shadow." << std::endl;
+
+		std::cout << t << " ms - Visibility: "
+			<< vis.VisibleDenseMain.size() << " main, "
+			<< vis.VisibleDenseShadow.size() << " shadow."
+			<< std::endl;
 
 		// ------------------------------------------------------------
 		// Common barriers
@@ -609,20 +581,20 @@ namespace shz
 		// Helper: pack object table using instanceRemap
 		// ------------------------------------------------------------
 		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
-		{
-			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-			hlsl::ObjectConstants* dst = map;
-
-			for (size_t i = 0; i < remap.size(); ++i)
 			{
-				const uint32 oc = remap[i];
-				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-				dst[i] = tableCPU[oc];
-			}
-		};
+				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+				hlsl::ObjectConstants* dst = map;
+
+				for (size_t i = 0; i < remap.size(); ++i)
+				{
+					const uint32 oc = remap[i];
+					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+					dst[i] = tableCPU[oc];
+				}
+			};
 
 		// ------------------------------------------------------------
 		// Build packets + pack object tables
@@ -630,9 +602,9 @@ namespace shz
 		std::vector<uint32> instanceRemap;
 
 		auto pipelineResolver = [this](MaterialId matId, uint64 rpKey) -> const MaterialPipelineBinding&
-		{
-			return this->AcquireMaterialPipelineBinding(matId, rpKey);
-		};
+			{
+				return this->AcquireMaterialPipelineBinding(matId, rpKey);
+			};
 
 		RenderScene::ViewLodParams viewLodParams = {};
 		viewLodParams.View = view.ViewMatrix;
@@ -643,7 +615,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
 			viewLodParams,
-			visibleObjectIndexMain,
+			vis.VisibleDenseMain,
 			pipelineResolver,
 			m_PassCtx.MainDrawPackets,
 			instanceRemap);
@@ -654,7 +626,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("Forward"),
 			viewLodParams,
-			visibleObjectIndexMain,
+			vis.VisibleDenseMain,
 			pipelineResolver,
 			m_PassCtx.ForwardDrawPackets,
 			instanceRemap);
@@ -663,40 +635,43 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("DepthPrepass"),
 			viewLodParams,
-			visibleObjectIndexMain,
+			vis.VisibleDenseMain,
 			pipelineResolver,
 			m_PassCtx.DepthPrepassDrawPackets,
 			instanceRemap);
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
-		// Shadow // TOOD: off shadow now
-		/*scene.BuildDrawPackets(
+		// Shadow (kept off in your code; if you re-enable, pass vis.VisibleDenseShadow)
+		/*
+		scene.BuildDrawPackets(
 			STRING_HASH("Shadow"),
-			visibleObjectIndexShadow,
+			viewLodParams,
+			vis.VisibleDenseShadow,
 			pipelineResolver,
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);
 
-		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);*/
+		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);
+		*/
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("DepthPrepass"), pipelineResolver, m_PassCtx.DepthPrepassIndirectDrawPackets);
-		
+
 		IBuffer* pIndirectArgs = m_pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
 		IBuffer* pIndirectCounters = m_pRegistry->GetBuffer(STRING_HASH("IndirectDrawCountBuffer"));
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
 		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
-		{
-			for (DrawIndirectPacket& p : packets)
 			{
-				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
-				p.DrawAttribs.pCounterBuffer = pIndirectCounters;
-			}
-		};
+				for (DrawIndirectPacket& p : packets)
+				{
+					p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+					p.DrawAttribs.pCounterBuffer = pIndirectCounters;
+				}
+			};
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
@@ -777,7 +752,6 @@ namespace shz
 			}
 		}
 	}
-
 
 	void Renderer::EndFrame()
 	{

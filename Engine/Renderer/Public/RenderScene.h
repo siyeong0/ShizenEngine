@@ -106,6 +106,21 @@ namespace shz
 			bool bViewForwardIsPositiveZ = true; // if false, forward is -Z
 		};
 
+		// ------------------------------------------------------------
+		// Visibility outputs
+		// ------------------------------------------------------------
+		struct VisibilityLists final
+		{
+			std::vector<uint32> VisibleDenseMain = {};
+			std::vector<uint32> VisibleDenseShadow = {};
+
+			void Clear()
+			{
+				VisibleDenseMain.clear();
+				VisibleDenseShadow.clear();
+			}
+		};
+
 	public:
 		RenderScene() = default;
 		RenderScene(const RenderScene&) = delete;
@@ -183,6 +198,22 @@ namespace shz
 			ASSERT(denseIndex < static_cast<uint32>(m_ObjectDense.size()), "Object dense index OOB.");
 			return m_ObjectDense[denseIndex].OcIndex;
 		}
+
+		// ------------------------------------------------------------
+		// Visibility
+		// ------------------------------------------------------------
+		// Computes visible object dense indices for main/shadow frusta.
+		// - Main list includes all objects whose bounds intersect frustumMain.
+		// - Shadow list includes only objects that cast shadow AND intersect frustumShadow.
+		void BuildVisibilityLists(
+			const ViewFrustumExt& frustumMain,
+			const ViewFrustumExt& frustumShadow,
+			VisibilityLists& outLists) const;
+
+		// Convenience overload (if you only need main frustum).
+		void BuildVisibilityMainOnly(
+			const ViewFrustumExt& frustumMain,
+			std::vector<uint32>& outVisibleDenseMain) const;
 
 		// ------------------------------------------------------------
 		// Static mesh draw packets
@@ -376,7 +407,7 @@ namespace shz
 		// Objects
 		std::vector<Slot<SceneObject>> m_ObjectSlots;
 		std::vector<uint32> m_ObjectSparse;
-		std::vector<struct ObjectRecord> m_ObjectDense;
+		std::vector<ObjectRecord> m_ObjectDense;
 		std::vector<Handle<SceneObject>> m_ObjectHandles;
 
 		// Terrain
@@ -398,8 +429,8 @@ namespace shz
 		std::vector<Handle<LightObject>> m_LightHandles;
 
 		//
-		std::unordered_map<struct DrawBatchKey, uint32, struct DrawBatchKeyHasher> m_BatchLookup;
-		std::vector<struct Batch> m_Batches;
+		std::unordered_map<DrawBatchKey, uint32, DrawBatchKeyHasher> m_BatchLookup;
+		std::vector<Batch> m_Batches;
 
 		std::vector<hlsl::ObjectConstants> m_ObjectTableCPU;
 		std::vector<uint32> m_FreeOcIndices;

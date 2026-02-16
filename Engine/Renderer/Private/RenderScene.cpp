@@ -105,6 +105,71 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
+	// Visibility
+	// ------------------------------------------------------------
+	void RenderScene::BuildVisibilityLists(
+		const ViewFrustumExt& frustumMain,
+		const ViewFrustumExt& frustumShadow,
+		VisibilityLists& outLists) const
+	{
+		const uint32 count = GetObjectDenseCount();
+
+		outLists.VisibleDenseMain.clear();
+		outLists.VisibleDenseShadow.clear();
+
+		outLists.VisibleDenseMain.reserve(count);
+		outLists.VisibleDenseShadow.reserve(count);
+
+		for (uint32 i = 0; i < count; ++i)
+		{
+			const ObjectRecord& rec = m_ObjectDense[i];
+			const SceneObject& obj = rec.Obj;
+
+			ASSERT(obj.pMesh, "Invalid scene object.");
+
+			const Box& localBounds = obj.pMesh->GetLocalBounds().GetBox();
+
+			if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+			{
+				outLists.VisibleDenseMain.push_back(i);
+			}
+
+			if (obj.bCastShadow)
+			{
+				if (IntersectsFrustum(frustumShadow, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+				{
+					outLists.VisibleDenseShadow.push_back(i);
+				}
+			}
+		}
+	}
+
+	void RenderScene::BuildVisibilityMainOnly(
+		const ViewFrustumExt& frustumMain,
+		std::vector<uint32>& outVisibleDenseMain) const
+	{
+		const uint32 count = GetObjectDenseCount();
+
+		outVisibleDenseMain.clear();
+		outVisibleDenseMain.reserve(count);
+
+		for (uint32 i = 0; i < count; ++i)
+		{
+			const ObjectRecord& rec = m_ObjectDense[i];
+			const SceneObject& obj = rec.Obj;
+
+			ASSERT(obj.pMesh, "Invalid scene object.");
+
+			const Box& localBounds = obj.pMesh->GetLocalBounds().GetBox();
+
+			if (IntersectsFrustum(frustumMain, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+			{
+				outVisibleDenseMain.push_back(i);
+			}
+		}
+	}
+
+	// ------------------------------------------------------------
 	// Scene Objects API
 	// ------------------------------------------------------------
 	Handle<RenderScene::SceneObject> RenderScene::AddObject(const StaticMeshRenderData& rd, const Matrix4x4& transform, bool bCastShadow)
@@ -1106,4 +1171,5 @@ namespace shz
 
 		return slot.DenseIndex;
 	}
+
 } // namespace shz
