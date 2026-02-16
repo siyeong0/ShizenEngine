@@ -337,7 +337,7 @@ namespace shz
 		const View& view = viewFamily.Views[0];
 
 		// ------------------------------------------------------------
-		// Viewport / frustum
+		// Viewport + Frustum
 		// ------------------------------------------------------------
 		float2 viewportSize =
 		{
@@ -346,9 +346,10 @@ namespace shz
 		};
 
 		ViewFrustumExt frustumMain = {};
-		Matrix4x4 viewProj = view.ViewProjMatrix;
-		ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
-
+		{
+			Matrix4x4 viewProj = view.ViewProjMatrix;
+			ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
+		}
 		m_PassCtx.MainViewFrustum = frustumMain;
 
 		// ------------------------------------------------------------
@@ -390,7 +391,6 @@ namespace shz
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
 			const float ShadowVisibleDistance = 200.0f;
-
 			const float3 lightForward = lightDirWs;
 
 			float3 up = float3(0, 1, 0);
@@ -505,21 +505,7 @@ namespace shz
 
 		ViewFrustumExt frustumShadow = {};
 		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);
-
 		m_PassCtx.ShadowViewFrustum = frustumShadow;
-
-		// ------------------------------------------------------------
-		// Visibility (moved into RenderScene)
-		// ------------------------------------------------------------
-		bench::Timer timer;
-		RenderScene::VisibilityLists vis = {};
-		scene.BuildVisibilityLists(frustumMain, frustumShadow, vis);
-		auto t = timer.ElapsedMs();
-
-		std::cout << t << " ms - Visibility: "
-			<< vis.VisibleDenseMain.size() << " main, "
-			<< vis.VisibleDenseShadow.size() << " shadow."
-			<< std::endl;
 
 		// ------------------------------------------------------------
 		// Common barriers
@@ -531,6 +517,7 @@ namespace shz
 		pushBarrier(pBasePassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pForwardPassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pShadowPassObjectTable, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
+
 		pushBarrier(pEnvTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvDiffTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 		pushBarrier(pEnvSpecTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
@@ -598,6 +585,7 @@ namespace shz
 
 		// ------------------------------------------------------------
 		// Build packets + pack object tables
+		// (Visibility + LOD is now inside RenderScene::BuildDrawPackets)
 		// ------------------------------------------------------------
 		std::vector<uint32> instanceRemap;
 
@@ -615,7 +603,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
 			viewLodParams,
-			vis.VisibleDenseMain,
+			frustumMain,
 			pipelineResolver,
 			m_PassCtx.MainDrawPackets,
 			instanceRemap);
@@ -626,7 +614,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("Forward"),
 			viewLodParams,
-			vis.VisibleDenseMain,
+			frustumMain,
 			pipelineResolver,
 			m_PassCtx.ForwardDrawPackets,
 			instanceRemap);
@@ -635,19 +623,19 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("DepthPrepass"),
 			viewLodParams,
-			vis.VisibleDenseMain,
+			frustumMain,
 			pipelineResolver,
 			m_PassCtx.DepthPrepassDrawPackets,
 			instanceRemap);
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
-		// Shadow (kept off in your code; if you re-enable, pass vis.VisibleDenseShadow)
+		// Shadow (if you enable later)
 		/*
 		scene.BuildDrawPackets(
 			STRING_HASH("Shadow"),
 			viewLodParams,
-			vis.VisibleDenseShadow,
+			frustumShadow,
 			pipelineResolver,
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);
