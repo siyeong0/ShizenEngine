@@ -215,20 +215,14 @@ namespace shz
 		m_LastVisKey = key;
 		m_LastVisStamp = stamp;
 
-		bench::Timer t2;
 		// Ensure BVH is up-to-date
 		rebuildStaticBVHIfNeeded();
-		auto t2Elapsed = t2.ElapsedMs();
 
-		bench::Timer t1;
 		// Query static BVH -> candidate object dense indices
 		m_StaticBVHCandidates = m_StaticBVH.QueryFrustum(frustum);
-		auto t1Elapsed = t1.ElapsedMs();
 
 		// Query dynamic grid -> candidate object dense indices
 		m_DynamicCandidates = m_DynamicGrid.QueryFrustum(frustum);
-
-		std::cout << t1Elapsed << " ms for BVH query, " << t2Elapsed << " ms for BVH rebuild if needed. Candidates: " << m_StaticBVHCandidates.size() << " (static), " << m_DynamicCandidates.size() << " (dynamic)." << std::endl;
 
 		// Helper lambda: process a candidate set
 		auto ProcessCandidates = [&](const std::vector<uint32>& candidates)
@@ -989,12 +983,14 @@ namespace shz
 		BuildTerrainDrawPackets(passKey, resolver, outPackets);
 
 		if (m_ObjectDense.empty() || m_ObjectTableCPU.empty())
+		{
 			return;
+		}
 
 		// Visibility + LOD (cached)
 		buildVisibilityAndLodCached(view, frustum);
-		const uint32 stamp = m_LastVisStamp;
 
+		const uint32 stamp = m_LastVisStamp;
 		const bool bIsShadowPass = (passKey == STRING_HASH("Shadow"));
 
 		// Iterate batches (already LOD-specific)
@@ -1002,13 +998,19 @@ namespace shz
 		{
 			const Batch& b = m_Batches[batchId];
 			if (b.IsEmpty())
+			{
 				continue;
+			}
 
 			if (b.PassKey != passKey)
+			{
 				continue;
+			}
 
 			if (bIsShadowPass && !b.bMatCastsShadow)
+			{
 				continue;
+			}
 
 			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
 
@@ -1017,13 +1019,19 @@ namespace shz
 			{
 				const uint32 oc = inst.OcIndex;
 				if (oc >= static_cast<uint32>(m_OcVisibleStamp.size()))
+				{
 					continue;
+				}
 
 				if (m_OcVisibleStamp[oc] != stamp)
+				{
 					continue;
+				}
 
 				if (m_OcChosenLod[oc] != b.LodIndex)
+				{
 					continue;
+				}
 
 				outInstanceRemap.push_back(oc);
 			}

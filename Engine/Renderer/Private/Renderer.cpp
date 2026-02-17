@@ -599,8 +599,6 @@ namespace shz
 		viewLodParams.TanHalfFovY = Tan(view.FieldOfViewY * 0.5f);
 		viewLodParams.ViewportHeight = viewportSize.y;
 
-		bench::Timer timer;
-
 		// GBuffer
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
@@ -666,9 +664,6 @@ namespace shz
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
 		patchIndirectPackets(m_PassCtx.DepthPrepassIndirectDrawPackets);
-
-		auto t = timer.ElapsedMs();
-		//std::cout << "BuildDrawPackets + object table update time: " << t << " ms" << std::endl;
 
 		// ------------------------------------------------------------
 		// Pending transitions
