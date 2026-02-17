@@ -31,6 +31,12 @@ struct FrameConstants
 	float4x4 LightViewProj;
 };
 
+struct ShadowConstants
+{
+	float2 ViewportSize;
+	float2 InvViewportSize;
+};
+
 struct ViewConstants
 {
 	float4x4 View;

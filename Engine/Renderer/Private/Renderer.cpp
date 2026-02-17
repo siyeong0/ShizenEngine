@@ -119,22 +119,26 @@ namespace shz
 			RefCntAutoPtr<IBuffer> frameCB;
 			RefCntAutoPtr<IBuffer> viewCB;
 			RefCntAutoPtr<IBuffer> drawCB;
+			RefCntAutoPtr<IBuffer> shadowCB;
 
 			CreateUniformBuffer(dev, sizeof(hlsl::FrameConstants), "Frame constants", &frameCB);
 			CreateUniformBuffer(dev, sizeof(hlsl::ViewConstants), "View constants", &viewCB);
 			CreateUniformBuffer(dev, sizeof(hlsl::DrawConstants), "Draw constants", &drawCB);
-
+			CreateUniformBuffer(dev, sizeof(hlsl::ShadowConstants), "Shadow constants", &shadowCB);
 			ASSERT(frameCB, "Frame CB create failed.");
 			ASSERT(viewCB, "View CB create failed.");
 			ASSERT(drawCB, "Draw CB create failed.");
+			ASSERT(shadowCB, "Shadow CB create failed.");	
 
 			m_pRegistry->RegisterBuffer(STRING_HASH("FRAME_CONSTANTS"), std::move(frameCB));
 			m_pRegistry->RegisterBuffer(STRING_HASH("VIEW_CONSTANTS"), std::move(viewCB));
 			m_pRegistry->RegisterBuffer(STRING_HASH("DRAW_CONSTANTS"), std::move(drawCB));
+			m_pRegistry->RegisterBuffer(STRING_HASH("SHADOW_CONSTANTS"), std::move(shadowCB));
 
 			m_pPipelineStateManager->RegisterStaticBufferCBV("FRAME_CONSTANTS", STRING_HASH("FRAME_CONSTANTS"));
 			m_pPipelineStateManager->RegisterStaticBufferCBV("VIEW_CONSTANTS", STRING_HASH("VIEW_CONSTANTS"));
 			m_pPipelineStateManager->RegisterStaticBufferCBV("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
+			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
 				{
@@ -515,7 +519,7 @@ namespace shz
 
 			const float3 FixedShadowCenterWS = float3(0.0f, 0.0f, 0.0f); // 테스트용: 월드 원점 고정
 			const float  FixedShadowHalfExtent = 200.0f;                // 커버할 반경(가로/세로)
-			const float  FixedShadowDepth = 500.0f;                     // 라이트 방향으로 깊이
+			const float  FixedShadowDepth = 300.0f;                     // 라이트 방향으로 깊이
 
 			float3 up = float3(0, 1, 0);
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }

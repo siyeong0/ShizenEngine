@@ -1,3 +1,5 @@
+#include "Common.hlsli"
+
 #ifndef SHADOW_HLSLI
 #define SHADOW_HLSLI
 
@@ -12,27 +14,40 @@ static float3 WorldToShadowUVZ(float3 worldPos, float4x4 lightViewProj)
 	return float3(uv, clip.z);
 }
 
-// -----------------------------------------------------------------------------
-// Single-tap shadow compare (no PCF)
-// -----------------------------------------------------------------------------
-float SampleShadow(
+static float SampleShadow(
     Texture2D<float> shadowMap,
     SamplerComparisonState shadowCmpSampler,
-    float3 shadowUVZ,
-    float depthBias)
+    float3 worldPos)
 {
+	float3 shadowUVZ = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
+	
     // Bounds / far-plane early out
 	if (shadowUVZ.x < 0.0 || shadowUVZ.x > 1.0 || shadowUVZ.y < 0.0 || shadowUVZ.y > 1.0)
+	{
 		return 1.0;
+	}
 
-    // If your shadow map stores depth in [0..1] and 1.0 means far, keep this.
-	if (shadowUVZ.z >= 1.0)
+	if (shadowUVZ.z >= 0.99)
+	{
 		return 1.0;
+	}
 
-	float depth = shadowUVZ.z - depthBias;
+	float depth = shadowUVZ.z;
+	
+    // Box PCF
+	float sum = 0.0;
+    [loop]
+	for (int y = -1; y <= 1; ++y)
+	{
+        [loop]
+		for (int x = -1; x <= 1; ++x)
+		{
+			float2 uv = shadowUVZ.xy + float2(x, y) * g_ShadowCB.InvViewportSize;
+			sum += shadowMap.SampleCmpLevelZero(shadowCmpSampler, uv, depth);
+		}
+	}
 
-    // Compare sampler does: (depth <= shadowDepth) ? 1 : 0 with HW filtering rules.
-	return shadowMap.SampleCmpLevelZero(shadowCmpSampler, shadowUVZ.xy, depth);
+	return sum / 9.0;
 }
 
 #endif // SHADOW_HLSLI

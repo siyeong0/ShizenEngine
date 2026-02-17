@@ -27,8 +27,6 @@ namespace shz
 				// depth target write
 				b.DeclareTextureDSVWrite(kShadowMap);
 
-				b.DeclareBufferUAV(STRING_HASH("DEP00"), RENDER_ACCESS_WRITE);
-
 				// clear
 				b.SetClearDepthStencil(kShadowMap, 1.f, 0);
 			},
@@ -37,6 +35,14 @@ namespace shz
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 
 				ctx.pRenderer->UpdateViewConstantBuffer(ctx.ShadowView);
+
+				{
+					hlsl::ShadowConstants shadowCBData = {};
+					shadowCBData.ViewportSize = float2(4096.0f, 4096.0f);
+					shadowCBData.InvViewportSize = float2(1.0f / 4096.0f, 1.0f / 4096.0f);
+
+					ctx.pRenderer->UpdateBuffer<hlsl::ShadowConstants>(STRING_HASH("SHADOW_CONSTANTS"), shadowCBData);
+				}
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
 

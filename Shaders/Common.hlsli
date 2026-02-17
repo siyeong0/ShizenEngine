@@ -202,6 +202,11 @@ cbuffer FRAME_CONSTANTS
     FrameConstants g_FrameCB;
 };
 
+cbuffer SHADOW_CONSTANTS
+{
+    ShadowConstants g_ShadowCB;
+};
+
 cbuffer VIEW_CONSTANTS
 {
     ViewConstants g_ViewCB;

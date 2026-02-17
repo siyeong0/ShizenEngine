@@ -101,10 +101,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	float NdotV = saturate(dot(N, V));
 
 	// Shadow
-	float shadow = 1.0;
-	float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
-	float bias = 0.0001 + (1.0 - NdotL) * 0.0001;
-	shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, sh, bias);
+	float shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, worldPos);
 	
 	float3 lit = Shade(
 		N, V, L,

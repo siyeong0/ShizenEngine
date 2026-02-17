@@ -315,8 +315,6 @@ namespace shz
 	{
 		ASSERT(pRenderPass, "RenderPass is null.");
 
-		const MaterialTemplate& tmpl = (pass == EMaterialPass::DepthOnly || pass == EMaterialPass::ShadowDepth)? m_DepthOnlyTemplate : m_BaseTemplate;
-
 		GraphicsPipelineStateCreateInfo outCI = {};
 
 		// -----------------------------
@@ -347,7 +345,7 @@ namespace shz
 		// -----------------------------
 		GraphicsPipelineDesc& gpDesc = outCI.GraphicsPipeline;
 		gpDesc = {};
-
+		
 		// RenderPass injection
 		gpDesc.pRenderPass = pRenderPass;
 		gpDesc.SubpassIndex = 0;
@@ -367,6 +365,13 @@ namespace shz
 			// gpDesc.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
 			gpDesc.RasterizerDesc.CullMode = GetCullMode();
 			gpDesc.RasterizerDesc.FrontCounterClockwise = GetFrontCounterClockwise();
+
+			if (pass == EMaterialPass::ShadowDepth)
+			{
+				gpDesc.RasterizerDesc.DepthBias = 800;
+				gpDesc.RasterizerDesc.DepthBiasClamp = 0.01f; 
+				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 2.0f;
+			}
 		}
 
 		// Depth options
