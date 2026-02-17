@@ -13,11 +13,10 @@ Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 Texture2D<float> g_ShadowMap;
 SamplerComparisonState g_ShadowCmpSampler;
 
-
 struct PSInput
 {
-    float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0;
+	float4 Pos : SV_POSITION;
+	float2 UV : TEXCOORD0;
 };
 
 // ------------------------------------------------------------
@@ -26,83 +25,88 @@ struct PSInput
 
 static float3 UnpackNormal01(float3 n01)
 {
-    return normalize(n01 * 2.0 - 1.0);
+	return normalize(n01 * 2.0 - 1.0);
 }
 
 static float3 ReconstructWorldPos(float2 uv, float depth01)
 {
-    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
-    float4 ndc = float4(ndcXY, depth01, 1.0);
+	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+	float4 ndc = float4(ndcXY, depth01, 1.0);
 
-    float4 ws = mul(ndc, g_ViewCB.InvViewProj);
-    ws.xyz /= max(ws.w, 1e-6);
-    return ws.xyz;
+	float4 ws = mul(ndc, g_FrameCB.InvViewProj);
+	ws.xyz /= max(ws.w, 1e-6);
+	return ws.xyz;
 }
 
 static float3 ReconstructWorldRayDir(float2 uv)
 {
 	// NDC: xy in [-1,1], z=0(near) / 1(far) in D3D convention
-    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
 
-    float4 ndcNear = float4(ndcXY, 0.0, 1.0);
-    float4 ndcFar = float4(ndcXY, 1.0, 1.0);
+	float4 ndcNear = float4(ndcXY, 0.0, 1.0);
+	float4 ndcFar = float4(ndcXY, 1.0, 1.0);
 
-    float4 wsNear = mul(ndcNear, g_ViewCB.InvViewProj);
-    float4 wsFar = mul(ndcFar, g_ViewCB.InvViewProj);
+	float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
+	float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
 
-    wsNear.xyz /= max(wsNear.w, 1e-6);
-    wsFar.xyz /= max(wsFar.w, 1e-6);
+	wsNear.xyz /= max(wsNear.w, 1e-6);
+	wsFar.xyz /= max(wsFar.w, 1e-6);
 
-    return normalize(wsFar.xyz - wsNear.xyz);
+	return normalize(wsFar.xyz - wsNear.xyz);
 }
 
 // Main
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    float2 uv = PSIn.UV;
+	float2 uv = PSIn.UV;
 
-    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
-
+	float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
+	
+	//float dddd = g_ShadowMap.Sample(g_LinearClampSampler, uv);
+	//OutColor = float4(dddd.xxx, 1.0);
+	//return;
+	
+	
 	// Background / sky pixels (no geometry written to GBuffer)
-    if (depth01 >= 0.999999)
-    {
-        float3 dirWS = ReconstructWorldRayDir(uv);
-        float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
-        OutColor = float4(sky, 1.0);
-        return;
-    }
+	if (depth01 >= 0.999999)
+	{
+		float3 dirWS = ReconstructWorldRayDir(uv);
+		float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
+		OutColor = float4(sky, 1.0);
+		return;
+	}
 	
-    float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
-    float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
-    float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
-    float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
+	float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
+	float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
+	float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
+	float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
 	
-    float3 baseColor = gb0.rgb;
-    float opacity = gb0.a;
+	float3 baseColor = gb0.rgb;
+	float opacity = gb0.a;
 
-    float3 N = UnpackNormal01(gb1.xyz);
+	float3 N = UnpackNormal01(gb1.xyz);
 
-    float metallic = saturate(gb2.x);
-    float roughness = saturate(gb2.y);
-    float ao = saturate(gb2.z);
+	float metallic = saturate(gb2.x);
+	float roughness = saturate(gb2.y);
+	float ao = saturate(gb2.z);
 
-    float3 emissive = gb3.rgb;
+	float3 emissive = gb3.rgb;
 
-    float3 worldPos = ReconstructWorldPos(uv, depth01);
+	float3 worldPos = ReconstructWorldPos(uv, depth01);
 
-    float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
-    float3 L = normalize(-g_FrameCB.LightDirWS);
+	float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
+	float3 L = normalize(-g_FrameCB.LightDirWS);
 
-    float NdotL = saturate(dot(N, L));
-    float NdotV = saturate(dot(N, V));
+	float NdotL = saturate(dot(N, L));
+	float NdotV = saturate(dot(N, V));
 
 	// Shadow
-    float shadow = 1.0;
-    float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
-    float bias = 0.0001 + (1.0 - NdotL) * 0.0001;
-    shadow = SampleShadow_PCF16(g_ShadowMap, g_ShadowCmpSampler, sh, bias, 2.0);
-    
-    float3 lit = Shade(
+	float shadow = 1.0;
+	float3 sh = WorldToShadowUVZ(worldPos, g_FrameCB.LightViewProj);
+	float bias = 0.0001 + (1.0 - NdotL) * 0.0001;
+	shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, sh, bias);
+	
+	float3 lit = Shade(
 		N, V, L,
 		baseColor,
 		metallic,
@@ -114,5 +118,5 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 		g_FrameCB.LightIntensity,
 		0.15 /*iblScale*/);
 	
-    OutColor = float4(lit, opacity);
+	OutColor = float4(lit, opacity);
 }

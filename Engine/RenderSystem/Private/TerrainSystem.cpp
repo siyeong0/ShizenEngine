@@ -38,7 +38,7 @@ namespace shz
 		STITCH_BOTTOM = 1 << 2,
 		STITCH_TOP = 1 << 3,
 	};
-	
+
 	// Helpers
 	uint32 log2U32(uint32 v) noexcept
 	{
@@ -368,6 +368,8 @@ namespace shz
 			mat.SetTextureAssetRef("g_RockyAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(rocky.AmbientOcclusion));
 			mat.SetTextureAssetRef("g_RockyDisplacementTex", assetManager.RegisterAsset<Texture>(rocky.Displacement));
 
+			// mat.SetCullMode(CULL_MODE_NONE);
+
 			// Per-draw constants table SRV.
 			mat.SetBufferResource("g_TerrainDrawConstants", STRING_HASH("TerrainDrawConstantsBuffer"));
 		}
@@ -469,12 +471,6 @@ namespace shz
 			std::vector<uint8> bytes(sizeof(cb));
 			std::memcpy(bytes.data(), &cb, sizeof(cb));
 			renderer.UpdateBuffer(STRING_HASH("TerrainCB"), std::move(bytes));
-		}
-
-		ViewFrustumExt frustumMain = {};
-		{
-			const Matrix4x4 viewProj = view.ViewMatrix * view.ProjMatrix;
-			ExtractViewFrustumPlanesFromMatrix(viewProj, frustumMain);
 		}
 
 		auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
@@ -583,32 +579,11 @@ namespace shz
 		}
 
 		// --------------------------------------------------------------------
-		// Build visible instances + batch draw calls by (lod, stitchMask)
+		// Build instances for ALL chunks (no visibility cull here)
+		// TerrainSystem always Add; RenderScene will do visibility per-chunk.
 		// --------------------------------------------------------------------
-		struct BatchKey final
-		{
-			uint8 Lod = 0u;
-			uint8 Mask = 0u;
-
-			bool operator==(const BatchKey& o) const noexcept
-			{
-				return (Lod == o.Lod) && (Mask == o.Mask);
-			}
-		};
-
-		struct Batch final
-		{
-			uint8  Lod = 0u;
-			uint8  Mask = 0u;
-			uint32 StartInstance = 0u;
-			uint32 InstanceCount = 0u;
-		};
-
 		std::vector<hlsl::TerrainDrawConstants> instances;
 		instances.reserve(size_t(numChunksX) * size_t(numChunksZ));
-
-		std::vector<Batch> batches;
-		batches.reserve(128);
 
 		const float yMin = m_HeightOffset;
 		const float yMax = m_HeightOffset + m_HeightScale;
@@ -627,24 +602,6 @@ namespace shz
 				}
 			};
 
-		BatchKey currentKey = { 255u, 255u };
-		uint32 currentBatchStart = 0u;
-
-		auto flushBatch = [&](const BatchKey& key)
-			{
-				const uint32 end = uint32(instances.size());
-				const uint32 count = end - currentBatchStart;
-
-				Batch b = {};
-				b.Lod = key.Lod;
-				b.Mask = key.Mask;
-				b.StartInstance = currentBatchStart;
-				b.InstanceCount = count;
-				batches.push_back(b);
-
-				currentBatchStart = end;
-			};
-
 		for (uint32 cz = 0u; cz < numChunksZ; ++cz)
 		{
 			for (uint32 cx = 0u; cx < numChunksX; ++cx)
@@ -657,15 +614,6 @@ namespace shz
 
 				const float chunkSizeX = (remainX > 0.0f) ? Min(m_ChunkSize, remainX) : 0.0f;
 				const float chunkSizeZ = (remainZ > 0.0f) ? Min(m_ChunkSize, remainZ) : 0.0f;
-
-				// Frustum cull using actual size.
-				Box localBounds(float3{ 0.0f, yMin, 0.0f }, float3{ chunkSizeX, yMax, chunkSizeZ });
-
-				Matrix4x4 chunkWorld = Matrix4x4::Translation(float3{ chunkOriginX, 0.0f, chunkOriginZ });
-				if (!IntersectsFrustum(frustumMain, localBounds, chunkWorld, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-				{
-					continue;
-				}
 
 				const uint32 lod = uint32(lodGrid[idx2D(cx, cz)]);
 				ASSERT(lod < m_NumLods, "Invalid LOD.");
@@ -684,38 +632,21 @@ namespace shz
 				const float morph = morphForClampedLod(dist, lod);
 				(void)morph;
 
-				const BatchKey key = { uint8(lod), uint8(mask) };
-				if (!(key == currentKey))
-				{
-					if (currentKey.Lod != 255u)
-					{
-						flushBatch(currentKey);
-					}
-
-					currentKey = key;
-					currentBatchStart = uint32(instances.size());
-				}
-
 				hlsl::TerrainDrawConstants dc = {};
 				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
 				dc.LodIndex = lod;
 				dc.ChunkSizeXZ = float2{ chunkSizeX, chunkSizeZ };
 				dc.InvChunkSizeXZ = float2
 				{
-					1.0f / chunkSizeX,
-					1.0f / chunkSizeZ
+					(chunkSizeX > EPSILON) ? (1.0f / chunkSizeX) : 0.0f,
+					(chunkSizeZ > EPSILON) ? (1.0f / chunkSizeZ) : 0.0f
 				};
 
 				instances.emplace_back(dc);
 			}
 		}
 
-		if (currentKey.Lod != 255u)
-		{
-			flushBatch(currentKey);
-		}
-
-		if (instances.empty() || batches.empty())
+		if (instances.empty())
 		{
 			return;
 		}
@@ -734,25 +665,49 @@ namespace shz
 		}
 		m_SceneHandles.clear();
 
-		for (const Batch& b : batches)
+		// Add per-chunk TerrainObject always; RenderScene will cull per chunk.
 		{
-			const uint32 lod = uint32(b.Lod);
-			const uint32 mask = uint32(b.Mask);
+			uint32 chunkIndex = 0u;
 
-			RenderScene::TerrainObject object = {};
-			object.IndexType = VT_UINT16;
+			for (uint32 cz = 0u; cz < numChunksZ; ++cz)
+			{
+				for (uint32 cx = 0u; cx < numChunksX; ++cx)
+				{
+					const hlsl::TerrainDrawConstants& dc = instances[chunkIndex];
 
-			object.VertexBuffer = m_pGridVB;
-			object.IndexBuffer = m_pLodIB[lod][mask];
-			object.IndexCount = m_LodIndexCount[lod][mask];
+					const uint32 lod = uint32(dc.LodIndex);
+					ASSERT(lod < m_NumLods, "Invalid LOD.");
 
-			object.InstanceCount = b.InstanceCount;
-			object.StartInstanceLocation = b.StartInstance;
+					uint8 mask = STITCH_NONE;
+					if (nLod(int32(cx) - 1, int32(cz), lod) > lod) { mask |= STITCH_LEFT; }
+					if (nLod(int32(cx) + 1, int32(cz), lod) > lod) { mask |= STITCH_RIGHT; }
+					if (nLod(int32(cx), int32(cz) - 1, lod) > lod) { mask |= STITCH_BOTTOM; }
+					if (nLod(int32(cx), int32(cz) + 1, lod) > lod) { mask |= STITCH_TOP; }
 
-			object.MaterialId = m_TerrainMaterialId;
+					RenderScene::TerrainObject object = {};
+					object.IndexType = VT_UINT16;
 
-			Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
-			m_SceneHandles.push_back(handle);
+					object.VertexBuffer = m_pGridVB;
+					object.IndexBuffer = m_pLodIB[lod][uint32(mask)];
+					object.IndexCount = m_LodIndexCount[lod][uint32(mask)];
+
+					object.InstanceCount = 1u;
+					object.StartInstanceLocation = chunkIndex;
+
+					object.MaterialId = m_TerrainMaterialId;
+
+					object.bCastShadow = true;
+
+					// Bounds for RenderScene visibility test
+					object.LocalBounds = Box(float3{ 0.0f, yMin, 0.0f }, float3{ dc.ChunkSizeXZ.x, yMax, dc.ChunkSizeXZ.y });
+					object.World = Matrix4x4::Translation(float3{ dc.ChunkOriginXZ.x, 0.0f, dc.ChunkOriginXZ.y });
+
+					Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
+					m_SceneHandles.push_back(handle);
+
+					++chunkIndex;
+				}
+			}
 		}
 	}
 

@@ -137,20 +137,20 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticBufferCBV("DRAW_CONSTANTS", STRING_HASH("DRAW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
-			{
-				BufferDesc desc = {};
-				desc.Name = name;
-				desc.Usage = USAGE_DYNAMIC;
-				desc.BindFlags = BIND_SHADER_RESOURCE;
-				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-				desc.Mode = BUFFER_MODE_STRUCTURED;
-				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+				{
+					BufferDesc desc = {};
+					desc.Name = name;
+					desc.Usage = USAGE_DYNAMIC;
+					desc.BindFlags = BIND_SHADER_RESOURCE;
+					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+					desc.Mode = BUFFER_MODE_STRUCTURED;
+					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
-				ASSERT(sb, "Object table create failed.");
-				return sb;
-			};
+					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+					ASSERT(sb, "Object table create failed.");
+					return sb;
+				};
 
 			AddBuffer(STRING_HASH("BasePassObjectTable"), std::move(createObjectTable("BasePassObjectTable")));
 			AddBuffer(STRING_HASH("ForwardPassObjectTable"), std::move(createObjectTable("ForwardPassObjectTable")));
@@ -362,6 +362,9 @@ namespace shz
 			frameCB->CameraPosition = view.CameraPosition;
 			frameCB->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
 
+			frameCB->ViewProj = view.ViewProjMatrix;
+			frameCB->InvViewProj = view.ViewProjMatrix.Inversed();
+
 			frameCB->FrustumPlanesWS[0] = frustumMain.NearPlane;
 			frameCB->FrustumPlanesWS[1] = frustumMain.FarPlane;
 			frameCB->FrustumPlanesWS[2] = frustumMain.TopPlane;
@@ -390,97 +393,180 @@ namespace shz
 			frameCB->LightIntensity = lightIntensity;
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
-			const float ShadowVisibleDistance = 200.0f;
+			// const float ShadowVisibleDistance = 200.0f;
+			/*	const float3 lightForward = lightDirWs;
+
+				float3 up = float3(0, 1, 0);
+				if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
+
+				auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
+					{
+						return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+					};
+
+				float3 shadowCornersWS[8] = {};
+				{
+					const float3 C = view.CameraPosition;
+
+					for (int yBit = 0; yBit <= 1; ++yBit)
+					{
+						for (int xBit = 0; xBit <= 1; ++xBit)
+						{
+							const int idxNear = CornerIndex(xBit, yBit, 0);
+							const int idxFar = CornerIndex(xBit, yBit, 1);
+
+							const float3 N = frustumMain.FrustumCorners[idxNear];
+							const float3 F = frustumMain.FrustumCorners[idxFar];
+
+							shadowCornersWS[idxNear] = N;
+
+							const float nearDist = (N - C).Length();
+							const float farDist = (F - C).Length();
+
+							float t = 1.0f;
+							if (farDist > nearDist + 1e-4f)
+							{
+								t = (ShadowVisibleDistance - nearDist) / (farDist - nearDist);
+							}
+							t = Clamp(t, 0.0f, 1.0f);
+
+							shadowCornersWS[idxFar] = Vector3::Lerp(N, F, t);
+						}
+					}
+				}
+
+				float3 centerWs = float3(0, 0, 0);
+				for (int i = 0; i < 8; ++i) { centerWs += shadowCornersWS[i]; }
+				centerWs *= (1.0f / 8.0f);
+
+				const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
+				Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+
+				float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
+				float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+
+				for (int i = 0; i < 8; ++i)
+				{
+					const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView;
+					minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
+					maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
+				}
+
+				const float pcfPadXY = 1.0f;
+				const float padZ = 10.0f;
+
+				minX -= pcfPadXY; minY -= pcfPadXY;
+				maxX += pcfPadXY; maxY += pcfPadXY;
+
+				float nearZ = minZ - padZ;
+				float farZ = maxZ + padZ;
+
+				const float centerX = 0.5f * (minX + maxX);
+				const float centerY = 0.5f * (minY + maxY);
+
+				float extentX = (maxX - minX);
+				float extentY = (maxY - minY);
+				float extent = Max(extentX, extentY);
+
+				const float unitsPerTexelSqX = extent / m_PassCtx.ShadowMapResolution;
+				const float unitsPerTexelSqY = extent / m_PassCtx.ShadowMapResolution;
+				const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
+
+				extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
+
+				minX = centerX - extent * 0.5f;
+				maxX = centerX + extent * 0.5f;
+				minY = centerY - extent * 0.5f;
+				maxY = centerY + extent * 0.5f;
+
+				minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
+				minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
+				maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
+				maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
+
+				const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+					minX, maxX,
+					minY, maxY,
+					nearZ, farZ);
+
+				lightViewProj = lightView * lightProj;
+				frameCB->LightViewProj = lightViewProj;
+
+				m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
+				m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
+				m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
+
+				m_PassCtx.ShadowView.CameraPosition = float3(0.0f, 0.0f, 0.0f);
+				m_PassCtx.ShadowView.ViewMatrix = lightView;
+				m_PassCtx.ShadowView.ProjMatrix = lightProj;
+				m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
+
+				m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
+				m_PassCtx.ShadowView.AspectRatio = 1.0f;
+
+				m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+				m_PassCtx.ShadowView.NearPlane = 0.1f;
+				m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
+
+				m_PassCtx.ShadowView.bOrthographic = true;
+				m_PassCtx.ShadowView.OrthographicSize = extent;*/
+				// ---- Shadow lightViewProj (FIXED CENTER TEST) ----
 			const float3 lightForward = lightDirWs;
+
+			const float3 FixedShadowCenterWS = float3(0.0f, 0.0f, 0.0f); // 테스트용: 월드 원점 고정
+			const float  FixedShadowHalfExtent = 200.0f;                // 커버할 반경(가로/세로)
+			const float  FixedShadowDepth = 500.0f;                     // 라이트 방향으로 깊이
 
 			float3 up = float3(0, 1, 0);
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
-			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-				{
-					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-				};
+			// (1) 중심을 카메라가 아니라 "월드 고정"으로
+			const float3 centerWs = FixedShadowCenterWS;
 
-			float3 shadowCornersWS[8] = {};
-			{
-				const float3 C = view.CameraPosition;
-
-				for (int yBit = 0; yBit <= 1; ++yBit)
-				{
-					for (int xBit = 0; xBit <= 1; ++xBit)
-					{
-						const int idxNear = CornerIndex(xBit, yBit, 0);
-						const int idxFar = CornerIndex(xBit, yBit, 1);
-
-						const float3 N = frustumMain.FrustumCorners[idxNear];
-						const float3 F = frustumMain.FrustumCorners[idxFar];
-
-						shadowCornersWS[idxNear] = N;
-
-						const float nearDist = (N - C).Length();
-						const float farDist = (F - C).Length();
-
-						float t = 1.0f;
-						if (farDist > nearDist + 1e-4f)
-						{
-							t = (ShadowVisibleDistance - nearDist) / (farDist - nearDist);
-						}
-						t = Clamp(t, 0.0f, 1.0f);
-
-						shadowCornersWS[idxFar] = Vector3::Lerp(N, F, t);
-					}
-				}
-			}
-
-			float3 centerWs = float3(0, 0, 0);
-			for (int i = 0; i < 8; ++i) { centerWs += shadowCornersWS[i]; }
-			centerWs *= (1.0f / 8.0f);
-
+			// (2) 라이트 위치도 고정 중심 기준으로
+			const float ShadowVisibleDistance = FixedShadowDepth; // 기존 변수명 재사용
 			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
+
+			std::cout << lightPosWs.x << ", " << lightPosWs.y << ", " << lightPosWs.z << std::endl;
+
+			// (3) light view
 			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
-			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
-			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+			// (4) Ortho 범위 고정 (frustum fitting 제거)
+			float minX = -FixedShadowHalfExtent;
+			float maxX = +FixedShadowHalfExtent;
+			float minY = -FixedShadowHalfExtent;
+			float maxY = +FixedShadowHalfExtent;
 
-			for (int i = 0; i < 8; ++i)
+			// depth 범위도 고정
+			float nearZ = 0.0f;                  // LookAtLH 기준, center가 대충 z>0에 오게 됨
+			float farZ = ShadowVisibleDistance * 2.0f; // 넉넉히
+
+			// (5) 여전히 texel snapping만 유지하고 싶으면 여기서만 스냅
 			{
-				const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView;
-				minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
-				maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
+				float extent = (maxX - minX); // == 2*HalfExtent
+
+				const float unitsPerTexel = extent / m_PassCtx.ShadowMapResolution;
+
+				// extent를 텍셀 그리드에 맞춰 반올림
+				extent = ceil(extent / unitsPerTexel) * unitsPerTexel;
+
+				const float centerX = 0.5f * (minX + maxX);
+				const float centerY = 0.5f * (minY + maxY);
+
+				minX = centerX - extent * 0.5f;
+				maxX = centerX + extent * 0.5f;
+				minY = centerY - extent * 0.5f;
+				maxY = centerY + extent * 0.5f;
+
+				// 그리드 스냅
+				minX = floor(minX / unitsPerTexel) * unitsPerTexel;
+				minY = floor(minY / unitsPerTexel) * unitsPerTexel;
+				maxX = ceil(maxX / unitsPerTexel) * unitsPerTexel;
+				maxY = ceil(maxY / unitsPerTexel) * unitsPerTexel;
 			}
 
-			const float pcfPadXY = 1.0f;
-			const float padZ = 10.0f;
-
-			minX -= pcfPadXY; minY -= pcfPadXY;
-			maxX += pcfPadXY; maxY += pcfPadXY;
-
-			float nearZ = minZ - padZ;
-			float farZ = maxZ + padZ;
-
-			const float centerX = 0.5f * (minX + maxX);
-			const float centerY = 0.5f * (minY + maxY);
-
-			float extentX = (maxX - minX);
-			float extentY = (maxY - minY);
-			float extent = Max(extentX, extentY);
-
-			const float unitsPerTexelSqX = extent / m_PassCtx.ShadowMapResolution;
-			const float unitsPerTexelSqY = extent / m_PassCtx.ShadowMapResolution;
-			const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
-
-			extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
-
-			minX = centerX - extent * 0.5f;
-			maxX = centerX + extent * 0.5f;
-			minY = centerY - extent * 0.5f;
-			maxY = centerY + extent * 0.5f;
-
-			minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
-			minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
-			maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
-			maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
-
+			// (6) Ortho + VP
 			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
 				minX, maxX,
 				minY, maxY,
@@ -489,6 +575,7 @@ namespace shz
 			lightViewProj = lightView * lightProj;
 			frameCB->LightViewProj = lightViewProj;
 
+			// ShadowView 업데이트는 그대로
 			m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
 			m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
 			m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
@@ -501,12 +588,15 @@ namespace shz
 			m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
 			m_PassCtx.ShadowView.AspectRatio = 1.0f;
 
-			m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+			m_PassCtx.ShadowView.Viewport = { 0, 0,
+				static_cast<int32>(m_PassCtx.ShadowMapResolution),
+				static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+
 			m_PassCtx.ShadowView.NearPlane = 0.1f;
 			m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
 
 			m_PassCtx.ShadowView.bOrthographic = true;
-			m_PassCtx.ShadowView.OrthographicSize = extent;
+			m_PassCtx.ShadowView.OrthographicSize = (maxX - minX); // 또는 extent
 		}
 
 		ViewFrustumExt frustumShadow = {};
@@ -809,42 +899,42 @@ namespace shz
 		// Helpers
 		// -----------------------------------------------------------------
 		auto isWriteAccess = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-			return false;
-		};
+			{
+				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+				return false;
+			};
 
 		auto hasClearValue = [&](uint64 resourceId) -> bool
-		{
-			return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
-		};
+			{
+				return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
+			};
 
 		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
-		{
-			OptimizedClearValue cv = {};
-			if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 			{
-				cv = it->second;
-			}
-			else
-			{
-				// default: black / depth=1
-				if (bDepth)
+				OptimizedClearValue cv = {};
+				if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 				{
-					cv.DepthStencil.Depth = 1.f;
-					cv.DepthStencil.Stencil = 0;
+					cv = it->second;
 				}
 				else
 				{
-					cv.Color[0] = 0.f;
-					cv.Color[1] = 0.f;
-					cv.Color[2] = 0.f;
-					cv.Color[3] = 0.f;
+					// default: black / depth=1
+					if (bDepth)
+					{
+						cv.DepthStencil.Depth = 1.f;
+						cv.DepthStencil.Stencil = 0;
+					}
+					else
+					{
+						cv.Color[0] = 0.f;
+						cv.Color[1] = 0.f;
+						cv.Color[2] = 0.f;
+						cv.Color[3] = 0.f;
+					}
 				}
-			}
-			return cv;
-		};
+				return cv;
+			};
 
 		// -----------------------------------------------------------------
 		// Build RHI RenderPass + Framebuffer attachments
@@ -1526,7 +1616,7 @@ namespace shz
 		{
 			const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(assimpRef);
 			StaticMeshLevel level;
-			BuildStaticMeshAsset(assimpAsset, &level , {}, materialTempalteName, nullptr, m_pAssetManager);
+			BuildStaticMeshAsset(assimpAsset, &level, {}, materialTempalteName, nullptr, m_pAssetManager);
 			staticMesh.AddLevel(std::move(level), lodFactor);
 			lodFactor *= 0.4f;
 		}
@@ -1602,9 +1692,9 @@ namespace shz
 	const MaterialPipelineBinding& Renderer::AcquireMaterialPipelineBinding(MaterialId materialId, uint64 renderPassKey)
 	{
 		auto hashCombine64 = [](uint64 h, uint64 v)
-		{
-			return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
-		};
+			{
+				return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+			};
 
 		const uint64 hash = hashCombine64(materialId, renderPassKey);
 		auto it = m_PipelineBindingCache.find(hash);
@@ -1672,47 +1762,47 @@ namespace shz
 		};
 
 		auto bindVarByStages = [&](const char* name, SHADER_TYPE stageMask, auto&& setterFn) -> SHADER_TYPE
-		{
-			SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
-			bool anyBound = false;
-
-			// If mask is known, only try those stages.
-			if (stageMask != SHADER_TYPE_UNKNOWN)
 			{
-				for (SHADER_TYPE st : kStages)
-				{
-					if ((stageMask & st) == 0)
-						continue;
+				SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
+				bool anyBound = false;
 
-					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-					if (var)
+				// If mask is known, only try those stages.
+				if (stageMask != SHADER_TYPE_UNKNOWN)
+				{
+					for (SHADER_TYPE st : kStages)
 					{
-						setterFn(var);
-						anyBound = true;
-						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
+						if ((stageMask & st) == 0)
+							continue;
+
+						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+						if (var)
+						{
+							setterFn(var);
+							anyBound = true;
+							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
+						}
 					}
 				}
-			}
 
-			// Fallback: probe all shaders used by the material/template.
-			if (!anyBound)
-			{
-				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders(pass))
+				// Fallback: probe all shaders used by the material/template.
+				if (!anyBound)
 				{
-					ASSERT(shader, "Shader in source instance is null.");
-					const SHADER_TYPE st = shader->GetDesc().ShaderType;
-
-					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-					if (var)
+					for (const RefCntAutoPtr<IShader>& shader : material.GetShaders(pass))
 					{
-						setterFn(var);
-						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
+						ASSERT(shader, "Shader in source instance is null.");
+						const SHADER_TYPE st = shader->GetDesc().ShaderType;
+
+						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+						if (var)
+						{
+							setterFn(var);
+							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
+						}
 					}
 				}
-			}
 
-			return actuallyBound;
-		};
+				return actuallyBound;
+			};
 
 		// ---------------------------------------------------------------------
 		// Constant Buffers (bind ALL reflected CBs + store them)
@@ -1963,7 +2053,7 @@ namespace shz
 
 			MaterialTemplate depthOnlyTemplate;
 
-			macros.AddShaderMacro("DEPHT_ONLY", 1);
+			macros.AddShaderMacro("DEPTH_ONLY", 1);
 
 			depthOnlyCreateInfo.MacroArray = macros;
 
@@ -2127,43 +2217,43 @@ namespace shz
 
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_WRITE)     return true;
-			if (a.Access == RENDER_ACCESS_READ)      return false;
-			if (a.Access == RENDER_ACCESS_READWRITE) return true;
-
-			switch (a.Usage)
 			{
-			case RENDER_USAGE_RTV:
-			case RENDER_USAGE_DSV_WRITE:
-			case RENDER_USAGE_UAV:
-				return true;
-			default:
-				return false;
-			}
-		};
+				if (a.Access == RENDER_ACCESS_WRITE)     return true;
+				if (a.Access == RENDER_ACCESS_READ)      return false;
+				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+				switch (a.Usage)
+				{
+				case RENDER_USAGE_RTV:
+				case RENDER_USAGE_DSV_WRITE:
+				case RENDER_USAGE_UAV:
+					return true;
+				default:
+					return false;
+				}
+			};
 
 		auto isRead = [](const RenderPassResourceAccess& a) -> bool
-		{
-			if (a.Access == RENDER_ACCESS_READ)      return true;
-			if (a.Access == RENDER_ACCESS_WRITE)     return false;
-			if (a.Access == RENDER_ACCESS_READWRITE) return true;
-
-			switch (a.Usage)
 			{
-			case RENDER_USAGE_SRV:
-			case RENDER_USAGE_CBV:
-			case RENDER_USAGE_DSV_READ:
-			case RENDER_USAGE_INDIRECT_ARGUMENT:
-				return true;
+				if (a.Access == RENDER_ACCESS_READ)      return true;
+				if (a.Access == RENDER_ACCESS_WRITE)     return false;
+				if (a.Access == RENDER_ACCESS_READWRITE) return true;
 
-			case RENDER_USAGE_UAV:
-				return false;
+				switch (a.Usage)
+				{
+				case RENDER_USAGE_SRV:
+				case RENDER_USAGE_CBV:
+				case RENDER_USAGE_DSV_READ:
+				case RENDER_USAGE_INDIRECT_ARGUMENT:
+					return true;
 
-			default:
-				return false;
-			}
-		};
+				case RENDER_USAGE_UAV:
+					return false;
+
+				default:
+					return false;
+				}
+			};
 
 		// ------------------------------------------------------------
 		// Build per-resource use lists (deterministic key order via std::map)
@@ -2222,10 +2312,10 @@ namespace shz
 		adj.resize(n);
 
 		auto pushEdge = [&](uint32 u, uint32 v)
-		{
-			if (u == v) return;
-			adj[u].push_back(v);
-		};
+			{
+				if (u == v) return;
+				adj[u].push_back(v);
+			};
 
 		// ------------------------------------------------------------
 		// Dependency rules (simple RenderGraph-lite):
@@ -2284,18 +2374,18 @@ namespace shz
 		}
 
 		auto passName = [&](uint32 passIndex) -> const char*
-		{
-			return m_PassTable.at(m_PassAddOrder[passIndex]).Name.c_str();
-		};
+			{
+				return m_PassTable.at(m_PassAddOrder[passIndex]).Name.c_str();
+			};
 
 		auto dumpUse = [&](uint64 rid, const UseList& ul)
-		{
-			std::cout << "RID=" << rid << "\n  Writers:";
-			for (uint32 w : ul.Writers) std::cout << " " << passName(w);
-			std::cout << "\n  Readers:";
-			for (uint32 r : ul.Readers) std::cout << " " << passName(r);
-			std::cout << "\n\n";
-		};
+			{
+				std::cout << "RID=" << rid << "\n  Writers:";
+				for (uint32 w : ul.Writers) std::cout << " " << passName(w);
+				std::cout << "\n  Readers:";
+				for (uint32 r : ul.Readers) std::cout << " " << passName(r);
+				std::cout << "\n\n";
+			};
 
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
@@ -2414,11 +2504,11 @@ namespace shz
 		agg.reserve(accesses.size());
 
 		auto isWrite = [](const RenderPassResourceAccess& a)
-		{
-			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-			return false;
-		};
+			{
+				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+				return false;
+			};
 
 		for (const auto& a : accesses)
 		{

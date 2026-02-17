@@ -498,7 +498,7 @@ namespace shz
 
 		rec.OcIndex = allocOcIndex();
 
-		m_ObjectDense.emplace_back(std::move(rec));
+		m_ObjectDense.emplace_back(rec);
 		m_ObjectHandles.emplace_back(h);
 
 		slot.Owner = std::move(owner);
@@ -791,7 +791,7 @@ namespace shz
 		io.Desc = desc;
 		io.bEnabled = true;
 
-		m_IndirectDense.emplace_back(std::move(io));
+		m_IndirectDense.emplace_back(io);
 		m_IndirectHandles.emplace_back(h);
 
 		slot.Owner = std::move(owner);
@@ -1010,21 +1010,38 @@ namespace shz
 	}
 
 	// ------------------------------------------------------------
-	// Terrain packets
+	// Terrain packets (RenderScene performs visibility check)
 	// ------------------------------------------------------------
 	void RenderScene::BuildTerrainDrawPackets(
 		uint64 passKey,
+		const View& view,
+		const ViewFrustumExt& frustum,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets) const
 	{
 		if (!(passKey == STRING_HASH("GBuffer") || passKey == STRING_HASH("Shadow") || passKey == STRING_HASH("DepthPrepass")))
+		{
 			return;
+		}
+
+		const bool bIsShadowPass = (passKey == STRING_HASH("Shadow"));
 
 		for (const TerrainObject& t : m_TerrainDense)
 		{
 			ASSERT(t.VertexBuffer, "TerrainObject VB is null.");
 			ASSERT(t.IndexBuffer, "TerrainObject IB is null.");
 			ASSERT(t.IndexCount > 0, "TerrainObject IndexCount is 0.");
+
+			if (bIsShadowPass && !t.bCastShadow)
+			{
+				continue;
+			}
+
+			// Visibility (per-chunk)
+			if (!IntersectsFrustum(frustum, t.LocalBounds, t.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+			{
+				continue;
+			}
 
 			const MaterialPipelineBinding& pb = resolver(t.MaterialId, passKey);
 			ASSERT(pb.pPSO && pb.pSRB, "Terrain pipeline binding is null.");
@@ -1064,7 +1081,7 @@ namespace shz
 		outInstanceRemap.clear();
 
 		// Terrain first
-		BuildTerrainDrawPackets(passKey, resolver, outPackets);
+		BuildTerrainDrawPackets(passKey, view, frustum, resolver, outPackets);
 
 		if (m_ObjectDense.empty() || m_ObjectTableCPU.empty())
 		{

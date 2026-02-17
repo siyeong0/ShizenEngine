@@ -6,9 +6,12 @@
 // ----------------------------------------------
 struct FrameConstants
 {
-	float3 CameraPosition;
 	uint FrameIndex;
+	float3 CameraPosition;
 
+	float4x4 ViewProj;
+	float4x4 InvViewProj;
+	
 	float4 FrustumPlanesWS[6];
 
 	float2 ViewportSize;
@@ -21,7 +24,7 @@ struct FrameConstants
 
 	float3 LightDirWS;
 	float _pad0;
-
+	
 	float3 LightColor;
 	float LightIntensity;
 

@@ -68,6 +68,10 @@ namespace shz
 			MaterialId MaterialId = 0;
 
 			bool bCastShadow = false;
+
+			// Visibility data (RenderScene performs visibility test)
+			Matrix4x4 World = {};
+			Box       LocalBounds = {};
 		};
 
 		struct LightObject final
@@ -205,6 +209,8 @@ namespace shz
 
 		void BuildTerrainDrawPackets(
 			uint64 passKey,
+			const View& view,
+			const ViewFrustumExt& frustum,
 			const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets) const;
 
