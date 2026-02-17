@@ -22,6 +22,9 @@ namespace shz
         Rect Viewport;
         float32 NearPlane;
         float32 FarPlane;
+
+		bool bOrthographic;
+		float OrthographicSize;
     };
 
     struct ViewFamily

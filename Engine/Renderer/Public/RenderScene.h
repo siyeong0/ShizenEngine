@@ -23,6 +23,7 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	} // namespace hlsl
 
+	struct View;
 	struct MaterialPipelineBinding;
 
 	class RenderScene final
@@ -102,17 +103,6 @@ namespace shz
 		{
 			IndirectObjectDesc Desc = {};
 			bool bEnabled = true;
-		};
-
-		// ------------------------------------------------------------
-		// View params for LOD selection in BuildDrawPackets
-		// ------------------------------------------------------------
-		struct ViewLodParams final
-		{
-			Matrix4x4 View = Matrix4x4::Identity(); // World -> View
-			float TanHalfFovY = 1.0f;
-			float ViewportHeight = 1080.0f; // optional
-			bool bViewForwardIsPositiveZ = true;
 		};
 
 	public:
@@ -202,7 +192,7 @@ namespace shz
 		// ------------------------------------------------------------
 		void BuildDrawPackets(
 			uint64 passKey,
-			const ViewLodParams& view,
+			const View& view,
 			const ViewFrustumExt& frustum,
 			const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets,
@@ -408,9 +398,9 @@ namespace shz
 
 		// Visibility cache (reuse across passes with same view/frustum)
 		void ensureVisibilityScratchCapacity() const;
-		uint64 computeVisCacheKey(const ViewLodParams& view, const ViewFrustumExt& frustum) const;
+		uint64 computeVisCacheKey(const View& view, const ViewFrustumExt& frustum) const;
 
-		void buildVisibilityAndLodCached(const ViewLodParams& view, const ViewFrustumExt& frustum) const;
+		void buildVisibilityAndLodCached(const View& view, const ViewFrustumExt& frustum) const;
 
 	private:
 		// Objects

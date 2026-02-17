@@ -498,9 +498,15 @@ namespace shz
 			m_PassCtx.ShadowView.ProjMatrix = lightProj;
 			m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
 
+			m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
+			m_PassCtx.ShadowView.AspectRatio = 1.0f;
+
 			m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
 			m_PassCtx.ShadowView.NearPlane = 0.1f;
 			m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
+
+			m_PassCtx.ShadowView.bOrthographic = true;
+			m_PassCtx.ShadowView.OrthographicSize = extent;
 		}
 
 		ViewFrustumExt frustumShadow = {};
@@ -594,15 +600,12 @@ namespace shz
 				return this->AcquireMaterialPipelineBinding(matId, rpKey);
 			};
 
-		RenderScene::ViewLodParams viewLodParams = {};
-		viewLodParams.View = view.ViewMatrix;
-		viewLodParams.TanHalfFovY = Tan(view.FieldOfViewY * 0.5f);
-		viewLodParams.ViewportHeight = viewportSize.y;
+		View shadowView = m_PassCtx.ShadowView;
 
 		// GBuffer
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
-			viewLodParams,
+			view,
 			frustumMain,
 			pipelineResolver,
 			m_PassCtx.MainDrawPackets,
@@ -613,7 +616,7 @@ namespace shz
 		// Forward
 		scene.BuildDrawPackets(
 			STRING_HASH("Forward"),
-			viewLodParams,
+			view,
 			frustumMain,
 			pipelineResolver,
 			m_PassCtx.ForwardDrawPackets,
@@ -622,7 +625,7 @@ namespace shz
 		// Depth prepass
 		scene.BuildDrawPackets(
 			STRING_HASH("DepthPrepass"),
-			viewLodParams,
+			view,
 			frustumMain,
 			pipelineResolver,
 			m_PassCtx.DepthPrepassDrawPackets,
@@ -630,18 +633,16 @@ namespace shz
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
-		// Shadow (if you enable later)
-		/*
+		// Shadow
 		scene.BuildDrawPackets(
 			STRING_HASH("Shadow"),
-			viewLodParams,
+			m_PassCtx.ShadowView,
 			frustumShadow,
 			pipelineResolver,
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);
 
 		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);
-		*/
 
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);

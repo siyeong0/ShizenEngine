@@ -4,6 +4,7 @@
 #include "Engine/RuntimeData/Public/Material.h"
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 #include "Engine/Renderer/Public/Renderer.h"
+#include "Engine/Renderer/Public/ViewFamily.h"
 
 namespace shz
 {
@@ -15,6 +16,13 @@ namespace shz
 		const float dist = std::max(zPositive, 1e-3f);
 		const float ss = (radius / dist) * (1.0f / std::max(tanHalfFovY, 1e-6f));
 		return ss;
+	}
+
+	static inline float ComputeScreenSize_Sphere_Ortho(float orthoSizeFullHeight, float sphereRadius)
+	{
+		const float halfH = std::max(orthoSizeFullHeight * 0.5f, 1e-6f);
+		// 화면 높이(=ortho full height) 대비 "반지름" 비율 (persp의 screenSize 정의와 맞춰 쓰기 쉬움)
+		return sphereRadius / halfH;
 	}
 
 	static inline uint32 ChooseLODByScreenSize(const StaticMeshRenderData& meshRD, float screenSize)
@@ -129,15 +137,80 @@ namespace shz
 		}
 	}
 
-	uint64 RenderScene::computeVisCacheKey(const ViewLodParams& view, const ViewFrustumExt& frustum) const
+	static inline uint64 hashFloatToU64(float v)
 	{
-		// Cheap key: hash a few matrix elements + tanFov + first plane values.
-		// Enough to reuse within a frame for same view/frustum calls.
-		const uint64 a = static_cast<uint64>(hash::twang_mix64(*reinterpret_cast<const uint64*>(&view.TanHalfFovY)));
-		const uint64 b = static_cast<uint64>(hash::twang_mix64(*reinterpret_cast<const uint64*>(&view.View._m00)));
-		const uint64 c = static_cast<uint64>(hash::twang_mix64(*reinterpret_cast<const uint64*>(&view.View._m22)));
-		const uint64 d = static_cast<uint64>(hash::twang_mix64(*reinterpret_cast<const uint64*>(&frustum.LeftPlane.Distance)));
-		return a ^ (b << 1) ^ (c << 7) ^ (d << 13);
+		uint32 u = 0;
+		static_assert(sizeof(float) == sizeof(uint32));
+		std::memcpy(&u, &v, sizeof(uint32));
+		return hash::twang_mix64(static_cast<uint64>(u));
+	}
+
+	static inline uint64 hashU32ToU64(uint32 v)
+	{
+		return hash::twang_mix64(static_cast<uint64>(v));
+	}
+
+	static inline uint64 hashBoolToU64(bool b)
+	{
+		return hash::twang_mix64(static_cast<uint64>(b ? 1u : 0u));
+	}
+
+	static inline uint64 hashMatrixSample(const Matrix4x4& m)
+	{
+		// “cheap but stable” samples
+		uint64 h = 0;
+		h ^= hashFloatToU64(m._m00) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m11) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m22) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m33) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m03) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m13) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m23) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m30) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m31) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(m._m32) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		return h;
+	}
+
+	uint64 RenderScene::computeVisCacheKey(const View& view, const ViewFrustumExt& frustum) const
+	{
+		// View parameters
+		const uint32 vpW = static_cast<uint32>(std::max(0, view.Viewport.right - view.Viewport.left));
+		const uint32 vpH = static_cast<uint32>(std::max(0, view.Viewport.bottom - view.Viewport.top));
+
+		uint64 h = 0;
+
+		// Matrices
+		h ^= hashMatrixSample(view.ViewMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashMatrixSample(view.ProjMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+		// Viewport
+		h ^= hashU32ToU64(vpW) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashU32ToU64(vpH) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+		// Projection params
+		h ^= hashBoolToU64(view.bOrthographic) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(view.NearPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(view.FarPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+		if (view.bOrthographic)
+		{
+			// OrthographicSize == full height in world units (너가 ShadowView에 extent 넣은 값)
+			h ^= hashFloatToU64(view.OrthographicSize) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		}
+		else
+		{
+			h ^= hashFloatToU64(view.FieldOfViewY) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+			h ^= hashFloatToU64(view.AspectRatio) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		}
+
+		// Frustum planes (a few samples)
+		h ^= hashFloatToU64(frustum.LeftPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(frustum.RightPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(frustum.NearPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(frustum.FarPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+		return h;
 	}
 
 	// ------------------------------------------------------------
@@ -199,7 +272,7 @@ namespace shz
 		}
 	}
 
-	void RenderScene::buildVisibilityAndLodCached(const ViewLodParams& view, const ViewFrustumExt& frustum) const
+	void RenderScene::buildVisibilityAndLodCached(const View& view, const ViewFrustumExt& frustum) const
 	{
 		ensureVisibilityScratchCapacity();
 
@@ -224,7 +297,9 @@ namespace shz
 		// Query dynamic grid -> candidate object dense indices
 		m_DynamicCandidates = m_DynamicGrid.QueryFrustum(frustum);
 
-		// Helper lambda: process a candidate set
+		const bool  bOrtho = view.bOrthographic;
+		const float tanHalfFovY = (!bOrtho) ? Tan(view.FieldOfViewY * 0.5f) : 0.0f;
+
 		auto ProcessCandidates = [&](const std::vector<uint32>& candidates)
 			{
 				for (uint32 objDense : candidates)
@@ -243,29 +318,38 @@ namespace shz
 					const uint32 oc = rec.OcIndex;
 					ASSERT(oc < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
 
-					// Final frustum test (tight): use OBB test via localAABB + world,
-					// BUT since we cached world bounds, do world-AABB plane test quickly:
-					// (If you want exact OBB test, keep IntersectsFrustum with localAABB.)
-					// We'll use worldAABB plane test via StaticBVH's same method pattern is already used.
-					// Simpler: reuse IntersectsFrustum with localAABB to keep correctness. (still cheap because candidates reduced)
+					// Final frustum test:
+					// (정확성을 위해 기존 방식 유지)
 					const Box localBounds = obj.pMesh->Levels[0].LocalBounds.GetBox();
 					if (!IntersectsFrustum(frustum, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 						continue;
 
 					m_OcVisibleStamp[oc] = stamp;
 
-					// LOD selection (screen-size)
+					// LOD selection:
+					// - Perspective: use view-space depth z + tanHalfFovY
+					// - Ortho: use OrthographicSize (full height) only
 					const float3 localC = obj.pMesh->Levels[0].LocalBounds.Center;
 					const float  radius = obj.pMesh->Levels[0].LocalBounds.Radius;
 
-					const float4 cVS4 = float4(localC, 1.0f) * obj.World * view.View;
-					float z = cVS4.z;
-					if (!view.bViewForwardIsPositiveZ)
-						z = -z;
+					float screenSize = 0.0f;
 
-					const float screenSize = ComputeScreenSizeFromSphere_ViewSpace(std::max(z, 1e-3f), radius, view.TanHalfFovY);
+					if (bOrtho)
+					{
+						// ShadowView.OrthographicSize는 너가 extent(=full height)로 넣고 있음
+						screenSize = ComputeScreenSize_Sphere_Ortho(view.OrthographicSize, radius);
+					}
+					else
+					{
+						const float4 cVS4 = float4(localC, 1.0f) * obj.World * view.ViewMatrix;
+
+						// 네 코드 흐름상 LH(+Z forward)로 가정
+						const float z = std::max(cVS4.z, 1e-3f);
+
+						screenSize = ComputeScreenSizeFromSphere_ViewSpace(z, radius, tanHalfFovY);
+					}
+
 					const uint32 lod = ChooseLODByScreenSize(*obj.pMesh, screenSize);
-
 					m_OcChosenLod[oc] = static_cast<uint16>(lod);
 				}
 			};
@@ -970,7 +1054,7 @@ namespace shz
 	// ------------------------------------------------------------
 	void RenderScene::BuildDrawPackets(
 		uint64 passKey,
-		const ViewLodParams& view,
+		const View& view,
 		const ViewFrustumExt& frustum,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets,

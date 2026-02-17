@@ -58,6 +58,9 @@ namespace shz
 
 			v.NearPlane = cam.GetProjAttribs().NearClipPlane;
 			v.FarPlane = cam.GetProjAttribs().FarClipPlane;
+
+			v.bOrthographic = false;
+			v.OrthographicSize = 0.0f;
 		}
 	} // namespace
 
