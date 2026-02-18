@@ -127,8 +127,6 @@ struct BaseVSOutput
 #define SET_VSOUT_WORLD_TANGENT(wt) /* no-op */
 #define SET_VSOUT_POS(svPos)        OUT.SVPosition = (svPos);
 
-// NOTE: For depth-only, many engines keep jitter ON to match main pass depth.
-//       With APPLY_JITTER=0 you can test stability / debug.
 #ifdef MASKED
 
     #define SET_VSOUT_WORLD_POS_STATIC(pos)                                    \

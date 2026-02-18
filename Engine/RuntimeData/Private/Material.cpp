@@ -368,9 +368,9 @@ namespace shz
 
 			if (pass == EMaterialPass::ShadowDepth)
 			{
-				gpDesc.RasterizerDesc.DepthBias = 800;
-				gpDesc.RasterizerDesc.DepthBiasClamp = 0.01f; 
-				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 2.0f;
+				gpDesc.RasterizerDesc.DepthBias = 2500;
+				gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f; 
+				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 1.5f;
 			}
 		}
 

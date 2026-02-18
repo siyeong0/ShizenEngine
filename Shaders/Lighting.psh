@@ -97,11 +97,9 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
 	float3 L = normalize(-g_FrameCB.LightDirWS);
 
-	float NdotL = saturate(dot(N, L));
-	float NdotV = saturate(dot(N, V));
-
 	// Shadow
-	float shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, worldPos);
+	float3 biasedWorldPos = worldPos + N * 0.005;
+	float shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, biasedWorldPos);
 	
 	float3 lit = Shade(
 		N, V, L,

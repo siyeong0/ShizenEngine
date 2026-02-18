@@ -128,7 +128,7 @@ namespace shz
 			ASSERT(frameCB, "Frame CB create failed.");
 			ASSERT(viewCB, "View CB create failed.");
 			ASSERT(drawCB, "Draw CB create failed.");
-			ASSERT(shadowCB, "Shadow CB create failed.");	
+			ASSERT(shadowCB, "Shadow CB create failed.");
 
 			m_pRegistry->RegisterBuffer(STRING_HASH("FRAME_CONSTANTS"), std::move(frameCB));
 			m_pRegistry->RegisterBuffer(STRING_HASH("VIEW_CONSTANTS"), std::move(viewCB));
@@ -192,7 +192,7 @@ namespace shz
 		// -----------------------------------------------------------------
 		// Create shadow map
 		// -----------------------------------------------------------------
-		static constexpr uint32 SHADOW_MAP_SIZE = 4096;
+		static constexpr uint32 SHADOW_MAP_SIZE = 2048;
 		m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
 		{
 			TextureDesc td = {};
@@ -203,7 +203,7 @@ namespace shz
 			td.MipLevels = 1;
 			td.SampleCount = 1;
 			td.Usage = USAGE_DEFAULT;
-			td.Format = TEX_FORMAT_R32_TYPELESS;
+			td.Format = TEX_FORMAT_R32_FLOAT;
 			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
 
 			m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
@@ -397,178 +397,97 @@ namespace shz
 			frameCB->LightIntensity = lightIntensity;
 
 			// ---- Shadow lightViewProj (your existing block, unchanged) ----
-			// const float ShadowVisibleDistance = 200.0f;
-			/*	const float3 lightForward = lightDirWs;
-
-				float3 up = float3(0, 1, 0);
-				if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
-
-				auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
-					{
-						return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
-					};
-
-				float3 shadowCornersWS[8] = {};
-				{
-					const float3 C = view.CameraPosition;
-
-					for (int yBit = 0; yBit <= 1; ++yBit)
-					{
-						for (int xBit = 0; xBit <= 1; ++xBit)
-						{
-							const int idxNear = CornerIndex(xBit, yBit, 0);
-							const int idxFar = CornerIndex(xBit, yBit, 1);
-
-							const float3 N = frustumMain.FrustumCorners[idxNear];
-							const float3 F = frustumMain.FrustumCorners[idxFar];
-
-							shadowCornersWS[idxNear] = N;
-
-							const float nearDist = (N - C).Length();
-							const float farDist = (F - C).Length();
-
-							float t = 1.0f;
-							if (farDist > nearDist + 1e-4f)
-							{
-								t = (ShadowVisibleDistance - nearDist) / (farDist - nearDist);
-							}
-							t = Clamp(t, 0.0f, 1.0f);
-
-							shadowCornersWS[idxFar] = Vector3::Lerp(N, F, t);
-						}
-					}
-				}
-
-				float3 centerWs = float3(0, 0, 0);
-				for (int i = 0; i < 8; ++i) { centerWs += shadowCornersWS[i]; }
-				centerWs *= (1.0f / 8.0f);
-
-				const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
-				Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
-
-				float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
-				float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
-
-				for (int i = 0; i < 8; ++i)
-				{
-					const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView;
-					minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
-					maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
-				}
-
-				const float pcfPadXY = 1.0f;
-				const float padZ = 10.0f;
-
-				minX -= pcfPadXY; minY -= pcfPadXY;
-				maxX += pcfPadXY; maxY += pcfPadXY;
-
-				float nearZ = minZ - padZ;
-				float farZ = maxZ + padZ;
-
-				const float centerX = 0.5f * (minX + maxX);
-				const float centerY = 0.5f * (minY + maxY);
-
-				float extentX = (maxX - minX);
-				float extentY = (maxY - minY);
-				float extent = Max(extentX, extentY);
-
-				const float unitsPerTexelSqX = extent / m_PassCtx.ShadowMapResolution;
-				const float unitsPerTexelSqY = extent / m_PassCtx.ShadowMapResolution;
-				const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
-
-				extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
-
-				minX = centerX - extent * 0.5f;
-				maxX = centerX + extent * 0.5f;
-				minY = centerY - extent * 0.5f;
-				maxY = centerY + extent * 0.5f;
-
-				minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
-				minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
-				maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
-				maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
-
-				const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
-					minX, maxX,
-					minY, maxY,
-					nearZ, farZ);
-
-				lightViewProj = lightView * lightProj;
-				frameCB->LightViewProj = lightViewProj;
-
-				m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
-				m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
-				m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
-
-				m_PassCtx.ShadowView.CameraPosition = float3(0.0f, 0.0f, 0.0f);
-				m_PassCtx.ShadowView.ViewMatrix = lightView;
-				m_PassCtx.ShadowView.ProjMatrix = lightProj;
-				m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
-
-				m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
-				m_PassCtx.ShadowView.AspectRatio = 1.0f;
-
-				m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
-				m_PassCtx.ShadowView.NearPlane = 0.1f;
-				m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
-
-				m_PassCtx.ShadowView.bOrthographic = true;
-				m_PassCtx.ShadowView.OrthographicSize = extent;*/
-				// ---- Shadow lightViewProj (FIXED CENTER TEST) ----
+			const float ShadowVisibleDistance = 200.0f;
 			const float3 lightForward = lightDirWs;
-
-			const float3 FixedShadowCenterWS = float3(0.0f, 0.0f, 0.0f); // 테스트용: 월드 원점 고정
-			const float  FixedShadowHalfExtent = 200.0f;                // 커버할 반경(가로/세로)
-			const float  FixedShadowDepth = 300.0f;                     // 라이트 방향으로 깊이
 
 			float3 up = float3(0, 1, 0);
 			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
 
-			// (1) 중심을 카메라가 아니라 "월드 고정"으로
-			const float3 centerWs = FixedShadowCenterWS;
+			auto CornerIndex = [](int xBit, int yBit, int zBit) -> int
+				{
+					return (xBit ? 1 : 0) | (yBit ? 2 : 0) | (zBit ? 4 : 0);
+				};
 
-			// (2) 라이트 위치도 고정 중심 기준으로
-			const float ShadowVisibleDistance = FixedShadowDepth; // 기존 변수명 재사용
-			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
-
-			// (3) light view
-			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
-
-			// (4) Ortho 범위 고정 (frustum fitting 제거)
-			float minX = -FixedShadowHalfExtent;
-			float maxX = +FixedShadowHalfExtent;
-			float minY = -FixedShadowHalfExtent;
-			float maxY = +FixedShadowHalfExtent;
-
-			// depth 범위도 고정
-			float nearZ = 0.0f;                  // LookAtLH 기준, center가 대충 z>0에 오게 됨
-			float farZ = ShadowVisibleDistance * 2.0f; // 넉넉히
-
-			// (5) 여전히 texel snapping만 유지하고 싶으면 여기서만 스냅
+			float3 shadowCornersWS[8] = {};
 			{
-				float extent = (maxX - minX); // == 2*HalfExtent
+				const float3 C = view.CameraPosition;
 
-				const float unitsPerTexel = extent / m_PassCtx.ShadowMapResolution;
+				for (int yBit = 0; yBit <= 1; ++yBit)
+				{
+					for (int xBit = 0; xBit <= 1; ++xBit)
+					{
+						const int idxNear = CornerIndex(xBit, yBit, 0);
+						const int idxFar = CornerIndex(xBit, yBit, 1);
 
-				// extent를 텍셀 그리드에 맞춰 반올림
-				extent = ceil(extent / unitsPerTexel) * unitsPerTexel;
+						const float3 N = frustumMain.FrustumCorners[idxNear];
+						const float3 F = frustumMain.FrustumCorners[idxFar];
 
-				const float centerX = 0.5f * (minX + maxX);
-				const float centerY = 0.5f * (minY + maxY);
+						shadowCornersWS[idxNear] = N;
 
-				minX = centerX - extent * 0.5f;
-				maxX = centerX + extent * 0.5f;
-				minY = centerY - extent * 0.5f;
-				maxY = centerY + extent * 0.5f;
+						const float nearDist = (N - C).Length();
+						const float farDist = (F - C).Length();
 
-				// 그리드 스냅
-				minX = floor(minX / unitsPerTexel) * unitsPerTexel;
-				minY = floor(minY / unitsPerTexel) * unitsPerTexel;
-				maxX = ceil(maxX / unitsPerTexel) * unitsPerTexel;
-				maxY = ceil(maxY / unitsPerTexel) * unitsPerTexel;
+						float t = 1.0f;
+						if (farDist > nearDist + 1e-4f)
+						{
+							t = (ShadowVisibleDistance - nearDist) / (farDist - nearDist);
+						}
+						t = Clamp(t, 0.0f, 1.0f);
+
+						shadowCornersWS[idxFar] = Vector3::Lerp(N, F, t);
+					}
+				}
 			}
 
-			// (6) Ortho + VP
+			float3 centerWs = float3(0, 0, 0);
+			for (int i = 0; i < 8; ++i) { centerWs += shadowCornersWS[i]; }
+			centerWs *= (1.0f / 8.0f);
+
+			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
+			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+
+			float minX = +FLT_MAX, minY = +FLT_MAX, minZ = +FLT_MAX;
+			float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
+
+			for (int i = 0; i < 8; ++i)
+			{
+				const float4 pLs4 = float4(shadowCornersWS[i], 1.0f) * lightView;
+				minX = Min(minX, pLs4.x);  minY = Min(minY, pLs4.y);  minZ = Min(minZ, pLs4.z);
+				maxX = Max(maxX, pLs4.x);  maxY = Max(maxY, pLs4.y);  maxZ = Max(maxZ, pLs4.z);
+			}
+
+			const float pcfPadXY = 1.0f;
+			const float padZ = 10.0f;
+
+			minX -= pcfPadXY; minY -= pcfPadXY;
+			maxX += pcfPadXY; maxY += pcfPadXY;
+
+			float nearZ = minZ - padZ;
+			float farZ = maxZ + padZ;
+
+			const float centerX = 0.5f * (minX + maxX);
+			const float centerY = 0.5f * (minY + maxY);
+
+			float extentX = (maxX - minX);
+			float extentY = (maxY - minY);
+			float extent = Max(extentX, extentY);
+
+			const float unitsPerTexelSqX = extent / m_PassCtx.ShadowMapResolution;
+			const float unitsPerTexelSqY = extent / m_PassCtx.ShadowMapResolution;
+			const float unitsPerTexelSq = Max(unitsPerTexelSqX, unitsPerTexelSqY);
+
+			extent = ceil(extent / unitsPerTexelSq) * unitsPerTexelSq;
+
+			minX = centerX - extent * 0.5f;
+			maxX = centerX + extent * 0.5f;
+			minY = centerY - extent * 0.5f;
+			maxY = centerY + extent * 0.5f;
+
+			minX = floor(minX / unitsPerTexelSq) * unitsPerTexelSq;
+			minY = floor(minY / unitsPerTexelSq) * unitsPerTexelSq;
+			maxX = ceil(maxX / unitsPerTexelSq) * unitsPerTexelSq;
+			maxY = ceil(maxY / unitsPerTexelSq) * unitsPerTexelSq;
+
 			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
 				minX, maxX,
 				minY, maxY,
@@ -577,7 +496,6 @@ namespace shz
 			lightViewProj = lightView * lightProj;
 			frameCB->LightViewProj = lightViewProj;
 
-			// ShadowView 업데이트는 그대로
 			m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
 			m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
 			m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
@@ -590,15 +508,99 @@ namespace shz
 			m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
 			m_PassCtx.ShadowView.AspectRatio = 1.0f;
 
-			m_PassCtx.ShadowView.Viewport = { 0, 0,
-				static_cast<int32>(m_PassCtx.ShadowMapResolution),
-				static_cast<int32>(m_PassCtx.ShadowMapResolution) };
-
-			m_PassCtx.ShadowView.NearPlane = 0.1f;
-			m_PassCtx.ShadowView.FarPlane = ShadowVisibleDistance;
+			m_PassCtx.ShadowView.Viewport = { 0, 0, static_cast<int32>(m_PassCtx.ShadowMapResolution), static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+			m_PassCtx.ShadowView.NearPlane = nearZ;
+			m_PassCtx.ShadowView.FarPlane = farZ;
 
 			m_PassCtx.ShadowView.bOrthographic = true;
-			m_PassCtx.ShadowView.OrthographicSize = (maxX - minX); // 또는 extent
+			m_PassCtx.ShadowView.OrthographicSize = extent;
+			// ---- Shadow lightViewProj (FIXED CENTER TEST) ----
+		//const float3 lightForward = lightDirWs;
+
+		//const float3 FixedShadowCenterWS = float3(0.0f, -200.0f, 0.0f); // 테스트용: 월드 원점 고정
+		//const float  FixedShadowHalfExtent = 200.0f;                // 커버할 반경(가로/세로)
+		//const float  FixedShadowDepth = 400.0f;                     // 라이트 방향으로 깊이
+
+		//float3 up = float3(0, 1, 0);
+		//if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
+
+		//// (1) 중심을 카메라가 아니라 "월드 고정"으로
+		//const float3 centerWs = FixedShadowCenterWS;
+
+		//// (2) 라이트 위치도 고정 중심 기준으로
+		//const float ShadowVisibleDistance = FixedShadowDepth; // 기존 변수명 재사용
+		//const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
+
+		//std::cout << lightPosWs.x << ", " << lightPosWs.y << ", " << lightPosWs.z << std::endl;
+
+		//// (3) light view
+		//Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
+
+		//// (4) Ortho 범위 고정 (frustum fitting 제거)
+		//float minX = -FixedShadowHalfExtent;
+		//float maxX = +FixedShadowHalfExtent;
+		//float minY = -FixedShadowHalfExtent;
+		//float maxY = +FixedShadowHalfExtent;
+
+		//// depth 범위도 고정
+		//float nearZ = 0.0f;                  // LookAtLH 기준, center가 대충 z>0에 오게 됨
+		//float farZ = ShadowVisibleDistance; // 넉넉히
+
+		//// (5) 여전히 texel snapping만 유지하고 싶으면 여기서만 스냅
+		//{
+		//	float extent = (maxX - minX); // == 2*HalfExtent
+
+		//	const float unitsPerTexel = extent / m_PassCtx.ShadowMapResolution;
+
+		//	// extent를 텍셀 그리드에 맞춰 반올림
+		//	extent = ceil(extent / unitsPerTexel) * unitsPerTexel;
+
+		//	const float centerX = 0.5f * (minX + maxX);
+		//	const float centerY = 0.5f * (minY + maxY);
+
+		//	minX = centerX - extent * 0.5f;
+		//	maxX = centerX + extent * 0.5f;
+		//	minY = centerY - extent * 0.5f;
+		//	maxY = centerY + extent * 0.5f;
+
+		//	// 그리드 스냅
+		//	minX = floor(minX / unitsPerTexel) * unitsPerTexel;
+		//	minY = floor(minY / unitsPerTexel) * unitsPerTexel;
+		//	maxX = ceil(maxX / unitsPerTexel) * unitsPerTexel;
+		//	maxY = ceil(maxY / unitsPerTexel) * unitsPerTexel;
+		//}
+
+		//// (6) Ortho + VP
+		//const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+		//	minX, maxX,
+		//	minY, maxY,
+		//	nearZ, farZ);
+
+		//lightViewProj = lightView * lightProj;
+		//frameCB->LightViewProj = lightViewProj;
+
+		//// ShadowView 업데이트는 그대로
+		//m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
+		//m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
+		//m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
+
+		//m_PassCtx.ShadowView.CameraPosition = float3(0.0f, 0.0f, 0.0f);
+		//m_PassCtx.ShadowView.ViewMatrix = lightView;
+		//m_PassCtx.ShadowView.ProjMatrix = lightProj;
+		//m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
+
+		//m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
+		//m_PassCtx.ShadowView.AspectRatio = 1.0f;
+
+		//m_PassCtx.ShadowView.Viewport = { 0, 0,
+		//	static_cast<int32>(m_PassCtx.ShadowMapResolution),
+		//	static_cast<int32>(m_PassCtx.ShadowMapResolution) };
+
+		//m_PassCtx.ShadowView.NearPlane = nearZ;
+		//m_PassCtx.ShadowView.FarPlane = farZ;
+
+		//m_PassCtx.ShadowView.bOrthographic = true;
+		//m_PassCtx.ShadowView.OrthographicSize = (maxX - minX); // 또는 extent
 		}
 
 		ViewFrustumExt frustumShadow = {};
@@ -698,7 +700,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("GBuffer"),
 			view,
-			frustumMain,
+			view,
 			pipelineResolver,
 			m_PassCtx.MainDrawPackets,
 			instanceRemap);
@@ -709,7 +711,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("Forward"),
 			view,
-			frustumMain,
+			view,
 			pipelineResolver,
 			m_PassCtx.ForwardDrawPackets,
 			instanceRemap);
@@ -718,7 +720,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("DepthPrepass"),
 			view,
-			frustumMain,
+			view,
 			pipelineResolver,
 			m_PassCtx.DepthPrepassDrawPackets,
 			instanceRemap);
@@ -729,7 +731,7 @@ namespace shz
 		scene.BuildDrawPackets(
 			STRING_HASH("Shadow"),
 			m_PassCtx.ShadowView,
-			frustumShadow,
+			view,
 			pipelineResolver,
 			m_PassCtx.ShadowDrawPackets,
 			instanceRemap);

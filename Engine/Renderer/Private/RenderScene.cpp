@@ -172,46 +172,51 @@ namespace shz
 		return h;
 	}
 
-	uint64 RenderScene::computeVisCacheKey(const View& view, const ViewFrustumExt& frustum) const
+	uint64 RenderScene::computeVisCacheKey(const View& renderView, const View& lodView, const ViewFrustumExt& renderFrustum) const
 	{
-		// View parameters
-		const uint32 vpW = static_cast<uint32>(std::max(0, view.Viewport.right - view.Viewport.left));
-		const uint32 vpH = static_cast<uint32>(std::max(0, view.Viewport.bottom - view.Viewport.top));
+		auto HashViewCore = [&](const View& view, uint64& h)
+			{
+				const uint32 vpW = static_cast<uint32>(std::max(0, view.Viewport.right - view.Viewport.left));
+				const uint32 vpH = static_cast<uint32>(std::max(0, view.Viewport.bottom - view.Viewport.top));
+
+				h ^= hashMatrixSample(view.ViewMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				h ^= hashMatrixSample(view.ProjMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+				h ^= hashU32ToU64(vpW) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				h ^= hashU32ToU64(vpH) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+				h ^= hashBoolToU64(view.bOrthographic) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				h ^= hashFloatToU64(view.NearPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				h ^= hashFloatToU64(view.FarPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+				if (view.bOrthographic)
+				{
+					h ^= hashFloatToU64(view.OrthographicSize) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				}
+				else
+				{
+					h ^= hashFloatToU64(view.FieldOfViewY) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+					h ^= hashFloatToU64(view.AspectRatio) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+				}
+			};
 
 		uint64 h = 0;
 
-		// Matrices
-		h ^= hashMatrixSample(view.ViewMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashMatrixSample(view.ProjMatrix) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		// render view (컬링/가시성)
+		HashViewCore(renderView, h);
 
-		// Viewport
-		h ^= hashU32ToU64(vpW) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashU32ToU64(vpH) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		// lod view (LOD 선택)
+		HashViewCore(lodView, h);
 
-		// Projection params
-		h ^= hashBoolToU64(view.bOrthographic) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashFloatToU64(view.NearPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashFloatToU64(view.FarPlane) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-
-		if (view.bOrthographic)
-		{
-			// OrthographicSize == full height in world units (너가 ShadowView에 extent 넣은 값)
-			h ^= hashFloatToU64(view.OrthographicSize) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		}
-		else
-		{
-			h ^= hashFloatToU64(view.FieldOfViewY) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-			h ^= hashFloatToU64(view.AspectRatio) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		}
-
-		// Frustum planes (a few samples)
-		h ^= hashFloatToU64(frustum.LeftPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashFloatToU64(frustum.RightPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashFloatToU64(frustum.NearPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-		h ^= hashFloatToU64(frustum.FarPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		// frustum planes (renderFrustum만 반영)
+		h ^= hashFloatToU64(renderFrustum.LeftPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(renderFrustum.RightPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(renderFrustum.NearPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+		h ^= hashFloatToU64(renderFrustum.FarPlane.Distance) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
 
 		return h;
 	}
+
 
 	// ------------------------------------------------------------
 	// Spatial structures
@@ -272,33 +277,29 @@ namespace shz
 		}
 	}
 
-	void RenderScene::buildVisibilityAndLodCached(const View& view, const ViewFrustumExt& frustum) const
+	void RenderScene::buildVisibilityAndLodCached(const View& renderView, const View& lodView, const ViewFrustumExt& renderFrustum) const
 	{
 		ensureVisibilityScratchCapacity();
 
-		const uint64 key = computeVisCacheKey(view, frustum);
+		const uint64 key = computeVisCacheKey(renderView, lodView, renderFrustum);
 		if (key == m_LastVisKey && m_LastVisStamp != 0)
 		{
-			// already computed for this view/frustum in this frame scope
 			return;
 		}
 
-		// New visibility stamp
 		const uint32 stamp = m_VisStampCounter++;
 		m_LastVisKey = key;
 		m_LastVisStamp = stamp;
 
-		// Ensure BVH is up-to-date
 		rebuildStaticBVHIfNeeded();
 
-		// Query static BVH -> candidate object dense indices
-		m_StaticBVHCandidates = m_StaticBVH.QueryFrustum(frustum);
+		// 후보는 renderFrustum 기준
+		m_StaticBVHCandidates = m_StaticBVH.QueryFrustum(renderFrustum);
+		m_DynamicCandidates = m_DynamicGrid.QueryFrustum(renderFrustum);
 
-		// Query dynamic grid -> candidate object dense indices
-		m_DynamicCandidates = m_DynamicGrid.QueryFrustum(frustum);
-
-		const bool  bOrtho = view.bOrthographic;
-		const float tanHalfFovY = (!bOrtho) ? Tan(view.FieldOfViewY * 0.5f) : 0.0f;
+		// LOD 계산은 lodView 기준
+		const bool  bOrtho = lodView.bOrthographic;
+		const float tanHalfFovY = (!bOrtho) ? Tan(lodView.FieldOfViewY * 0.5f) : 0.0f;
 
 		auto ProcessCandidates = [&](const std::vector<uint32>& candidates)
 			{
@@ -310,25 +311,21 @@ namespace shz
 					const ObjectRecord& rec = m_ObjectDense[objDense];
 					const SceneObject& obj = rec.Obj;
 
-					if (!obj.pMesh)
-						continue;
-					if (rec.OcIndex == INVALID_INDEX)
-						continue;
+					if (!obj.pMesh) continue;
+					if (rec.OcIndex == INVALID_INDEX) continue;
 
 					const uint32 oc = rec.OcIndex;
-					ASSERT(oc < static_cast<uint32>(m_ObjectTableCPU.size()), "OcIndex OOB.");
+					if (oc >= static_cast<uint32>(m_ObjectTableCPU.size()))
+						continue;
 
-					// Final frustum test:
-					// (정확성을 위해 기존 방식 유지)
+					// 최종 프러스텀 테스트도 renderFrustum(=ShadowView 등) 기준
 					const Box localBounds = obj.pMesh->Levels[0].LocalBounds.GetBox();
-					if (!IntersectsFrustum(frustum, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
+					if (!IntersectsFrustum(renderFrustum, localBounds, obj.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
 						continue;
 
 					m_OcVisibleStamp[oc] = stamp;
 
-					// LOD selection:
-					// - Perspective: use view-space depth z + tanHalfFovY
-					// - Ortho: use OrthographicSize (full height) only
+					// ---- LOD 선택 (lodView 기준) ----
 					const float3 localC = obj.pMesh->Levels[0].LocalBounds.Center;
 					const float  radius = obj.pMesh->Levels[0].LocalBounds.Radius;
 
@@ -336,16 +333,13 @@ namespace shz
 
 					if (bOrtho)
 					{
-						// ShadowView.OrthographicSize는 너가 extent(=full height)로 넣고 있음
-						screenSize = ComputeScreenSize_Sphere_Ortho(view.OrthographicSize, radius);
+						screenSize = ComputeScreenSize_Sphere_Ortho(lodView.OrthographicSize, radius);
 					}
 					else
 					{
-						const float4 cVS4 = float4(localC, 1.0f) * obj.World * view.ViewMatrix;
-
-						// 네 코드 흐름상 LH(+Z forward)로 가정
+						// view-space depth는 lodView의 view matrix로 계산
+						const float4 cVS4 = float4(localC, 1.0f) * obj.World * lodView.ViewMatrix;
 						const float z = std::max(cVS4.z, 1e-3f);
-
 						screenSize = ComputeScreenSizeFromSphere_ViewSpace(z, radius, tanHalfFovY);
 					}
 
@@ -357,6 +351,7 @@ namespace shz
 		ProcessCandidates(m_StaticBVHCandidates);
 		ProcessCandidates(m_DynamicCandidates);
 	}
+
 
 	// ------------------------------------------------------------
 	// Reset
@@ -1014,34 +1009,28 @@ namespace shz
 	// ------------------------------------------------------------
 	void RenderScene::BuildTerrainDrawPackets(
 		uint64 passKey,
-		const View& view,
-		const ViewFrustumExt& frustum,
+		const View& renderView,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets) const
 	{
 		if (!(passKey == STRING_HASH("GBuffer") || passKey == STRING_HASH("Shadow") || passKey == STRING_HASH("DepthPrepass")))
-		{
 			return;
-		}
+
+		ViewFrustumExt frustum;
+		ExtractViewFrustumPlanesFromMatrix(renderView.ViewProjMatrix, frustum);
 
 		const bool bIsShadowPass = (passKey == STRING_HASH("Shadow"));
 
 		for (const TerrainObject& t : m_TerrainDense)
 		{
-			ASSERT(t.VertexBuffer, "TerrainObject VB is null.");
-			ASSERT(t.IndexBuffer, "TerrainObject IB is null.");
-			ASSERT(t.IndexCount > 0, "TerrainObject IndexCount is 0.");
+			if (!t.VertexBuffer || !t.IndexBuffer || t.IndexCount == 0 || t.InstanceCount == 0)
+				continue;
 
 			if (bIsShadowPass && !t.bCastShadow)
-			{
 				continue;
-			}
 
-			// Visibility (per-chunk)
 			if (!IntersectsFrustum(frustum, t.LocalBounds, t.World, FRUSTUM_PLANE_FLAG_FULL_FRUSTUM))
-			{
 				continue;
-			}
 
 			const MaterialPipelineBinding& pb = resolver(t.MaterialId, passKey);
 			ASSERT(pb.pPSO && pb.pSRB, "Terrain pipeline binding is null.");
@@ -1066,13 +1055,14 @@ namespace shz
 		}
 	}
 
+
 	// ------------------------------------------------------------
 	// Draw list build (BVH+Grid visibility + LOD + batching)
 	// ------------------------------------------------------------
 	void RenderScene::BuildDrawPackets(
 		uint64 passKey,
-		const View& view,
-		const ViewFrustumExt& frustum,
+		const View& renderView,
+		const View& lodView,
 		const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 		std::vector<DrawPacket>& outPackets,
 		std::vector<uint32>& outInstanceRemap) const
@@ -1080,59 +1070,47 @@ namespace shz
 		outPackets.clear();
 		outInstanceRemap.clear();
 
-		// Terrain first
-		BuildTerrainDrawPackets(passKey, view, frustum, resolver, outPackets);
+		ViewFrustumExt frustum;
+		ExtractViewFrustumPlanesFromMatrix(renderView.ViewProjMatrix, frustum);
+
+		// Terrain first (renderView 기준)
+		BuildTerrainDrawPackets(passKey, renderView, resolver, outPackets);
 
 		if (m_ObjectDense.empty() || m_ObjectTableCPU.empty())
-		{
 			return;
-		}
 
-		// Visibility + LOD (cached)
-		buildVisibilityAndLodCached(view, frustum);
+		// Visibility(renderView+frustum) + LOD(lodView) 캐시 빌드
+		buildVisibilityAndLodCached(renderView, lodView, frustum);
 
 		const uint32 stamp = m_LastVisStamp;
 		const bool bIsShadowPass = (passKey == STRING_HASH("Shadow"));
 
-		// Iterate batches (already LOD-specific)
 		for (uint32 batchId = 0; batchId < static_cast<uint32>(m_Batches.size()); ++batchId)
 		{
 			const Batch& b = m_Batches[batchId];
 			if (b.IsEmpty())
-			{
 				continue;
-			}
 
 			if (b.PassKey != passKey)
-			{
 				continue;
-			}
 
 			if (bIsShadowPass && !b.bMatCastsShadow)
-			{
 				continue;
-			}
 
 			const uint32 start = static_cast<uint32>(outInstanceRemap.size());
 
-			// Single pass push
 			for (const BatchInstance& inst : b.Instances)
 			{
 				const uint32 oc = inst.OcIndex;
 				if (oc >= static_cast<uint32>(m_OcVisibleStamp.size()))
-				{
 					continue;
-				}
 
 				if (m_OcVisibleStamp[oc] != stamp)
-				{
 					continue;
-				}
 
+				// **여기가 핵심**: b.LodIndex는 "lodView 기준으로 선택된 LOD"와 맞아야 통과
 				if (m_OcChosenLod[oc] != b.LodIndex)
-				{
 					continue;
-				}
 
 				outInstanceRemap.push_back(oc);
 			}
@@ -1140,7 +1118,6 @@ namespace shz
 			const uint32 visibleCount = static_cast<uint32>(outInstanceRemap.size()) - start;
 			if (visibleCount == 0)
 			{
-				// rollback
 				outInstanceRemap.resize(start);
 				continue;
 			}
@@ -1149,9 +1126,10 @@ namespace shz
 
 			const StaticMeshRenderData& meshRD = *b.pMesh;
 			ASSERT(b.LodIndex < static_cast<uint32>(meshRD.Levels.size()), "Batch LodIndex OOB.");
-			const StaticMeshLevelRenderData& lvl = meshRD.Levels[b.LodIndex];
 
+			const StaticMeshLevelRenderData& lvl = meshRD.Levels[b.LodIndex];
 			ASSERT(b.SectionIndex < static_cast<uint32>(lvl.Sections.size()), "Batch SectionIndex OOB for this LOD.");
+
 			const auto& sec = lvl.Sections[b.SectionIndex];
 
 			const MaterialPipelineBinding& pb = resolver(b.MaterialId, passKey);
@@ -1176,6 +1154,7 @@ namespace shz
 			outPackets.emplace_back(pkt);
 		}
 	}
+
 
 	bool RenderScene::TryGetBatchView(uint32 batchId, BatchView& outView) const noexcept
 	{

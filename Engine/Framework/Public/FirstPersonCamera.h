@@ -60,6 +60,9 @@ namespace shz
 		float3 GetPos() const { return m_Pos; }
 		float  GetCurrentSpeed() const { return m_fCurrentSpeed; }
 
+		float GetYaw() const { return m_fYawAngle; }
+		float GetPitch() const { return m_fPitchAngle; }
+
 		struct ProjectionAttribs
 		{
 			float32           NearClipPlane = 1.f;

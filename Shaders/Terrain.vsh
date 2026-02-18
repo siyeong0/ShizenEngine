@@ -1,6 +1,3 @@
-// ============================================================================
-// Terrain.vsh
-// ============================================================================
 #include "Common.hlsli"
 #include "TerrainCommon.hlsli"
 
@@ -45,7 +42,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 
 	float2 uvWorld01 = WorldXZToTerrainUV(worldXZ);
 
-	float3 normalWorld = ComputeNormalAt(worldXZ, step);
+	float3 normalWorld = SampleTerrainNormalAtWorldXZ(worldXZ);
 
 	float3 tangentWorld = float3(1.0f, 0.0f, 0.0f);
 	tangentWorld = normalize(tangentWorld - normalWorld * dot(normalWorld, tangentWorld));

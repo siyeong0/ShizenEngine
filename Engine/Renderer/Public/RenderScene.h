@@ -196,8 +196,8 @@ namespace shz
 		// ------------------------------------------------------------
 		void BuildDrawPackets(
 			uint64 passKey,
-			const View& view,
-			const ViewFrustumExt& frustum,
+			const View& renderView,
+			const View& lodView,
 			const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets,
 			std::vector<uint32>& outInstanceRemap) const;
@@ -209,8 +209,7 @@ namespace shz
 
 		void BuildTerrainDrawPackets(
 			uint64 passKey,
-			const View& view,
-			const ViewFrustumExt& frustum,
+			const View& renderView,
 			const std::function<const MaterialPipelineBinding& (MaterialId, uint64)>& resolver,
 			std::vector<DrawPacket>& outPackets) const;
 
@@ -404,9 +403,8 @@ namespace shz
 
 		// Visibility cache (reuse across passes with same view/frustum)
 		void ensureVisibilityScratchCapacity() const;
-		uint64 computeVisCacheKey(const View& view, const ViewFrustumExt& frustum) const;
-
-		void buildVisibilityAndLodCached(const View& view, const ViewFrustumExt& frustum) const;
+		uint64 computeVisCacheKey(const View& renderView, const View& lodView, const ViewFrustumExt& renderFrustum) const;
+		void buildVisibilityAndLodCached(const View& renderView, const View& lodView, const ViewFrustumExt& renderFrustum) const;
 
 	private:
 		// Objects

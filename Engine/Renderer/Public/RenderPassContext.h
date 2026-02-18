@@ -38,7 +38,7 @@ namespace shz
 		const ViewFamily* pViewFamily = nullptr;
 		float DeltaTime = 0.0f;
 		uint64 FrameIndex = 0;
-		uint32 ShadowMapResolution = 4096;
+		uint32 ShadowMapResolution = 2048;
 
 		RefCntAutoPtr<IRenderPass> pRHIRenderPass;
 
