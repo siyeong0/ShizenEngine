@@ -3,273 +3,421 @@
 
 namespace shz
 {
-	void RenderResourceRegistry::Initialize()
-	{
-		// Nothing for now. Kept for symmetry and future expansion.
-	}
+    void RenderResourceRegistry::Initialize()
+    {
+        // Nothing for now.
+    }
 
-	void RenderResourceRegistry::Shutdown()
-	{
-		for (auto& [id, entry] : m_Textures)
-		{
-			entry.SRV.Release();
-			entry.RTV.Release();
-			entry.DSV.Release();
-			entry.UAV.Release();
-			entry.Texture.Release();
-		}
-		m_Textures.clear();
+    void RenderResourceRegistry::Shutdown()
+    {
+        // Named views first
+        for (auto& [id, entry] : m_TextureViews)
+        {
+            entry.View.Release();
+            entry.TextureId = 0;
+            entry.ViewType = TEXTURE_VIEW_UNDEFINED;
+        }
+        m_TextureViews.clear();
 
-		for (auto& [id, entry] : m_Buffers)
-		{
-			entry.SRV.Release();
-			entry.UAV.Release();
-			entry.Buffer.Release();
-		}
-		m_Buffers.clear();
-	}
+        for (auto& [id, entry] : m_BufferViews)
+        {
+            entry.View.Release();
+            entry.BufferId = 0;
+            entry.ViewType = BUFFER_VIEW_UNDEFINED;
+        }
+        m_BufferViews.clear();
 
-	void RenderResourceRegistry::RegisterTexture(RenderResourceId id, RefCntAutoPtr<ITexture>&& pTexture)
-	{
-		ASSERT(id != 0, "Id must be non-zero.");
-		ASSERT(pTexture, "Cannot register null texture.");
-		ASSERT(!HasTexture(id), "Texture id already registered."); // TODO: Duplicate
+        // Owned resources
+        for (auto& [id, entry] : m_Textures)
+        {
+            entry.SRV.Release();
+            entry.RTV.Release();
+            entry.DSV.Release();
+            entry.UAV.Release();
+            entry.Texture.Release();
+        }
+        m_Textures.clear();
 
-		TextureEntry& e = m_Textures[id];
+        for (auto& [id, entry] : m_Buffers)
+        {
+            entry.SRV.Release();
+            entry.UAV.Release();
+            entry.Buffer.Release();
+        }
+        m_Buffers.clear();
 
-		// Replace owned texture
-		e.Texture = std::move(pTexture);
+        m_Aliases.clear();
+    }
 
-		// Refresh cached default views
-		e.SRV = e.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-		e.RTV = e.Texture->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-		e.DSV = e.Texture->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
-		e.UAV = e.Texture->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS);
-	}
+    void RenderResourceRegistry::RegisterTexture(RenderResourceId id, RefCntAutoPtr<ITexture>&& pTexture)
+    {
+        ASSERT(id != 0, "Id must be non-zero.");
+        ASSERT(pTexture, "Cannot register null texture.");
+        ASSERT(!HasTexture(id), "Texture id already registered.");
 
-	void RenderResourceRegistry::RegisterBuffer(RenderResourceId id, RefCntAutoPtr<IBuffer>&& pBuffer)
-	{
-		ASSERT(id != 0, "Id must be non-zero.");
-		ASSERT(pBuffer, "Cannot register null buffer.");
-		ASSERT(!HasBuffer(id), "Buffer id already registered.");
+        TextureEntry& e = m_Textures[id];
 
-		BufferEntry& e = m_Buffers[id];
-		e.Buffer = std::move(pBuffer);
-		e.SRV = e.Buffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
-		e.UAV = e.Buffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
-	}
+        e.Texture = std::move(pTexture);
 
-	void RenderResourceRegistry::UnregisterTexture(RenderResourceId id)
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
-		m_Textures.erase(id);
-	}
+        // Refresh cached default views
+        e.SRV = e.Texture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        e.RTV = e.Texture->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+        e.DSV = e.Texture->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
+        e.UAV = e.Texture->GetDefaultView(TEXTURE_VIEW_UNORDERED_ACCESS);
+    }
 
-	void RenderResourceRegistry::UnregisterBuffer(RenderResourceId id)
-	{
-		ASSERT(HasBuffer(id), "Buffer id not found.");
-		m_Buffers.erase(id);
-	}
+    void RenderResourceRegistry::RegisterBuffer(RenderResourceId id, RefCntAutoPtr<IBuffer>&& pBuffer)
+    {
+        ASSERT(id != 0, "Id must be non-zero.");
+        ASSERT(pBuffer, "Cannot register null buffer.");
+        ASSERT(!HasBuffer(id), "Buffer id already registered.");
 
-	void RenderResourceRegistry::CreateTextureView(RenderResourceId id, const TextureViewDesc& desc)
-	{
-		ASSERT(id != 0, "Id must be non-zero.");
-		ASSERT(HasTexture(id), "Texture id not found.");
+        BufferEntry& e = m_Buffers[id];
+        e.Buffer = std::move(pBuffer);
+        e.SRV = e.Buffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
+        e.UAV = e.Buffer->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
+    }
 
-		TextureEntry& e = m_Textures[id];
-		switch (desc.ViewType)
-		{
-		case TEXTURE_VIEW_SHADER_RESOURCE:
-			e.SRV.Release();
-			e.Texture->CreateView(desc, &e.SRV);
-			break;
-		case TEXTURE_VIEW_RENDER_TARGET:
-			e.RTV.Release();
-			e.Texture->CreateView(desc, &e.RTV);
-			break;
-		case TEXTURE_VIEW_DEPTH_STENCIL:
-			e.DSV.Release();
-			e.Texture->CreateView(desc, &e.DSV);
-			break;
-		case TEXTURE_VIEW_UNORDERED_ACCESS:
-			e.UAV.Release();
-			e.Texture->CreateView(desc, &e.UAV);
-			break;
-		default:
-			ASSERT(false, "Unsupported texture view type.");
-			break;
-		}
-	}
+    void RenderResourceRegistry::UnregisterTexture(RenderResourceId id)
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
 
-	void RenderResourceRegistry::CreateBufferView(RenderResourceId id, const BufferViewDesc& desc)
-	{
-		ASSERT(id != 0, "Id must be non-zero.");
-		ASSERT(HasBuffer(id), "Buffer id not found.");
+        // Note: named views referencing this texture are NOT auto-removed (정책 선택).
+        // 필요하면 여기서 스캔해서 지우는 코드도 넣을 수 있음.
+        m_Textures.erase(id);
+    }
 
-		BufferEntry& e = m_Buffers[id];
-		switch (desc.ViewType)
-		{
-		case BUFFER_VIEW_SHADER_RESOURCE:
-			e.SRV.Release();
-			e.Buffer->CreateView(desc, &e.SRV);
-			break;
-		case BUFFER_VIEW_UNORDERED_ACCESS:
-			e.UAV.Release();
-			e.Buffer->CreateView(desc, &e.UAV);
-			break;
-		default:
-			ASSERT(false, "Unsupported buffer view type.");
-			break;
-		}
-	}
+    void RenderResourceRegistry::UnregisterBuffer(RenderResourceId id)
+    {
+        ASSERT(HasBuffer(id), "Buffer id not found.");
+        id = resolveAlias(id);
+        m_Buffers.erase(id);
+    }
 
-	void RenderResourceRegistry::AddAlias(uint64 src, uint64 alias)
-	{
-		ASSERT(m_Aliases.find(alias) == m_Aliases.end(), "Alias already exists.");
-		ASSERT(m_Textures.find(src) != m_Textures.end() || m_Buffers.find(src) != m_Buffers.end(), "Source resource not exists.");
+    // -----------------------------------------------------------------
+    // Default view replace (backward compatible)
+    // -----------------------------------------------------------------
+    void RenderResourceRegistry::CreateTextureView(RenderResourceId id, const TextureViewDesc& desc)
+    {
+        ASSERT(id != 0, "Id must be non-zero.");
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
 
-		m_Aliases[alias] = src;
-	}
+        TextureEntry& e = m_Textures[id];
+        switch (desc.ViewType)
+        {
+        case TEXTURE_VIEW_SHADER_RESOURCE:
+            e.SRV.Release();
+            e.Texture->CreateView(desc, &e.SRV);
+            break;
+        case TEXTURE_VIEW_RENDER_TARGET:
+            e.RTV.Release();
+            e.Texture->CreateView(desc, &e.RTV);
+            break;
+        case TEXTURE_VIEW_DEPTH_STENCIL:
+            e.DSV.Release();
+            e.Texture->CreateView(desc, &e.DSV);
+            break;
+        case TEXTURE_VIEW_UNORDERED_ACCESS:
+            e.UAV.Release();
+            e.Texture->CreateView(desc, &e.UAV);
+            break;
+        default:
+            ASSERT(false, "Unsupported texture view type.");
+            break;
+        }
+    }
 
-	void RenderResourceRegistry::RemoveAlias(uint64 alias)
-	{
-		ASSERT(m_Aliases.find(alias) != m_Aliases.end(), "Alias not exists.");
+    void RenderResourceRegistry::CreateBufferView(RenderResourceId id, const BufferViewDesc& desc)
+    {
+        ASSERT(id != 0, "Id must be non-zero.");
+        ASSERT(HasBuffer(id), "Buffer id not found.");
+        id = resolveAlias(id);
 
-		m_Aliases.erase(alias);
-	}
+        BufferEntry& e = m_Buffers[id];
+        switch (desc.ViewType)
+        {
+        case BUFFER_VIEW_SHADER_RESOURCE:
+            e.SRV.Release();
+            e.Buffer->CreateView(desc, &e.SRV);
+            break;
+        case BUFFER_VIEW_UNORDERED_ACCESS:
+            e.UAV.Release();
+            e.Buffer->CreateView(desc, &e.UAV);
+            break;
+        default:
+            ASSERT(false, "Unsupported buffer view type.");
+            break;
+        }
+    }
 
-	bool RenderResourceRegistry::HasTexture(RenderResourceId id) const
-	{
-		auto it = m_Textures.find(id);
-		if (it != m_Textures.end())
-		{
-			return true;
-		}
+    // -----------------------------------------------------------------
+    // NEW: Named views (multi-view per texture/buffer)  <<== 핵심
+    // -----------------------------------------------------------------
+    void RenderResourceRegistry::CreateTextureView(RenderResourceId textureId, RenderResourceId viewId, const TextureViewDesc& desc)
+    {
+        ASSERT(textureId != 0 && viewId != 0, "Ids must be non-zero.");
+        ASSERT(HasTexture(textureId), "Texture id not found.");
 
-		auto aliasIter = m_Aliases.find(id);
-		if (aliasIter != m_Aliases.end())
-		{
-			ASSERT(m_Textures.find(aliasIter->second) != m_Textures.end(), "Invalid alias.");
-			return true;
-		}
+        textureId = resolveAlias(textureId);
+        ASSERT(m_TextureViews.find(viewId) == m_TextureViews.end(), "Texture view id already exists.");
 
-		return false;
-	}
+        TextureEntry& texE = m_Textures[textureId];
 
-	bool RenderResourceRegistry::HasBuffer(RenderResourceId id) const
-	{
-		auto it = m_Buffers.find(id);
-		if (it != m_Buffers.end())
-		{
-			return true;
-		}
+        TextureViewEntry ve = {};
+        ve.TextureId = textureId;
+        ve.ViewType = desc.ViewType;
 
-		auto aliasIter = m_Aliases.find(id);
-		if (aliasIter != m_Aliases.end())
-		{
-			ASSERT(m_Buffers.find(aliasIter->second) != m_Buffers.end(), "Invalid alias.");
-			return true;
-		}
+        texE.Texture->CreateView(desc, &ve.View);
+        ASSERT(ve.View, "Failed to create texture view.");
 
-		return false;
-	}
+        m_TextureViews.emplace(viewId, std::move(ve));
+    }
 
-	RefCntAutoPtr<ITexture> RenderResourceRegistry::GetTexture(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
+    void RenderResourceRegistry::CreateBufferView(RenderResourceId bufferId, RenderResourceId viewId, const BufferViewDesc& desc)
+    {
+        ASSERT(bufferId != 0 && viewId != 0, "Ids must be non-zero.");
+        ASSERT(HasBuffer(bufferId), "Buffer id not found.");
 
-		return getTextureEntryOrNull(id)->Texture;
-	}
+        bufferId = resolveAlias(bufferId);
+        ASSERT(m_BufferViews.find(viewId) == m_BufferViews.end(), "Buffer view id already exists.");
 
-	RefCntAutoPtr<IBuffer> RenderResourceRegistry::GetBuffer(RenderResourceId id) const
-	{
-		ASSERT(HasBuffer(id), "Buffer id not found.");
+        BufferEntry& bufE = m_Buffers[bufferId];
 
-		return getBufferEntryOrNull(id)->Buffer;
-	}
+        BufferViewEntry ve = {};
+        ve.BufferId = bufferId;
+        ve.ViewType = desc.ViewType;
 
-	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureSRV(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = *getTextureEntryOrNull(id);
-		return e.SRV;
-	}
+        bufE.Buffer->CreateView(desc, &ve.View);
+        ASSERT(ve.View, "Failed to create buffer view.");
 
-	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureRTV(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = *getTextureEntryOrNull(id);
-		return e.RTV;
-	}
+        m_BufferViews.emplace(viewId, std::move(ve));
+    }
 
-	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureDSV(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = *getTextureEntryOrNull(id);
-		return e.DSV;
-	}
+    void RenderResourceRegistry::RemoveTextureView(RenderResourceId viewId)
+    {
+        auto it = m_TextureViews.find(viewId);
+        if (it == m_TextureViews.end())
+            return;
 
-	RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureUAV(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
-		const TextureEntry& e = *getTextureEntryOrNull(id);
-		return e.UAV;
-	}
+        it->second.View.Release();
+        m_TextureViews.erase(it);
+    }
 
-	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferSRV(RenderResourceId id) const
-	{
-		ASSERT(HasBuffer(id), "Buffer id not found.");
-		const BufferEntry& e = *getBufferEntryOrNull(id);
-		return e.SRV;
-	}
+    void RenderResourceRegistry::RemoveBufferView(RenderResourceId viewId)
+    {
+        auto it = m_BufferViews.find(viewId);
+        if (it == m_BufferViews.end())
+            return;
 
-	RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferUAV(RenderResourceId id) const
-	{
-		ASSERT(HasBuffer(id), "Buffer id not found.");
-		const BufferEntry& e = *getBufferEntryOrNull(id);
-		return e.UAV;
-	}
+        it->second.View.Release();
+        m_BufferViews.erase(it);
+    }
 
-	const RenderResourceRegistry::TextureEntry* RenderResourceRegistry::getTextureEntryOrNull(RenderResourceId id) const
-	{
-		ASSERT(HasTexture(id), "Texture id not found.");
+    // -----------------------------------------------------------------
+    // Alias
+    // -----------------------------------------------------------------
+    void RenderResourceRegistry::AddAlias(uint64 src, uint64 alias)
+    {
+        ASSERT(m_Aliases.find(alias) == m_Aliases.end(), "Alias already exists.");
+        ASSERT(m_Textures.find(src) != m_Textures.end() || m_Buffers.find(src) != m_Buffers.end(), "Source resource not exists.");
 
-		auto it = m_Textures.find(id);
-		if (it != m_Textures.end())
-		{
-			return &m_Textures.at(id);
-		}
+        m_Aliases[alias] = src;
+    }
 
-		auto aliasIter = m_Aliases.find(id);
-		if (aliasIter != m_Aliases.end())
-		{
-			ASSERT(m_Textures.find(aliasIter->second) != m_Textures.end(), "Invalid alias.");
-			return &m_Textures.at(aliasIter->second);
-		}
+    void RenderResourceRegistry::RemoveAlias(uint64 alias)
+    {
+        ASSERT(m_Aliases.find(alias) != m_Aliases.end(), "Alias not exists.");
+        m_Aliases.erase(alias);
+    }
 
-		ASSERT(false, "Invalid id");
-		return nullptr;
-	}
+    RenderResourceId RenderResourceRegistry::resolveAlias(RenderResourceId id) const
+    {
+        auto aliasIter = m_Aliases.find(id);
+        if (aliasIter != m_Aliases.end())
+            return aliasIter->second;
+        return id;
+    }
 
-	const RenderResourceRegistry::BufferEntry* RenderResourceRegistry::getBufferEntryOrNull(RenderResourceId id) const
-	{
-		ASSERT(HasBuffer(id), "Buffer id not found.");
+    // -----------------------------------------------------------------
+    // Has*
+    // -----------------------------------------------------------------
+    bool RenderResourceRegistry::HasTexture(RenderResourceId id) const
+    {
+        id = resolveAlias(id);
+        return m_Textures.find(id) != m_Textures.end();
+    }
 
-		auto it = m_Buffers.find(id);
-		if (it != m_Buffers.end())
-		{
-			return &m_Buffers.at(id);
-		}
+    bool RenderResourceRegistry::HasBuffer(RenderResourceId id) const
+    {
+        id = resolveAlias(id);
+        return m_Buffers.find(id) != m_Buffers.end();
+    }
 
-		auto aliasIter = m_Aliases.find(id);
-		if (aliasIter != m_Aliases.end())
-		{
-			ASSERT(m_Buffers.find(aliasIter->second) != m_Buffers.end(), "Invalid alias.");
-			return &m_Buffers.at(aliasIter->second);
-		}
+    bool RenderResourceRegistry::HasTextureView(RenderResourceId viewId) const
+    {
+        return m_TextureViews.find(viewId) != m_TextureViews.end();
+    }
 
-		ASSERT(false, "Invalid id");
+    bool RenderResourceRegistry::HasBufferView(RenderResourceId viewId) const
+    {
+        return m_BufferViews.find(viewId) != m_BufferViews.end();
+    }
 
-		return nullptr;
-	}
+    // -----------------------------------------------------------------
+    // Get resource
+    // -----------------------------------------------------------------
+    RefCntAutoPtr<ITexture> RenderResourceRegistry::GetTexture(RenderResourceId id) const
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
+        return m_Textures.at(id).Texture;
+    }
+
+    RefCntAutoPtr<IBuffer> RenderResourceRegistry::GetBuffer(RenderResourceId id) const
+    {
+        ASSERT(HasBuffer(id), "Buffer id not found.");
+        id = resolveAlias(id);
+        return m_Buffers.at(id).Buffer;
+    }
+
+    // -----------------------------------------------------------------
+    // Get default views (by texture/buffer id)
+    // -----------------------------------------------------------------
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureSRV(RenderResourceId id) const
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
+        return m_Textures.at(id).SRV;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureRTV(RenderResourceId id) const
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
+        return m_Textures.at(id).RTV;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureDSV(RenderResourceId id) const
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
+        return m_Textures.at(id).DSV;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureUAV(RenderResourceId id) const
+    {
+        ASSERT(HasTexture(id), "Texture id not found.");
+        id = resolveAlias(id);
+        return m_Textures.at(id).UAV;
+    }
+
+    RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferSRV(RenderResourceId id) const
+    {
+        ASSERT(HasBuffer(id), "Buffer id not found.");
+        id = resolveAlias(id);
+        return m_Buffers.at(id).SRV;
+    }
+
+    RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferUAV(RenderResourceId id) const
+    {
+        ASSERT(HasBuffer(id), "Buffer id not found.");
+        id = resolveAlias(id);
+        return m_Buffers.at(id).UAV;
+    }
+
+    // -----------------------------------------------------------------
+    // Get named views (by view id)
+    // -----------------------------------------------------------------
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureView(RenderResourceId viewId) const
+    {
+        ASSERT(HasTextureView(viewId), "Texture view id not found.");
+        return m_TextureViews.at(viewId).View;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureSRVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasTextureView(viewId), "Texture view id not found.");
+        const auto& e = m_TextureViews.at(viewId);
+        ASSERT(e.ViewType == TEXTURE_VIEW_SHADER_RESOURCE, "Texture view type mismatch.");
+        return e.View;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureRTVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasTextureView(viewId), "Texture view id not found.");
+        const auto& e = m_TextureViews.at(viewId);
+        ASSERT(e.ViewType == TEXTURE_VIEW_RENDER_TARGET, "Texture view type mismatch.");
+        return e.View;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureDSVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasTextureView(viewId), "Texture view id not found.");
+        const auto& e = m_TextureViews.at(viewId);
+        ASSERT(e.ViewType == TEXTURE_VIEW_DEPTH_STENCIL, "Texture view type mismatch.");
+        return e.View;
+    }
+
+    RefCntAutoPtr<ITextureView> RenderResourceRegistry::GetTextureUAVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasTextureView(viewId), "Texture view id not found.");
+        const auto& e = m_TextureViews.at(viewId);
+        ASSERT(e.ViewType == TEXTURE_VIEW_UNORDERED_ACCESS, "Texture view type mismatch.");
+        return e.View;
+    }
+
+    RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferView(RenderResourceId viewId) const
+    {
+        ASSERT(HasBufferView(viewId), "Buffer view id not found.");
+        return m_BufferViews.at(viewId).View;
+    }
+
+    RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferSRVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasBufferView(viewId), "Buffer view id not found.");
+        const auto& e = m_BufferViews.at(viewId);
+        ASSERT(e.ViewType == BUFFER_VIEW_SHADER_RESOURCE, "Buffer view type mismatch.");
+        return e.View;
+    }
+
+    RefCntAutoPtr<IBufferView> RenderResourceRegistry::GetBufferUAVView(RenderResourceId viewId) const
+    {
+        ASSERT(HasBufferView(viewId), "Buffer view id not found.");
+        const auto& e = m_BufferViews.at(viewId);
+        ASSERT(e.ViewType == BUFFER_VIEW_UNORDERED_ACCESS, "Buffer view type mismatch.");
+        return e.View;
+    }
+
+    // -----------------------------------------------------------------
+    // Internal entry access (optional; kept minimal)
+    // -----------------------------------------------------------------
+    const RenderResourceRegistry::TextureEntry* RenderResourceRegistry::getTextureEntryOrNull(RenderResourceId id) const
+    {
+        id = resolveAlias(id);
+        auto it = m_Textures.find(id);
+        return it != m_Textures.end() ? &it->second : nullptr;
+    }
+
+    RenderResourceRegistry::TextureEntry* RenderResourceRegistry::getTextureEntryOrNull(RenderResourceId id)
+    {
+        id = resolveAlias(id);
+        auto it = m_Textures.find(id);
+        return it != m_Textures.end() ? &it->second : nullptr;
+    }
+
+    const RenderResourceRegistry::BufferEntry* RenderResourceRegistry::getBufferEntryOrNull(RenderResourceId id) const
+    {
+        id = resolveAlias(id);
+        auto it = m_Buffers.find(id);
+        return it != m_Buffers.end() ? &it->second : nullptr;
+    }
+
+    RenderResourceRegistry::BufferEntry* RenderResourceRegistry::getBufferEntryOrNull(RenderResourceId id)
+    {
+        id = resolveAlias(id);
+        auto it = m_Buffers.find(id);
+        return it != m_Buffers.end() ? &it->second : nullptr;
+    }
 } // namespace shz

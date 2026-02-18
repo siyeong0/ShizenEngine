@@ -9,6 +9,8 @@ namespace shz
 		, m_BaseTemplate(m_sTemplateLibrary->at(m_BaseTemplateName))
 		, m_DepthOnlyTemplateName(templateName + "_DepthOnly")
 		, m_DepthOnlyTemplate(m_sTemplateLibrary->at(m_DepthOnlyTemplateName))
+		, m_ShadowTemplateName(templateName + "_Shadow")
+		, m_ShadowTemplate(m_sTemplateLibrary->at(m_ShadowTemplateName))
 	{
 		// Ensure runtime template binding
 		{
@@ -345,7 +347,7 @@ namespace shz
 		// -----------------------------
 		GraphicsPipelineDesc& gpDesc = outCI.GraphicsPipeline;
 		gpDesc = {};
-		
+
 		// RenderPass injection
 		gpDesc.pRenderPass = pRenderPass;
 		gpDesc.SubpassIndex = 0;
@@ -369,7 +371,7 @@ namespace shz
 			if (pass == EMaterialPass::ShadowDepth)
 			{
 				gpDesc.RasterizerDesc.DepthBias = 2500;
-				gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f; 
+				gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f;
 				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 4.0f;
 			}
 		}
@@ -434,10 +436,21 @@ namespace shz
 		return outCI;
 	}
 
-	const std::vector<RefCntAutoPtr<IShader>>& Material::GetShaders(EMaterialPass pass) const noexcept 
-	{ 
-		const MaterialTemplate& tmpl = (pass == EMaterialPass::DepthOnly || pass == EMaterialPass::ShadowDepth) ? m_DepthOnlyTemplate : m_BaseTemplate;
-		return tmpl.GetShaders();
+	const std::vector<RefCntAutoPtr<IShader>>& Material::GetShaders(EMaterialPass pass) const noexcept
+	{
+		switch (pass)
+		{
+		case EMaterialPass::Base:
+		case EMaterialPass::Forward:
+			return m_BaseTemplate.GetShaders();
+		case EMaterialPass::DepthOnly:
+			return m_DepthOnlyTemplate.GetShaders();
+		case EMaterialPass::ShadowDepth:
+			return m_ShadowTemplate.GetShaders();
+		default:
+			ASSERT(false, "Invalid material pass.");
+			return m_BaseTemplate.GetShaders();
+		}
 	}
 
 	void Material::Clear()

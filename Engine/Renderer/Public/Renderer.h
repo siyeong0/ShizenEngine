@@ -32,6 +32,8 @@
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
+#include "Engine/RenderSystem/Public/ShadowSystem.h"
+
 namespace shz
 {
 	struct RendererCreateInfo
@@ -176,6 +178,8 @@ namespace shz
 
 		void AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc);
 		void AddTextureView(uint64 textureId, const TextureViewDesc& viewDesc);
+		void AddTextureView(const std::string& textureName, const std::string& viewName, const TextureViewDesc& viewDesc);
+		void AddTextureView(uint64 textureId, uint64 viewId, const TextureViewDesc& viewDesc);
 
 		uint64 AddBuffer(const std::string& name, const BufferDesc& desc, const BufferData* pInitData = nullptr);
 		uint64 AddBuffer(uint64 id, const BufferDesc& desc, const BufferData* pInitData = nullptr);
@@ -236,9 +240,9 @@ namespace shz
 		const MaterialPipelineBinding& AcquireMaterialPipelineBinding(MaterialId materialId, uint64 passKey);
 
 		// Material
-		void RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
-		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
-		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true);
+		void RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true, bool bRegisterShadow = true);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true, bool bRegisterShadow = true);
+		void RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly = true, bool bRegisterShadow = true);
 		const MaterialTemplate& GetMaterialTemplate(const std::string& name) const;
 		std::vector<std::string> GetAllMaterialTemplateNames() const;
 
@@ -264,6 +268,8 @@ namespace shz
 		RefCntAutoPtr<IDeviceContext> m_pImmediateContext;
 		std::vector<RefCntAutoPtr<IDeviceContext>> m_pDeferredContexts;
 		RefCntAutoPtr<ISwapChain> m_pSwapChain;
+
+		std::unique_ptr<ShadowSystem> m_pShadowSystem;
 
 		AssetManager* m_pAssetManager = nullptr;
 		std::unordered_map<std::string, MaterialTemplate> m_TemplateLibrary = {};

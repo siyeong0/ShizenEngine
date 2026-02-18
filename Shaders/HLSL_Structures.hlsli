@@ -9,9 +9,11 @@ struct FrameConstants
 	uint FrameIndex;
 	float3 CameraPosition;
 
+	float4x4 View;
+	float4x4 Proj;
 	float4x4 ViewProj;
 	float4x4 InvViewProj;
-	
+
 	float4 FrustumPlanesWS[6];
 
 	float2 ViewportSize;
@@ -24,17 +26,19 @@ struct FrameConstants
 
 	float3 LightDirWS;
 	float _pad0;
-	
+
 	float3 LightColor;
 	float LightIntensity;
 
+    // NOTE:
+    // This can remain as "LightViewProj" for legacy lighting shading usage,
+    // but shadow pass MUST NOT rely on this for CSM mapping.
 	float4x4 LightViewProj;
 };
 
 struct ShadowConstants
 {
-	float2 ViewportSize;
-	float2 InvViewportSize;
+	uint CascadeIndex;
 };
 
 struct ViewConstants
@@ -46,17 +50,56 @@ struct ViewConstants
 	float4x4 PrevViewProj;
 };
 
+struct CascadeAttribs
+{
+	float4 LightSpaceScale; // xyz
+	float4 LightSpaceScaledBias; // xyz
+	float4 StartEndZ; // x=start, y=end (camera view-space)
+	float4 MarginProjSpace; // xyzw
+};
+
+// ------------------------------------------------------------
+// ShadowMapAttribs (NO ARRAYS INSIDE CB)
+// ------------------------------------------------------------
+struct ShadowMapAttribs
+{
+	float4x4 WorldToLightView; // world -> light view space
+	float4 ShadowMapDim; // xy = size, zw = inv size
+
+    // replaces float4 CascadeCamSpaceZEnd[2]
+	float4 CascadeCamSpaceZEnd0; // for cascades 0..3
+	float4 CascadeCamSpaceZEnd1; // for cascades 4..7
+
+	int NumCascades;
+	float NumCascadesF;
+	float CascadeTransitionRegion;
+	float ReceiverPlaneDepthBiasClamp;
+
+	float FixedDepthBias;
+	float FilterWorldSize;
+	int FixedFilterSize;
+	int MaxAnisotropy;
+
+    // replaces CascadeAttribs Cascades[8]
+	CascadeAttribs Cascades0;
+	CascadeAttribs Cascades1;
+	CascadeAttribs Cascades2;
+	CascadeAttribs Cascades3;
+	CascadeAttribs Cascades4;
+	CascadeAttribs Cascades5;
+	CascadeAttribs Cascades6;
+	CascadeAttribs Cascades7;
+};
+
 // ---------------------------------------------------------------------------
 // Draw constants (PER DRAW)
-// - Grass uses SpeciesId + LodIndex to look up base offsets in a buffer.
-// - StartInstanceLocation kept for compatibility; you can ignore it for grass.
 // ---------------------------------------------------------------------------
 struct DrawConstants
 {
-	uint StartInstanceLocation; // optional legacy
-	uint SpeciesId; // used by grass
-	uint LodIndex; // 0/1/2 for grass
+	uint StartInstanceLocation;
 	uint _pad0;
+	uint _pad1;
+	uint _pad2;
 };
 
 // ----------------------------------------------
@@ -109,7 +152,6 @@ struct TerrainDrawConstants
 	uint LodIndex;
 	uint _pad0;
 
-    // NOTE: Last row/column can be partial -> keep per-axis size to prevent edge UV drift.
 	float2 ChunkSizeXZ;
 	float2 InvChunkSizeXZ;
 };
@@ -171,7 +213,6 @@ struct GrassBillboardInstance
 
 struct GrassGenConstants
 {
-	// Species count
 	uint NumSpecies;
 	float YOffset;
 	float NormalAlignStrength;
@@ -240,7 +281,6 @@ struct GrassRenderConstants
 	float _pad2;
 };
 
-// Must exist for C++ side too
 struct ObjectIndexConstants
 {
 	uint ObjectIndex;

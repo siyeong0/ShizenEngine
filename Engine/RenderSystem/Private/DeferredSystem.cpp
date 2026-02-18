@@ -358,7 +358,6 @@ namespace shz
 				const uint64 kG2 = STRING_HASH("GBuffer2_MRAO");
 				const uint64 kG3 = STRING_HASH("GBuffer3_Emissive");
 				const uint64 kGD = STRING_HASH("GBufferDepth");
-				const uint64 kShadow = STRING_HASH("ShadowMap");
 				const uint64 kLighting = STRING_HASH("LightingScene");
 
 				b.DeclareTextureSRVRead(kG0);
@@ -366,7 +365,7 @@ namespace shz
 				b.DeclareTextureSRVRead(kG2);
 				b.DeclareTextureSRVRead(kG3);
 				b.DeclareTextureSRVRead(kGD);
-				b.DeclareTextureSRVRead(kShadow);
+				b.DeclareTextureSRVRead(STRING_HASH("ShadowMapArray"));
 
 				b.DeclareTextureRTVWrite(kLighting);
 				b.SetClearColor(kLighting, 0.f, 0.f, 0.f, 1.f);
@@ -389,7 +388,6 @@ namespace shz
 				bindTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
 				bindTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
 				bindTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
-				bindTexture("g_ShadowMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("ShadowMap")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -441,7 +439,6 @@ namespace shz
 					{ SHADER_TYPE_PIXEL, "g_GBuffer2",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_PIXEL, "g_ShadowMap",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				psoCi.PSODesc.ResourceLayout.Variables = vars;
 				psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);

@@ -9,10 +9,6 @@ Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, Reserved
 Texture2D<float4> g_GBuffer3; // Emissive.rgb, unused
 Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 
-// Shadow map (Depth) + comparison sampler
-Texture2D<float> g_ShadowMap;
-SamplerComparisonState g_ShadowCmpSampler;
-
 struct PSInput
 {
 	float4 Pos : SV_POSITION;
@@ -62,10 +58,9 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
 	float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
 	
-	//float dddd = g_ShadowMap.Sample(g_LinearClampSampler, uv);
+	//float dddd = g_ShadowMapArray.Sample(g_LinearClampSampler, float3(uv, 1));
 	//OutColor = float4(dddd.xxx, 1.0);
 	//return;
-	
 	
 	// Background / sky pixels (no geometry written to GBuffer)
 	if (depth01 >= 0.999999)
@@ -97,8 +92,22 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
 	float3 L = normalize(-g_FrameCB.LightDirWS);
 
-	// Shadow
-	float shadow = SampleShadow(g_ShadowMap, g_ShadowCmpSampler, worldPos);
+	float3 ddxWorldPos = ddx(worldPos);
+	float3 ddyWorldPos = ddy(worldPos);
+
+	
+	float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
+	float cameraViewSpaceZ = viewPos.z;
+	bool filterAcrossCascades = true;
+
+	FilteredShadow sh = FilterShadowMapCSM(
+		worldPos,
+		ddxWorldPos,
+		ddyWorldPos,
+		cameraViewSpaceZ,
+		filterAcrossCascades);
+
+	float shadow = sh.LightAmount;
 	
 	float3 lit = Shade(
 		N, V, L,

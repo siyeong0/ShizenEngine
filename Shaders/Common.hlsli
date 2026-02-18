@@ -3,6 +3,9 @@
 
 #include "HLSL_Structures.hlsli"
 
+// ============================================================================
+// Input
+// ============================================================================
 struct BaseVSInput
 {
 	float3 Position : ATTRIB0;
@@ -121,6 +124,7 @@ struct BaseVSOutput
 #endif
 };
 
+// In depth-only we do not output these.
 #define SET_VSOUT_CURR_CLIP(cc)     /* no-op */
 #define SET_VSOUT_PREV_CLIP(pc)     /* no-op */
 #define SET_VSOUT_WORLD_NORMAL(wn)  /* no-op */
@@ -129,25 +133,62 @@ struct BaseVSOutput
 
 #ifdef MASKED
 
-    #define SET_VSOUT_WORLD_POS_STATIC(pos)                                    \
-        OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
+    // ------------------------------------------------------------------------
+    // DEPTH_ONLY + MASKED
+    // - Shadow pass: use g_ShadowAttribs mapping
+    // - Non-shadow depth pass: use g_ViewCB.ViewProj (original)
+    // ------------------------------------------------------------------------
+#ifdef SHADOW
 
-    #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                            \
-        OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
+#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+            OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
 
-    #define SET_VSOUT_UV(uv)    OUT.UV = (uv);
+#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+            OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
 
-#else // OPAQUE
+        // IMPORTANT: Shadow depth should NOT use TAA jitter.
+        // We intentionally bypass APPLY_JITTER_TO_CLIP here.
 
-    #define SET_VSOUT_WORLD_POS_STATIC(pos)                                    \
-        OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
+#else // !SHADOW
 
-    #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                            \
-        OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
+#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
 
-    #define SET_VSOUT_UV(uv)    /* no-op */
+#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
 
-#endif
+#endif // SHADOW
+
+#define SET_VSOUT_UV(uv)    OUT.UV = (uv);
+
+#else // OPAQUE (not masked)
+
+    // ------------------------------------------------------------------------
+    // DEPTH_ONLY + OPAQUE
+    // ------------------------------------------------------------------------
+#ifdef SHADOW
+
+#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+            OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
+
+#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+            OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
+
+        // No jitter in shadow depth
+
+#else // !SHADOW
+
+#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
+
+#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
+
+#endif // SHADOW
+
+#define SET_VSOUT_UV(uv)    /* no-op */
+
+#endif // MASKED
 
 struct BasePSInput
 {
@@ -161,9 +202,9 @@ struct BasePSInput
 #define GET_PSIN_POS()          (IN.SVPosition)
 
 #ifdef MASKED
-    #define GET_PSIN_UV()       (IN.UV)
+#define GET_PSIN_UV()       (IN.UV)
 #else
-    #define GET_PSIN_UV()       (float2(0.0, 0.0))
+#define GET_PSIN_UV()       (float2(0.0, 0.0))
 #endif
 
 #define GET_PSIN_WORLD_POS()        (float3(0.0, 0.0, 0.0))
@@ -191,28 +232,37 @@ struct BasePSOutput { };
 
 #endif // DEPTH_ONLY
 
+// ============================================================================
+// Common bindings
+// ============================================================================
+
 // Objects
 StructuredBuffer<ObjectConstants> g_ObjectTable;
 
 // Constant Buffers
 cbuffer FRAME_CONSTANTS
 {
-    FrameConstants g_FrameCB;
+	FrameConstants g_FrameCB;
 };
 
 cbuffer SHADOW_CONSTANTS
 {
-    ShadowConstants g_ShadowCB;
+	ShadowConstants g_ShadowCB;
+};
+
+cbuffer SHADOW_MAP_ATTRIBS
+{
+	ShadowMapAttribs g_ShadowAttribs;
 };
 
 cbuffer VIEW_CONSTANTS
 {
-    ViewConstants g_ViewCB;
+	ViewConstants g_ViewCB;
 };
 
 cbuffer DRAW_CONSTANTS
 {
-    DrawConstants g_DrawCB;
+	DrawConstants g_DrawCB;
 };
 
 cbuffer TERRAIN_CONSTANTS
@@ -221,6 +271,8 @@ cbuffer TERRAIN_CONSTANTS
 };
 
 // Resources
+Texture2DArray<float> g_ShadowMapArray;
+SamplerComparisonState g_ShadowCmpSampler;
 
 // Samplers
 SamplerState g_LinearWrapSampler;
@@ -228,17 +280,47 @@ SamplerState g_LinearClampSampler;
 SamplerState g_PointWrapSampler;
 SamplerState g_PointClampSampler;
 
-// ----------------------------------------------------------------------------
+static CascadeAttribs GetCascadeAttribs(uint idx)
+{
+    // NOTE: no arrays in CB -> switch
+    switch (idx)
+    {
+    default:
+    case 0: return g_ShadowAttribs.Cascades0;
+    case 1: return g_ShadowAttribs.Cascades1;
+    case 2: return g_ShadowAttribs.Cascades2;
+    case 3: return g_ShadowAttribs.Cascades3;
+    case 4: return g_ShadowAttribs.Cascades4;
+    case 5: return g_ShadowAttribs.Cascades5;
+    case 6: return g_ShadowAttribs.Cascades6;
+    case 7: return g_ShadowAttribs.Cascades7;
+    }
+}
+
+static float4 BuildShadowClipFromWorldPos(float3 worldPos)
+{
+    const uint c = g_ShadowCB.CascadeIndex;
+
+	const float3 posLS = mul(float4(worldPos, 1.0), g_ShadowAttribs.WorldToLightView).xyz;
+
+    const CascadeAttribs C = GetCascadeAttribs(c);
+    const float3 posProj = posLS * C.LightSpaceScale.xyz + C.LightSpaceScaledBias.xyz;
+
+	return float4(posProj.xy, posProj.z, 1.0);
+}
+
+
+// ============================================================================
 // Helpers
-// ----------------------------------------------------------------------------
+// ============================================================================
 float3 UnpackNormalTS(float3 n01)
 {
-    return normalize(n01 * 2.0 - 1.0);
+	return normalize(n01 * 2.0 - 1.0);
 }
 
 float3 PackNormal01(float3 n)
 {
-    return n * 0.5 + 0.5;
+	return n * 0.5 + 0.5;
 }
 
 //------------------------------------------------------------------------------
@@ -246,37 +328,37 @@ float3 PackNormal01(float3 n)
 //------------------------------------------------------------------------------
 float2 ClipToUV(float4 clip)
 {
-    float2 ndc = clip.xy / max(clip.w, 1e-6); // [-1..1]
-    return ndc * 0.5 + 0.5; // [0..1]
+	float2 ndc = clip.xy / max(clip.w, 1e-6); // [-1..1]
+	return ndc * 0.5 + 0.5; // [0..1]
 }
 
 uint2 SVPosToPixel(float4 svPos)
 {
-    return (uint2) floor(svPos.xy);
+	return (uint2) floor(svPos.xy);
 }
 
 uint Hash_u32(uint x)
 {
-    x ^= x >> 16;
-    x *= 0x7feb352du;
-    x ^= x >> 15;
-    x *= 0x846ca68bu;
-    x ^= x >> 16;
-    return x;
+	x ^= x >> 16;
+	x *= 0x7feb352du;
+	x ^= x >> 15;
+	x *= 0x846ca68bu;
+	x ^= x >> 16;
+	return x;
 }
 
 float DitherThreshold4x4(int2 pix)
 {
-    static const float bayer4[16] =
-    {
-        0, 8, 2, 10,
-		12, 4, 14, 6,
-		3, 11, 1, 9,
-		15, 7, 13, 5
-    };
+	static const float bayer4[16] =
+	{
+		0, 8, 2, 10,
+        12, 4, 14, 6,
+        3, 11, 1, 9,
+        15, 7, 13, 5
+	};
 
-    int idx = (pix.x & 3) + ((pix.y & 3) << 2);
-    return (bayer4[idx] + 0.5) / 16.0;
+	int idx = (pix.x & 3) + ((pix.y & 3) << 2);
+	return (bayer4[idx] + 0.5) / 16.0;
 }
 
 //------------------------------------------------------------------------------
@@ -286,34 +368,34 @@ static const int MAX_HALTON_SEQUENCE = 16;
 
 static const float2 HALTON_SEQUENCE[MAX_HALTON_SEQUENCE] =
 {
-    float2(0.5, 0.333333),
-	float2(0.25, 0.666667),
-	float2(0.75, 0.111111),
-	float2(0.125, 0.444444),
-	float2(0.625, 0.777778),
-	float2(0.375, 0.222222),
-	float2(0.875, 0.555556),
-	float2(0.0625, 0.888889),
-	float2(0.5625, 0.037037),
-	float2(0.3125, 0.37037),
-	float2(0.8125, 0.703704),
-	float2(0.1875, 0.148148),
-	float2(0.6875, 0.481482),
-	float2(0.4375, 0.814815),
-	float2(0.9375, 0.259259),
-	float2(0.03125, 0.592593)
+	float2(0.5, 0.333333),
+    float2(0.25, 0.666667),
+    float2(0.75, 0.111111),
+    float2(0.125, 0.444444),
+    float2(0.625, 0.777778),
+    float2(0.375, 0.222222),
+    float2(0.875, 0.555556),
+    float2(0.0625, 0.888889),
+    float2(0.5625, 0.037037),
+    float2(0.3125, 0.37037),
+    float2(0.8125, 0.703704),
+    float2(0.1875, 0.148148),
+    float2(0.6875, 0.481482),
+    float2(0.4375, 0.814815),
+    float2(0.9375, 0.259259),
+    float2(0.03125, 0.592593)
 };
 
 float4 ApplyTAAJittering(float4 clipSpace)
 {
-    int idx = (int) (g_FrameCB.FrameIndex % MAX_HALTON_SEQUENCE);
+	int idx = (int) (g_FrameCB.FrameIndex % MAX_HALTON_SEQUENCE);
 
-    float2 jitter = HALTON_SEQUENCE[idx];
-    jitter.x = (jitter.x - 0.5f) / g_FrameCB.ViewportSize.x * 2.f;
-    jitter.y = (jitter.y - 0.5f) / g_FrameCB.ViewportSize.y * 2.f;
+	float2 jitter = HALTON_SEQUENCE[idx];
+	jitter.x = (jitter.x - 0.5f) / g_FrameCB.ViewportSize.x * 2.f;
+	jitter.y = (jitter.y - 0.5f) / g_FrameCB.ViewportSize.y * 2.f;
 
-    clipSpace.xy += jitter;
-    return clipSpace;
+	clipSpace.xy += jitter;
+	return clipSpace;
 }
 
 float ClipPixelCoverage(float alpha, float4 svPos)
@@ -323,9 +405,8 @@ float ClipPixelCoverage(float alpha, float4 svPos)
 	float coverage = saturate((alpha - cutoff) / (1.0 - cutoff));
 	float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
 	clip(coverage - t);
-    
+
 	return coverage;
 }
-
 
 #endif // HLSL_COMMON_HLSLI

@@ -189,37 +189,9 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfIBLTex", STRING_HASH("EnvBrdfTex"));
 		}
 
-		// -----------------------------------------------------------------
-		// Create shadow map
-		// -----------------------------------------------------------------
-		static constexpr uint32 SHADOW_MAP_SIZE = 2048;
-		m_PassCtx.ShadowMapResolution = SHADOW_MAP_SIZE;
-		{
-			TextureDesc td = {};
-			td.Name = "ShadowMap";
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = SHADOW_MAP_SIZE;
-			td.Height = SHADOW_MAP_SIZE;
-			td.MipLevels = 1;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.Format = TEX_FORMAT_R32_FLOAT;
-			td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-			m_pRegistry->RegisterTexture(STRING_HASH("ShadowMap"), CreateTexture(td));
-
-			TextureViewDesc dsvDesc = {};
-			dsvDesc.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-			dsvDesc.Format = TEX_FORMAT_D32_FLOAT;
-			m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), dsvDesc);
-
-			TextureViewDesc srvDesc = {};
-			srvDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-			srvDesc.Format = TEX_FORMAT_R32_FLOAT;
-			m_pRegistry->CreateTextureView(STRING_HASH("ShadowMap"), srvDesc);
-
-			m_pPipelineStateManager->RegisterStaticTextureResource("g_ShadowMap", STRING_HASH("ShadowMap"));
-		}
+		m_pShadowSystem = std::make_unique<ShadowSystem>();
+		m_pShadowSystem->Initialize(*this, ShadowSystem::CreateInfo{});
+		m_pShadowSystem->InstallPasses(*this);
 
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
@@ -360,12 +332,15 @@ namespace shz
 		// Update Frame/Shadow constants + compute lightViewProj (STABLE)
 		// ------------------------------------------------------------
 		Matrix4x4 lightViewProj = {};
+		float3 lightDirWs = {};
 		{
 			MapHelper<hlsl::FrameConstants> frameCB(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
 
 			frameCB->CameraPosition = view.CameraPosition;
 			frameCB->FrameIndex = static_cast<uint32>(viewFamily.FrameIndex);
 
+			frameCB->View = view.ViewMatrix;
+			frameCB->Proj = view.ProjMatrix;
 			frameCB->ViewProj = view.ViewProjMatrix;
 			frameCB->InvViewProj = view.ViewProjMatrix.Inversed();
 
@@ -390,7 +365,7 @@ namespace shz
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights()) { globalLight = &l; break; }
 
-			float3 lightDirWs = globalLight ? globalLight->Direction.Normalized() : float3(0, -1, 0);
+			lightDirWs = globalLight ? globalLight->Direction.Normalized() : float3(0, -1, 0);
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;
 
@@ -422,7 +397,7 @@ namespace shz
 			// 0) unitsPerTexel (고정) + centerWs 월드 양자화(이동 안정화의 핵심)
 			// ----------------------------
 			const float extentXY = ShadowHalfExtent * 2.0f;
-			const float unitsPerTexel = extentXY / float(m_PassCtx.ShadowMapResolution);
+			const float unitsPerTexel = extentXY / float(m_pShadowSystem->GetResolution());
 
 			// 카메라 중심을 "텍셀 월드 크기" 단위로 양자화해서 연속 이동을 제거
 			float3 centerWs = view.CameraPosition;
@@ -544,8 +519,8 @@ namespace shz
 			m_PassCtx.ShadowView.Viewport =
 			{
 				0, 0,
-				static_cast<int32>(m_PassCtx.ShadowMapResolution),
-				static_cast<int32>(m_PassCtx.ShadowMapResolution)
+				static_cast<int32>(m_pShadowSystem->GetResolution()),
+				static_cast<int32>(m_pShadowSystem->GetResolution())
 			};
 
 			m_PassCtx.ShadowView.NearPlane = nearZ;
@@ -555,6 +530,8 @@ namespace shz
 			m_PassCtx.ShadowView.OrthographicSize = (maxX - minX);
 
 		}
+
+		m_pShadowSystem->UpdateShadowMatrices(*this, view, lightDirWs);
 
 		// ------------------------------------------------------------
 		// Shadow frustum (for culling etc.)
@@ -966,17 +943,34 @@ namespace shz
 			// Texture DSV write (single depth)
 			// -------------------------------------------------------------
 			else if (a.Kind == RENDER_RESOURCE_KIND_TEXTURE &&
-				// bWrite && TODO: Read만 해도 DSV 생성하도록 해놈. 더 근본적인 해결?
 				(a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_DSV_READ) &&
 				a.TextureViewType == TEXTURE_VIEW_DEPTH_STENCIL)
 			{
 				ASSERT(!bHasDepth, "Multiple depth attachments are not supported yet.");
 
-				ITexture* pTex = m_pRegistry->GetTexture(a.ResourceId);
-				ASSERT(pTex, "DSV texture not found.");
+				ITexture* pTex = nullptr;
+				ITextureView* pDSV = nullptr;
 
-				ITextureView* pDSV = m_pRegistry->GetTextureDSV(a.ResourceId);
-				ASSERT(pDSV, "DSV view not found.");
+				// NEW: a.ResourceId는 "textureId"일 수도 있고, "viewId"일 수도 있다.
+				// 1) viewId 경로 (CSM slice DSV)
+				if (m_pRegistry->HasTextureView(a.ResourceId))
+				{
+					pDSV = m_pRegistry->GetTextureDSVView(a.ResourceId);
+					ASSERT(pDSV, "DSV view not found (named view).");
+
+					// 뷰에서 원본 텍스처를 얻는다
+					pTex = pDSV->GetTexture();
+					ASSERT(pTex, "DSV view has no texture.");
+				}
+				else
+				{
+					// 2) 기존 호환: textureId 경로 (default DSV)
+					pTex = m_pRegistry->GetTexture(a.ResourceId);
+					ASSERT(pTex, "DSV texture not found.");
+
+					pDSV = m_pRegistry->GetTextureDSV(a.ResourceId);
+					ASSERT(pDSV, "DSV view not found.");
+				}
 
 				const TextureDesc& td = pTex->GetDesc();
 				const TextureViewDesc& vd = pDSV->GetDesc();
@@ -984,7 +978,7 @@ namespace shz
 				const bool bClear = hasClearValue(a.ResourceId);
 
 				RenderPassAttachmentDesc at = {};
-				at.Format = vd.Format; // View format
+				at.Format = vd.Format;
 				at.SampleCount = td.SampleCount;
 
 				at.LoadOp = bClear ? ATTACHMENT_LOAD_OP_CLEAR : ATTACHMENT_LOAD_OP_LOAD;
@@ -1003,7 +997,6 @@ namespace shz
 				depthRef.State = RESOURCE_STATE_DEPTH_WRITE;
 
 				rpItem.StaticFBAttachments.emplace_back(pDSV);
-
 				rpItem.ClearValues.emplace_back(findClearValue(a.ResourceId, /*bDepth*/true));
 
 				bHasDepth = true;
@@ -1118,8 +1111,8 @@ namespace shz
 	}
 
 	// ---------------------------------------------------------------------
-// Resource wrappers
-// ---------------------------------------------------------------------
+	// Resource wrappers
+	// ---------------------------------------------------------------------
 
 	RefCntAutoPtr<ITexture> Renderer::CreateTexture(const TextureDesc& desc, const TextureData* pInitData)
 	{
@@ -1330,6 +1323,7 @@ namespace shz
 
 	void Renderer::AddTextureView(const std::string& textureName, const TextureViewDesc& viewDesc)
 	{
+		ASSERT(m_pRegistry, "Registry is null.");
 		ASSERT(!textureName.empty(), "Name is empty.");
 		AddTextureView(STRING_HASH(textureName), viewDesc);
 	}
@@ -1338,6 +1332,20 @@ namespace shz
 	{
 		ASSERT(m_pRegistry, "Registry is null.");
 		m_pRegistry->CreateTextureView(textureId, viewDesc);
+	}
+
+	void Renderer::AddTextureView(const std::string& textureName, const std::string& viewName, const TextureViewDesc& viewDesc)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		ASSERT(!textureName.empty(), "Texture name is empty.");
+		ASSERT(!viewName.empty(), "View name is empty.");
+		AddTextureView(STRING_HASH(textureName), STRING_HASH(viewName), viewDesc);
+	}
+
+	void Renderer::AddTextureView(uint64 textureId, uint64 viewId, const TextureViewDesc& viewDesc)
+	{
+		ASSERT(m_pRegistry, "Registry is null.");
+		m_pRegistry->CreateTextureView(textureId, viewId, viewDesc);
 	}
 
 	uint64 Renderer::AddBuffer(const std::string& name, const BufferDesc& desc, const BufferData* pInitData)
@@ -1677,6 +1685,7 @@ namespace shz
 		EMaterialPass pass = EMaterialPass::Base;
 		if (renderPassKey == STRING_HASH("Shadow"))
 		{
+			renderPassKey = STRING_HASH("Shadow.Cascade0");
 			pass = EMaterialPass::ShadowDepth;
 			material.SetBufferResource("g_ObjectTable", STRING_HASH("ShadowPassObjectTable"));
 		}
@@ -1967,7 +1976,7 @@ namespace shz
 	// Material templates
 	// ---------------------------------------------------------------------
 
-	void Renderer::RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
+	void Renderer::RegisterMaterialTemplate(const MaterialTemplateCreateInfo& createInfo, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly, bool bRegisterShadow)
 	{
 		ASSERT(createInfo.ShaderStages.size() >= 1, "At least one shader stage must be specified.");
 		ASSERT(createInfo.TemplateName != "", "Material template name is empty.");
@@ -2012,18 +2021,34 @@ namespace shz
 			depthOnlyCreateInfo.TemplateName = name;
 
 			MaterialTemplate depthOnlyTemplate;
-
 			macros.AddShaderMacro("DEPTH_ONLY", 1);
-
 			depthOnlyCreateInfo.MacroArray = macros;
 
 			bResult = depthOnlyTemplate.Initialize(*this, depthOnlyCreateInfo);
 			ASSERT(bResult, "Failed to create material template: %s", name.c_str());
 			m_TemplateLibrary[name] = std::move(depthOnlyTemplate);
 		}
+
+		// Shadow
+		if (bRegisterShadow)
+		{
+			const std::string name = baseCreateInfo.TemplateName + "_Shadow";
+			ASSERT(m_TemplateLibrary.find(name) == m_TemplateLibrary.end(), "Material template already exists: %s", name.c_str());
+
+			MaterialTemplateCreateInfo shadowCreateInfo = baseCreateInfo;
+			shadowCreateInfo.TemplateName = name;
+
+			MaterialTemplate shadowTemplate;
+			macros.AddShaderMacro("SHADOW", 1);
+			shadowCreateInfo.MacroArray = macros;
+
+			bResult = shadowTemplate.Initialize(*this, shadowCreateInfo);
+			ASSERT(bResult, "Failed to create material template: %s", name.c_str());
+			m_TemplateLibrary[name] = std::move(shadowTemplate);
+		}
 	}
 
-	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
+	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& psPath, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly, bool bRegisterShadow)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -2040,10 +2065,10 @@ namespace shz
 		psDesc.EntryPoint = "main";
 		createInfo.ShaderStages.push_back(psDesc);
 
-		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly);
+		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly, bRegisterShadow);
 	}
 
-	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly)
+	void Renderer::RegisterMaterialTemplate(const std::string& name, const std::string& vsPath, const std::string& vsEntry, const std::string& psPath, const std::string& psEntry, MATERIAL_BLEND_MODE blendMode, bool bRegisterDepthOnly, bool bRegisterShadow)
 	{
 		MaterialTemplateCreateInfo createInfo = {};
 		createInfo.TemplateName = name;
@@ -2060,7 +2085,7 @@ namespace shz
 		psDesc.EntryPoint = psEntry;
 		createInfo.ShaderStages.push_back(psDesc);
 
-		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly);
+		RegisterMaterialTemplate(createInfo, blendMode, bRegisterDepthOnly, bRegisterShadow);
 	}
 
 	const MaterialTemplate& Renderer::GetMaterialTemplate(const std::string& name) const

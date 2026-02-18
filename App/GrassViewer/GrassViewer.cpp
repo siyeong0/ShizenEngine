@@ -279,7 +279,6 @@ namespace shz
 			m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
 			m_pDeferredSystem = std::make_unique<DeferredSystem>();
 			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
-			m_pShadowSystem = std::make_unique<ShadowSystem>();
 			m_pInteractionSystem = std::make_unique<InteractionSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
 
@@ -406,7 +405,6 @@ namespace shz
 
 			m_pDeferredSystem->InstallPasses(*m_pRenderer);
 			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
-			m_pShadowSystem->InstallPasses(*m_pRenderer);
 			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
 			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pIndirectArgsSystem, *m_pInteractionSystem);

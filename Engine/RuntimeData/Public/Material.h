@@ -245,6 +245,9 @@ namespace shz
 		std::string m_DepthOnlyTemplateName = {};
 		const MaterialTemplate& m_DepthOnlyTemplate;
 
+		std::string m_ShadowTemplateName = {};
+		const MaterialTemplate& m_ShadowTemplate;
+
 		// Minimal options
 		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
