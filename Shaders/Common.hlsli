@@ -280,31 +280,46 @@ SamplerState g_LinearClampSampler;
 SamplerState g_PointWrapSampler;
 SamplerState g_PointClampSampler;
 
+// -----------------------------------------------------------------------------
+// Helpers: Cascade accessors (NO ARRAYS IN CB)
+// -----------------------------------------------------------------------------
 static CascadeAttribs GetCascadeAttribs(uint idx)
 {
-    // NOTE: no arrays in CB -> switch
-    switch (idx)
-    {
-    default:
-    case 0: return g_ShadowAttribs.Cascades0;
-    case 1: return g_ShadowAttribs.Cascades1;
-    case 2: return g_ShadowAttribs.Cascades2;
-    case 3: return g_ShadowAttribs.Cascades3;
-    case 4: return g_ShadowAttribs.Cascades4;
-    case 5: return g_ShadowAttribs.Cascades5;
-    case 6: return g_ShadowAttribs.Cascades6;
-    case 7: return g_ShadowAttribs.Cascades7;
-    }
+	switch (idx)
+	{
+		default:
+		case 0:
+			return g_ShadowAttribs.Cascades0;
+		case 1:
+			return g_ShadowAttribs.Cascades1;
+		case 2:
+			return g_ShadowAttribs.Cascades2;
+		case 3:
+			return g_ShadowAttribs.Cascades3;
+		case 4:
+			return g_ShadowAttribs.Cascades4;
+		case 5:
+			return g_ShadowAttribs.Cascades5;
+		case 6:
+			return g_ShadowAttribs.Cascades6;
+		case 7:
+			return g_ShadowAttribs.Cascades7;
+	}
 }
 
+// Build shadow clip (per-cascade frustum-fit)
+// Output:
+//  clip.xy: [-1..1]
+//  clip.z : [0..1] (D3D depth)
+//  clip.w : 1
 static float4 BuildShadowClipFromWorldPos(float3 worldPos)
 {
-    const uint c = g_ShadowCB.CascadeIndex;
+	const uint c = g_ShadowCB.CascadeIndex;
 
-	const float3 posLS = mul(float4(worldPos, 1.0), g_ShadowAttribs.WorldToLightView).xyz;
+	const CascadeAttribs C = GetCascadeAttribs(c);
 
-    const CascadeAttribs C = GetCascadeAttribs(c);
-    const float3 posProj = posLS * C.LightSpaceScale.xyz + C.LightSpaceScaledBias.xyz;
+	const float3 posLS = mul(float4(worldPos, 1.0), C.WorldToLightView).xyz;
+	const float3 posProj = posLS * C.LightSpaceScale.xyz + C.LightSpaceScaledBias.xyz;
 
 	return float4(posProj.xy, posProj.z, 1.0);
 }

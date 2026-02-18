@@ -1,5 +1,3 @@
-// Engine/RenderSystem/Public/ShadowSystem.h
-
 #pragma once
 #include <array>
 #include <vector>
@@ -13,80 +11,91 @@
 
 namespace shz
 {
-	namespace hlsl
-	{
+    namespace hlsl
+    {
 #include "Shaders/HLSL_Structures.hlsli"
-	}
+    }
 
-	class Renderer;
-	struct View;
+    class Renderer;
+    struct View;
 
-	class ShadowSystem final
-	{
-	public:
-		struct CreateInfo final
-		{
-			uint32 ShadowMapResolution = 4096;
-			uint32 NumCascades = 4;
+    class ShadowSystem final
+    {
+    public:
+        struct CreateInfo final
+        {
+            uint32 ShadowMapResolution = 4096;
+            uint32 NumCascades = 4;
 
-			bool  SnapCascades = true;
-			bool  StabilizeExtents = true;
-			bool  EqualizeExtents = true;
-			float PartitioningFactor = 0.95f;
+            // Frustum partition
+            float PartitioningFactor = 0.95f;  // lambda (0=linear,1=log)
+            float CascadeTransitionRegion = 0.10f;
 
-			float CascadeTransitionRegion = 0.1f;
+            // Stabilization
+            bool  SnapCascades = true;         // texel snapping in light-space
+            bool  QuantizeExtents = true;      // extent -> texel multiple
+            bool  EqualizeExtents = true;      // force square extents for XY
 
-			float ReceiverPlaneDepthBiasClamp = 0.02f;
-			float FixedDepthBias = 0.0005f;
+            float ZPadding = 20.0f;            // push zn/zf by padding (light-space)
 
-			int   FixedFilterSize = 5;
-		};
+            // Bias / PCF
+            float ReceiverPlaneDepthBiasClamp = 0.02f;
+            float FixedDepthBias = 0.0005f;
+            int   FixedFilterSize = 5;
+        };
 
-		ShadowSystem() = default;
-		ShadowSystem(const ShadowSystem&) = delete;
-		ShadowSystem& operator=(const ShadowSystem&) = delete;
-		~ShadowSystem() = default;
+        ShadowSystem() = default;
+        ShadowSystem(const ShadowSystem&) = delete;
+        ShadowSystem& operator=(const ShadowSystem&) = delete;
+        ~ShadowSystem() = default;
 
-		void Initialize(Renderer& renderer, const CreateInfo& ci);
-		void Shutdown();
+        void Initialize(Renderer& renderer, const CreateInfo& ci);
+        void Shutdown();
 
-		void UpdateShadowMatrices(Renderer& renderer, const View& mainView, const float3& lightDirWs);
-		void InstallPasses(Renderer& renderer);
+        void UpdateShadowMatrices(Renderer& renderer, const View& mainView, const float3& lightDirWs);
+        void InstallPasses(Renderer& renderer);
 
-		uint32 GetNumCascades() const { return m_CI.NumCascades; }
-		uint32 GetResolution()  const { return m_CI.ShadowMapResolution; }
+        uint32 GetNumCascades() const { return m_CI.NumCascades; }
+        uint32 GetResolution()  const { return m_CI.ShadowMapResolution; }
 
-	private:
-		static constexpr uint32 kMaxCascades = 8;
+    private:
+        static constexpr uint32 kMaxCascades = 8;
 
-		// (kept for compatibility; no longer used to build WorldToLightView)
-		static void BuildLightViewBasis(const float3& lightDirWs, float3& X, float3& Y, float3& Z);
+        static void BuildLightViewBasis(const float3& lightDirWs, float3& X, float3& Y, float3& Z);
 
-		static void GetFrustumMinimumBoundingSphere(
-			float proj11, float proj22,
-			float nearZ, float farZ,
-			float3& outCenterView,
-			float& outRadius);
+        static hlsl::CascadeAttribs& GetCascadeRef(hlsl::ShadowMapAttribs& A, uint32 idx);
+        static void SetCascadeCamSpaceZEnd(hlsl::ShadowMapAttribs& A, uint32 idx, float z);
 
-		void DistributeCascades(
-			const Matrix4x4& cameraView,
-			const Matrix4x4& cameraProj,
-			const Matrix4x4& cameraWorld,
-			const float3& lightDirWs);
+        static void ComputeCascadeSplits(
+            float camNear,
+            float camFar,
+            uint32 numCascades,
+            float lambda,
+            float* outSplitZ); // length=numCascades (endZ each)
 
-		static hlsl::CascadeAttribs& GetCascadeRef(hlsl::ShadowMapAttribs& A, uint32 idx);
-		static void SetCascadeCamSpaceZEnd(hlsl::ShadowMapAttribs& A, uint32 idx, float z);
+        static void BuildFrustumCornersWS_ForZRange(
+            const Matrix4x4& cameraWorld,
+            float tanHalfFovY,
+            float aspect,
+            float zNear,
+            float zFar,
+            float3 outCornersWS[8]);
 
-	private:
-		CreateInfo m_CI = {};
+        void BuildCascade_FrustumFitStabilized(
+            uint32 cascadeIdx,
+            const float3 frustumCornersWS[8],
+            const float3& lightDirWs,
+            float shadowMapRes);
 
-		uint64 m_ShadowMapTexId = 0;
-		uint64 m_ShadowMapSRVId = 0;
-		std::array<uint64, kMaxCascades> m_ShadowMapCascadeDSVIds = {};
+    private:
+        CreateInfo m_CI = {};
 
-		uint64 m_ShadowAttribsCBId = 0;
+        uint64 m_ShadowMapTexId = 0;
+        uint64 m_ShadowMapSRVId = 0;
+        std::array<uint64, kMaxCascades> m_ShadowMapCascadeDSVIds = {};
 
-		// HLSL struct 그대로 CPU에서도 사용
-		hlsl::ShadowMapAttribs m_ShadowAttribs = {};
-	};
+        uint64 m_ShadowAttribsCBId = 0;
+
+        hlsl::ShadowMapAttribs m_ShadowAttribs = {};
+    };
 } // namespace shz

@@ -30,9 +30,7 @@ struct FrameConstants
 	float3 LightColor;
 	float LightIntensity;
 
-    // NOTE:
-    // This can remain as "LightViewProj" for legacy lighting shading usage,
-    // but shadow pass MUST NOT rely on this for CSM mapping.
+    // Legacy only. Shadow pass must rely on ShadowMapAttribs cascades.
 	float4x4 LightViewProj;
 };
 
@@ -50,11 +48,17 @@ struct ViewConstants
 	float4x4 PrevViewProj;
 };
 
+// ------------------------------------------------------------
+// CascadeAttribs
+// - NO ARRAYS inside CB -> this struct is embedded as Cascades0..7
+// - Frustum-fit requires per-cascade light view (translation differs)
+// ------------------------------------------------------------
 struct CascadeAttribs
 {
+	float4x4 WorldToLightView; // per-cascade world -> light view
 	float4 LightSpaceScale; // xyz
 	float4 LightSpaceScaledBias; // xyz
-	float4 StartEndZ; // x=start, y=end (camera view-space)
+	float4 StartEndZ; // x=start, y=end (camera view-space +z)
 	float4 MarginProjSpace; // xyzw
 };
 
@@ -63,7 +67,6 @@ struct CascadeAttribs
 // ------------------------------------------------------------
 struct ShadowMapAttribs
 {
-	float4x4 WorldToLightView; // world -> light view space
 	float4 ShadowMapDim; // xy = size, zw = inv size
 
     // replaces float4 CascadeCamSpaceZEnd[2]
@@ -179,7 +182,7 @@ struct IndirectArgsHeader
 };
 
 // ----------------------------------------------
-// Grass instance
+// Grass instances
 // ----------------------------------------------
 struct GrassMeshInstance
 {

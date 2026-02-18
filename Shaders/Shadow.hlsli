@@ -3,42 +3,30 @@
 #ifndef SHZ_SHADOWS_HLSLI
 #define SHZ_SHADOWS_HLSLI
 
-// ============================================================================
-// NOTE (CB ARRAY 제거 버전)
-// - HLSL_Structures.hlsli에서:
-//   * ShadowMapAttribs.CascadeCamSpaceZEnd[2]  -> CascadeCamSpaceZEnd0 / 1
-//   * ShadowMapAttribs.Cascades[8]            -> Cascades0..7
-// 로 바뀐 것에 맞춰 이 파일도 전부 교체.
-// ============================================================================
-
 // -----------------------------------------------------------------------------
-// NDC -> UV / Depth (통일)
+// NDC -> UV / Depth
 // -----------------------------------------------------------------------------
 static float2 NdcXY_To_UV(float2 ndcXY)
 {
 	float2 uv = ndcXY * 0.5 + 0.5;
-	uv.y = 1.0 - uv.y; // D3D UV convention (top-left)
+	uv.y = 1.0 - uv.y;
 	return uv;
 }
-
 static float NdcZ_To_Depth(float ndcZ)
 {
-	// D3D depth: [0..1]
 	return ndcZ;
 }
 
-// Unified conversion vector used for ddx/ddy mapping:
-//   u =  0.5*ndc.x + 0.5
-//   v = -0.5*ndc.y + 0.5
-//   d =  1.0*ndc.z
+// u =  0.5*ndc.x + 0.5
+// v = -0.5*ndc.y + 0.5
+// d =  1.0*ndc.z
 static const float3 NDC_TO_UVD = float3(0.5, -0.5, 1.0);
 
 // -----------------------------------------------------------------------------
 // ShadowMapAttribs accessors (NO ARRAYS IN CB)
 // -----------------------------------------------------------------------------
-static CascadeAttribs GetCascadeAttribs(int idx)
+static CascadeAttribs GetCascadeAttribs_i(int idx)
 {
-	// NOTE: idx is expected 0..7
 	switch (idx)
 	{
 		default:
@@ -63,8 +51,6 @@ static CascadeAttribs GetCascadeAttribs(int idx)
 
 static float GetCascadeEndZ(int idx)
 {
-	// CascadeCamSpaceZEnd0: x,y,z,w => 0..3
-	// CascadeCamSpaceZEnd1: x,y,z,w => 4..7
 	switch (idx)
 	{
 		default:
@@ -76,7 +62,6 @@ static float GetCascadeEndZ(int idx)
 			return g_ShadowAttribs.CascadeCamSpaceZEnd0.z;
 		case 3:
 			return g_ShadowAttribs.CascadeCamSpaceZEnd0.w;
-
 		case 4:
 			return g_ShadowAttribs.CascadeCamSpaceZEnd1.x;
 		case 5:
@@ -88,17 +73,15 @@ static float GetCascadeEndZ(int idx)
 	}
 }
 
-
 // -----------------------------------------------------------------------------
 // Distance to cascade margin (Diligent-like)
-// posInCascadeProjSpace.xy in [-1..1], z in [0..1]
+// posProj.xy in [-1..1], z in [0..1]
 // -----------------------------------------------------------------------------
 float GetDistanceToCascadeMargin(float3 posInCascadeProjSpace, float4 marginProjSpace)
 {
 	float4 distToEdges;
 	distToEdges.xy = 1.0.xx - marginProjSpace.xy - abs(posInCascadeProjSpace.xy);
 
-	// z range is [0..1]
 	const float ZScale = 2.0 / (1.0 - 0.0);
 	distToEdges.z = (posInCascadeProjSpace.z - (0.0 + marginProjSpace.z)) * ZScale;
 	distToEdges.w = (1.0 - marginProjSpace.w - posInCascadeProjSpace.z) * ZScale;
@@ -117,34 +100,34 @@ struct CascadeSamplingInfo
 
 	float3 LightSpaceScale;
 	float MinDistToMargin;
+
+	float4x4 WorldToLightView;
 };
 
-CascadeSamplingInfo GetCascadeSamplingInfo(float3 posInLightViewSpace, int cascadeIdx)
+CascadeSamplingInfo GetCascadeSamplingInfo(float3 worldPos, float cameraViewSpaceZ, int cascadeIdx)
 {
-	CascadeAttribs C = GetCascadeAttribs(cascadeIdx);
+	CascadeAttribs C = GetCascadeAttribs_i(cascadeIdx);
 
-	const float3 lightSpaceScale = C.LightSpaceScale.xyz;
-	const float3 posInCascadeProjSpace = posInLightViewSpace * lightSpaceScale + C.LightSpaceScaledBias.xyz;
+	float3 posLS = mul(float4(worldPos, 1.0), C.WorldToLightView).xyz;
+	float3 posProj = posLS * C.LightSpaceScale.xyz + C.LightSpaceScaledBias.xyz;
 
 	CascadeSamplingInfo S;
 	S.CascadeIdx = cascadeIdx;
+	S.UV = NdcXY_To_UV(posProj.xy);
+	S.Depth = NdcZ_To_Depth(posProj.z);
 
-	S.UV = NdcXY_To_UV(posInCascadeProjSpace.xy);
-	S.Depth = NdcZ_To_Depth(posInCascadeProjSpace.z);
-
-	S.LightSpaceScale = lightSpaceScale;
-	S.MinDistToMargin = GetDistanceToCascadeMargin(posInCascadeProjSpace, C.MarginProjSpace);
+	S.LightSpaceScale = C.LightSpaceScale.xyz;
+	S.MinDistToMargin = GetDistanceToCascadeMargin(posProj, C.MarginProjSpace);
+	S.WorldToLightView = C.WorldToLightView;
 	return S;
 }
 
 // -----------------------------------------------------------------------------
 // Fast cascade selection using camera view-space Z ends (NO ARRAYS)
 // -----------------------------------------------------------------------------
-CascadeSamplingInfo FindCascade(float3 posInLightViewSpace, float cameraViewSpaceZ)
+int FindCascadeIndex(float cameraViewSpaceZ)
 {
-	CascadeSamplingInfo S;
 	int idx = 0;
-
 	if (GetCascadeEndZ(0) < cameraViewSpaceZ)
 		idx++;
 	if (GetCascadeEndZ(1) < cameraViewSpaceZ)
@@ -161,35 +144,26 @@ CascadeSamplingInfo FindCascade(float3 posInLightViewSpace, float cameraViewSpac
 		idx++;
 	if (GetCascadeEndZ(7) < cameraViewSpaceZ)
 		idx++;
-
-	if (idx < g_ShadowAttribs.NumCascades)
-		S = GetCascadeSamplingInfo(posInLightViewSpace, idx);
-
-	S.CascadeIdx = idx;
-	return S;
+	return idx;
 }
 
-
 // -----------------------------------------------------------------------------
-// Next cascade blend amount (transition region + margin safety)
+// Next cascade blend amount
 // -----------------------------------------------------------------------------
 float GetNextCascadeBlendAmount(
-	float cameraViewSpaceZ,
-	CascadeSamplingInfo Cur,
-	CascadeSamplingInfo Next)
+    float cameraViewSpaceZ,
+    CascadeSamplingInfo Cur,
+    CascadeSamplingInfo Next)
 {
-	CascadeAttribs CurC = GetCascadeAttribs(Cur.CascadeIdx);
+	CascadeAttribs CurC = GetCascadeAttribs_i(Cur.CascadeIdx);
 	float4 startEndZ = CurC.StartEndZ;
 
 	float distToTransitionEdge =
-		(startEndZ.y - cameraViewSpaceZ) / max(startEndZ.y - startEndZ.x, 1e-6);
+        (startEndZ.y - cameraViewSpaceZ) / max(startEndZ.y - startEndZ.x, 1e-6);
 
-	// include margin so we don't blend from/to outside area
 	distToTransitionEdge = max(distToTransitionEdge, Cur.MinDistToMargin);
 
 	float a = saturate(1.0 - distToTransitionEdge / max(g_ShadowAttribs.CascadeTransitionRegion, 1e-6));
-
-	// next margin safety
 	a *= saturate(Next.MinDistToMargin / 0.01);
 	return a;
 }
@@ -209,69 +183,62 @@ float2 ComputeReceiverPlaneDepthBias(float3 ShadowUVDepthDX, float3 ShadowUVDept
 }
 
 // -----------------------------------------------------------------------------
-// Fixed 5x5 PCF (comparison sampler)
-// g_ShadowAttribs.ShadowMapDim.zw must be texel size (1/width, 1/height)
+// Fixed 5x5 PCF
 // -----------------------------------------------------------------------------
-float FilterShadowFixedPCF_5x5(
-	float2 uv,
-	int cascadeIdx,
-	float depth,
-	float2 depthSlopeScaledBiasUV)
+float FilterShadowFixedPCF_5x5(float2 uv, int cascadeIdx, float depth, float2 depthSlopeScaledBiasUV)
 {
 	float2 texel = g_ShadowAttribs.ShadowMapDim.zw;
 
 	float sum = 0.0;
-	[unroll]
+    [unroll]
 	for (int y = -2; y <= 2; ++y)
 	{
-		[unroll]
+        [unroll]
 		for (int x = -2; x <= 2; ++x)
 		{
 			float2 duv = float2(x, y) * texel + depthSlopeScaledBiasUV;
 			sum += g_ShadowMapArray.SampleCmpLevelZero(
-				g_ShadowCmpSampler,
-				float3(uv + duv, cascadeIdx),
-				depth);
+                g_ShadowCmpSampler,
+                float3(uv + duv, cascadeIdx),
+                depth);
 		}
 	}
 	return sum / 25.0;
 }
 
 // -----------------------------------------------------------------------------
-// Filter a single cascade
+// Filter a single cascade (per-cascade WorldToLightView for ddx/ddy too)
 // -----------------------------------------------------------------------------
 float FilterShadowCascade(
-	float3 ddxPosInLightView,
-	float3 ddyPosInLightView,
-	CascadeSamplingInfo S)
+    float3 worldPos,
+    float3 ddxWorldPos,
+    float3 ddyWorldPos,
+    CascadeSamplingInfo S)
 {
-	// ddx/ddy of (U,V,Depth) in texture space.
-	// u =  0.5*ndc.x+0.5, v = -0.5*ndc.y+0.5, depth = ndc.z
-	float3 ddxUVD = ddxPosInLightView * S.LightSpaceScale * NDC_TO_UVD;
-	float3 ddyUVD = ddyPosInLightView * S.LightSpaceScale * NDC_TO_UVD;
+	CascadeAttribs C = GetCascadeAttribs_i(S.CascadeIdx);
+
+	float3 posLS = mul(float4(worldPos, 1.0), C.WorldToLightView).xyz;
+	float3 ddxLS = mul(float4(ddxWorldPos, 0.0), C.WorldToLightView).xyz;
+	float3 ddyLS = mul(float4(ddyWorldPos, 0.0), C.WorldToLightView).xyz;
+
+	float3 ddxUVD = ddxLS * C.LightSpaceScale.xyz * NDC_TO_UVD;
+	float3 ddyUVD = ddyLS * C.LightSpaceScale.xyz * NDC_TO_UVD;
 
 	float2 slopeBias = ComputeReceiverPlaneDepthBias(ddxUVD, ddyUVD);
 
-	// clamp in UV space based on cascade scale (same intent as Diligent)
 	float2 slopeClamp =
-		abs((S.LightSpaceScale.z * NDC_TO_UVD.z) /
-			max(S.LightSpaceScale.xy * NDC_TO_UVD.xy, 1e-6.xx)) *
-		g_ShadowAttribs.ReceiverPlaneDepthBiasClamp;
+        abs((C.LightSpaceScale.z * NDC_TO_UVD.z) /
+            max(C.LightSpaceScale.xy * NDC_TO_UVD.xy, 1e-6.xx)) *
+        g_ShadowAttribs.ReceiverPlaneDepthBiasClamp;
 
 	slopeBias = clamp(slopeBias, -slopeClamp, slopeClamp);
 
-	// convert slope bias to UV units (texels -> UV)
 	slopeBias *= g_ShadowAttribs.ShadowMapDim.zw;
 
-	// depth bias: fractional error from slope + fixed depth bias
 	float fractionalError = dot(abs(slopeBias), 1.0.xx) + g_ShadowAttribs.FixedDepthBias;
 	float depth = S.Depth - fractionalError;
 
-	return FilterShadowFixedPCF_5x5(
-		S.UV,
-		S.CascadeIdx,
-		depth,
-		slopeBias);
+	return FilterShadowFixedPCF_5x5(S.UV, S.CascadeIdx, depth, slopeBias);
 }
 
 // -----------------------------------------------------------------------------
@@ -285,41 +252,36 @@ struct FilteredShadow
 };
 
 // -----------------------------------------------------------------------------
-// Main entry: filter CSM shadow map array
+// Main entry
+// cameraViewSpaceZ: main camera view-space Z (+forward)
 // -----------------------------------------------------------------------------
 FilteredShadow FilterShadowMapCSM(
-	float3 worldPos,
-	float3 ddxWorldPos,
-	float3 ddyWorldPos,
-	float cameraViewSpaceZ,
-	bool filterAcrossCascades)
+    float3 worldPos,
+    float3 ddxWorldPos,
+    float3 ddyWorldPos,
+    float cameraViewSpaceZ,
+    bool filterAcrossCascades)
 {
-	// World -> Light view space
-	float3 posLS = mul(float4(worldPos, 1.0), g_ShadowAttribs.WorldToLightView).xyz;
-	float3 ddxLS = mul(float4(ddxWorldPos, 0.0), g_ShadowAttribs.WorldToLightView).xyz;
-	float3 ddyLS = mul(float4(ddyWorldPos, 0.0), g_ShadowAttribs.WorldToLightView).xyz;
-
-	CascadeSamplingInfo S = FindCascade(posLS, cameraViewSpaceZ);
-
 	FilteredShadow Out;
-	Out.CascadeIdx = S.CascadeIdx;
+	Out.CascadeIdx = FindCascadeIndex(cameraViewSpaceZ);
 	Out.NextCascadeBlend = 0.0;
 	Out.LightAmount = 1.0;
 
-	if (S.CascadeIdx >= g_ShadowAttribs.NumCascades)
+	if (Out.CascadeIdx >= g_ShadowAttribs.NumCascades)
 		return Out;
 
-	Out.LightAmount = FilterShadowCascade(ddxLS, ddyLS, S);
+	CascadeSamplingInfo S = GetCascadeSamplingInfo(worldPos, cameraViewSpaceZ, Out.CascadeIdx);
+	Out.LightAmount = FilterShadowCascade(worldPos, ddxWorldPos, ddyWorldPos, S);
 
-	if (filterAcrossCascades && (S.CascadeIdx + 1 < g_ShadowAttribs.NumCascades))
+	if (filterAcrossCascades && (Out.CascadeIdx + 1 < g_ShadowAttribs.NumCascades))
 	{
-		CascadeSamplingInfo N = GetCascadeSamplingInfo(posLS, S.CascadeIdx + 1);
+		CascadeSamplingInfo N = GetCascadeSamplingInfo(worldPos, cameraViewSpaceZ, Out.CascadeIdx + 1);
 		float a = GetNextCascadeBlendAmount(cameraViewSpaceZ, S, N);
 		Out.NextCascadeBlend = a;
 
 		if (a > 0.0)
 		{
-			float nShadow = FilterShadowCascade(ddxLS, ddyLS, N);
+			float nShadow = FilterShadowCascade(worldPos, ddxWorldPos, ddyWorldPos, N);
 			Out.LightAmount = lerp(Out.LightAmount, nShadow, a);
 		}
 	}
