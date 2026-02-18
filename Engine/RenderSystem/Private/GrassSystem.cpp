@@ -219,6 +219,7 @@ namespace shz
 
 				// LOD0
 				d.bDepthPrepass = false;
+				d.bCastShadow = true;
 				d.pMesh = &gd.pMesh->GetLevel(0);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD0.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD0.MeshId;
@@ -227,6 +228,7 @@ namespace shz
 
 				// LOD1
 				d.bDepthPrepass = false;
+				d.bCastShadow = true;
 				d.pMesh = &gd.pMesh->GetLevel(1);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD1.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD1.MeshId;
@@ -235,6 +237,7 @@ namespace shz
 
 				// LOD2
 				d.bDepthPrepass = false;
+				d.bCastShadow = false;
 				d.pMesh = &gd.pMesh->GetLevel(2);
 				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD2.BaseSlot;
 				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD2.MeshId;

@@ -888,7 +888,7 @@ namespace shz
 		}
 
 		material.SetBlendMode(blendMode);
-		material.SetCullMode(twoSided ? CULL_MODE_NONE : CULL_MODE_BACK);
+		// material.SetCullMode(twoSided ? CULL_MODE_NONE : CULL_MODE_BACK);
 
 		if (blendMode == MATERIAL_BLEND_MODE_TRANSPARENT)
 		{

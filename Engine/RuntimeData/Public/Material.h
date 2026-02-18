@@ -252,7 +252,7 @@ namespace shz
 		MATERIAL_BLEND_MODE m_BlendMode = MATERIAL_BLEND_MODE_OPAQUE;
 
 		// Raster
-		CULL_MODE m_CullMode = CULL_MODE_BACK;
+		CULL_MODE m_CullMode = CULL_MODE_NONE;
 		bool m_bFrontCounterClockwise = true;
 
 		// Depth

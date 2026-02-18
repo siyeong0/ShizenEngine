@@ -22,8 +22,9 @@ struct BaseVSInput
 // ---------------------------------------------------------------------------
 // Jitter toggle
 // ---------------------------------------------------------------------------
-// Helper macro: apply jitter conditionally (expects clip-space float4)
-#if APPLY_JITTER
+#define APPLY_JITTER 1
+
+#ifdef APPLY_JITTER
 #define APPLY_JITTER_TO_CLIP(clipPos)  ApplyTAAJittering((clipPos))
 #else
 #define APPLY_JITTER_TO_CLIP(clipPos)  (clipPos)

@@ -28,6 +28,5 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float3 toneMapped = ToneMapACES(hdrColor);
     
-	// OutColor = float4(toneMapped, 1.0);
-	OutColor = float4(hdrColor, 1.0);
+	OutColor = float4(toneMapped, 1.0);
 }

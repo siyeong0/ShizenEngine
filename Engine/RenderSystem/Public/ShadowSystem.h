@@ -28,7 +28,7 @@ namespace shz
             uint32 NumCascades = 4;
 
             // Frustum partition
-            float PartitioningFactor = 0.95f;  // lambda (0=linear,1=log)
+            float PartitioningFactor = 0.9f;  // lambda (0=linear,1=log)
             float CascadeTransitionRegion = 0.10f;
 
             // Stabilization
@@ -39,8 +39,8 @@ namespace shz
             float ZPadding = 20.0f;            // push zn/zf by padding (light-space)
 
             // Bias / PCF
-            float ReceiverPlaneDepthBiasClamp = 0.02f;
-            float FixedDepthBias = 0.0005f;
+            float ReceiverPlaneDepthBiasClamp = 0.00f;
+            float FixedDepthBias = 0.001f;
             int   FixedFilterSize = 5;
         };
 
@@ -61,8 +61,6 @@ namespace shz
     private:
         static constexpr uint32 kMaxCascades = 8;
 
-        static void BuildLightViewBasis(const float3& lightDirWs, float3& X, float3& Y, float3& Z);
-
         static hlsl::CascadeAttribs& GetCascadeRef(hlsl::ShadowMapAttribs& A, uint32 idx);
         static void SetCascadeCamSpaceZEnd(hlsl::ShadowMapAttribs& A, uint32 idx, float z);
 
@@ -72,14 +70,6 @@ namespace shz
             uint32 numCascades,
             float lambda,
             float* outSplitZ); // length=numCascades (endZ each)
-
-        static void BuildFrustumCornersWS_ForZRange(
-            const Matrix4x4& cameraWorld,
-            float tanHalfFovY,
-            float aspect,
-            float zNear,
-            float zFar,
-            float3 outCornersWS[8]);
 
         void BuildCascade_FrustumFitStabilized(
             uint32 cascadeIdx,

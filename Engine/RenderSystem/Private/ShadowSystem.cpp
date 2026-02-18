@@ -19,17 +19,6 @@ namespace shz
     // ------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------
-    void ShadowSystem::BuildLightViewBasis(const float3& lightDirWs, float3& X, float3& Y, float3& Z)
-    {
-        Z = lightDirWs.Normalized(); // forward (LH)
-
-        float3 up = float3(0, 1, 0);
-        if (Abs(Vector3::Dot(up, Z)) > 0.99f)
-            up = float3(0, 0, 1);
-
-        X = Vector3::Cross(up, Z).Normalized();
-        Y = Vector3::Cross(Z, X).Normalized();
-    }
 
     hlsl::CascadeAttribs& ShadowSystem::GetCascadeRef(hlsl::ShadowMapAttribs& A, uint32 idx)
     {
@@ -83,41 +72,46 @@ namespace shz
         }
     }
 
-    void ShadowSystem::BuildFrustumCornersWS_ForZRange(
+    static void BuildFrustumCornersWS_ForZRange(
         const Matrix4x4& cameraWorld,
-        float tanHalfFovY,
-        float aspect,
+        const Matrix4x4& invProj,
         float zNear,
         float zFar,
         float3 outCornersWS[8])
     {
-        // View-space slice corners (LH, forward +Z)
-        // near plane
-        const float nh = zNear * tanHalfFovY;
-        const float nw = nh * aspect;
-
-        // far plane
-        const float fh = zFar * tanHalfFovY;
-        const float fw = fh * aspect;
-
-        const float3 v[8] =
+        const float2 ndcXY[4] =
         {
-            // near
-            float3(-nw, -nh, zNear),
-            float3(+nw, -nh, zNear),
-            float3(-nw, +nh, zNear),
-            float3(+nw, +nh, zNear),
-
-            // far
-            float3(-fw, -fh, zFar),
-            float3(+fw, -fh, zFar),
-            float3(-fw, +fh, zFar),
-            float3(+fw, +fh, zFar),
+            float2(-1, -1),
+            float2(+1, -1),
+            float2(-1, +1),
+            float2(+1, +1),
         };
 
-        for (int i = 0; i < 8; ++i)
+        float3 dirVS[4]{};
+
+        for (int i = 0; i < 4; ++i)
         {
-            outCornersWS[i] = cameraWorld.TransformPosition(v[i]);
+            // clip (x,y,1,1) -> view
+            const float4 pVS4 = float4(ndcXY[i].x, ndcXY[i].y, 1.0f, 1.0f) * invProj;
+            const float3 pVS = pVS4 / std::max(pVS4.w, 1e-6f);
+
+            // view-space ray direction (camera at origin in VS)
+            dirVS[i] = pVS.Normalized();
+        }
+
+        // Intersect with planes z = zNear/zFar in view-space (LH, +Z forward)
+        for (int i = 0; i < 4; ++i)
+        {
+            const float denom = std::max(dirVS[i].z, 1e-6f);
+
+            const float tN = zNear / denom;
+            const float tF = zFar / denom;
+
+            const float3 pNvs = dirVS[i] * tN;
+            const float3 pFvs = dirVS[i] * tF;
+
+            outCornersWS[i + 0] = cameraWorld.TransformPosition(pNvs); // near 0..3
+            outCornersWS[i + 4] = cameraWorld.TransformPosition(pFvs); // far  4..7
         }
     }
 
@@ -376,19 +370,13 @@ namespace shz
         const Matrix4x4 cameraProj = mainView.ProjMatrix;
         const Matrix4x4 cameraWorld = cameraView.Inversed(); // affine ok
 
-        // Derive fov/aspect from projection (row-vector LH):
-        // proj._m11 = yScale = 1/tan(fovY/2)
-        // proj._m00 = xScale = yScale/aspect  => aspect = yScale/xScale
-        const float yScale = std::max(cameraProj._m11, 1e-6f);
-        const float xScale = std::max(cameraProj._m00, 1e-6f);
-
-        const float tanHalfFovY = 1.0f / yScale;
-        const float aspect = yScale / xScale;
+        const float tanHalfFovY = std::tan(mainView.FieldOfViewY * 0.5f);
+        const float aspect = mainView.AspectRatio;
 
         // Use View near/far if present; otherwise replace here.
-        const float camNear = std::max(mainView.NearPlane, 0.01f);
-        const float camFar = std::max(mainView.FarPlane, camNear + 1.0f);
-
+        const float camNear = mainView.NearPlane;
+        // float camFar = std::max(mainView.FarPlane, camNear + 1.0f);
+        const float camFar = 500.0f;
         // 1) splits
         float zEnds[kMaxCascades]{};
         ComputeCascadeSplits(camNear, camFar, m_CI.NumCascades, m_CI.PartitioningFactor, zEnds);
@@ -403,11 +391,10 @@ namespace shz
             C.StartEndZ = float4(prevEnd, zEnd, 0, 0);
             SetCascadeCamSpaceZEnd(m_ShadowAttribs, c, zEnd);
 
-            // 3) frustum slice corners in WS
-            float3 cornersWS[8]{};
-            BuildFrustumCornersWS_ForZRange(cameraWorld, tanHalfFovY, aspect, prevEnd, zEnd, cornersWS);
+            const Matrix4x4 invProj = cameraProj.Inversed();
 
-            // 4) frustum-fit + stabilization
+            float3 cornersWS[8]{};
+            BuildFrustumCornersWS_ForZRange(cameraWorld, invProj, prevEnd, zEnd, cornersWS);
             BuildCascade_FrustumFitStabilized(c, cornersWS, lightDirWs, (float)m_CI.ShadowMapResolution);
 
             prevEnd = zEnd;
@@ -447,6 +434,15 @@ namespace shz
                 {
                     b.DeclareTextureDSVWrite(dsvId);
                     b.SetClearDepthStencil(dsvId, 1.f, 0);
+
+                    b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectArgsBuffer"));
+                    b.DeclareBufferIndirectArgsRead(STRING_HASH("IndirectDrawCountBuffer"));
+
+                    b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD0"));
+                    b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD1"));
+                    b.DeclareBufferSRVRead(STRING_HASH("GrassInstanceBufferLOD2"));
+
+                    b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLodOffsets"));
                 },
                 [this, c](RenderPassContext& ctx)
                 {
@@ -525,6 +521,61 @@ namespace shz
                         }
 
                         pContext->DrawIndexed(pkt.DrawAttribs);
+                    }
+
+                    for (const DrawIndirectPacket& pkt : ctx.ShadowIndirectPackets)
+                    {
+                        ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
+
+                        if (pLastPSO != pkt.PSO)
+                        {
+                            pLastPSO = pkt.PSO;
+                            pLastSRB = nullptr;
+                            pContext->SetPipelineState(pLastPSO);
+                        }
+
+                        if (pLastSRB != pkt.SRB)
+                        {
+                            pLastSRB = pkt.SRB;
+                            pContext->CommitShaderResources(pLastSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+                        }
+
+                        if (pLastVB != pkt.VertexBuffer)
+                        {
+                            IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
+                            uint64 pOffsets[] = { 0 };
+
+                            pContext->SetVertexBuffers(
+                                0,
+                                1,
+                                ppVertexBuffers,
+                                pOffsets,
+                                RESOURCE_STATE_TRANSITION_MODE_VERIFY,
+                                SET_VERTEX_BUFFERS_FLAG_RESET);
+
+                            pLastVB = pkt.VertexBuffer;
+                        }
+
+                        if (pLastIB != pkt.IndexBuffer)
+                        {
+                            pContext->SetIndexBuffer(pkt.IndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+                            pLastIB = pkt.IndexBuffer;
+                        }
+
+                        DrawIndexedIndirectAttribs dia = pkt.DrawAttribs;
+
+                        {
+                            MapHelper<hlsl::DrawConstants> map(
+                                pContext,
+                                ctx.pRegistry->GetBuffer(STRING_HASH("DRAW_CONSTANTS")),
+                                MAP_WRITE,
+                                MAP_FLAG_DISCARD);
+
+                            hlsl::DrawConstants* dst = map;
+                            dst->StartInstanceLocation = pkt.StartInstanceLocation;
+                        }
+
+                        pContext->DrawIndexedIndirect(dia);
                     }
                 });
         }

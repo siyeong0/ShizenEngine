@@ -379,8 +379,8 @@ namespace shz
 			// ----------------------------
 			// Tunables
 			// ----------------------------
-			const float ShadowHalfExtent = 100.0f;  // XY 반범위(m)
-			const float ShadowDepth = 200.0f;  // 라이트 방향 커버 깊이(m)
+			const float ShadowHalfExtent = 500.0f;  // XY 반범위(m)
+			const float ShadowDepth = 400.0f;  // 라이트 방향 커버 깊이(m)
 			const float PadZ = 30.0f;
 
 			// 월드 높이 범위 (네 월드 스펙)
