@@ -531,8 +531,6 @@ namespace shz
 			const float ShadowVisibleDistance = FixedShadowDepth; // 기존 변수명 재사용
 			const float3 lightPosWs = centerWs - lightForward * ShadowVisibleDistance;
 
-			std::cout << lightPosWs.x << ", " << lightPosWs.y << ", " << lightPosWs.z << std::endl;
-
 			// (3) light view
 			Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
 
