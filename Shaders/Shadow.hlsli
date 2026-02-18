@@ -32,22 +32,22 @@ static float SampleShadow(
 		return 1.0;
 	}
 
-	float depth = shadowUVZ.z;
+	float depth = shadowUVZ.z - 0.0001;
 	
     // Box PCF
 	float sum = 0.0;
     [loop]
-	for (int y = -1; y <= 1; ++y)
+	for (int y = -2; y <= 2; ++y)
 	{
         [loop]
-		for (int x = -1; x <= 1; ++x)
+		for (int x = -2; x <= 2; ++x)
 		{
 			float2 uv = shadowUVZ.xy + float2(x, y) * g_ShadowCB.InvViewportSize;
 			sum += shadowMap.SampleCmpLevelZero(shadowCmpSampler, uv, depth);
 		}
 	}
 
-	return sum / 9.0;
+	return sum / 25.0;
 }
 
 #endif // SHADOW_HLSLI

@@ -370,7 +370,7 @@ namespace shz
 			{
 				gpDesc.RasterizerDesc.DepthBias = 2500;
 				gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f; 
-				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 1.5f;
+				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 4.0f;
 			}
 		}
 
