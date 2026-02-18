@@ -113,7 +113,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 		shadow,
 		g_FrameCB.LightColor,
 		g_FrameCB.LightIntensity,
-		0.15 /*iblScale*/);
+		0.25 /*iblScale*/);
 	
 	OutColor = float4(lit, opacity);
 }
