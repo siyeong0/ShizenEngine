@@ -4,13 +4,13 @@
 Texture2D<float> g_GBufferDepth; // D3D depth 0..1
 Texture2D<float4> g_GBufferNormal; // packed 0..1 (world)
 
-static const float SSS_MAX_DISTANCE_WS = 0.2;
+static const float SSS_MAX_DISTANCE_WS = 0.1;
 static const int SSS_NUM_STEPS = 16;
 
-static const float SSS_DEPTH_BIAS_VZ = 0.002;
+static const float SSS_DEPTH_BIAS_VZ = 0.001;
 static const float SSS_THICKNESS_VZ = 0.05;
 
-static const float SSS_FADE_START_WS = 15.0;
+static const float SSS_FADE_START_WS = 25.0;
 static const float SSS_FADE_END_WS = 45.0;
 
 struct PSInput
@@ -71,7 +71,7 @@ void main(in PSInput PSIn, out float4 OutSSS : SV_TARGET0)
 
     float noise = GetBlueNoiseDither(pix);
     float stepLen = SSS_MAX_DISTANCE_WS / (float) SSS_NUM_STEPS;
-    float3 startWS = ws + (N * 0.01) + (rayDirWS * 0.005);
+    float3 startWS = ws + (N * 0.01) + (rayDirWS * 0.0075);
 
     float hit = 0.0f;
 	[loop]
