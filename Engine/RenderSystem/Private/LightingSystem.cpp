@@ -37,24 +37,19 @@ namespace shz
 			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
-				const uint64 kG0 = STRING_HASH("GBuffer0_Albedo");
-				const uint64 kG1 = STRING_HASH("GBuffer1_Normal");
-				const uint64 kG2 = STRING_HASH("GBuffer2_MRAO");
-				const uint64 kG3 = STRING_HASH("GBuffer3_Emissive");
-				const uint64 kGD = STRING_HASH("GBufferDepth");
-				const uint64 kLighting = STRING_HASH("LightingScene");
-
-				b.DeclareTextureSRVRead(kG0);
-				b.DeclareTextureSRVRead(kG1);
-				b.DeclareTextureSRVRead(kG2);
-				b.DeclareTextureSRVRead(kG3);
-				b.DeclareTextureSRVRead(kGD);
+				b.DeclareTextureSRVRead(STRING_HASH("GBuffer0_Albedo"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBuffer2_MRAO"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBuffer3_Emissive"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 
 				// Shadow map array (existing)
 				b.DeclareTextureSRVRead(STRING_HASH("ShadowMapArray"));
 
-				b.DeclareTextureRTVWrite(kLighting);
-				b.SetClearColor(kLighting, 0.f, 0.f, 0.f, 1.f);
+				b.DeclareTextureSRVRead(STRING_HASH("ScreenSpaceShadow"));
+
+				b.DeclareTextureRTVWrite(STRING_HASH("LightingScene"));
+				b.SetClearColor(STRING_HASH("LightingScene"), 0.f, 0.f, 0.f, 1.f);
 			},
 			[this](RenderPassContext& ctx)
 			{
@@ -74,6 +69,7 @@ namespace shz
 				bindTexture("g_GBuffer2", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer2_MRAO")));
 				bindTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
 				bindTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+				bindTexture("g_ScreenSpaceShadow", ctx.pRegistry->GetTextureSRV(STRING_HASH("ScreenSpaceShadow")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -126,8 +122,7 @@ namespace shz
 					{ SHADER_TYPE_PIXEL, "g_GBuffer2",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					// NOTE: ShadowMapArray는 지금 코드에서 SRB에 직접 바인딩 안 하고 있었는데,
-					// 네 Lighting.psh가 사용한다면 여기에 변수로 추가하고 bindTexture도 추가해야 함.
+					{ SHADER_TYPE_PIXEL, "g_ScreenSpaceShadow", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 
 				psoCi.PSODesc.ResourceLayout.Variables = vars;

@@ -1,4 +1,3 @@
-// LightingPS_Foliage.hlsl
 #include "Common.hlsli"
 #include "PBRLighting.hlsli"
 #include "Shadow.hlsli"
@@ -10,45 +9,14 @@ Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, AlphaCoverage
 Texture2D<float4> g_GBuffer3; // Emissive.rgb, ShadingModel in a (asfloat(model))
 Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 
+// Screen-space shadow (0..1, 1=lit)
+Texture2D<float> g_ScreenSpaceShadow;
+
 struct PSInput
 {
-	float4 Pos : SV_POSITION;
-	float2 UV : TEXCOORD0;
+    float4 Pos : SV_POSITION;
+    float2 UV : TEXCOORD0;
 };
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-static float3 UnpackNormal01(float3 n01)
-{
-	return normalize(n01 * 2.0 - 1.0);
-}
-
-static float3 ReconstructWorldPos(float2 uv, float depth01)
-{
-	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
-	float4 ndc = float4(ndcXY, depth01, 1.0);
-
-	float4 ws = mul(ndc, g_FrameCB.InvViewProj);
-	ws.xyz /= max(ws.w, 1e-6);
-	return ws.xyz;
-}
-
-static float3 ReconstructWorldRayDir(float2 uv)
-{
-	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
-
-	float4 ndcNear = float4(ndcXY, 0.0, 1.0);
-	float4 ndcFar = float4(ndcXY, 1.0, 1.0);
-
-	float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
-	float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
-
-	wsNear.xyz /= max(wsNear.w, 1e-6);
-	wsFar.xyz /= max(wsFar.w, 1e-6);
-
-	return normalize(wsFar.xyz - wsNear.xyz);
-}
 
 // ------------------------------------------------------------
 // Foliage lighting add-on (deferred friendly)
@@ -73,7 +41,6 @@ static float3 EvaluateFoliageAddon(
     float back = saturate(dot(-N, L));
     float backScatter = pow(back, 2.0) * (1.0 - roughness);
 
-    // 등질수록 wrap 더 주기 (너무 어두운 문제 완화)
     float darkSide = 1.0 - NoL;
     float wrapStrength = lerp(0.25, 0.55, darkSide);
     const float backStrength = 0.55;
@@ -92,124 +59,136 @@ static float3 EvaluateFoliageAddon(
     return add * lightColor * lightIntensity;
 }
 
-
+// ------------------------------------------------------------
 // Main
+// ------------------------------------------------------------
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-	float2 uv = PSIn.UV;
+    float2 uv = PSIn.UV;
 
-	float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
+    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
 
-	// Background / sky pixels (no geometry written to GBuffer)
-	if (depth01 >= 0.999999)
-	{
-		float3 dirWS = ReconstructWorldRayDir(uv);
-		float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
-		OutColor = float4(sky, 1.0);
-		return;
-	}
-
-	float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
-	float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
-	float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
-	float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
-
-	float3 baseColor = gb0.rgb;
-	float opacity = gb0.a;
-
-	float3 N = UnpackNormal01(gb1.xyz);
-
-	float metallic = saturate(gb2.x);
-	float roughness = saturate(gb2.y);
-	float ao = saturate(gb2.z);
-
-	float3 emissive = gb3.rgb;
-	uint shadingModel = DecodeShadingModel_U8(gb3.a);
-
-	float3 worldPos = ReconstructWorldPos(uv, depth01);
-
-	float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
-	float3 L = normalize(-g_FrameCB.LightDirWS);
-
-	// Shadow
-	float3 ddxWorldPos = ddx(worldPos);
-	float3 ddyWorldPos = ddy(worldPos);
-
-	float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
-	float cameraViewSpaceZ = viewPos.z;
-	bool filterAcrossCascades = true;
-
-	FilteredShadow sh = FilterShadowMapCSM(
-		worldPos,
-		ddxWorldPos,
-		ddyWorldPos,
-		cameraViewSpaceZ,
-		filterAcrossCascades);
-
-	float shadow = sh.LightAmount;
-
-	// ------------------------------------------------------------
-	// Shading model branching
-	// ------------------------------------------------------------
-	if (shadingModel == DEFAULT_LIT)
-	{
-        float3 lit = Shade(
-			N, V, L,
-			baseColor,
-			metallic,
-			roughness,
-			ao,
-			emissive,
-			shadow,
-			g_FrameCB.LightColor,
-			g_FrameCB.LightIntensity,
-			0.25 /*iblScale*/);
-
-        OutColor = float4(lit, opacity);
+    // Background / sky pixels
+    if (depth01 >= 0.999999)
+    {
+        float3 dirWS = ReconstructWorldRayDir(uv);
+        float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
+        OutColor = float4(sky, 1.0);
         return;
-	}
-	else if (shadingModel == FOLIAGE)
-	{
-		// ---- Foliage parameter fixes ----
-		// Grass/leaves are not metals
-        metallic = 0.0;
+    }
 
-		// Avoid "dead matte" or "wet plastic": clamp into usable range
-        roughness = clamp(roughness, 0.35, 0.85);
+    float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
+    float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
+    float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
+    float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
 
-		// AO tends to over-darken foliage (already geometrically dense)
-        ao = lerp(1.0, ao, 0.35);
-		
-        float coverage = saturate(gb2.w);
-		
-        float iblScale = 0.25;
-        float foliageDirectScale = 0.45;
+    float3 baseColor = gb0.rgb;
+    float opacity = gb0.a;
 
-        float3 lit = Shade_ScaleDirectOnly(
-			N, V, L,
-			baseColor,
-			metallic,
-			roughness,
-			ao,
-			emissive,
-			shadow,
-			g_FrameCB.LightColor,
-			g_FrameCB.LightIntensity,
-			iblScale,
-			foliageDirectScale);
+    float3 N = UnpackNormal01(gb1.xyz);
 
-		// Add foliage-specific transmission / wrap lighting
-        lit += EvaluateFoliageAddon(
-			normalize(N),
-			normalize(V),
-			normalize(L),
-			baseColor,
-			roughness,
-			shadow,
-			g_FrameCB.LightColor,
-			g_FrameCB.LightIntensity);
+    float metallic = saturate(gb2.x);
+    float roughness = saturate(gb2.y);
+    float ao = saturate(gb2.z);
+
+    float3 emissive = gb3.rgb;
+    uint shadingModel = DecodeShadingModel_U8(gb3.a);
+
+    float3 worldPos = ReconstructWorldPos(uv, depth01);
+
+    float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
+    float3 L = normalize(-g_FrameCB.LightDirWS);
+
+    // ------------------------------------------------------------
+    // Shadow (CSM)
+    // ------------------------------------------------------------
+    float3 ddxWorldPos = ddx(worldPos);
+    float3 ddyWorldPos = ddy(worldPos);
+
+    float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
+    float cameraViewSpaceZ = viewPos.z;
+    bool filterAcrossCascades = true;
+
+    FilteredShadow sh = FilterShadowMapCSM(
+        worldPos,
+        ddxWorldPos,
+        ddyWorldPos,
+        cameraViewSpaceZ,
+        filterAcrossCascades);
+
+    float shadowCSM = sh.LightAmount;
+
+    // ------------------------------------------------------------
+    // Screen-space shadow (Contact shadow)
+    // ------------------------------------------------------------
+    float screenShadow = g_ScreenSpaceShadow.Sample(g_LinearClampSampler, uv);
+
+    //OutColor = float4(screenShadow.xxx, 1.0);
+    //return;
+    
+    // Combine: screen shadow only removes light, never adds
+    // (Min()도 가능하지만, 곱이 일반적으로 자연스러움)
+    float shadowFinal = shadowCSM * screenShadow;
+
+    // ------------------------------------------------------------
+    // Shading model branching
+    // ------------------------------------------------------------
+    if (shadingModel == DEFAULT_LIT)
+    {
+        float3 lit = Shade(
+            N, V, L,
+            baseColor,
+            metallic,
+            roughness,
+            ao,
+            emissive,
+            shadowFinal,
+            g_FrameCB.LightColor,
+            g_FrameCB.LightIntensity,
+            0.25 /*iblScale*/);
 
         OutColor = float4(lit, opacity);
         return;
     }
+    else if (shadingModel == FOLIAGE)
+    {
+        // ---- Foliage parameter fixes ----
+        metallic = 0.0;
+        roughness = clamp(roughness, 0.35, 0.85);
+        ao = lerp(1.0, ao, 0.35);
+
+        float coverage = saturate(gb2.w);
+
+        float iblScale = 0.25;
+        float foliageDirectScale = 0.45;
+
+        float3 lit = Shade_ScaleDirectOnly(
+            N, V, L,
+            baseColor,
+            metallic,
+            roughness,
+            ao,
+            emissive,
+            shadowFinal,
+            g_FrameCB.LightColor,
+            g_FrameCB.LightIntensity,
+            iblScale,
+            foliageDirectScale);
+
+        lit += EvaluateFoliageAddon(
+            normalize(N),
+            normalize(V),
+            normalize(L),
+            baseColor,
+            roughness,
+            shadowFinal,
+            g_FrameCB.LightColor,
+            g_FrameCB.LightIntensity);
+
+        OutColor = float4(lit, opacity);
+        return;
+    }
+
+    // Fallback
+    OutColor = float4(baseColor, opacity);
 }

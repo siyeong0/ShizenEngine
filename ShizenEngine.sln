@@ -67,6 +67,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\PBRLighting.hlsli = Shaders\PBRLighting.hlsli
 		Shaders\PBRMaterial.hlsli = Shaders\PBRMaterial.hlsli
 		Shaders\PostCopy.psh = Shaders\PostCopy.psh
+		Shaders\ScreenSpaceShadow.psh = Shaders\ScreenSpaceShadow.psh
 		Shaders\Shadow.hlsli = Shaders\Shadow.hlsli
 		Shaders\TemporalAA.psh = Shaders\TemporalAA.psh
 		Shaders\Terrain.psh = Shaders\Terrain.psh

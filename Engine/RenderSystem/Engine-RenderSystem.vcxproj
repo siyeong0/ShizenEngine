@@ -160,6 +160,7 @@
     <ClInclude Include="Public\InteractionSystem.h" />
     <ClInclude Include="Public\LightingSystem.h" />
     <ClInclude Include="Public\PostProcessSystem.h" />
+    <ClInclude Include="Public\ScreenSpaceShadowSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
     <ClInclude Include="Public\TerrainSystem.h" />
   </ItemGroup>
@@ -178,6 +179,7 @@
     <ClCompile Include="Private\InteractionSystem.cpp" />
     <ClCompile Include="Private\LightingSystem.cpp" />
     <ClCompile Include="Private\PostProcessSystem.cpp" />
+    <ClCompile Include="Private\ScreenSpaceShadowSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
     <ClCompile Include="Private\TerrainSystem.cpp" />
   </ItemGroup>

@@ -196,6 +196,7 @@ namespace shz
 		m_pLightingSystem = std::make_unique<LightingSystem>();
 		m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 		m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
+		m_pScreenSpaceShadowSystem = std::make_unique<ScreenSpaceShadowSystem>();
 
 		m_pDepthPrepassSystem->Initialize(*this);
 		m_pGBufferSystem->Initialize(*this);
@@ -203,6 +204,7 @@ namespace shz
 		m_pLightingSystem->Initialize(*this);
 		m_pPostProcessSystem->Initialize(*this);
 		m_pIndirectArgsSystem->Initialize(*this);
+		m_pScreenSpaceShadowSystem->Initialize(*this);
 
 		m_pDepthPrepassSystem->InstallPasses(*this);
 		m_pGBufferSystem->InstallPasses(*this);
@@ -210,6 +212,7 @@ namespace shz
 		m_pLightingSystem->InstallPasses(*this);
 		m_pPostProcessSystem->InstallPasses(*this);
 		m_pIndirectArgsSystem->InstallPasses(*this);
+		m_pScreenSpaceShadowSystem->InstallPasses(*this);
 
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
@@ -360,6 +363,9 @@ namespace shz
 			frameCB->View = view.ViewMatrix;
 			frameCB->Proj = view.ProjMatrix;
 			frameCB->ViewProj = view.ViewProjMatrix;
+
+			frameCB->InvView = view.ViewMatrix.Inversed();
+			frameCB->InvProj = view.ProjMatrix.Inversed();
 			frameCB->InvViewProj = view.ViewProjMatrix.Inversed();
 
 			frameCB->FrustumPlanesWS[0] = frustumMain.NearPlane;

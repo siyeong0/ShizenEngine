@@ -332,14 +332,14 @@ static float4 BuildShadowClipFromWorldPos(float3 worldPos)
 // ============================================================================
 // Helpers
 // ============================================================================
-float3 UnpackNormalTS(float3 n01)
-{
-	return normalize(n01 * 2.0 - 1.0);
-}
-
 float3 PackNormal01(float3 n)
 {
 	return n * 0.5 + 0.5;
+}
+
+static float3 UnpackNormal01(float3 n01)
+{
+    return normalize(n01 * 2.0 - 1.0);
 }
 
 // Shading model encode/decode for UNORM8 channel
@@ -359,8 +359,38 @@ static uint DecodeShadingModel_U8(float enc)
 //------------------------------------------------------------------------------
 float2 ClipToUV(float4 clip)
 {
-	float2 ndc = clip.xy / max(clip.w, 1e-6); // [-1..1]
-	return ndc * 0.5 + 0.5; // [0..1]
+    float invW = rcp(max(abs(clip.w), 1e-6));
+    float2 ndc = clip.xy * invW; // -1..1
+    float2 uv;
+    uv.x = ndc.x * 0.5 + 0.5;
+    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+    return uv;
+}
+
+float3 ReconstructWorldPos(float2 uv, float depth01)
+{
+    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+    float4 ndc = float4(ndcXY, depth01, 1.0);
+
+    float4 ws = mul(ndc, g_FrameCB.InvViewProj);
+    ws.xyz /= max(ws.w, 1e-6);
+    return ws.xyz;
+}
+
+float3 ReconstructWorldRayDir(float2 uv)
+{
+    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+
+    float4 ndcNear = float4(ndcXY, 0.0, 1.0);
+    float4 ndcFar = float4(ndcXY, 1.0, 1.0);
+
+    float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
+    float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
+
+    wsNear.xyz /= max(wsNear.w, 1e-6);
+    wsFar.xyz /= max(wsFar.w, 1e-6);
+
+    return normalize(wsFar.xyz - wsNear.xyz);
 }
 
 uint2 SVPosToPixel(float4 svPos)

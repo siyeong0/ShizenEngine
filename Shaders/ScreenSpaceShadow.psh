@@ -1,0 +1,171 @@
+#include "Common.hlsli"
+
+
+Texture2D<float> g_GBufferDepth; // D3D depth 0..1
+Texture2D<float4> g_GBufferNormal; // packed 0..1 (world)
+
+
+static const float SSS_MAX_DISTANCE_WS = 0.1f;
+static const int SSS_NUM_STEPS = 16;
+
+static const float SSS_DEPTH_BIAS_VZ = 0.005f; 
+static const float SSS_THICKNESS_VZ = 0.05f;
+
+static const float SSS_FADE_START_WS = 15.0f;
+static const float SSS_FADE_END_WS = 45.0f;
+
+struct PSInput
+{
+	float4 Pos : SV_POSITION;
+	float2 UV : TEXCOORD0;
+};
+
+static float4 WorldToClip(float3 ws)
+{
+	return mul(float4(ws, 1.0f), g_FrameCB.ViewProj);
+}
+
+static float ClipToDepth01(float4 clip)
+{
+	float invW = rcp(max(abs(clip.w), 1e-6f));
+	return clip.z * invW; // D3D depth 0..1
+}
+
+static bool IsInsideScreen(float2 uv)
+{
+	return all(uv >= 0.0f) && all(uv <= 1.0f);
+}
+
+static float Depth01ToViewZ(float depth01)
+{
+	float4 v = mul(float4(0, 0, depth01, 1), g_FrameCB.InvProj);
+	return v.z / max(v.w, 1e-6f);
+}
+
+static float ViewDistanceFade(float3 ws)
+{
+	float d = length(ws - g_FrameCB.CameraPosition);
+	return saturate((SSS_FADE_END_WS - d) / max(SSS_FADE_END_WS - SSS_FADE_START_WS, 1e-3f));
+}
+
+float ComputeScreenSpaceShadow(float2 uv, float3 ws, float3 N, uint2 pix)
+{
+    // 1. 광선 방향 설정 (광원 방향으로 추적)
+    float3 rayDirWS = normalize(-g_FrameCB.LightDirWS);
+
+    // 2. 초기화 및 지터링 (Interleaved Gradient Noise 대용으로 Hash 사용)
+    // 픽셀 좌표를 기반으로 0~1 사이의 랜덤 값을 생성하여 첫 스텝의 위치를 흔듭니다.
+    float noise = float(Hash_u32(pix.x ^ Hash_u32(pix.y)) % 1000) / 1000.0f;
+    float stepLen = SSS_MAX_DISTANCE_WS / (float) SSS_NUM_STEPS;
+    
+    // 3. 시작 지점 Bias (Normal 방향으로 살짝 띄워 셀프 섀도잉 방지)
+    float3 startWS = ws + (N * 0.005f) + (rayDirWS * 0.002f);
+
+    float hit = 0.0f;
+
+    [loop]
+    for (int i = 0; i < SSS_NUM_STEPS; ++i)
+    {
+        // 지터링된 거리 계산
+        float t = (float(i) + noise) * stepLen;
+        float3 pWS = startWS + rayDirWS * t;
+
+        // 월드 좌표를 클립 공간으로
+        float4 clip = mul(float4(pWS, 1.0f), g_FrameCB.ViewProj);
+        
+        // 화면 밖 영역 제외
+        if (clip.w <= 0.0f)
+            continue;
+
+        float2 suv = ClipToUV(clip);
+        if (!IsInsideScreen(suv))
+            break;
+
+        // 현재 광선의 깊이 (ViewZ)
+        float rayDepth01 = ClipToDepth01(clip);
+        float rayVZ = Depth01ToViewZ(rayDepth01);
+
+        // 실제 GBuffer의 깊이 (ViewZ)
+        float sceneDepth01 = g_GBufferDepth.SampleLevel(g_PointClampSampler, suv, 0);
+        
+        // 하늘(Sky)인 경우 무시
+        if (sceneDepth01 >= 0.999999f)
+            continue;
+        
+        float sceneVZ = Depth01ToViewZ(sceneDepth01);
+
+        // 깊이 차이 계산 (카메라 방향에 따라 부호 주의: 일반적으로 ray가 scene보다 커야 뒤에 있음)
+        float dz = rayVZ - sceneVZ;
+
+        // 4. 충돌 판정 (Thickness 로직)
+        // dz > SSS_DEPTH_BIAS_VZ : 광선이 물체 표면보다 뒤에 있음
+        // dz < SSS_THICKNESS_VZ   : 광선이 물체 "내부" 혹은 근처에 있음 (무한한 그림자 방지)
+        
+        float adaptiveThickness = lerp(SSS_THICKNESS_VZ, SSS_THICKNESS_VZ * 0.2f, t / SSS_MAX_DISTANCE_WS);
+        
+        if (dz > SSS_DEPTH_BIAS_VZ && dz < adaptiveThickness)
+        {
+            //// 추가 보정: 법선이 너무 반대 방향이면 가짜 그림자일 확률이 높음 (Backface Culling 개념)
+            float3 sceneN01 = g_GBufferNormal.SampleLevel(g_PointClampSampler, suv, 0).xyz;
+            float3 sceneN = UnpackNormal01(sceneN01);
+            
+            if (dot(sceneN, -rayDirWS) < -0.2f)
+            {
+                continue;
+            }
+            
+            // 히트 지점을 찾았을 때, 더 정밀한 위치를 위해 이진 탐색 수행
+            float prevT = t - stepLen;
+            float midT = t;
+    
+            [unroll(3)] // 3번만 반복해도 정밀도가 대폭 상승함
+            for (int j = 0; j < 3; ++j)
+            {
+                midT = (prevT + t) * 0.5f;
+                float3 pMidWS = startWS + rayDirWS * midT;
+                float4 clipMid = mul(float4(pMidWS, 1.0f), g_FrameCB.ViewProj);
+                float midSceneVZ = Depth01ToViewZ(g_GBufferDepth.SampleLevel(g_PointClampSampler, ClipToUV(clipMid), 0));
+                float midRayVZ = Depth01ToViewZ(ClipToDepth01(clipMid));
+        
+                if (midRayVZ - midSceneVZ > SSS_DEPTH_BIAS_VZ)
+                    t = midT;
+                else
+                    prevT = midT;
+            }
+            hit = 1.0f;
+            break;
+        }
+    }
+
+    // 5. 페이드 처리 (화면 가장자리나 거리 등에 따른 감쇄)
+    float fade = ViewDistanceFade(ws);
+    return lerp(1.0f, 1.0f - hit, fade);
+}
+
+// -----------------------------------------------------------------------------
+// Main
+// -----------------------------------------------------------------------------
+void main(in PSInput PSIn, out float4 OutSSS : SV_TARGET0)
+{
+	float2 uv = PSIn.UV;
+
+	float depth01 = g_GBufferDepth.Sample(g_PointClampSampler, uv);
+
+	// Sky / invalid
+	if (depth01 >= 0.999999f)
+	{
+		OutSSS = float4(1, 1, 1, 1);
+		return;
+	}
+
+	float3 ws = ReconstructWorldPos(uv, depth01);
+
+	float3 n01 = g_GBufferNormal.Sample(g_PointClampSampler, uv).xyz;
+	float3 N = UnpackNormal01(n01);
+
+	uint2 pix = SVPosToPixel(PSIn.Pos);
+
+	float sss = ComputeScreenSpaceShadow(uv, ws, N, pix);
+
+	OutSSS = float4(sss, sss, sss, 1.0f);
+}

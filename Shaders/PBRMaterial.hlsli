@@ -65,7 +65,7 @@ float3 GetNormal(float2 uv, float3 normalWS, float3 tangentWS)
 		float3 T = normalize(tangentWS);
 		float3 B = normalize(cross(N, T));
 
-		float3 nTS = UnpackNormalTS(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
+		float3 nTS = UnpackNormal01(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
 		nTS.xy *= g_NormalScale;
 
 		float3x3 TBN = float3x3(T, B, N);
