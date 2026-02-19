@@ -168,20 +168,124 @@ namespace shz
 				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMeshLevel& mesh)
-					{
-						mesh.RecomputeBounds();
-						const Box& b = mesh.GetBoxBounds();
-						float yScale01 = 1.0f / (b.Max().y - b.Min().y);
-						mesh.ApplyUniformScale(yScale01);
-						mesh.MoveBottomToOrigin(true);
-					};
+				{
+					mesh.RecomputeBounds();
+					const Box& b = mesh.GetBoxBounds();
+					float yScale01 = 1.0f / (b.Max().y - b.Min().y);
+					mesh.ApplyUniformScale(yScale01);
+					mesh.MoveBottomToOrigin(true);
+				};
 
+				//{
+				//	GrassDesc gd = {};
+				//	StaticMesh grassMesh;
+				//	// LOD0 : Mesh
+				//	{
+				//		AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
+				//		const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+				//		StaticMeshLevel grassMeshLevel;
+				//		BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+				//		uniform01(grassMeshLevel);
+				//		for (auto matId : grassMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//			mat.SetCullMode(CULL_MODE_NONE);
+				//		}
+				//		grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
+				//	}
+				//	// LOD1 : Cross-plane
+				//	{
+				//		AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
+				//		const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
+				//		StaticMeshLevel grassCrossMeshLevel;
+				//		BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+				//		uniform01(grassCrossMeshLevel);
+				//		for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//			mat.SetCullMode(CULL_MODE_NONE);
+				//		}
+				//		grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
+				//	}
+				//	// LOD2 : Billboard
+				//	{
+				//		AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
+				//		StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+				//		for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//			mat.SetCullMode(CULL_MODE_NONE);
+				//		}
+				//		grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
+				//	}
+				//	gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+				//	m_pGrassSystem->AddGrassDesc(gd);
+				//}
+
+				//{
+				//	GrassDesc gd = {};
+				//	StaticMesh grassMesh;
+				//	// LOD0 : Mesh
+				//	{
+				//		AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
+				//		const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+				//		StaticMeshLevel grassMeshLevel;
+				//		BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+				//		uniform01(grassMeshLevel);
+				//		for (auto matId : grassMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//		}
+				//		grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
+				//	}
+				//	// LOD1 : Cross-plane
+				//	{
+				//		AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower_cross.fbx");
+				//		const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
+				//		StaticMeshLevel grassCrossMeshLevel;
+				//		BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
+				//		uniform01(grassCrossMeshLevel);
+				//		for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//			mat.SetCullMode(CULL_MODE_NONE);
+				//		}
+				//		grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
+				//	}
+				//	// LOD2 : Billboard
+				//	{
+				//		AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/clips/l.png");
+				//		StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
+				//		for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
+				//		{
+				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+				//			mat.SetCullMode(CULL_MODE_NONE);
+				//		}
+				//		grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
+				//	}
+				//	gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
+				//	m_pGrassSystem->AddGrassDesc(gd);
+				//}
+
+				auto addGrass = [&](const std::string& path)
 				{
 					GrassDesc gd = {};
 					StaticMesh grassMesh;
 					// LOD0 : Mesh
 					{
-						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
+						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
 						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
 						StaticMeshLevel grassMeshLevel;
 						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
@@ -197,7 +301,7 @@ namespace shz
 					}
 					// LOD1 : Cross-plane
 					{
-						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
+						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
 						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
 						StaticMeshLevel grassCrossMeshLevel;
 						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
@@ -226,58 +330,19 @@ namespace shz
 					}
 					gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
 					m_pGrassSystem->AddGrassDesc(gd);
-				}
+				};
 
-				{
-					GrassDesc gd = {};
-					StaticMesh grassMesh;
-					// LOD0 : Mesh
-					{
-						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
-						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-						StaticMeshLevel grassMeshLevel;
-						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-						uniform01(grassMeshLevel);
-						for (auto matId : grassMeshLevel.GetMaterialSlots())
-						{
-							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-						}
-						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
-					}
-					// LOD1 : Cross-plane
-					{
-						AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower_cross.fbx");
-						const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-						StaticMeshLevel grassCrossMeshLevel;
-						BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-						uniform01(grassCrossMeshLevel);
-						for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
-						{
-							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
-							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-							mat.SetCullMode(CULL_MODE_NONE);
-						}
-						grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
-					}
-					// LOD2 : Billboard
-					{
-						AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/clips/l.png");
-						StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-						for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
-						{
-							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
-							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-							mat.SetCullMode(CULL_MODE_NONE);
-						}
-						grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
-					}
-					gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
-					m_pGrassSystem->AddGrassDesc(gd);
-				}
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_A.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_A1.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_B.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_B1.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_C.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_D.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A1.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A2.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A3.fbx");
+				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A4.fbx");
 			}
 
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
@@ -604,38 +669,38 @@ namespace shz
 		// Helpers (lambdas)
 		// -------------------------------------------------------------------------
 		auto loadTexture = [&](const std::string& path) -> const Texture&
-			{
-				AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>(path);
-				return *m_pAssetManager->LoadBlocking(ref);
-			};
+		{
+			AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>(path);
+			return *m_pAssetManager->LoadBlocking(ref);
+		};
 
 		auto getPixelStrideBytes = [&](const Texture& tex) -> uint32
-			{
-				const TEXTURE_FORMAT fmt = tex.GetFormat();
-				const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
+		{
+			const TEXTURE_FORMAT fmt = tex.GetFormat();
+			const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
 
-				// Diligent: ComponentSize = bytes per component, NumComponents = channels
-				const uint32 compSize = a.ComponentSize;
-				const uint32 numComp = (a.NumComponents > 0) ? a.NumComponents : 1;
-				return compSize * numComp;
-			};
+			// Diligent: ComponentSize = bytes per component, NumComponents = channels
+			const uint32 compSize = a.ComponentSize;
+			const uint32 numComp = (a.NumComponents > 0) ? a.NumComponents : 1;
+			return compSize * numComp;
+		};
 
 		auto getMip0 = [&](const Texture& tex) -> const TextureMip&
-			{
-				ASSERT(!tex.GetMips().empty(), "Texture has no mips.");
-				return tex.GetMips()[0];
-			};
+		{
+			ASSERT(!tex.GetMips().empty(), "Texture has no mips.");
+			return tex.GetMips()[0];
+		};
 
 		auto valueToBucket = [&](uint8 value) -> uint32
-			{
-				// 0: >200, 1: >=150, 2: >=100, 3: >=50, 4: >=1, else: skip
-				if (value > 200) return 0;
-				if (value >= 150) return 1;
-				if (value >= 100) return 2;
-				if (value >= 50)  return 3;
-				if (value >= 1)   return 4;
-				return 999;
-			};
+		{
+			// 0: >200, 1: >=150, 2: >=100, 3: >=50, 4: >=1, else: skip
+			if (value > 200) return 0;
+			if (value >= 150) return 1;
+			if (value >= 100) return 2;
+			if (value >= 50)  return 3;
+			if (value >= 1)   return 4;
+			return 999;
+		};
 
 		enum class ETreeSize : uint8
 		{
@@ -648,79 +713,79 @@ namespace shz
 		};
 
 		auto loadTree = [&](const std::string& folderName) -> const StaticMeshRenderData*
+		{
+			std::vector<AssetRef<AssimpAsset>> treeMeshRefs(4);
+			for (uint lod = 0; lod < 4; ++lod)
 			{
-				std::vector<AssetRef<AssimpAsset>> treeMeshRefs(4);
-				for (uint lod = 0; lod < 4; ++lod)
-				{
-					std::string path = std::string("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/") + folderName + "/lod" + std::to_string(lod) + ".fbx";
-					treeMeshRefs[lod] = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
-				}
-				return &m_pRenderer->CreateStaticMeshRenderData(treeMeshRefs);
-			};
+				std::string path = std::string("C:/Dev/ShizenEngine/Assets/Tree/pine_trees/") + folderName + "/lod" + std::to_string(lod) + ".fbx";
+				treeMeshRefs[lod] = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
+			}
+			return &m_pRenderer->CreateStaticMeshRenderData(treeMeshRefs);
+		};
 
 		auto pickSizeByBucket = [&](uint32 bucket, std::mt19937& rng) -> ETreeSize
+		{
+			std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+			const float r = dist01(rng);
+
+			switch (bucket)
 			{
-				std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
-				const float r = dist01(rng);
+			case 0:
+				// Large 25% / Big 30% / Medium 25% / Small 15% / Sapling 5%
+				if (r < 0.25f) return ETreeSize::Large;
+				if (r < 0.55f) return ETreeSize::Big;
+				if (r < 0.80f) return ETreeSize::Medium;
+				if (r < 0.95f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				switch (bucket)
-				{
-				case 0:
-					// Large 25% / Big 30% / Medium 25% / Small 15% / Sapling 5%
-					if (r < 0.25f) return ETreeSize::Large;
-					if (r < 0.55f) return ETreeSize::Big;
-					if (r < 0.80f) return ETreeSize::Medium;
-					if (r < 0.95f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 1:
+				// Large 10% / Big 25% / Medium 40% / Small 20% / Sapling 5%
+				if (r < 0.10f) return ETreeSize::Large;
+				if (r < 0.35f) return ETreeSize::Big;
+				if (r < 0.75f) return ETreeSize::Medium;
+				if (r < 0.95f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 1:
-					// Large 10% / Big 25% / Medium 40% / Small 20% / Sapling 5%
-					if (r < 0.10f) return ETreeSize::Large;
-					if (r < 0.35f) return ETreeSize::Big;
-					if (r < 0.75f) return ETreeSize::Medium;
-					if (r < 0.95f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 2:
+				// Large 5% / Big 10% / Medium 50% / Small 25% / Sapling 10%
+				if (r < 0.05f) return ETreeSize::Large;
+				if (r < 0.15f) return ETreeSize::Big;
+				if (r < 0.65f) return ETreeSize::Medium;
+				if (r < 0.90f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 2:
-					// Large 5% / Big 10% / Medium 50% / Small 25% / Sapling 10%
-					if (r < 0.05f) return ETreeSize::Large;
-					if (r < 0.15f) return ETreeSize::Big;
-					if (r < 0.65f) return ETreeSize::Medium;
-					if (r < 0.90f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 3:
+				// Large 5% / Big 5% / Medium 25% / Small 50% / Sapling 15%
+				if (r < 0.05f) return ETreeSize::Large;
+				if (r < 0.10f) return ETreeSize::Big;
+				if (r < 0.35f) return ETreeSize::Medium;
+				if (r < 0.85f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 3:
-					// Large 5% / Big 5% / Medium 25% / Small 50% / Sapling 15%
-					if (r < 0.05f) return ETreeSize::Large;
-					if (r < 0.10f) return ETreeSize::Big;
-					if (r < 0.35f) return ETreeSize::Medium;
-					if (r < 0.85f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
-
-				case 4:
-					// Large 0% / Big 5% / Medium 15% / Small 30% / Sapling 50%
-					if (r < 0.05f) return ETreeSize::Big;
-					if (r < 0.20f) return ETreeSize::Medium;
-					if (r < 0.50f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
-				default:
-					ASSERT(false, "Invalid bucket value.");
-					return ETreeSize::Medium;
-				}
-			};
+			case 4:
+				// Large 0% / Big 5% / Medium 15% / Small 30% / Sapling 50%
+				if (r < 0.05f) return ETreeSize::Big;
+				if (r < 0.20f) return ETreeSize::Medium;
+				if (r < 0.50f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
+			default:
+				ASSERT(false, "Invalid bucket value.");
+				return ETreeSize::Medium;
+			}
+		};
 
 		auto pickScaleBySize = [&](ETreeSize size, std::mt19937& rng) -> float
+		{
+			switch (size)
 			{
-				switch (size)
-				{
-				case ETreeSize::Large: { std::uniform_real_distribution<float> d(0.90f, 1.15f); return d(rng); }
-				case ETreeSize::Big: { std::uniform_real_distribution<float> d(0.90f, 1.12f); return d(rng); }
-				case ETreeSize::Medium: { std::uniform_real_distribution<float> d(0.90f, 1.10f); return d(rng); }
-				case ETreeSize::Small: { std::uniform_real_distribution<float> d(0.90f, 1.08f); return d(rng); }
-				case ETreeSize::Sapling: { std::uniform_real_distribution<float> d(0.90f, 1.06f); return d(rng); }
-				default: return 1.0f;
-				}
-			};
+			case ETreeSize::Large: { std::uniform_real_distribution<float> d(0.90f, 1.15f); return d(rng); }
+			case ETreeSize::Big: { std::uniform_real_distribution<float> d(0.90f, 1.12f); return d(rng); }
+			case ETreeSize::Medium: { std::uniform_real_distribution<float> d(0.90f, 1.10f); return d(rng); }
+			case ETreeSize::Small: { std::uniform_real_distribution<float> d(0.90f, 1.08f); return d(rng); }
+			case ETreeSize::Sapling: { std::uniform_real_distribution<float> d(0.90f, 1.06f); return d(rng); }
+			default: return 1.0f;
+			}
+		};
 
 		auto addRenderOnlyStaticMeshEntity = [&](
 			const char* name,
@@ -729,27 +794,27 @@ namespace shz
 			const float3& rot,
 			const float3& scl,
 			bool bCastShadow) -> flecs::entity
-			{
-				flecs::entity e = ecs.entity();
-				e.set<CName>({ name });
+		{
+			flecs::entity e = ecs.entity();
+			e.set<CName>({ name });
 
-				CTransform tr = {};
-				tr.Position = pos;
-				tr.Rotation = rot;
-				tr.Scale = scl;
-				e.set<CTransform>(tr);
+			CTransform tr = {};
+			tr.Position = pos;
+			tr.Rotation = rot;
+			tr.Scale = scl;
+			e.set<CTransform>(tr);
 
-				CMeshRenderer mr = {};
-				mr.MeshRef = {};
-				mr.bCastShadow = bCastShadow;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					meshRD,
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					bCastShadow);
-				e.set<CMeshRenderer>(mr);
+			CMeshRenderer mr = {};
+			mr.MeshRef = {};
+			mr.bCastShadow = bCastShadow;
+			mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				meshRD,
+				Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+				bCastShadow);
+			e.set<CMeshRenderer>(mr);
 
-				return e;
-			};
+			return e;
+		};
 
 		// -------------------------------------------------------------------------
 		// Physics Terrain: HeightFieldCollider + Static Rigidbody
