@@ -19,6 +19,8 @@ namespace shz
 		PostProcessSystem& operator=(const PostProcessSystem&) = delete;
 		~PostProcessSystem() = default;
 
+		void Initialize(Renderer& renderer);
+
 		void InstallPasses(Renderer& renderer);
 
 	private:

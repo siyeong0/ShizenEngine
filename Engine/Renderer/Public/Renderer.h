@@ -32,6 +32,13 @@
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 
+#include "Engine/RenderSystem/Public/DepthPrepassSystem.h"
+#include "Engine/RenderSystem/Public/GBufferSystem.h"
+#include "Engine/RenderSystem/Public/LightingSystem.h"
+#include "Engine/RenderSystem/Public/ForwardSystem.h"
+#include "Engine/RenderSystem/Public/PostProcessSystem.h"
+#include "Engine/RenderSystem/Public/InteractionSystem.h"
+#include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 
 namespace shz
@@ -149,6 +156,13 @@ namespace shz
 			std::function<void(RenderPassContext&)> endLambda,
 			std::function<void()> onCreated = {});
 
+		DepthPrepassSystem* GetDepthPrepassSystem() { return m_pDepthPrepassSystem.get(); }
+		GBufferSystem* GetGBufferSystem() { return m_pGBufferSystem.get(); }
+		LightingSystem* GetLightingSystem() { return m_pLightingSystem.get(); }
+		PostProcessSystem* GetPostProcessSystem() { return m_pPostProcessSystem.get(); }
+		IndirectArgsSystem* GetIndirectArgsSystem() { return m_pIndirectArgsSystem.get(); }
+		ShadowSystem* GetShadowSystem() { return m_pShadowSystem.get(); }
+
 		// 
 		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		RefCntAutoPtr<ITexture> CreateTexture(const AssetRef<Texture>& assetRef);
@@ -248,6 +262,11 @@ namespace shz
 
 		void UpdateViewConstantBuffer(const View& view);
 
+		uint32 GetWidth() const { return m_Width; }
+		uint32 GetHeight() const { return m_Height; }
+
+		TEXTURE_FORMAT GetSwapChainFormat() const { return m_pSwapChain->GetDesc().ColorBufferFormat; }
+
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
 
@@ -269,6 +288,11 @@ namespace shz
 		std::vector<RefCntAutoPtr<IDeviceContext>> m_pDeferredContexts;
 		RefCntAutoPtr<ISwapChain> m_pSwapChain;
 
+		std::unique_ptr<DepthPrepassSystem> m_pDepthPrepassSystem;
+		std::unique_ptr<GBufferSystem> m_pGBufferSystem;
+		std::unique_ptr<LightingSystem> m_pLightingSystem;
+		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
+		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 		std::unique_ptr<ShadowSystem> m_pShadowSystem;
 
 		AssetManager* m_pAssetManager = nullptr;

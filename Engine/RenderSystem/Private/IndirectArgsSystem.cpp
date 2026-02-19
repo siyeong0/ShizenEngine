@@ -63,6 +63,11 @@ namespace shz
         return false;
     }
 
+    void IndirectArgsSystem::Initialize(Renderer& renderer)
+    {
+
+    }
+
     void IndirectArgsSystem::InstallPasses(Renderer& renderer)
     {
         // ---------------------------------------------------------------------

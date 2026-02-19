@@ -35,10 +35,11 @@ namespace shz
         GrassSystem(const GrassSystem&) = delete;
         GrassSystem& operator=(const GrassSystem&) = delete;
 
+        void Initialize(Renderer& renderer);
+
         void InstallPasses(
             Renderer& renderer,
             RenderScene& scene,
-            IndirectArgsSystem& indirect,
             const InteractionSystem& interaction);
 
         // -----------------------------------------------------------------

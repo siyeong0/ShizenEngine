@@ -21,7 +21,7 @@
     <ClInclude Include="Public\ShadowSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Public\DeferredSystem.h">
+    <ClInclude Include="Public\GBufferSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Public\ForwardSystem.h">
@@ -45,6 +45,9 @@
     <ClInclude Include="Public\DepthPrepassSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Public\LightingSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -53,7 +56,7 @@
     <ClCompile Include="Private\ShadowSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Private\DeferredSystem.cpp">
+    <ClCompile Include="Private\GBufferSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\ForwardSystem.cpp">
@@ -75,6 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Private\DepthPrepassSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\LightingSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

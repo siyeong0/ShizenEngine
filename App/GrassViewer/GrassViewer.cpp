@@ -15,11 +15,6 @@
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 #include "Engine/AssetManager/Public/AssimpImporter.h"
 
-#include "Engine/RenderSystem/Public/DeferredSystem.h"
-#include "Engine/RenderSystem/Public/ForwardSystem.h"
-#include "Engine/RenderSystem/Public/ShadowSystem.h"
-#include "Engine/RenderSystem/Public/PostProcessSystem.h"
-
 namespace shz
 {
 	namespace hlsl
@@ -119,124 +114,6 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
-		// Create common resources for passes
-		// -----------------------------------------------------------------
-		{
-			// GBuffer textures
-			static constexpr uint32 NUM_GBUFFERS = 4;
-			{
-				auto createGBufferTextureDesc = [&](uint32 w, uint32 h, TEXTURE_FORMAT fmt, const char* name) -> TextureDesc
-					{
-						TextureDesc td = {};
-						td.Name = name;
-						td.Type = RESOURCE_DIM_TEX_2D;
-						td.Width = w;
-						td.Height = h;
-						td.MipLevels = 1;
-						td.Format = fmt;
-						td.SampleCount = 1;
-						td.Usage = USAGE_DEFAULT;
-						td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-						return td;
-					};
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer3_Emissive"));
-
-				// Velocity
-				{
-					TextureDesc td = {};
-					td.Name = "Velocity";
-					td.Type = RESOURCE_DIM_TEX_2D;
-					td.Width = m_Viewport.Width;
-					td.Height = m_Viewport.Height;
-					td.MipLevels = 1;
-					td.Format = TEX_FORMAT_RG16_FLOAT;
-					td.SampleCount = 1;
-					td.Usage = USAGE_DEFAULT;
-					td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-					m_pRenderer->AddTexture(STRING_HASH("Velocity"), td);
-				}
-
-				// Depth
-				{
-					TextureDesc td = {};
-					td.Name = "GBufferDepth";
-					td.Type = RESOURCE_DIM_TEX_2D;
-					td.Width = m_Viewport.Width;
-					td.Height = m_Viewport.Height;
-					td.MipLevels = 1;
-					td.SampleCount = 1;
-					td.Usage = USAGE_DEFAULT;
-					td.Format = TEX_FORMAT_R32_TYPELESS;
-					td.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
-
-					m_pRenderer->AddTexture(STRING_HASH("GBufferDepth"), td);
-
-					TextureViewDesc vd = {};
-					vd.ViewType = TEXTURE_VIEW_DEPTH_STENCIL;
-					vd.Format = TEX_FORMAT_D32_FLOAT;
-
-					m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
-
-					vd = {};
-					vd.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
-					vd.Format = TEX_FORMAT_R32_FLOAT;
-					m_pRenderer->AddTextureView(STRING_HASH("GBufferDepth"), vd);
-				}
-			}
-
-			// Lighting
-			{
-				TextureDesc td = {};
-				td.Name = "LightingScene";
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-				m_pRenderer->AddTexture(STRING_HASH("LightingScene"), td);
-			}
-
-			// TAA History Ping-Pong
-			{
-				TextureDesc td = {};
-				td.Type = RESOURCE_DIM_TEX_2D;
-				td.Width = m_Viewport.Width;
-				td.Height = m_Viewport.Height;
-				td.MipLevels = 1;
-				td.SampleCount = 1;
-				td.Usage = USAGE_DEFAULT;
-				td.Format = TEX_FORMAT_RGBA16_FLOAT;
-				td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-				td.Name = "TAA_History0";
-				m_pRenderer->AddTexture(STRING_HASH("TAA_History0"), td);
-
-				td.Name = "TAA_History1";
-				m_pRenderer->AddTexture(STRING_HASH("TAA_History1"), td);
-			}
-
-			{
-				BufferDesc bd = {};
-				bd.Name = "GrassRenderConstantsCB";
-				bd.Usage = USAGE_DYNAMIC;
-				bd.BindFlags = BIND_UNIFORM_BUFFER;
-				bd.CPUAccessFlags = CPU_ACCESS_WRITE;
-				bd.Size = sizeof(hlsl::GrassRenderConstants);
-
-				m_pRenderer->AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
-				m_pRenderer->RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
-			}
-		}
-
-		// -----------------------------------------------------------------
 		// Terrain system
 		// -----------------------------------------------------------------
 		{
@@ -276,11 +153,11 @@ namespace shz
 		// Create render systems
 		// -----------------------------------------------------------------
 		{
-			m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
-			m_pDeferredSystem = std::make_unique<DeferredSystem>();
-			m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 			m_pInteractionSystem = std::make_unique<InteractionSystem>();
 			m_pGrassSystem = std::make_unique<GrassSystem>();
+
+			m_pInteractionSystem->Initialize(*m_pRenderer);
+			m_pGrassSystem->Initialize(*m_pRenderer);
 
 			// ------------------------------------------------------------
 			// Grass model
@@ -403,11 +280,8 @@ namespace shz
 				}
 			}
 
-			m_pDeferredSystem->InstallPasses(*m_pRenderer);
-			m_pPostProcessSystem->InstallPasses(*m_pRenderer);
-			m_pIndirectArgsSystem->InstallPasses(*m_pRenderer);
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
-			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pIndirectArgsSystem, *m_pInteractionSystem);
+			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pInteractionSystem);
 		}
 
 		// ECS

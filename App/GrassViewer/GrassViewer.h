@@ -19,13 +19,9 @@
 #include "Engine/ECS/Public/Components.h"
 #include "Engine/ECSIntegration/Public/PhysicsSystem.h"
 
-#include "Engine/RenderSystem/Public/DeferredSystem.h"
-#include "Engine/RenderSystem/Public/ForwardSystem.h"
-#include "Engine/RenderSystem/Public/PostProcessSystem.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 #include "Engine/RenderSystem/Public/TerrainSystem.h"
 #include "Engine/RenderSystem/Public/InteractionSystem.h"
-#include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 
 namespace shz
 {
@@ -67,11 +63,8 @@ namespace shz
 
 		std::unique_ptr<TerrainSystem> m_pTerrainSystem;
 
-		std::unique_ptr<DeferredSystem> m_pDeferredSystem;
-		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
 		std::unique_ptr<GrassSystem> m_pGrassSystem;
 		std::unique_ptr<InteractionSystem> m_pInteractionSystem;
-		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 
 		ViewportState m_Viewport = {};
 		ViewFamily m_ViewFamily = {};

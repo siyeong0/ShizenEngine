@@ -152,12 +152,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Public\DeferredSystem.h" />
+    <ClInclude Include="Public\GBufferSystem.h" />
     <ClInclude Include="Public\DepthPrepassSystem.h" />
     <ClInclude Include="Public\ForwardSystem.h" />
     <ClInclude Include="Public\GrassSystem.h" />
     <ClInclude Include="Public\IndirectArgsSystem.h" />
     <ClInclude Include="Public\InteractionSystem.h" />
+    <ClInclude Include="Public\LightingSystem.h" />
     <ClInclude Include="Public\PostProcessSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
     <ClInclude Include="Public\TerrainSystem.h" />
@@ -169,12 +170,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Private\DeferredSystem.cpp" />
+    <ClCompile Include="Private\GBufferSystem.cpp" />
     <ClCompile Include="Private\DepthPrepassSystem.cpp" />
     <ClCompile Include="Private\ForwardSystem.cpp" />
     <ClCompile Include="Private\GrassSystem.cpp" />
     <ClCompile Include="Private\IndirectArgsSystem.cpp" />
     <ClCompile Include="Private\InteractionSystem.cpp" />
+    <ClCompile Include="Private\LightingSystem.cpp" />
     <ClCompile Include="Private\PostProcessSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
     <ClCompile Include="Private\TerrainSystem.cpp" />

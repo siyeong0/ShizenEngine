@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
 
 #include "Engine/RHI/Interface/IShader.h"
@@ -9,15 +11,20 @@ namespace shz
 {
 	class Renderer;
 
-	class DeferredSystem final
+	// -----------------------------------------------------------------------------
+	// LightingSystem
+	// - Reads GBuffers (+ ShadowMapArray) and writes LightingScene
+	// -----------------------------------------------------------------------------
+	class LightingSystem final
 	{
 	public:
-		DeferredSystem() = default;
-		DeferredSystem(const DeferredSystem&) = delete;
-		DeferredSystem& operator=(const DeferredSystem&) = delete;
-		~DeferredSystem() = default;
+		LightingSystem() = default;
+		LightingSystem(const LightingSystem&) = delete;
+		LightingSystem& operator=(const LightingSystem&) = delete;
+		~LightingSystem() = default;
 
-		// Register all passes that belong to this system.
+		void Initialize(Renderer& renderer);
+
 		void InstallPasses(Renderer& renderer);
 
 	private:

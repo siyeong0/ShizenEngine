@@ -26,6 +26,8 @@ namespace shz
         InteractionSystem(const InteractionSystem&) = delete;
         InteractionSystem& operator=(const InteractionSystem&) = delete;
 
+        void Initialize(Renderer& renderer);
+
         void InstallPasses(Renderer& renderer, TerrainSystem& terrain);
 
         float2 GetWorldOriginXZ() const;

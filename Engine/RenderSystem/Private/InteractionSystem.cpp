@@ -49,6 +49,11 @@ namespace shz
         uint32 x0 = 0, y0 = 0, x1 = 0, y1 = 0; // [x0,x1) [y0,y1)
     };
 
+    void InteractionSystem::Initialize(Renderer& renderer)
+    {
+
+    }
+
     void InteractionSystem::InstallPasses(Renderer& renderer, TerrainSystem& terrain)
     {
         // Interaction field texture (R16_FLOAT SRV/UAV)

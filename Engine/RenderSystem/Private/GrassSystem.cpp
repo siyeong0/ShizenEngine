@@ -43,10 +43,24 @@ namespace shz
 		return (uint32)(m_GrassDescs.size() - 1u);
 	}
 
+	void GrassSystem::Initialize(Renderer& renderer)
+	{
+		{
+			BufferDesc bd = {};
+			bd.Name = "GrassRenderConstantsCB";
+			bd.Usage = USAGE_DYNAMIC;
+			bd.BindFlags = BIND_UNIFORM_BUFFER;
+			bd.CPUAccessFlags = CPU_ACCESS_WRITE;
+			bd.Size = sizeof(hlsl::GrassRenderConstants);
+
+			renderer.AddBuffer(STRING_HASH("GrassRenderConstantsCB"), bd);
+			renderer.RegisterStaticBufferCBV("GRASS_RENDER_CONSTANTS", STRING_HASH("GrassRenderConstantsCB"));
+		}
+	}
+
 	void GrassSystem::InstallPasses(
 		Renderer& renderer,
 		RenderScene& scene,
-		IndirectArgsSystem& indirect,
 		const InteractionSystem& interaction)
 	{
 		m_pInteractionSystem = &interaction;
@@ -186,9 +200,9 @@ namespace shz
 			const uint32 lod1Sections = (uint32)gd.pMesh->GetLevel(1).Sections.size();
 			const uint32 lod2Sections = (uint32)gd.pMesh->GetLevel(2).Sections.size();
 
-			m_SpeciesIndirect[sp].LOD0 = indirect.AllocateMesh("GrassLOD0_Species", lod0Sections);
-			m_SpeciesIndirect[sp].LOD1 = indirect.AllocateMesh("GrassLOD1_Species", lod1Sections);
-			m_SpeciesIndirect[sp].LOD2 = indirect.AllocateMesh("GrassLOD2_Species", lod2Sections);
+			m_SpeciesIndirect[sp].LOD0 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD0_Species", lod0Sections);
+			m_SpeciesIndirect[sp].LOD1 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD1_Species", lod1Sections);
+			m_SpeciesIndirect[sp].LOD2 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD2_Species", lod2Sections);
 
 			auto SetMeshTemplates = [&](const StaticMeshLevelRenderData& mesh, uint32 baseSlot)
 			{
@@ -203,7 +217,7 @@ namespace shz
 					t.BaseVertexLocation = sec.BaseVertex;
 					t.StartInstanceLocation = 0;
 
-					indirect.SetTemplate(baseSlot + si, t);
+					renderer.GetIndirectArgsSystem()->SetTemplate(baseSlot + si, t);
 				}
 			};
 

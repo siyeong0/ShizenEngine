@@ -188,10 +188,28 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_SpecularIBLTex", STRING_HASH("EnvSpecularTex"));
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfIBLTex", STRING_HASH("EnvBrdfTex"));
 		}
+		
 
+		m_pDepthPrepassSystem = std::make_unique<DepthPrepassSystem>();
+		m_pGBufferSystem = std::make_unique<GBufferSystem>();
 		m_pShadowSystem = std::make_unique<ShadowSystem>();
+		m_pLightingSystem = std::make_unique<LightingSystem>();
+		m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
+		m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
+
+		m_pDepthPrepassSystem->Initialize(*this);
+		m_pGBufferSystem->Initialize(*this);
 		m_pShadowSystem->Initialize(*this, ShadowSystem::CreateInfo{});
+		m_pLightingSystem->Initialize(*this);
+		m_pPostProcessSystem->Initialize(*this);
+		m_pIndirectArgsSystem->Initialize(*this);
+
+		m_pDepthPrepassSystem->InstallPasses(*this);
+		m_pGBufferSystem->InstallPasses(*this);
 		m_pShadowSystem->InstallPasses(*this);
+		m_pLightingSystem->InstallPasses(*this);
+		m_pPostProcessSystem->InstallPasses(*this);
+		m_pIndirectArgsSystem->InstallPasses(*this);
 
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);

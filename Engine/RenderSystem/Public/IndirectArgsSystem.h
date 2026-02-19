@@ -33,9 +33,10 @@ namespace shz
 
         IndirectArgsSystem() = default;
         ~IndirectArgsSystem() = default;
-
         IndirectArgsSystem(const IndirectArgsSystem&) = delete;
         IndirectArgsSystem& operator=(const IndirectArgsSystem&) = delete;
+
+        void Initialize(Renderer& renderer);
 
         void InstallPasses(Renderer& renderer);
 

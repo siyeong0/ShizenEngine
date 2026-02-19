@@ -25,6 +25,28 @@ namespace shz
 		return (ctx.FrameIndex & 1u) == 0u;
 	}
 
+	void PostProcessSystem::Initialize(Renderer& renderer)
+	{
+		// TAA History Ping-Pong
+		{
+			TextureDesc td = {};
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = renderer.GetWidth();
+			td.Height = renderer.GetHeight();
+			td.MipLevels = 1;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.Format = TEX_FORMAT_RGBA16_FLOAT;
+			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+			td.Name = "TAA_History0";
+			renderer.AddTexture(STRING_HASH("TAA_History0"), td);
+
+			td.Name = "TAA_History1";
+			renderer.AddTexture(STRING_HASH("TAA_History1"), td);
+		}
+	}
+
 	// ---------------------------------------------------------------------
 	// InstallPasses
 	// ---------------------------------------------------------------------
