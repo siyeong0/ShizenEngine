@@ -12,6 +12,13 @@ struct PSInput
     float2 UV : TEXCOORD0;
 };
 
+float LinearizeDepth01(float z01)
+{
+    float n = g_FrameCB.NearPlane;
+    float f = g_FrameCB.FarPlane;
+    return (n * f) / max(f - z01 * (f - n), 1e-6f);
+}
+
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
     float2 uv = PSIn.UV;
@@ -29,7 +36,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float4 histColor = g_HistoryColor.SampleLevel(g_LinearClampSampler, uvPrev, 0);
 
-    // 2. 3x3 Neighborhood Clamp
+    // 3x3 neighborhood clamp (너 코드 그대로)
     float4 m1 = 0, m2 = 0;
     float4 lower = 1e9, upper = -1e9;
     [unroll]
@@ -41,31 +48,52 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
             float4 c = g_CurrentColor.SampleLevel(g_PointClampSampler, uv, 0, int2(x, y));
             lower = min(lower, c);
             upper = max(upper, c);
-            
             m1 += c;
             m2 += c * c;
         }
     }
-    
+
     float4 mu = m1 / 9.0;
     float4 sigma = sqrt(abs(m2 / 9.0 - mu * mu));
     float gamma = 1.5;
     lower = min(lower, mu - gamma * sigma);
     upper = max(upper, mu + gamma * sigma);
-
     histColor = clamp(histColor, lower, upper);
 
+    // ------------------------------------------------------------
+    // History weight (fix grass blur)
+    // ------------------------------------------------------------
     float coverage = g_GBuffer2.SampleLevel(g_PointClampSampler, uv, 0).a;
+
     float velocityLenPx = length(velocity * g_FrameCB.ViewportSize);
     float motionFade = saturate(1.0 - velocityLenPx * 0.1);
 
-    float baseHistoryW = 0.95;
+    float baseHistoryW_opaque = 0.95;
+    float baseHistoryW_masked = 0.80;
+    float baseHistoryW = lerp(baseHistoryW_masked, baseHistoryW_opaque, coverage);
+
     float historyW = baseHistoryW * motionFade;
 
+    // Luma rejection (너 코드 유지)
     float lumC = dot(currColor.rgb, float3(0.299, 0.587, 0.114));
     float lumH = dot(histColor.rgb, float3(0.299, 0.587, 0.114));
     float lumFade = saturate(1.0 - abs(lumC - lumH) * 2.0);
     historyW *= lumFade;
+
+    // Coverage-reactive (핵심)
+    float reactive = saturate((coverage - 0.6f) / (1.0f - 0.6f));
+    reactive = reactive * reactive;
+    historyW *= reactive;
+
+    float zCur = g_Depth.SampleLevel(g_PointClampSampler, uv, 0);
+    float zPrevCur = g_Depth.SampleLevel(g_PointClampSampler, uvPrev, 0);
+    float dCur = LinearizeDepth01(zCur);
+    float dPrev = LinearizeDepth01(zPrevCur);
+
+    float depthDiff = abs(dCur - dPrev);
+    float depthThresh = max(0.02f * dCur, 0.02f);
+    float depthFade = saturate(1.0f - depthDiff / depthThresh);
+    historyW *= depthFade;
 
     float3 resolveColor = lerp(currColor.rgb, histColor.rgb, historyW);
     OutColor = float4(resolveColor, 1.0);
