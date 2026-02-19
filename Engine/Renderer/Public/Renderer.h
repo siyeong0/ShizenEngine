@@ -163,7 +163,7 @@ namespace shz
 		PostProcessSystem* GetPostProcessSystem() { return m_pPostProcessSystem.get(); }
 		IndirectArgsSystem* GetIndirectArgsSystem() { return m_pIndirectArgsSystem.get(); }
 		ShadowSystem* GetShadowSystem() { return m_pShadowSystem.get(); }
-		ContactShadowSystem* GetScreenSpaceShadowSystme() { return m_pScreenSpaceShadowSystem.get(); }
+		ContactShadowSystem* GetContactShadowSystme() { return m_pContactShadowSystem.get(); }
 		// 
 		RefCntAutoPtr<ITexture> CreateTexture(const TextureDesc& desc, const TextureData* pInitData = nullptr);
 		RefCntAutoPtr<ITexture> CreateTexture(const AssetRef<Texture>& assetRef);
@@ -295,7 +295,7 @@ namespace shz
 		std::unique_ptr<PostProcessSystem> m_pPostProcessSystem;
 		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 		std::unique_ptr<ShadowSystem> m_pShadowSystem;
-		std::unique_ptr<ContactShadowSystem> m_pScreenSpaceShadowSystem;
+		std::unique_ptr<ContactShadowSystem> m_pContactShadowSystem;
 
 		AssetManager* m_pAssetManager = nullptr;
 		std::unordered_map<std::string, MaterialTemplate> m_TemplateLibrary = {};

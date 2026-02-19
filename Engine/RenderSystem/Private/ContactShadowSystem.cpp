@@ -16,7 +16,7 @@ namespace shz
 		// ------------------------------------------------------------
 		{
 			TextureDesc td = {};
-			td.Name = "ScreenSpaceShadowRaw";
+			td.Name = "ContactShadowMapRaw";
 			td.Type = RESOURCE_DIM_TEX_2D;
 			td.Width = renderer.GetWidth();
 			td.Height = renderer.GetHeight();
@@ -26,7 +26,7 @@ namespace shz
 			td.Usage = USAGE_DEFAULT;
 			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 
-			renderer.AddTexture(STRING_HASH("ScreenSpaceShadowRaw"), td);
+			renderer.AddTexture(STRING_HASH("ContactShadowMapRaw"), td);
 		}
 
 		// ------------------------------------------------------------
@@ -34,7 +34,7 @@ namespace shz
 		// ------------------------------------------------------------
 		{
 			TextureDesc td = {};
-			td.Name = "ScreenSpaceShadow";
+			td.Name = "ContactShadowMap";
 			td.Type = RESOURCE_DIM_TEX_2D;
 			td.Width = renderer.GetWidth();
 			td.Height = renderer.GetHeight();
@@ -51,7 +51,7 @@ namespace shz
 			// UAV needed for compute output
 			td.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
 
-			renderer.AddTexture(STRING_HASH("ScreenSpaceShadow"), td);
+			renderer.AddTexture(STRING_HASH("ContactShadowMap"), td);
 		}
 	}
 
@@ -61,16 +61,16 @@ namespace shz
 		// Pass 1: ScreenSpaceShadowRaw (Graphics)
 		// =====================================================================
 		renderer.AddPass(
-			"ScreenSpaceShadow",
+			"ContactShadow",
 			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
-				b.DeclareTextureRTVWrite(STRING_HASH("ScreenSpaceShadowRaw"));
+				b.DeclareTextureRTVWrite(STRING_HASH("ContactShadowMapRaw"));
 
 				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
 
-				b.SetClearColor(STRING_HASH("ScreenSpaceShadowRaw"), 1.f, 1.f, 1.f, 1.f);
+				b.SetClearColor(STRING_HASH("ContactShadowMapRaw"), 1.f, 1.f, 1.f, 1.f);
 			},
 			[this](RenderPassContext& ctx)
 			{
@@ -101,7 +101,7 @@ namespace shz
 				[this, &renderer]()
 			{
 				GraphicsPipelineStateCreateInfo psoCi = {};
-				psoCi.PSODesc.Name = "ScreenSpaceShadow PSO";
+				psoCi.PSODesc.Name = "ContactShadow PSO";
 				psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
 
 				GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
@@ -156,26 +156,26 @@ namespace shz
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
 
-				m_pSSSPSO = renderer.AcquirePipelineState(STRING_HASH("ScreenSpaceShadow"), psoCi);
-				ASSERT(m_pSSSPSO, "AcquirePipelineState(ScreenSpaceShadow) failed.");
+				m_pSSSPSO = renderer.AcquirePipelineState(STRING_HASH("ContactShadow"), psoCi);
+				ASSERT(m_pSSSPSO, "AcquirePipelineState(ContactShadow) failed.");
 
 				m_pSSSPSO->CreateShaderResourceBinding(&m_pSSSSRB, true);
 				ASSERT(m_pSSSSRB, "SSS SRB create failed.");
 			});
 
 		// =====================================================================
-		// Pass 2: ScreenSpaceShadowBilinearBlur (Compute)
+		// Pass 2: BilinearBlur (Compute)
 		// =====================================================================
 		renderer.AddPass(
-			"ScreenSpaceShadow.BilinearBlur",
+			"ContactShadow.BilinearBlur",
 			EPassExecutionDomain::OutsideRenderPass,
 			[](RenderPassBuilder& b)
 			{
 				// read raw
-				b.DeclareTextureSRVRead(STRING_HASH("ScreenSpaceShadowRaw"));
+				b.DeclareTextureSRVRead(STRING_HASH("ContactShadowMapRaw"));
 
 				// write final
-				b.DeclareTextureUAV(STRING_HASH("ScreenSpaceShadow"), RENDER_ACCESS_WRITE);
+				b.DeclareTextureUAV(STRING_HASH("ContactShadowMap"), RENDER_ACCESS_WRITE);
 			},
 			[this, &renderer](RenderPassContext& ctx)
 			{
@@ -191,9 +191,9 @@ namespace shz
 				};
 
 				// SRV input
-				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("ScreenSpaceShadowRaw")));
+				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("ContactShadowMapRaw")));
 				// UAV output
-				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("ScreenSpaceShadow")));
+				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("ContactShadowMap")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 

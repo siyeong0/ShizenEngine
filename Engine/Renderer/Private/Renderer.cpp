@@ -245,7 +245,7 @@ namespace shz
 		m_pLightingSystem = std::make_unique<LightingSystem>();
 		m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 		m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
-		m_pScreenSpaceShadowSystem = std::make_unique<ContactShadowSystem>();
+		m_pContactShadowSystem = std::make_unique<ContactShadowSystem>();
 
 		m_pDepthPrepassSystem->Initialize(*this);
 		m_pGBufferSystem->Initialize(*this);
@@ -253,7 +253,7 @@ namespace shz
 		m_pLightingSystem->Initialize(*this);
 		m_pPostProcessSystem->Initialize(*this);
 		m_pIndirectArgsSystem->Initialize(*this);
-		m_pScreenSpaceShadowSystem->Initialize(*this);
+		m_pContactShadowSystem->Initialize(*this);
 
 		m_pDepthPrepassSystem->InstallPasses(*this);
 		m_pGBufferSystem->InstallPasses(*this);
@@ -261,7 +261,7 @@ namespace shz
 		m_pLightingSystem->InstallPasses(*this);
 		m_pPostProcessSystem->InstallPasses(*this);
 		m_pIndirectArgsSystem->InstallPasses(*this);
-		m_pScreenSpaceShadowSystem->InstallPasses(*this);
+		m_pContactShadowSystem->InstallPasses(*this);
 
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
