@@ -245,7 +245,7 @@ namespace shz
 		m_pLightingSystem = std::make_unique<LightingSystem>();
 		m_pPostProcessSystem = std::make_unique<PostProcessSystem>();
 		m_pIndirectArgsSystem = std::make_unique<IndirectArgsSystem>();
-		m_pScreenSpaceShadowSystem = std::make_unique<ScreenSpaceShadowSystem>();
+		m_pScreenSpaceShadowSystem = std::make_unique<ContactShadowSystem>();
 
 		m_pDepthPrepassSystem->Initialize(*this);
 		m_pGBufferSystem->Initialize(*this);

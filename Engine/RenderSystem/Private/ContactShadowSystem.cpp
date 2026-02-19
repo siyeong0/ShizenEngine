@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Engine/RenderSystem/Public/ScreenSpaceShadowSystem.h"
+#include "Engine/RenderSystem/Public/ContactShadowSystem.h"
 
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
@@ -9,7 +9,7 @@
 
 namespace shz
 {
-	void ScreenSpaceShadowSystem::Initialize(Renderer& renderer)
+	void ContactShadowSystem::Initialize(Renderer& renderer)
 	{
 		{
 			TextureDesc td = {};
@@ -27,7 +27,7 @@ namespace shz
 		}
 	}
 
-	void ScreenSpaceShadowSystem::InstallPasses(Renderer& renderer)
+	void ContactShadowSystem::InstallPasses(Renderer& renderer)
 	{
 		renderer.AddPass(
 			"ScreenSpaceShadow",

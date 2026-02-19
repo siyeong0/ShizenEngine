@@ -16,13 +16,13 @@ namespace shz
 	// - Reads: GBufferDepth, GBuffer1_Normal (optional but recommended)
 	// - Writes: ScreenSpaceShadow (0..1)
 	// -----------------------------------------------------------------------------
-	class ScreenSpaceShadowSystem final
+	class ContactShadowSystem final
 	{
 	public:
-		ScreenSpaceShadowSystem() = default;
-		ScreenSpaceShadowSystem(const ScreenSpaceShadowSystem&) = delete;
-		ScreenSpaceShadowSystem& operator=(const ScreenSpaceShadowSystem&) = delete;
-		~ScreenSpaceShadowSystem() = default;
+		ContactShadowSystem() = default;
+		ContactShadowSystem(const ContactShadowSystem&) = delete;
+		ContactShadowSystem& operator=(const ContactShadowSystem&) = delete;
+		~ContactShadowSystem() = default;
 
 		void Initialize(Renderer& renderer);
 
