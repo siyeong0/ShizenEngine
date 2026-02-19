@@ -61,7 +61,6 @@ static float DotSat(float3 a, float3 b)
 }
 
 // Perceptual roughness (artist) -> alpha roughness (microfacet)
-// Diligent style: Alpha = perceptual^2, then some terms square again internally.
 static float PerceptualToAlpha(float perceptualRoughness)
 {
 	perceptualRoughness = saturate(perceptualRoughness);
@@ -69,7 +68,7 @@ static float PerceptualToAlpha(float perceptualRoughness)
 	return perceptualRoughness * perceptualRoughness;
 }
 
-// Schlick Fresnel with explicit F90 (Diligent style)
+// Schlick Fresnel with explicit F90
 static float3 FresnelSchlick_F0F90(float3 F0, float3 F90, float cosTheta)
 {
 	return F0 + (F90 - F0) * Pow5(saturate(1.0 - cosTheta));
@@ -84,9 +83,6 @@ static float3 FresnelSchlick(float3 F0, float cosTheta)
 // -----------------------------------------------------------------------------
 // GGX Terms (D, Vis)
 // -----------------------------------------------------------------------------
-
-// GGX normal distribution (D)
-// Matches the stable form used in Diligent (a = alpha, and internally uses a^2 again).
 static float D_GGX(float NdotH, float alpha)
 {
 	alpha = max(alpha, 1e-3);
@@ -96,8 +92,7 @@ static float D_GGX(float NdotH, float alpha)
 	return a2 / max(PI * f * f, 1e-9);
 }
 
-// Smith GGX correlated visibility term (Vis = G2 / (4 NoV NoL))
-// Diligent: 0.5 / (NoL*sqrt(NoV^2(1-a2)+a2) + NoV*sqrt(NoL^2(1-a2)+a2))
+// Smith GGX correlated visibility term
 static float Vis_SmithGGX_Correlated(float NdotL, float NdotV, float alpha)
 {
 	float a2 = alpha * alpha;
@@ -111,15 +106,13 @@ static float Vis_SmithGGX_Correlated(float NdotL, float NdotV, float alpha)
 // -----------------------------------------------------------------------------
 // Diffuse models
 // -----------------------------------------------------------------------------
-
-// Lambert diffuse BRDF (with 1/PI)
 static float3 Diffuse_Lambert_BRDF(float3 baseColor)
 {
 	return baseColor * (1.0 / PI);
 }
 
-// Hammon 2017 diffuse (as in your D3D12 sample), returns BRDF with 1/PI effectively accounted for
-// In the original sample they omit 1/PI to cancel elsewhere; here we use it as a BRDF directly.
+// Hammon 2017 diffuse (direct lighting)
+// NOTE: Returns BRDF in "per-steradian" space (includes 1/PI here).
 static float3 Diffuse_Hammon2017_BRDF(
 	float3 baseColor,
 	float perceptualRoughness,
@@ -144,36 +137,39 @@ static float3 Diffuse_Hammon2017_BRDF(
 	float3 smooth = 1.05 * (1.0 - Pow5(1.0 - NoL)) * (1.0 - Pow5(1.0 - NoV));
 
 	float3 single = lerp(smooth, rough.xxx, a2);
-	// multi term from sample: 0.3641 * a  (where 0.3641 = PI * 0.1159)
-	// Convert to BRDF-space: sample¡¯s diffuse omitted 1/PI; here we include 1/PI for consistency.
-	// => (single + baseColor*multi) / PI
+
+	// Multi scattering approximation (sample-derived term).
+	// IMPORTANT FIX:
+	// Do NOT multiply baseColor twice (prevents baseColor^2 muddy darkening).
 	float multi = 0.3641 * a2;
 
-	return baseColor * (single + baseColor * multi) * (1.0 / PI);
+	return baseColor * (single + multi) * (1.0 / PI);
 }
 
 // -----------------------------------------------------------------------------
-// IBL (Split-Sum) - keep consistent Fresnel usage
+// IBL (Split-Sum)
 // -----------------------------------------------------------------------------
 static float3 EvaluateIBL_PBR(float3 N, float3 V, float3 baseColor, float metallic, float roughness, float ao)
 {
 	float NdotV = DotSat(N, V);
 
-	// F0
 	float3 F0 = lerp(0.04.xxx, baseColor, saturate(metallic));
 	float3 F90 = 1.0.xxx;
 
-	// For IBL, common choice: Fresnel at NdotV (not VdotH).
 	float alpha = PerceptualToAlpha(roughness);
 	float perceptualRoughness = max(saturate(roughness), MIN_ROUGHNESS);
 
+	// For IBL, use Fresnel at NdotV (common & stable)
 	float3 F = FresnelSchlick_F0F90(F0, F90, NdotV);
 
-	// Energy split (diffuse only for non-metals)
 	float3 kd = (1.0 - F) * (1.0 - saturate(metallic));
 
 	// Diffuse IBL (irradiance)
 	float3 irradiance = g_IrradianceIBLTex.Sample(g_LinearClampSampler, N).rgb;
+
+	// NOTE:
+	// This assumes irradiance is true irradiance (¡òLi cos) and Lambert BRDF needs 1/PI.
+	// If your irradiance cubemap already includes 1/PI, remove *(1.0/PI) here.
 	float3 diffuseIBL = kd * baseColor * irradiance * (1.0 / PI);
 
 	// Specular IBL (prefiltered env + BRDF LUT)
@@ -182,16 +178,13 @@ static float3 EvaluateIBL_PBR(float3 N, float3 V, float3 baseColor, float metall
 	uint w = 1, h = 1, mipLevels = 1;
 	g_SpecularIBLTex.GetDimensions(0, w, h, mipLevels);
 
-	// Most pipelines map perceptual roughness -> mip linearly.
 	float maxMip = (float) max((int) mipLevels - 1, 0);
 	float mip = perceptualRoughness * maxMip;
 
 	float3 prefiltered = g_SpecularIBLTex.SampleLevel(g_LinearClampSampler, R, mip).rgb;
 
-	// BRDF LUT is usually parameterized by (NdotV, roughness)
 	float2 brdf = g_BrdfIBLTex.Sample(g_LinearClampSampler, float2(NdotV, perceptualRoughness));
 
-	// split-sum: prefiltered * (F * brdf.x + brdf.y)
 	float3 specIBL = prefiltered * (F * brdf.x + brdf.y);
 
 	return (diffuseIBL + specIBL) * saturate(ao);
@@ -199,10 +192,9 @@ static float3 EvaluateIBL_PBR(float3 N, float3 V, float3 baseColor, float metall
 
 // -----------------------------------------------------------------------------
 // Lighting function: direct PBR + IBL + emissive
-// Notes:
-// - shadow is expected 0..1 (0 fully shadowed)
-// - iblScale lets you keep your current "ibl * 0.25" policy
-// - signature MUST remain identical to your original
+// - shadow: 0..1 visibility
+// - iblScale: your policy (e.g. 0.25)
+// Signature must match your usage.
 // -----------------------------------------------------------------------------
 static float3 Shade(
 	float3 N,
@@ -218,7 +210,6 @@ static float3 Shade(
 	float lightIntensity,
 	float iblScale)
 {
-	// Normalize defensively (callers sometimes already do this, but cheap insurance).
 	N = normalize(N);
 	V = normalize(V);
 	L = normalize(L);
@@ -226,9 +217,9 @@ static float3 Shade(
 	float NdotL = DotSat(N, L);
 	float NdotV = DotSat(N, V);
 
-	// If light is behind, you can early out to IBL+emissive
-	// (still keep emissive + IBL visible)
+	// IBL (AO applied inside)
 	float3 ibl = EvaluateIBL_PBR(N, V, baseColor, metallic, roughness, ao) * iblScale;
+
 	if (NdotL <= 0.0 || NdotV <= 0.0)
 	{
 		return ibl + emissive;
@@ -237,107 +228,100 @@ static float3 Shade(
 	metallic = saturate(metallic);
 	roughness = saturate(roughness);
 
-	// F0
 	float3 F0 = lerp(0.04.xxx, baseColor, metallic);
 	float3 F90 = 1.0.xxx;
 
-	// Half vector
 	float3 H = normalize(V + L);
 	float NdotH = DotSat(N, H);
 	float VdotH = DotSat(V, H);
 
-	// Microfacet params
 	float alpha = PerceptualToAlpha(roughness);
 
-	// Specular terms
+	// Specular BRDF
 	float D = D_GGX(NdotH, alpha);
 	float Vis = Vis_SmithGGX_Correlated(NdotL, NdotV, alpha);
 	float3 F = FresnelSchlick_F0F90(F0, F90, VdotH);
 
-	float3 specBRDF = F * (D * Vis); // already includes 1/(4 NoL NoV) through Vis definition
+	float3 specBRDF = F * (D * Vis);
 
-	// Diffuse (choose one)
-	// - Lambert is simplest and stable
-	// - Hammon2017 gives nicer retroreflective / rough diffuse behavior
-	float3 kd = (1.0 - F) * (1.0 - metallic);
+	// Diffuse energy split:
+	// IMPORTANT FIX:
+	// Use Fresnel at NdotV for kd (stable, avoids view-dependent diffuse wobble).
+	float3 Fd = FresnelSchlick_F0F90(F0, F90, NdotV);
+	float3 kd = (1.0 - Fd) * (1.0 - metallic);
 
-	// Option A: Lambert
-	// float3 diffBRDF = kd * Diffuse_Lambert_BRDF(baseColor);
-
-	// Option B: Hammon2017 (recommended for direct lighting quality)
+	// Diffuse BRDF
 	float3 diffBRDF = kd * Diffuse_Hammon2017_BRDF(baseColor, roughness, N, V, L);
 
-	// Radiance & shadow
 	float3 radiance = lightColor * lightIntensity;
 
-	// Direct lighting (no "NdotL + 0.1" fudge; use clean physics)
 	float3 direct = (diffBRDF + specBRDF) * radiance * NdotL;
-
-	// Apply shadow as visibility (0..1)
 	direct *= saturate(shadow);
 
-	// AO: already applied to IBL in EvaluateIBL_PBR. Usually NOT applied to direct.
+	// AO is intentionally NOT applied to direct (UE-like)
 	return ibl + direct + emissive;
 }
 
 static float3 Shade_ScaleDirectOnly(
-    float3 N,
-    float3 V,
-    float3 L,
-    float3 baseColor,
-    float metallic,
-    float roughness,
-    float ao,
-    float3 emissive,
-    float shadow,
-    float3 lightColor,
-    float lightIntensity,
-    float iblScale,
-    float directScale)
+	float3 N,
+	float3 V,
+	float3 L,
+	float3 baseColor,
+	float metallic,
+	float roughness,
+	float ao,
+	float3 emissive,
+	float shadow,
+	float3 lightColor,
+	float lightIntensity,
+	float iblScale,
+	float directScale)
 {
-    N = normalize(N);
-    V = normalize(V);
-    L = normalize(L);
+	N = normalize(N);
+	V = normalize(V);
+	L = normalize(L);
 
-    float NdotL = DotSat(N, L);
-    float NdotV = DotSat(N, V);
+	float NdotL = DotSat(N, L);
+	float NdotV = DotSat(N, V);
 
-    float3 ibl = EvaluateIBL_PBR(N, V, baseColor, metallic, roughness, ao) * iblScale;
+	float3 ibl = EvaluateIBL_PBR(N, V, baseColor, metallic, roughness, ao) * iblScale;
 
-    if (NdotL <= 0.0 || NdotV <= 0.0)
-    {
-        return ibl + emissive;
-    }
+	if (NdotL <= 0.0 || NdotV <= 0.0)
+	{
+		return ibl + emissive;
+	}
 
-    metallic = saturate(metallic);
-    roughness = saturate(roughness);
+	metallic = saturate(metallic);
+	roughness = saturate(roughness);
 
-    float3 F0 = lerp(0.04.xxx, baseColor, metallic);
-    float3 F90 = 1.0.xxx;
+	float3 F0 = lerp(0.04.xxx, baseColor, metallic);
+	float3 F90 = 1.0.xxx;
 
-    float3 H = normalize(V + L);
-    float NdotH = DotSat(N, H);
-    float VdotH = DotSat(V, H);
+	float3 H = normalize(V + L);
+	float NdotH = DotSat(N, H);
+	float VdotH = DotSat(V, H);
 
-    float alpha = PerceptualToAlpha(roughness);
+	float alpha = PerceptualToAlpha(roughness);
 
-    float D = D_GGX(NdotH, alpha);
-    float Vis = Vis_SmithGGX_Correlated(NdotL, NdotV, alpha);
-    float3 F = FresnelSchlick_F0F90(F0, F90, VdotH);
+	float D = D_GGX(NdotH, alpha);
+	float Vis = Vis_SmithGGX_Correlated(NdotL, NdotV, alpha);
+	float3 F = FresnelSchlick_F0F90(F0, F90, VdotH);
 
-    float3 specBRDF = F * (D * Vis);
+	float3 specBRDF = F * (D * Vis);
 
-    float3 kd = (1.0 - F) * (1.0 - metallic);
-    float3 diffBRDF = kd * Diffuse_Hammon2017_BRDF(baseColor, roughness, N, V, L);
+	// Same kd fix as Shade()
+	float3 Fd = FresnelSchlick_F0F90(F0, F90, NdotV);
+	float3 kd = (1.0 - Fd) * (1.0 - metallic);
 
-    float3 radiance = lightColor * lightIntensity;
+	float3 diffBRDF = kd * Diffuse_Hammon2017_BRDF(baseColor, roughness, N, V, L);
 
-    float3 direct = (diffBRDF + specBRDF) * radiance * NdotL;
-    direct *= saturate(shadow);
+	float3 radiance = lightColor * lightIntensity;
 
-    direct *= saturate(directScale);
+	float3 direct = (diffBRDF + specBRDF) * radiance * NdotL;
+	direct *= saturate(shadow);
+	direct *= saturate(directScale);
 
-    return ibl + direct + emissive;
+	return ibl + direct + emissive;
 }
 
 #endif // PBR_LIGHTING_HLSLI

@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Public\AmbientOcclusionSystem.h" />
     <ClInclude Include="Public\GBufferSystem.h" />
     <ClInclude Include="Public\DepthPrepassSystem.h" />
     <ClInclude Include="Public\ForwardSystem.h" />
@@ -171,6 +172,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Private\AmbientOcclusionSystem.cpp" />
     <ClCompile Include="Private\GBufferSystem.cpp" />
     <ClCompile Include="Private\DepthPrepassSystem.cpp" />
     <ClCompile Include="Private\ForwardSystem.cpp" />

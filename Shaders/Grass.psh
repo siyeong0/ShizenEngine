@@ -27,16 +27,23 @@ BASE_PS_MAIN_ENTRY()
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);
 	
-	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
-	float height01 = saturate((uv.y - 0.0) / 0.35);
+    float height01 = saturate((worldPos.y - SampleWorldHeightAtWorldXZ(worldPos.xz)) / 0.25);
 	float rootMask = 1.0 - height01; 
 	rootMask = rootMask * rootMask; 
 	float covMask = saturate((coverage - 0.25) / (1.0 - 0.25));
 	covMask *= covMask;
+    float blend = rootMask * covMask;
 
-	float blend = rootMask * covMask;
-	
+	// Base color + terrain tint blend
+    float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
     baseColor = lerp(baseColor, terrainTint, blend * 0.35);
+	
+	// AO boost
+    const float ROOT_AO_STRENGTH = 0.65;
+    const float ROOT_AO_MIN = 0.25; 
+	
+    float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
+    ao = max(aoRoot, ROOT_AO_MIN);
 	
 	// Pack to GBuffer
 	SET_PSOUT_ALBEDO(baseColor);

@@ -12,6 +12,9 @@ Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 // Screen-space shadow (0..1, 1=lit)
 Texture2D<float> g_ContactShadowMap;
 
+// Screen-space ambient occlusion (0..1, 1=no occlusion)
+Texture2D<float> g_AmbientOcclusionMap;
+
 struct PSInput
 {
     float4 Pos : SV_POSITION;
@@ -89,7 +92,9 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
-    float ao = saturate(gb2.z);
+
+    // Material AO from GBuffer
+    float aoMaterial = saturate(gb2.z);
 
     float3 emissive = gb3.rgb;
     uint shadingModel = DecodeShadingModel_U8(gb3.a);
@@ -98,6 +103,16 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
     float3 L = normalize(-g_FrameCB.LightDirWS);
+
+    // ------------------------------------------------------------
+    // SSAO (Screen-space AO)
+    // ------------------------------------------------------------
+    // SSAO texture is 0..1 (1 = no occlusion)
+    float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
+    
+    // Combine: SSAO only darkens, never brightens
+    // (Material AO * SSAO) is the usual pipeline.
+    float aoCombined = saturate(aoMaterial * ssao);
 
     // ------------------------------------------------------------
     // Shadow (CSM)
@@ -123,11 +138,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     // ------------------------------------------------------------
     float contactShadow = g_ContactShadowMap.Sample(g_LinearClampSampler, uv);
 
-    //OutColor = float4(screenShadow.xxx, 1.0);
-    //return;
-    
     // Combine: screen shadow only removes light, never adds
-    // (Min()도 가능하지만, 곱이 일반적으로 자연스러움)
     float shadowFinal = shadowCSM * contactShadow;
 
     // ------------------------------------------------------------
@@ -140,7 +151,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
             baseColor,
             metallic,
             roughness,
-            ao,
+            aoCombined,
             emissive,
             shadowFinal,
             g_FrameCB.LightColor,
@@ -155,7 +166,6 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
         // ---- Foliage parameter fixes ----
         metallic = 0.0;
         roughness = clamp(roughness, 0.35, 0.85);
-        ao = lerp(1.0, ao, 0.35);
 
         float coverage = saturate(gb2.w);
 
@@ -167,7 +177,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
             baseColor,
             metallic,
             roughness,
-            ao,
+            aoCombined,
             emissive,
             shadowFinal,
             g_FrameCB.LightColor,

@@ -41,6 +41,7 @@
 #include "Engine/RenderSystem/Public/IndirectArgsSystem.h"
 #include "Engine/RenderSystem/Public/ShadowSystem.h"
 #include "Engine/RenderSystem/Public/ContactShadowSystem.h"
+#include "Engine/RenderSystem/Public/AmbientOcclusionSystem.h"
 
 namespace shz
 {
@@ -296,6 +297,7 @@ namespace shz
 		std::unique_ptr<IndirectArgsSystem> m_pIndirectArgsSystem;
 		std::unique_ptr<ShadowSystem> m_pShadowSystem;
 		std::unique_ptr<ContactShadowSystem> m_pContactShadowSystem;
+		std::unique_ptr< AmbientOcclusionSystem> m_pAmbientOcclusionSystem;
 
 		AssetManager* m_pAssetManager = nullptr;
 		std::unordered_map<std::string, MaterialTemplate> m_TemplateLibrary = {};

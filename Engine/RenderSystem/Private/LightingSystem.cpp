@@ -45,8 +45,8 @@ namespace shz
 
 				// Shadow map array (existing)
 				b.DeclareTextureSRVRead(STRING_HASH("ShadowMapArray"));
-
 				b.DeclareTextureSRVRead(STRING_HASH("ContactShadowMap"));
+				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMap"));
 
 				b.DeclareTextureRTVWrite(STRING_HASH("LightingScene"));
 				b.SetClearColor(STRING_HASH("LightingScene"), 0.f, 0.f, 0.f, 1.f);
@@ -70,6 +70,7 @@ namespace shz
 				bindTexture("g_GBuffer3", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer3_Emissive")));
 				bindTexture("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
 				bindTexture("g_ContactShadowMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("ContactShadowMap")));
+				bindTexture("g_AmbientOcclusionMap", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMap")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
@@ -123,6 +124,7 @@ namespace shz
 					{ SHADER_TYPE_PIXEL, "g_GBuffer3",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_GBufferDepth", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_PIXEL, "g_ContactShadowMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_PIXEL, "g_AmbientOcclusionMap", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 
 				psoCi.PSODesc.ResourceLayout.Variables = vars;
