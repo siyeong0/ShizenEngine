@@ -130,7 +130,7 @@ namespace shz
 			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/soil.png";
 			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
 
-			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
+			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel032_2K-PNG";
 			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 
 			tci.ChunkSize = 64.0f;
