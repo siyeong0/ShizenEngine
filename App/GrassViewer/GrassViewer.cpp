@@ -137,7 +137,7 @@ namespace shz
 			tci.CellSize = 1.0f;
 			tci.WorldSpacing = 1.22f;
 			tci.HeightScale = 1500.0f;
-			tci.HeightOffset = -500.0f;
+			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
 
 			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);

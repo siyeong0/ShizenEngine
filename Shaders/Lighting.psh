@@ -6,7 +6,7 @@
 Texture2D<float4> g_GBuffer0; // Albedo.rgb, Opacity.a
 Texture2D<float4> g_GBuffer1; // Normal packed 0..1 (world), w unused
 Texture2D<float4> g_GBuffer2; // Metallic, Roughness, AO, AlphaCoverage
-Texture2D<float4> g_GBuffer3; // Emissive.rgb, ShadingModel in a (asfloat(model))
+Texture2D<float4> g_GBuffer3; // Emissive.rgb, ShadingModel in a (asfloat/model)
 Texture2D<float> g_GBufferDepth; // Depth (D3D 0..1)
 
 // Screen-space shadow (0..1, 1=lit)
@@ -36,11 +36,9 @@ static float3 EvaluateFoliageAddon(
 {
     float NoL = saturate(dot(N, L));
 
-    // Wrap diffuse
     const float wrap = 0.40;
     float wrapNoL = saturate((dot(N, L) + wrap) / (1.0 + wrap));
 
-    // Back scattering
     float back = saturate(dot(-N, L));
     float backScatter = pow(back, 2.0) * (1.0 - roughness);
 
@@ -50,7 +48,6 @@ static float3 EvaluateFoliageAddon(
 
     float3 add = baseColor * (wrapNoL * wrapStrength + backScatter * backStrength);
 
-    // Shadow: backlight´Â shadow¸¦ ÈÎ¾À ´ú ¸Ô°Ô
     float shadowFront = saturate(shadow);
     float shadowBack = lerp(1.0, shadowFront, 0.2);
     add *= lerp(shadowBack, shadowFront, NoL);
@@ -92,8 +89,6 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
     float metallic = saturate(gb2.x);
     float roughness = saturate(gb2.y);
-
-    // Material AO from GBuffer
     float aoMaterial = saturate(gb2.z);
 
     float3 emissive = gb3.rgb;
@@ -105,13 +100,9 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float3 L = normalize(-g_FrameCB.LightDirWS);
 
     // ------------------------------------------------------------
-    // SSAO (Screen-space AO)
+    // SSAO
     // ------------------------------------------------------------
-    // SSAO texture is 0..1 (1 = no occlusion)
     float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
-    
-    // Combine: SSAO only darkens, never brightens
-    // (Material AO * SSAO) is the usual pipeline.
     float aoCombined = saturate(aoMaterial * ssao);
 
     // ------------------------------------------------------------
@@ -134,56 +125,65 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
     float shadowCSM = sh.LightAmount;
 
     // ------------------------------------------------------------
-    // Screen-space shadow (Contact shadow)
+    // Contact shadow
     // ------------------------------------------------------------
     float contactShadow = g_ContactShadowMap.Sample(g_LinearClampSampler, uv);
+    float shadowFinal = shadowCSM * contactShadow; // 0..1 visibility
 
-    // Combine: screen shadow only removes light, never adds
-    float shadowFinal = shadowCSM * contactShadow;
+    // ------------------------------------------------------------
+    // Policy knobs (you can make these constants/CB params)
+    // ------------------------------------------------------------
+    float iblScale = 0.25;
+    float directScale = 1.0;
+
+    // Compute factors (unscaled)
+    float3 directFactor = 0;
+    float3 iblFactor = 0;
 
     // ------------------------------------------------------------
     // Shading model branching
     // ------------------------------------------------------------
     if (shadingModel == DEFAULT_LIT)
     {
-        float3 lit = Shade(
+        ComputeLightingFactors(
             N, V, L,
             baseColor,
             metallic,
             roughness,
             aoCombined,
-            emissive,
             shadowFinal,
             g_FrameCB.LightColor,
             g_FrameCB.LightIntensity,
-            0.25 /*iblScale*/);
+            directFactor,
+            iblFactor);
 
+        float3 lit = directFactor * directScale + iblFactor * iblScale + emissive;
         OutColor = float4(lit, opacity);
         return;
     }
     else if (shadingModel == FOLIAGE)
     {
-        // ---- Foliage parameter fixes ----
+        // Foliage fixes
         metallic = 0.0;
         roughness = clamp(roughness, 0.35, 0.85);
 
         float coverage = saturate(gb2.w);
+        iblScale = 0.45;
+        directScale = 0.45;
 
-        float iblScale = 0.25;
-        float foliageDirectScale = 0.45;
-
-        float3 lit = Shade_ScaleDirectOnly(
+        ComputeLightingFactors(
             N, V, L,
             baseColor,
             metallic,
             roughness,
             aoCombined,
-            emissive,
             shadowFinal,
             g_FrameCB.LightColor,
             g_FrameCB.LightIntensity,
-            iblScale,
-            foliageDirectScale);
+            directFactor,
+            iblFactor);
+
+        float3 lit = directFactor * directScale + iblFactor * iblScale + emissive;
 
         lit += EvaluateFoliageAddon(
             normalize(N),

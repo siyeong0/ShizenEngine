@@ -60,7 +60,7 @@ namespace shz
 		uint32 BackBufferWidth = 0;
 		uint32 BackBufferHeight = 0;
 
-		std::string EnvTexturePath = "C:/Dev/ShizenEngine/Assets/Cubemap/Sky/SkyEnvHDR.dds";
+		std::string EnvTexturePath = "C:/Dev/ShizenEngine/Assets/Cubemap/DaySky/SkyEnvHDR.dds";
 		std::string DiffuseIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/DaySky/SkyDiffuseHDR.dds";
 		std::string SpecularIrradianceTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/DaySky/SkySpecularHDR.dds";
 		std::string BrdfLUTTexPath = "C:/Dev/ShizenEngine/Assets/Cubemap/DaySky/SkyBrdf.dds";

@@ -217,7 +217,9 @@ namespace shz
 			TextureLoadInfo tli = {};
 			RefCntAutoPtr<ITexture> env, diff, spec, brdf;
 
+			tli.IsSRGB = true;
 			CreateTextureFromFile(m_CreateInfo.EnvTexturePath.c_str(), tli, m_pDevice, &env);
+			tli.IsSRGB = false;
 			CreateTextureFromFile(m_CreateInfo.DiffuseIrradianceTexPath.c_str(), tli, m_pDevice, &diff);
 			CreateTextureFromFile(m_CreateInfo.SpecularIrradianceTexPath.c_str(), tli, m_pDevice, &spec);
 			CreateTextureFromFile(m_CreateInfo.BrdfLUTTexPath.c_str(), tli, m_pDevice, &brdf);
