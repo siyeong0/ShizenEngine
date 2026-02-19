@@ -11,11 +11,6 @@ namespace shz
 {
 	class Renderer;
 
-	// -----------------------------------------------------------------------------
-	// ScreenSpaceShadowSystem
-	// - Reads: GBufferDepth, GBuffer1_Normal (optional but recommended)
-	// - Writes: ScreenSpaceShadow (0..1)
-	// -----------------------------------------------------------------------------
 	class ContactShadowSystem final
 	{
 	public:
@@ -29,10 +24,19 @@ namespace shz
 		void InstallPasses(Renderer& renderer);
 
 	private:
-		RefCntAutoPtr<IPipelineState> m_pSSSPSO;
+		RefCntAutoPtr<IPipelineState>         m_pSSSPSO;
 		RefCntAutoPtr<IShaderResourceBinding> m_pSSSSRB;
 
+		RefCntAutoPtr<IPipelineState>         m_pBlurCSO;
+		RefCntAutoPtr<IShaderResourceBinding> m_pBlurSRB;
+
 		std::string m_FullscreenVS = "FullScreen.vsh";
-		std::string m_SSSPS = "ScreenSpaceShadow.psh";
+		std::string m_SSSPS = "ContactShadow.psh";
+
+		std::string m_BlurCS = "BilinearBlur.hlsl";
+
+	private:
+		static constexpr uint32 BLUR_GROUP_SIZE_X = 8;
+		static constexpr uint32 BLUR_GROUP_SIZE_Y = 8;
 	};
 } // namespace shz

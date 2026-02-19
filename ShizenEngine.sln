@@ -50,7 +50,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Framework", "Engine\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D4CF4-FF88-49E2-B678-B242E569DF01}"
 	ProjectSection(SolutionItems) = preProject
+		Shaders\BilinearBlur.hlsl = Shaders\BilinearBlur.hlsl
 		Shaders\Common.hlsli = Shaders\Common.hlsli
+		Shaders\ContactShadow.psh = Shaders\ContactShadow.psh
 		Shaders\CopyTexture.psh = Shaders\CopyTexture.psh
 		Shaders\FullScreen.vsh = Shaders\FullScreen.vsh
 		Shaders\GBuffer.psh = Shaders\GBuffer.psh
@@ -67,7 +69,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\PBRLighting.hlsli = Shaders\PBRLighting.hlsli
 		Shaders\PBRMaterial.hlsli = Shaders\PBRMaterial.hlsli
 		Shaders\PostCopy.psh = Shaders\PostCopy.psh
-		Shaders\ScreenSpaceShadow.psh = Shaders\ScreenSpaceShadow.psh
 		Shaders\Shadow.hlsli = Shaders\Shadow.hlsli
 		Shaders\TemporalAA.psh = Shaders\TemporalAA.psh
 		Shaders\Terrain.psh = Shaders\Terrain.psh

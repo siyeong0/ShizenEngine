@@ -11,6 +11,27 @@ namespace shz
 {
 	void ContactShadowSystem::Initialize(Renderer& renderer)
 	{
+		// ------------------------------------------------------------
+		// Pass1 output: raw contact shadow (RTV)
+		// ------------------------------------------------------------
+		{
+			TextureDesc td = {};
+			td.Name = "ScreenSpaceShadowRaw";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = renderer.GetWidth();
+			td.Height = renderer.GetHeight();
+			td.MipLevels = 1;
+			td.Format = TEX_FORMAT_R8_UNORM;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+
+			renderer.AddTexture(STRING_HASH("ScreenSpaceShadowRaw"), td);
+		}
+
+		// ------------------------------------------------------------
+		// Pass2 output: blurred contact shadow (UAV + SRV)
+		// ------------------------------------------------------------
 		{
 			TextureDesc td = {};
 			td.Name = "ScreenSpaceShadow";
@@ -18,10 +39,17 @@ namespace shz
 			td.Width = renderer.GetWidth();
 			td.Height = renderer.GetHeight();
 			td.MipLevels = 1;
+
+			// NOTE:
+			// If R8_UNORM UAV binding fails on your backend/driver,
+			// change this to TEX_FORMAT_R16_FLOAT.
 			td.Format = TEX_FORMAT_R8_UNORM;
+
 			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT; 
-			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+			td.Usage = USAGE_DEFAULT;
+
+			// UAV needed for compute output
+			td.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
 
 			renderer.AddTexture(STRING_HASH("ScreenSpaceShadow"), td);
 		}
@@ -29,17 +57,20 @@ namespace shz
 
 	void ContactShadowSystem::InstallPasses(Renderer& renderer)
 	{
+		// =====================================================================
+		// Pass 1: ScreenSpaceShadowRaw (Graphics)
+		// =====================================================================
 		renderer.AddPass(
 			"ScreenSpaceShadow",
 			EPassExecutionDomain::RenderPass,
 			[](RenderPassBuilder& b)
 			{
-				b.DeclareTextureRTVWrite(STRING_HASH("ScreenSpaceShadow"));
-				
+				b.DeclareTextureRTVWrite(STRING_HASH("ScreenSpaceShadowRaw"));
+
 				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
 
-				b.SetClearColor(STRING_HASH("ScreenSpaceShadow"), 1.f, 1.f, 1.f, 1.f);
+				b.SetClearColor(STRING_HASH("ScreenSpaceShadowRaw"), 1.f, 1.f, 1.f, 1.f);
 			},
 			[this](RenderPassContext& ctx)
 			{
@@ -119,7 +150,7 @@ namespace shz
 
 				ImmutableSamplerDesc samplers[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_PointWrapSampler", pointWrap },
+					{ SHADER_TYPE_PIXEL, "g_PointWrapSampler",  pointWrap  },
 					{ SHADER_TYPE_PIXEL, "g_PointClampSampler", pointClamp },
 				};
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
@@ -130,6 +161,107 @@ namespace shz
 
 				m_pSSSPSO->CreateShaderResourceBinding(&m_pSSSSRB, true);
 				ASSERT(m_pSSSSRB, "SSS SRB create failed.");
+			});
+
+		// =====================================================================
+		// Pass 2: ScreenSpaceShadowBilinearBlur (Compute)
+		// =====================================================================
+		renderer.AddPass(
+			"ScreenSpaceShadow.BilinearBlur",
+			EPassExecutionDomain::OutsideRenderPass,
+			[](RenderPassBuilder& b)
+			{
+				// read raw
+				b.DeclareTextureSRVRead(STRING_HASH("ScreenSpaceShadowRaw"));
+
+				// write final
+				b.DeclareTextureUAV(STRING_HASH("ScreenSpaceShadow"), RENDER_ACCESS_WRITE);
+			},
+			[this, &renderer](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "Context is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(m_pBlurCSO, "Blur CSO is null. (onCreated must have initialized it)");
+				ASSERT(m_pBlurSRB, "Blur SRB is null. (onCreated must have initialized it)");
+
+				auto bindTexCS = [this](const char* name, ITextureView* view)
+				{
+					if (auto* var = m_pBlurSRB->GetVariableByName(SHADER_TYPE_COMPUTE, name))
+						var->Set(view, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				};
+
+				// SRV input
+				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("ScreenSpaceShadowRaw")));
+				// UAV output
+				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("ScreenSpaceShadow")));
+
+				IDeviceContext* pCtx = ctx.pImmediateContext;
+
+				pCtx->SetPipelineState(m_pBlurCSO);
+				pCtx->CommitShaderResources(m_pBlurSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				const uint32 w = renderer.GetWidth();
+				const uint32 h = renderer.GetHeight();
+
+				DispatchComputeAttribs dispatch = {};
+				dispatch.ThreadGroupCountX = (w + BLUR_GROUP_SIZE_X - 1) / BLUR_GROUP_SIZE_X;
+				dispatch.ThreadGroupCountY = (h + BLUR_GROUP_SIZE_Y - 1) / BLUR_GROUP_SIZE_Y;
+				dispatch.ThreadGroupCountZ = 1;
+
+				pCtx->DispatchCompute(dispatch);
+			},
+				[this, &renderer]()
+			{
+				// ---- Compile CS ----
+				ShaderCreateInfo csCI = {};
+				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				csCI.EntryPoint = "main";
+				csCI.Desc.Name = "SSS_BilinearBlur_CS";
+				csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+				csCI.Desc.UseCombinedTextureSamplers = false;
+				csCI.FilePath = m_BlurCS.c_str();
+
+				RefCntAutoPtr<IShader> cs;
+				renderer.CreateShader(csCI, &cs);
+				ASSERT(cs, "SSS blur CS compile failed");
+
+				// ---- Create Compute PSO ----
+				ComputePipelineStateCreateInfo psoCI = {};
+				psoCI.PSODesc.Name = "PSO_SSS_BilinearBlur";
+				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+
+				auto& rl = psoCI.PSODesc.ResourceLayout;
+				rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+				ShaderResourceVariableDesc vars[] =
+				{
+					{ SHADER_TYPE_COMPUTE, "g_Src",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_Dst", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				};
+				rl.Variables = vars;
+				rl.NumVariables = _countof(vars);
+
+				// Bilinear sampling needs linear clamp
+				SamplerDesc linearClamp =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
+
+				ImmutableSamplerDesc samplers[] =
+				{
+					{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
+				};
+				rl.ImmutableSamplers = samplers;
+				rl.NumImmutableSamplers = _countof(samplers);
+
+				psoCI.pCS = cs;
+
+				m_pBlurCSO = renderer.AcquirePipelineState(psoCI);
+				ASSERT(m_pBlurCSO, "AcquireCompute(SSS_BilinearBlur) failed");
+
+				m_pBlurCSO->CreateShaderResourceBinding(&m_pBlurSRB, true);
+				ASSERT(m_pBlurSRB, "SSS blur SRB create failed");
 			});
 	}
 } // namespace shz
