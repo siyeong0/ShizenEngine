@@ -1,6 +1,9 @@
 #ifndef HLSL_STRUCTURES_HLSLI
 #define HLSL_STRUCTURES_HLSLI
 
+static const uint DEFAULT_LIT = 0;
+static const uint FOLIAGE = 1;
+
 // ----------------------------------------------
 // Constant buffers
 // ----------------------------------------------

@@ -47,16 +47,16 @@ struct BaseVSOutput
 };
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                         \
-    OUT.WorldPosition = (pos).xyz;                                              \
-    OUT.CurrClip      = mul((pos), g_ViewCB.ViewProj);                          \
-    OUT.PrevClip      = mul((pos), g_ViewCB.PrevViewProj);                      \
-    OUT.SVPosition    = APPLY_JITTER_TO_CLIP(OUT.CurrClip);
+	OUT.WorldPosition = (pos).xyz;                                              \
+	OUT.CurrClip      = mul((pos), g_ViewCB.ViewProj);                          \
+	OUT.PrevClip      = mul((pos), g_ViewCB.PrevViewProj);                      \
+	OUT.SVPosition    = APPLY_JITTER_TO_CLIP(OUT.CurrClip);
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                                 \
-    OUT.WorldPosition = (curr).xyz;                                             \
-    OUT.CurrClip      = mul((curr), g_ViewCB.ViewProj);                         \
-    OUT.PrevClip      = mul((prev), g_ViewCB.PrevViewProj);                     \
-    OUT.SVPosition    = APPLY_JITTER_TO_CLIP(OUT.CurrClip);
+	OUT.WorldPosition = (curr).xyz;                                             \
+	OUT.CurrClip      = mul((curr), g_ViewCB.ViewProj);                         \
+	OUT.PrevClip      = mul((prev), g_ViewCB.PrevViewProj);                     \
+	OUT.SVPosition    = APPLY_JITTER_TO_CLIP(OUT.CurrClip);
 
 #define SET_VSOUT_UV(uv)            OUT.UV = (uv);
 #define SET_VSOUT_WORLD_NORMAL(wn)  OUT.WorldNormal = (wn);
@@ -105,8 +105,9 @@ struct BasePSOutput
 #define SET_PSOUT_ROUGHNESS(roughness)     OUT.GBuffer2.g   = (roughness);
 #define SET_PSOUT_AO(ao)                   OUT.GBuffer2.b   = (ao);
 #define SET_PSOUT_ALPHACOVERAGE(ac)        OUT.GBuffer2.a   = (ac);
-#define SET_PSOUT_EMISSIVE(emissive)       OUT.GBuffer3     = float4((emissive), 1.0);
-#define SET_PSOUT_VELOCITY(velocity)       OUT.Velocity    = (velocity);
+#define SET_PSOUT_EMISSIVE(emissive)       OUT.GBuffer3.rgb = (emissive);
+#define SET_PSOUT_SHADING_MODEL(model)	   OUT.GBuffer3.a   = (EncodeShadingModel_U8(model));
+#define SET_PSOUT_VELOCITY(velocity)       OUT.Velocity     = (velocity);
 
 #define BASE_VS_MAIN_ENTRY(INST_ID_VAR)    void main(BaseVSInput IN, out BaseVSOutput OUT, uint INST_ID_VAR : SV_InstanceID)
 #define BASE_PS_MAIN_ENTRY()              void main(in BasePSInput IN, out BasePSOutput OUT)
@@ -118,10 +119,10 @@ struct BasePSOutput
 
 struct BaseVSOutput
 {
-    float4 SVPosition : SV_POSITION;
+	float4 SVPosition : SV_POSITION;
 
 #ifdef MASKED
-    float2 UV : TEXCOORD0;
+	float2 UV : TEXCOORD0;
 #endif
 };
 
@@ -134,29 +135,29 @@ struct BaseVSOutput
 
 #ifdef MASKED
 
-    // ------------------------------------------------------------------------
-    // DEPTH_ONLY + MASKED
-    // - Shadow pass: use g_ShadowAttribs mapping
-    // - Non-shadow depth pass: use g_ViewCB.ViewProj (original)
-    // ------------------------------------------------------------------------
+	// ------------------------------------------------------------------------
+	// DEPTH_ONLY + MASKED
+	// - Shadow pass: use g_ShadowAttribs mapping
+	// - Non-shadow depth pass: use g_ViewCB.ViewProj (original)
+	// ------------------------------------------------------------------------
 #ifdef SHADOW
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
-            OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
+			OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
-            OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
+			OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
 
-        // IMPORTANT: Shadow depth should NOT use TAA jitter.
-        // We intentionally bypass APPLY_JITTER_TO_CLIP here.
+		// IMPORTANT: Shadow depth should NOT use TAA jitter.
+		// We intentionally bypass APPLY_JITTER_TO_CLIP here.
 
 #else // !SHADOW
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
-            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
+			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
-            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
+			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
 
 #endif // SHADOW
 
@@ -164,26 +165,26 @@ struct BaseVSOutput
 
 #else // OPAQUE (not masked)
 
-    // ------------------------------------------------------------------------
-    // DEPTH_ONLY + OPAQUE
-    // ------------------------------------------------------------------------
+	// ------------------------------------------------------------------------
+	// DEPTH_ONLY + OPAQUE
+	// ------------------------------------------------------------------------
 #ifdef SHADOW
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
-            OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
+			OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
-            OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
+			OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
 
-        // No jitter in shadow depth
+		// No jitter in shadow depth
 
 #else // !SHADOW
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
-            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
+			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
 
 #define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
-            OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
+			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
 
 #endif // SHADOW
 
@@ -193,10 +194,10 @@ struct BaseVSOutput
 
 struct BasePSInput
 {
-    float4 SVPosition : SV_POSITION;
+	float4 SVPosition : SV_POSITION;
 
 #ifdef MASKED
-    float2 UV : TEXCOORD0;
+	float2 UV : TEXCOORD0;
 #endif
 };
 
@@ -226,12 +227,14 @@ struct BasePSOutput { };
 #define SET_PSOUT_AO(ao)                   /* no-op */
 #define SET_PSOUT_ALPHACOVERAGE(ac)        /* no-op */
 #define SET_PSOUT_EMISSIVE(emissive)       /* no-op */
+#define SET_PSOUT_SHADING_MODEL(model)	   /* no-op */
 #define SET_PSOUT_VELOCITY(velocity)       /* no-op */
 
 #define BASE_VS_MAIN_ENTRY(INST_ID_VAR)    void main(BaseVSInput IN, out BaseVSOutput OUT, uint INST_ID_VAR : SV_InstanceID)
-#define BASE_PS_MAIN_ENTRY()              void main(in BasePSInput IN)
+#define BASE_PS_MAIN_ENTRY()               void main(in BasePSInput IN)
 
 #endif // DEPTH_ONLY
+
 
 // ============================================================================
 // Common bindings
@@ -339,6 +342,18 @@ float3 PackNormal01(float3 n)
 	return n * 0.5 + 0.5;
 }
 
+// Shading model encode/decode for UNORM8 channel
+static float EncodeShadingModel_U8(uint id)
+{
+	// id in [0..255]
+	return ((float) id + 0.5) / 255.0;
+}
+
+static uint DecodeShadingModel_U8(float enc)
+{
+	return (uint) floor(saturate(enc) * 255.0 + 0.5);
+}
+
 //------------------------------------------------------------------------------
 // Clip / UV helpers
 //------------------------------------------------------------------------------
@@ -368,9 +383,9 @@ float DitherThreshold4x4(int2 pix)
 	static const float bayer4[16] =
 	{
 		0, 8, 2, 10,
-        12, 4, 14, 6,
-        3, 11, 1, 9,
-        15, 7, 13, 5
+		12, 4, 14, 6,
+		3, 11, 1, 9,
+		15, 7, 13, 5
 	};
 
 	int idx = (pix.x & 3) + ((pix.y & 3) << 2);
@@ -385,21 +400,21 @@ static const int MAX_HALTON_SEQUENCE = 16;
 static const float2 HALTON_SEQUENCE[MAX_HALTON_SEQUENCE] =
 {
 	float2(0.5, 0.333333),
-    float2(0.25, 0.666667),
-    float2(0.75, 0.111111),
-    float2(0.125, 0.444444),
-    float2(0.625, 0.777778),
-    float2(0.375, 0.222222),
-    float2(0.875, 0.555556),
-    float2(0.0625, 0.888889),
-    float2(0.5625, 0.037037),
-    float2(0.3125, 0.37037),
-    float2(0.8125, 0.703704),
-    float2(0.1875, 0.148148),
-    float2(0.6875, 0.481482),
-    float2(0.4375, 0.814815),
-    float2(0.9375, 0.259259),
-    float2(0.03125, 0.592593)
+	float2(0.25, 0.666667),
+	float2(0.75, 0.111111),
+	float2(0.125, 0.444444),
+	float2(0.625, 0.777778),
+	float2(0.375, 0.222222),
+	float2(0.875, 0.555556),
+	float2(0.0625, 0.888889),
+	float2(0.5625, 0.037037),
+	float2(0.3125, 0.37037),
+	float2(0.8125, 0.703704),
+	float2(0.1875, 0.148148),
+	float2(0.6875, 0.481482),
+	float2(0.4375, 0.814815),
+	float2(0.9375, 0.259259),
+	float2(0.03125, 0.592593)
 };
 
 float4 ApplyTAAJittering(float4 clipSpace)

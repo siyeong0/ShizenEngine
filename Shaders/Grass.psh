@@ -1,5 +1,6 @@
 #include "Common.hlsli"
 #include "PBRMaterial.hlsli"
+#include "TerrainCommon.hlsli"
 
 BASE_PS_MAIN_ENTRY()
 {
@@ -23,10 +24,19 @@ BASE_PS_MAIN_ENTRY()
 	float3 emissive = GetEmissive(uv);
 	float3 normal = GetNormal(uv, normalWS, tangentWS);
 
-    uint shadingMode = GetShadingMode();
-	
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);
+	
+	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
+	float height01 = saturate((uv.y - 0.0) / 0.35);
+	float rootMask = 1.0 - height01; 
+	rootMask = rootMask * rootMask; 
+	float covMask = saturate((coverage - 0.25) / (1.0 - 0.25));
+	covMask *= covMask;
+
+	float blend = rootMask * covMask;
+	
+    baseColor = lerp(baseColor, terrainTint, blend * 0.35);
 	
 	// Pack to GBuffer
 	SET_PSOUT_ALBEDO(baseColor);
@@ -38,5 +48,5 @@ BASE_PS_MAIN_ENTRY()
 	SET_PSOUT_ALPHACOVERAGE(coverage);
 	SET_PSOUT_EMISSIVE(emissive);
 	SET_PSOUT_VELOCITY(currUV - prevUV);
-	SET_PSOUT_SHADING_MODEL(shadingMode);
+	SET_PSOUT_SHADING_MODEL(FOLIAGE);
 }

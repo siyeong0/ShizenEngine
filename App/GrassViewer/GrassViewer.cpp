@@ -142,7 +142,7 @@ namespace shz
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer0_Albedo"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer0_Albedo"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer1_Normal"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer1_Normal"));
 				m_pRenderer->AddTexture(STRING_HASH("GBuffer2_MRAO"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer2_MRAO"));
-				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA16_FLOAT, "GBuffer3_Emissive"));
+				m_pRenderer->AddTexture(STRING_HASH("GBuffer3_Emissive"), createGBufferTextureDesc(m_Viewport.Width, m_Viewport.Height, TEX_FORMAT_RGBA8_UNORM, "GBuffer3_Emissive"));
 
 				// Velocity
 				{
@@ -286,9 +286,9 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
-				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
-				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
-				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMeshLevel& mesh)
 					{

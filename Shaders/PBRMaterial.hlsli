@@ -21,7 +21,8 @@ cbuffer MATERIAL_CONSTANTS
 
 	float g_MetallicFactor; // scalar
 	uint g_MaterialFlags; // bitmask HAS_*
-	uint2 _pad0; // 16-byte align
+    uint g_ShadingMode;
+    uint _pad0;
 }
 
 // Resources
@@ -107,6 +108,11 @@ float3 GetEmissive(float2 uv)
 	}
 	emissive *= g_EmissiveIntensity;
 	return emissive;
+}
+
+uint GetShadingMode()
+{
+    return g_ShadingMode;
 }
 
 #endif //PBR_MATERIAL_HLSLI

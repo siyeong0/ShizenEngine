@@ -280,4 +280,64 @@ static float3 Shade(
 	return ibl + direct + emissive;
 }
 
+static float3 Shade_ScaleDirectOnly(
+    float3 N,
+    float3 V,
+    float3 L,
+    float3 baseColor,
+    float metallic,
+    float roughness,
+    float ao,
+    float3 emissive,
+    float shadow,
+    float3 lightColor,
+    float lightIntensity,
+    float iblScale,
+    float directScale)
+{
+    N = normalize(N);
+    V = normalize(V);
+    L = normalize(L);
+
+    float NdotL = DotSat(N, L);
+    float NdotV = DotSat(N, V);
+
+    float3 ibl = EvaluateIBL_PBR(N, V, baseColor, metallic, roughness, ao) * iblScale;
+
+    if (NdotL <= 0.0 || NdotV <= 0.0)
+    {
+        return ibl + emissive;
+    }
+
+    metallic = saturate(metallic);
+    roughness = saturate(roughness);
+
+    float3 F0 = lerp(0.04.xxx, baseColor, metallic);
+    float3 F90 = 1.0.xxx;
+
+    float3 H = normalize(V + L);
+    float NdotH = DotSat(N, H);
+    float VdotH = DotSat(V, H);
+
+    float alpha = PerceptualToAlpha(roughness);
+
+    float D = D_GGX(NdotH, alpha);
+    float Vis = Vis_SmithGGX_Correlated(NdotL, NdotV, alpha);
+    float3 F = FresnelSchlick_F0F90(F0, F90, VdotH);
+
+    float3 specBRDF = F * (D * Vis);
+
+    float3 kd = (1.0 - F) * (1.0 - metallic);
+    float3 diffBRDF = kd * Diffuse_Hammon2017_BRDF(baseColor, roughness, N, V, L);
+
+    float3 radiance = lightColor * lightIntensity;
+
+    float3 direct = (diffBRDF + specBRDF) * radiance * NdotL;
+    direct *= saturate(shadow);
+
+    direct *= saturate(directScale);
+
+    return ibl + direct + emissive;
+}
+
 #endif // PBR_LIGHTING_HLSLI

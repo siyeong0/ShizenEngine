@@ -40,7 +40,7 @@ namespace shz
 
             // Bias / PCF
             float ReceiverPlaneDepthBiasClamp = 0.00f;
-            float FixedDepthBias = 0.001f;
+            float FixedDepthBias = 0.002f;
             int   FixedFilterSize = 3;
         };
 

@@ -793,6 +793,17 @@ namespace shz
 			}
 		}
 #endif
+		bool bFoliage = false;
+		if ((name.find("foliage") != std::string::npos) || 
+			(name.find("Foliage") != std::string::npos) ||
+			(name.find("clusters") != std::string::npos) || 
+			(name.find("Clusters") != std::string::npos) ||
+			(name.find("billboard") != std::string::npos) ||
+			(name.find("Billboard") != std::string::npos))
+		{
+			twoSided = true;
+			bFoliage = true;
+		}
 
 		// BaseColor factor
 		float baseColor[4] = { 1, 1, 1, 1 };
@@ -998,6 +1009,14 @@ namespace shz
 		}
 
 		material.SetUint("g_MaterialFlags", materialFlag);
+		if (bFoliage)
+		{
+			material.SetUint("g_ShadingMode", hlsl::FOLIAGE);
+		}
+		else
+		{
+			material.SetUint("g_ShadingMode", hlsl::DEFAULT_LIT);
+		}
 		return outId;
 	}
 
