@@ -4,7 +4,7 @@
 
 cbuffer GRASS_GEN_CONSTANTS
 {
-	GrassGenConstants g_CB;
+    GrassGenConstants g_CB;
 };
 
 // ---------------------------------------------------------------------------
@@ -12,22 +12,22 @@ cbuffer GRASS_GEN_CONSTANTS
 // ---------------------------------------------------------------------------
 struct VisibleCell
 {
-	uint PoolIndex;
-	int2 ChunkCoord;
-	uint _pad;
+    uint PoolIndex;
+    int2 ChunkCoord;
+    uint _pad;
 };
 
 struct PoolChunkCoord
 {
-	uint _pad0;
-	int2 ChunkCoord;
-	float ChunkHeight;
+    uint _pad0;
+    int2 ChunkCoord;
+    float ChunkHeight;
 };
 
 struct PoolDirty
 {
-	uint Dirty; // 0=Clean, 1=NeedsFill, 2=Filling
-	uint3 _pad;
+    uint Dirty; // 0=Clean, 1=NeedsFill, 2=Filling
+    uint3 _pad;
 };
 
 // ---------------------------------------------------------------------------
@@ -40,8 +40,8 @@ RWStructuredBuffer<PoolDirty> g_PoolDirty;
 // PoolEntries
 struct PoolEntry
 {
-	float3 Position;
-	uint SpeciesId;
+    float3 Position;
+    uint SpeciesId;
 };
 RWStructuredBuffer<PoolEntry> g_PoolPositions;
 
@@ -78,24 +78,24 @@ static const float INVALID_NAN = asfloat(0x7FC00000u);
 // ---------------------------------------------------------------------------
 uint WangHash(uint seed)
 {
-	seed = (seed ^ 61u) ^ (seed >> 16);
-	seed *= 9u;
-	seed = seed ^ (seed >> 4);
-	seed *= 0x27d4eb2du;
-	seed = seed ^ (seed >> 15);
-	return seed;
+    seed = (seed ^ 61u) ^ (seed >> 16);
+    seed *= 9u;
+    seed = seed ^ (seed >> 4);
+    seed *= 0x27d4eb2du;
+    seed = seed ^ (seed >> 15);
+    return seed;
 }
 
 float Rand01(uint seed)
 {
-	return (WangHash(seed) & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+    return (WangHash(seed) & 0x00FFFFFFu) * (1.0f / 16777216.0f);
 }
 
 uint Hash2i(int2 v, uint salt)
 {
-	uint x = (uint) v.x;
-	uint y = (uint) v.y;
-	return (x * 73856093u) ^ (y * 19349663u) ^ salt;
+    uint x = (uint) v.x;
+    uint y = (uint) v.y;
+    return (x * 73856093u) ^ (y * 19349663u) ^ salt;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,82 +103,81 @@ uint Hash2i(int2 v, uint salt)
 // ---------------------------------------------------------------------------
 int2 WorldXZToChunkCoord(float2 worldXZ, float chunkSize)
 {
-	float2 rel = worldXZ - g_TerrainCB.WorldOriginXZ;
-	float inv = rcp(max(chunkSize, 1e-6f));
-	float2 c = floor(rel * inv);
-	return int2((int) c.x, (int) c.y);
+    float2 rel = worldXZ - g_TerrainCB.WorldOriginXZ;
+    float inv = rcp(max(chunkSize, 1e-6f));
+    float2 c = floor(rel * inv);
+    return int2((int) c.x, (int) c.y);
 }
 
 float2 ChunkCoordToWorldOrigin(int2 chunkCoord, float chunkSize)
 {
-	return g_TerrainCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
+    return g_TerrainCB.WorldOriginXZ + float2(chunkCoord) * chunkSize;
 }
 
 bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 {
-	float2 hfMin = g_TerrainCB.WorldOriginXZ;
-	float2 hfMax = g_TerrainCB.WorldOriginXZ + g_TerrainCB.WorldSizeXZ;
+    float2 hfMin = g_TerrainCB.WorldOriginXZ;
+    float2 hfMax = g_TerrainCB.WorldOriginXZ + g_TerrainCB.WorldSizeXZ;
 
-	float2 o = chunkOriginXZ;
-	float2 e = o + chunkSize.xx;
+    float2 o = chunkOriginXZ;
+    float2 e = o + chunkSize.xx;
 
-	if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
-	{
-		return false;
-	}
+    if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
+    {
+        return false;
+    }
 
-	chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
-	return true;
+    chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
 // Height / Density / Interaction sampling
 // ---------------------------------------------------------------------------
-
 float RemapDensity(float d, float contrast01)
 {
-	float a = saturate(contrast01);
-	a = min(a, 0.49f);
-	return smoothstep(a, 1.0f - a, d);
+    float a = saturate(contrast01);
+    a = min(a, 0.49f);
+    return smoothstep(a, 1.0f - a, d);
 }
 
 float SampleWorldDensity(float2 worldXZ, float mipLevel)
 {
-	float2 uv = WorldXZToTerrainUV(worldXZ);
+    float2 uv = WorldXZToTerrainUV(worldXZ);
 
 	// Use TerrainCommon helper (clamp sampler & consistent UV handling).
-	float d = SampleTerrainVegetationLevel(uv, mipLevel);
+    float d = SampleTerrainVegetationLevel(uv, mipLevel);
 
-	d = saturate(d);
-	d = RemapDensity(d, g_CB.DensityContrast);
-	d = pow(d, g_CB.DensityPow);
-	return d;
+    d = saturate(d);
+    d = RemapDensity(d, g_CB.DensityContrast);
+    d = pow(d, g_CB.DensityPow);
+    return d;
 }
 
 float SampleInteraction(float2 worldXZ)
 {
-	float2 uvLocal = (worldXZ - g_CB.InteractionOriginXZ) * g_CB.InteractionInvWorldSizeXZ;
-	float2 uvRingOffset = float2(g_CB.InteractionTexelOrigin) * g_CB.InteractionInvFieldSize;
-	float2 uv = frac(uvLocal + uvRingOffset);
-	return g_InteractionField.SampleLevel(g_LinearWrapSampler, uv, 0.0f).r;
+    float2 uvLocal = (worldXZ - g_CB.InteractionOriginXZ) * g_CB.InteractionInvWorldSizeXZ;
+    float2 uvRingOffset = float2(g_CB.InteractionTexelOrigin) * g_CB.InteractionInvFieldSize;
+    float2 uv = frac(uvLocal + uvRingOffset);
+    return g_InteractionField.SampleLevel(g_LinearWrapSampler, uv, 0.0f).r;
 }
 
 float ComputeHeightMask(float hN)
 {
-	float hMinN = g_CB.HeightMinN;
-	float hMaxN = g_CB.HeightMaxN;
-	float hFadeN = max(g_CB.HeightFadeN, 1e-6f);
+    float hMinN = g_CB.HeightMinN;
+    float hMaxN = g_CB.HeightMaxN;
+    float hFadeN = max(g_CB.HeightFadeN, 1e-6f);
 
-	if (hMaxN <= hMinN)
-	{
-		hMinN = 0.0f;
-		hMaxN = 1.0f;
-		hFadeN = 0.03f;
-	}
+    if (hMaxN <= hMinN)
+    {
+        hMinN = 0.0f;
+        hMaxN = 1.0f;
+        hFadeN = 0.03f;
+    }
 
-	float a = smoothstep(hMinN, hMinN + hFadeN, hN);
-	float b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hN);
-	return saturate(a * b);
+    float a = smoothstep(hMinN, hMinN + hFadeN, hN);
+    float b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hN);
+    return saturate(a * b);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,53 +186,54 @@ float ComputeHeightMask(float hN)
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
 	[unroll]
-	for (int i = 0; i < 6; ++i)
-	{
-		float4 P = g_FrameCB.FrustumPlanesWS[i];
-		float3 n = P.xyz;
-		float d = P.w;
+    for (int i = 0; i < 6; ++i)
+    {
+        float4 P = g_FrameCB.FrustumPlanesWS[i];
+        float3 n = P.xyz;
+        float d = P.w;
 
-		float3 v;
-		v.x = (n.x >= 0.0f) ? bmax.x : bmin.x;
-		v.y = (n.y >= 0.0f) ? bmax.y : bmin.y;
-		v.z = (n.z >= 0.0f) ? bmax.z : bmin.z;
+        float3 v;
+        v.x = (n.x >= 0.0f) ? bmax.x : bmin.x;
+        v.y = (n.y >= 0.0f) ? bmax.y : bmin.y;
+        v.z = (n.z >= 0.0f) ? bmax.z : bmin.z;
 
-		if (dot(n, v) + d < 0.0f)
-		{
-			return false;
-		}
-	}
-	return true;
+        if (dot(n, v) + d < 0.0f)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
 // Distance-based sample scaling (used in Count/Build)
 // ---------------------------------------------------------------------------
 static const float CHUNK_DENSITY_MIP = 2.0f;
+static const float INSTANCE_DENSITY_MIP = 0.0f; // 정확한 density 샘플링(인스턴스 위치 기준)
 static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 static const uint SAMPLES_MIN_FAR = 16u;
 static const uint SAMPLES_MAX_CLAMP = 4096u;
 
 float ComputeDistanceSampleScale(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
-	float dist = sqrt(max(distSqr, 0.0f));
-	float lod0 = sqrt(max(lod0Sqr, 0.0f));
-	float spawnR = sqrt(max(spawnRadiusSqr, 0.0f));
+    float dist = sqrt(max(distSqr, 0.0f));
+    float lod0 = sqrt(max(lod0Sqr, 0.0f));
+    float spawnR = sqrt(max(spawnRadiusSqr, 0.0f));
 
-	float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
-	t = saturate(t);
+    float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
+    t = saturate(t);
 
-	return 1.0f - t;
+    return 1.0f - t;
 }
 
 uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
-	float s = ComputeDistanceSampleScale(distSqr, lod0Sqr, spawnRadiusSqr);
-	uint target = (uint) round((float) baseSamples * s);
+    float s = ComputeDistanceSampleScale(distSqr, lod0Sqr, spawnRadiusSqr);
+    uint target = (uint) round((float) baseSamples * s);
 
-	target = max(target, SAMPLES_MIN_FAR);
-	target = min(target, min(baseSamples, SAMPLES_MAX_CLAMP));
-	return target;
+    target = max(target, SAMPLES_MIN_FAR);
+    target = min(target, min(baseSamples, SAMPLES_MAX_CLAMP));
+    return target;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,98 +241,98 @@ uint ComputeSamplesPerChunk(uint baseSamples, float distSqr, float lod0Sqr, floa
 // ---------------------------------------------------------------------------
 struct BallotMask
 {
-	uint4 M;
+    uint4 M;
 };
 
 BallotMask WaveBallotAll()
 {
-	BallotMask b;
-	b.M = WaveActiveBallot(true);
-	return b;
+    BallotMask b;
+    b.M = WaveActiveBallot(true);
+    return b;
 }
 
 bool BallotAny(BallotMask b)
 {
-	return (b.M.x | b.M.y | b.M.z | b.M.w) != 0u;
+    return (b.M.x | b.M.y | b.M.z | b.M.w) != 0u;
 }
 
 BallotMask BallotAndNot(BallotMask a, BallotMask b)
 {
-	BallotMask r;
-	r.M = uint4(a.M.x & ~b.M.x, a.M.y & ~b.M.y, a.M.z & ~b.M.z, a.M.w & ~b.M.w);
-	return r;
+    BallotMask r;
+    r.M = uint4(a.M.x & ~b.M.x, a.M.y & ~b.M.y, a.M.z & ~b.M.z, a.M.w & ~b.M.w);
+    return r;
 }
 
 uint BallotCountBits(BallotMask b)
 {
-	return countbits(b.M.x) + countbits(b.M.y) + countbits(b.M.z) + countbits(b.M.w);
+    return countbits(b.M.x) + countbits(b.M.y) + countbits(b.M.z) + countbits(b.M.w);
 }
 
 bool BallotTestLane(BallotMask b, uint lane)
 {
-	uint word = lane >> 5;
-	uint bit = lane & 31u;
+    uint word = lane >> 5;
+    uint bit = lane & 31u;
 
-	uint w =
+    uint w =
 		(word == 0u) ? b.M.x :
 		(word == 1u) ? b.M.y :
 		(word == 2u) ? b.M.z : b.M.w;
 
-	return ((w >> bit) & 1u) != 0u;
+    return ((w >> bit) & 1u) != 0u;
 }
 
 uint BallotFirstLane(BallotMask b)
 {
-	if (b.M.x != 0u)
-	{
-		return 0u + firstbitlow(b.M.x);
-	}
-	if (b.M.y != 0u)
-	{
-		return 32u + firstbitlow(b.M.y);
-	}
-	if (b.M.z != 0u)
-	{
-		return 64u + firstbitlow(b.M.z);
-	}
-	return 96u + firstbitlow(b.M.w);
+    if (b.M.x != 0u)
+    {
+        return 0u + firstbitlow(b.M.x);
+    }
+    if (b.M.y != 0u)
+    {
+        return 32u + firstbitlow(b.M.y);
+    }
+    if (b.M.z != 0u)
+    {
+        return 64u + firstbitlow(b.M.z);
+    }
+    return 96u + firstbitlow(b.M.w);
 }
 
 uint WaveReserveMeshCounter_Grouped(uint meshId)
 {
-	uint lane = WaveGetLaneIndex();
-	BallotMask remaining = WaveBallotAll();
+    uint lane = WaveGetLaneIndex();
+    BallotMask remaining = WaveBallotAll();
 
-	uint myBase = 0u;
+    uint myBase = 0u;
 
 	[loop]
-	while (BallotAny(remaining))
-	{
-		uint leaderLane = BallotFirstLane(remaining);
-		uint leaderMesh = WaveReadLaneAt(meshId, leaderLane);
+    while (BallotAny(remaining))
+    {
+        uint leaderLane = BallotFirstLane(remaining);
+        uint leaderMesh = WaveReadLaneAt(meshId, leaderLane);
 
-		BallotMask group;
-		group.M = WaveActiveBallot(meshId == leaderMesh);
+        BallotMask group;
+        group.M = WaveActiveBallot(meshId == leaderMesh);
 
-		uint cnt = BallotCountBits(group);
+        uint cnt = BallotCountBits(group);
 
-		uint base = 0u;
-		if (lane == leaderLane)
-		{
-			uint byteOffset = leaderMesh * 4u;
-			g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, cnt, base);
-		}
-		base = WaveReadLaneAt(base, leaderLane);
+        uint base = 0u;
+        if (lane == leaderLane)
+        {
+            uint byteOffset = leaderMesh * 4u;
+            g_MeshInstanceCountBuffer.InterlockedAdd(byteOffset, cnt, base);
+        }
+        base = WaveReadLaneAt(base, leaderLane);
 
-		if (BallotTestLane(group, lane))
-		{
-			myBase = base;
-		}
+        if (BallotTestLane(group, lane))
+        {
+            myBase = base;
+        }
 
-		remaining = BallotAndNot(remaining, group);
-	}
+        remaining = BallotAndNot(remaining, group);
+    }
 
-	return myBase;
+    return myBase;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,17 +340,17 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 // ---------------------------------------------------------------------------
 uint MakeSeed8(uint seed)
 {
-	return (WangHash(seed) >> 24) & 0xFFu;
+    return (WangHash(seed) >> 24) & 0xFFu;
 }
 
 uint MakeVariantId(uint seed)
 {
-	return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
+    return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
 }
 
 uint MakeAtlasIndex(uint seed)
 {
-	return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
+    return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,42 +359,42 @@ uint MakeAtlasIndex(uint seed)
 [numthreads(8, 8, 1)]
 void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 {
-	uint dim = g_CB.ChunkVisibleDim;
-	if (tid.x >= dim || tid.y >= dim)
-	{
-		return;
-	}
+    uint dim = g_CB.ChunkVisibleDim;
+    if (tid.x >= dim || tid.y >= dim)
+    {
+        return;
+    }
 
-	uint cellIndex = tid.y * dim + tid.x;
-	uint pool = cellIndex;
+    uint cellIndex = tid.y * dim + tid.x;
+    uint pool = cellIndex;
 
-	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	int2 camChunk = WorldXZToChunkCoord(camXZ, g_CB.ChunkSize);
+    float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+    int2 camChunk = WorldXZToChunkCoord(camXZ, g_CB.ChunkSize);
 
-	int halfExt = (int) g_CB.ChunkHalfExtent;
-	int2 grid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
-	int2 desiredChunk = camChunk + grid;
+    int halfExt = (int) g_CB.ChunkHalfExtent;
+    int2 grid = int2((int) tid.x - halfExt, (int) tid.y - halfExt);
+    int2 desiredChunk = camChunk + grid;
 
-	VisibleCell cell = g_VisibleCellTable[cellIndex];
-	cell.PoolIndex = pool;
+    VisibleCell cell = g_VisibleCellTable[cellIndex];
+    cell.PoolIndex = pool;
 
-	if (all(cell.ChunkCoord == desiredChunk))
-	{
-		g_VisibleCellTable[cellIndex] = cell;
-		return;
-	}
+    if (all(cell.ChunkCoord == desiredChunk))
+    {
+        g_VisibleCellTable[cellIndex] = cell;
+        return;
+    }
 
-	cell.ChunkCoord = desiredChunk;
-	g_VisibleCellTable[cellIndex] = cell;
+    cell.ChunkCoord = desiredChunk;
+    g_VisibleCellTable[cellIndex] = cell;
 
-	PoolChunkCoord pc = g_PoolChunkCoord[pool];
-	pc.ChunkCoord = desiredChunk;
-	pc.ChunkHeight = 0.0f;
-	g_PoolChunkCoord[pool] = pc;
+    PoolChunkCoord pc = g_PoolChunkCoord[pool];
+    pc.ChunkCoord = desiredChunk;
+    pc.ChunkHeight = 0.0f;
+    g_PoolChunkCoord[pool] = pc;
 
-	PoolDirty pd = g_PoolDirty[pool];
-	pd.Dirty = 1u;
-	g_PoolDirty[pool] = pd;
+    PoolDirty pd = g_PoolDirty[pool];
+    pd.Dirty = 1u;
+    g_PoolDirty[pool] = pd;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,97 +405,97 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {
-	uint dim = g_CB.ChunkVisibleDim;
-	uint visibleCells = dim * dim;
+    uint dim = g_CB.ChunkVisibleDim;
+    uint visibleCells = dim * dim;
 
-	uint cellIndex = gid.x;
-	if (cellIndex >= visibleCells)
-	{
-		return;
-	}
+    uint cellIndex = gid.x;
+    if (cellIndex >= visibleCells)
+    {
+        return;
+    }
 
-	uint pool = cellIndex;
+    uint pool = cellIndex;
 
-	PoolDirty pd = g_PoolDirty[pool];
-	if (pd.Dirty != 1u)
-	{
-		return;
-	}
+    PoolDirty pd = g_PoolDirty[pool];
+    if (pd.Dirty != 1u)
+    {
+        return;
+    }
 
-	if (tid.x == 0u)
-	{
-		pd.Dirty = 2u;
-		g_PoolDirty[pool] = pd;
-	}
-	GroupMemoryBarrierWithGroupSync();
+    if (tid.x == 0u)
+    {
+        pd.Dirty = 2u;
+        g_PoolDirty[pool] = pd;
+    }
+    GroupMemoryBarrierWithGroupSync();
 
-	VisibleCell cell = g_VisibleCellTable[cellIndex];
-	int2 chunkCoord = cell.ChunkCoord;
+    VisibleCell cell = g_VisibleCellTable[cellIndex];
+    int2 chunkCoord = cell.ChunkCoord;
 
-	float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
+    float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
 
-	if (!ClampChunkToHeightfield(chunkOriginXZ, g_CB.ChunkSize))
-	{
-		uint base = pool * g_CB.SamplesPerChunk;
+    if (!ClampChunkToHeightfield(chunkOriginXZ, g_CB.ChunkSize))
+    {
+        uint base0 = pool * g_CB.SamplesPerChunk;
 
-		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
-		{
-			g_PoolPositions[base + s].Position = float3(0.0f, INVALID_NAN, 0.0f);
-			g_PoolPositions[base + s].SpeciesId = 0u;
-		}
+        for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
+        {
+            g_PoolPositions[base0 + s].Position = float3(0.0f, INVALID_NAN, 0.0f);
+            g_PoolPositions[base0 + s].SpeciesId = 0u;
+        }
 
-		GroupMemoryBarrierWithGroupSync();
-		if (tid.x == 0u)
-		{
-			pd.Dirty = 0u;
-			g_PoolDirty[pool] = pd;
-		}
-		return;
-	}
+        GroupMemoryBarrierWithGroupSync();
+        if (tid.x == 0u)
+        {
+            pd.Dirty = 0u;
+            g_PoolDirty[pool] = pd;
+        }
+        return;
+    }
 
 	// Cache chunk height at a stable mip (was "5.0" in your previous code).
-	float chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginXZ, 5.0f);
+    float chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginXZ, 5.0f);
 
-	if (tid.x == 0u)
-	{
-		PoolChunkCoord pc = g_PoolChunkCoord[pool];
-		pc.ChunkCoord = chunkCoord;
-		pc.ChunkHeight = chunkHeight;
-		g_PoolChunkCoord[pool] = pc;
-	}
+    if (tid.x == 0u)
+    {
+        PoolChunkCoord pc = g_PoolChunkCoord[pool];
+        pc.ChunkCoord = chunkCoord;
+        pc.ChunkHeight = chunkHeight;
+        g_PoolChunkCoord[pool] = pc;
+    }
 
-	uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
-	uint base = pool * g_CB.SamplesPerChunk;
+    uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
+    uint base = pool * g_CB.SamplesPerChunk;
 
-	uint numSpecies = max(g_CB.NumSpecies, 1u);
+    uint numSpecies = max(g_CB.NumSpecies, 1u);
 
-	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
-	{
-		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
+    for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
+    {
+        uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		float ux = Rand01(seed ^ 0x2222u);
-		float uz = Rand01(seed ^ 0x3333u);
+        float ux = Rand01(seed ^ 0x2222u);
+        float uz = Rand01(seed ^ 0x3333u);
 
-		float jx = (ux - 0.5f) * g_CB.Jitter;
-		float jz = (uz - 0.5f) * g_CB.Jitter;
+        float jx = (ux - 0.5f) * g_CB.Jitter;
+        float jz = (uz - 0.5f) * g_CB.Jitter;
 
-		float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
-		float2 posXZ = chunkOriginXZ + localXZ;
+        float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
+        float2 posXZ = chunkOriginXZ + localXZ;
 
-		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
+        float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
 
-		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
+        uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
 
-		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
-		g_PoolPositions[base + s].SpeciesId = speciesId;
-	}
+        g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
+        g_PoolPositions[base + s].SpeciesId = speciesId;
+    }
 
-	GroupMemoryBarrierWithGroupSync();
-	if (tid.x == 0u)
-	{
-		pd.Dirty = 0u;
-		g_PoolDirty[pool] = pd;
-	}
+    GroupMemoryBarrierWithGroupSync();
+    if (tid.x == 0u)
+    {
+        pd.Dirty = 0u;
+        g_PoolDirty[pool] = pd;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -504,151 +504,162 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 [numthreads(256, 1, 1)]
 void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
 {
-	uint n = MAX_GRASS_SPECIES * 3u;
-	if (tid.x >= n)
-	{
-		return;
-	}
+    uint n = MAX_GRASS_SPECIES * 3u;
+    if (tid.x >= n)
+    {
+        return;
+    }
 
-	g_SpeciesLodCounts[tid.x] = 0u;
-	g_SpeciesLodOffsets[tid.x] = 0u;
-	g_SpeciesLodWriteCounters[tid.x] = 0u;
+    g_SpeciesLodCounts[tid.x] = 0u;
+    g_SpeciesLodOffsets[tid.x] = 0u;
+    g_SpeciesLodWriteCounters[tid.x] = 0u;
 }
 
 // ---------------------------------------------------------------------------
 // Entry B-2) CountInstancesFromPoolsCS
+// - 변경점: chunkDensity는 "청크 수준" early-out/샘플 수 스케일에만 사용
+//         인스턴스 스폰 게이트는 posXZ에서 density를 다시 샘플(정확)
 // ---------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {
-	uint dim = g_CB.ChunkVisibleDim;
-	uint visibleCells = dim * dim;
+    uint dim = g_CB.ChunkVisibleDim;
+    uint visibleCells = dim * dim;
 
-	uint cellIndex = gid.x;
-	if (cellIndex >= visibleCells)
-	{
-		return;
-	}
+    uint cellIndex = gid.x;
+    if (cellIndex >= visibleCells)
+    {
+        return;
+    }
 
-	uint pool = cellIndex;
+    uint pool = cellIndex;
 
-	VisibleCell cell = g_VisibleCellTable[cellIndex];
-	int2 chunkCoord = cell.ChunkCoord;
+    VisibleCell cell = g_VisibleCellTable[cellIndex];
+    int2 chunkCoord = cell.ChunkCoord;
 
-	float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
+    float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
 
-	float2 chunkOriginClamped = chunkOriginXZ;
-	if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
-	{
-		return;
-	}
+    float2 chunkOriginClamped = chunkOriginXZ;
+    if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
+    {
+        return;
+    }
 
-	PoolChunkCoord pc = g_PoolChunkCoord[pool];
-	float chunkHeight = pc.ChunkHeight;
-	if (chunkHeight == 0.0f)
-	{
-		chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
-	}
+    PoolChunkCoord pc = g_PoolChunkCoord[pool];
+    float chunkHeight = pc.ChunkHeight;
+    if (chunkHeight == 0.0f)
+    {
+        chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
+    }
 
-	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
-	float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + 120.0f, chunkOriginClamped.y + g_CB.ChunkSize);
+    float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
+    float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + 120.0f, chunkOriginClamped.y + g_CB.ChunkSize);
 
-	if (!AabbInsideFrustum(chunkMin, chunkMax))
-	{
-		return;
-	}
+    if (!AabbInsideFrustum(chunkMin, chunkMax))
+    {
+        return;
+    }
 
-	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
+    float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+    float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
 
-	float2 dChunk = chunkCenterXZ - camXZ;
-	float distChunkSqr = dot(dChunk, dChunk);
+    float2 dChunk = chunkCenterXZ - camXZ;
+    float distChunkSqr = dot(dChunk, dChunk);
 
-	float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
-	if (distChunkSqr > spawnRadiusSqr)
-	{
-		return;
-	}
+    float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
+    if (distChunkSqr > spawnRadiusSqr)
+    {
+        return;
+    }
 
-	float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
-	float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
+    float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
+    float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
 
-	float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
-	if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
-	{
-		return;
-	}
+	// 청크 수준 density: early-out + 샘플 수 스케일에만 사용 (기존 로직 유지)
+    float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
+    if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
+    {
+        return;
+    }
 
-	uint baseSamples = g_CB.SamplesPerChunk;
-	uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
+    uint baseSamples = g_CB.SamplesPerChunk;
+    uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
 
-	uint densityScaled = (uint) round((float) samplesThisChunk * saturate(chunkDensity));
-	samplesThisChunk = max(densityScaled, (uint) min(SAMPLES_MIN_FAR, samplesThisChunk));
-	samplesThisChunk = min(samplesThisChunk, baseSamples);
+    uint densityScaled = (uint) round((float) samplesThisChunk * saturate(chunkDensity));
+    samplesThisChunk = max(densityScaled, (uint) min(SAMPLES_MIN_FAR, samplesThisChunk));
+    samplesThisChunk = min(samplesThisChunk, baseSamples);
 
-	if (samplesThisChunk == 0u)
-	{
-		return;
-	}
+    if (samplesThisChunk == 0u)
+    {
+        return;
+    }
 
-	uint base = pool * g_CB.SamplesPerChunk;
+    uint base = pool * g_CB.SamplesPerChunk;
 
-	for (uint s = tid.x; s < samplesThisChunk; s += 256u)
-	{
-		PoolEntry p = g_PoolPositions[base + s];
+    for (uint s = tid.x; s < samplesThisChunk; s += 256u)
+    {
+        PoolEntry p = g_PoolPositions[base + s];
 
-		if (isnan(p.Position.y))
-		{
-			continue;
-		}
+        if (isnan(p.Position.y))
+        {
+            continue;
+        }
 
-		uint speciesId = p.SpeciesId;
-		if (speciesId >= g_CB.NumSpecies)
-		{
-			continue;
-		}
+        uint speciesId = p.SpeciesId;
+        if (speciesId >= g_CB.NumSpecies)
+        {
+            continue;
+        }
 
-		uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
-		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
+        uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
+        uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		float spawnGateBase = saturate(g_CB.SpawnProb * chunkDensity);
-		if (Rand01(seed ^ 0x4444u) > spawnGateBase)
-		{
-			continue;
-		}
+        float2 posXZ = p.Position.xz;
 
-		float2 posXZ = p.Position.xz;
+		// *** 변경: 인스턴스 위치에서 density를 "정확히" 샘플 ***
+        float instDensity = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
+        if (instDensity <= DENSITY_DISABLE_THRESHOLD)
+        {
+            continue;
+        }
 
-		float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
-		float heightMask = ComputeHeightMask(hN);
-		if (heightMask <= 0.001f)
-		{
-			continue;
-		}
+        float spawnGateBase = saturate(g_CB.SpawnProb * instDensity);
+        if (Rand01(seed ^ 0x4444u) > spawnGateBase)
+        {
+            continue;
+        }
 
-		float spawnGate = spawnGateBase * heightMask;
-		if (spawnGate <= 0.001f)
-		{
-			continue;
-		}
+        float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
+        float heightMask = ComputeHeightMask(hN);
+        if (heightMask <= 0.001f)
+        {
+            continue;
+        }
 
-		float press01 = saturate(SampleInteraction(posXZ));
+        float spawnGate = spawnGateBase * heightMask;
+        if (spawnGate <= 0.001f)
+        {
+            continue;
+        }
 
-		if (Rand01(seed ^ 0x4A4Au) > spawnGate)
-		{
-			continue;
-		}
+		// (기존 로직 유지: press01 계산은 Count에서는 결과에 영향 없음)
+        float press01 = saturate(SampleInteraction(posXZ));
 
-		float3 posWS = p.Position;
+        if (Rand01(seed ^ 0x4A4Au) > spawnGate)
+        {
+            continue;
+        }
 
-		float2 dxz = posWS.xz - camXZ;
-		float distSqr = dot(dxz, dxz);
+        float3 posWS = p.Position;
 
-		uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
+        float2 dxz = posWS.xz - camXZ;
+        float distSqr = dot(dxz, dxz);
 
-		uint idx = speciesId * 3u + lodIndex;
-		InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
-	}
+        uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
+
+        uint idx = speciesId * 3u + lodIndex;
+        InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -657,34 +668,34 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 [numthreads(1, 1, 1)]
 void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 {
-	uint numSpecies = min(max(g_CB.NumSpecies, 1u), (uint) MAX_GRASS_SPECIES);
+    uint numSpecies = min(max(g_CB.NumSpecies, 1u), (uint) MAX_GRASS_SPECIES);
 
-	uint running0 = 0u;
-	uint running1 = 0u;
-	uint running2 = 0u;
+    uint running0 = 0u;
+    uint running1 = 0u;
+    uint running2 = 0u;
 
-	for (uint s = 0u; s < numSpecies; ++s)
-	{
-		uint i0 = s * 3u + 0u;
-		uint i1 = s * 3u + 1u;
-		uint i2 = s * 3u + 2u;
+    for (uint s = 0u; s < numSpecies; ++s)
+    {
+        uint i0 = s * 3u + 0u;
+        uint i1 = s * 3u + 1u;
+        uint i2 = s * 3u + 2u;
 
-		uint c0 = g_SpeciesLodCounts[i0];
-		uint c1 = g_SpeciesLodCounts[i1];
-		uint c2 = g_SpeciesLodCounts[i2];
+        uint c0 = g_SpeciesLodCounts[i0];
+        uint c1 = g_SpeciesLodCounts[i1];
+        uint c2 = g_SpeciesLodCounts[i2];
 
-		g_SpeciesLodOffsets[i0] = running0;
-		g_SpeciesLodOffsets[i1] = running1;
-		g_SpeciesLodOffsets[i2] = running2;
+        g_SpeciesLodOffsets[i0] = running0;
+        g_SpeciesLodOffsets[i1] = running1;
+        g_SpeciesLodOffsets[i2] = running2;
 
-		g_SpeciesLodWriteCounters[i0] = 0u;
-		g_SpeciesLodWriteCounters[i1] = 0u;
-		g_SpeciesLodWriteCounters[i2] = 0u;
+        g_SpeciesLodWriteCounters[i0] = 0u;
+        g_SpeciesLodWriteCounters[i1] = 0u;
+        g_SpeciesLodWriteCounters[i2] = 0u;
 
-		running0 += c0;
-		running1 += c1;
-		running2 += c2;
-	}
+        running0 += c0;
+        running1 += c1;
+        running2 += c2;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -692,230 +703,238 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 // ---------------------------------------------------------------------------
 bool GrassInstanceAabbInsideFrustum_LOD0(float3 posWS, float scale)
 {
-	float hx = 0.5f * scale;
-	float hz = 0.5f * scale;
+    float hx = 0.5f * scale;
+    float hz = 0.5f * scale;
 
-	float3 bmin = posWS + float3(-hx, 0.0f, -hz);
-	float3 bmax = posWS + float3(hx, 1.0f * scale, hz);
+    float3 bmin = posWS + float3(-hx, 0.0f, -hz);
+    float3 bmax = posWS + float3(hx, 1.0f * scale, hz);
 
-	static const float EPS = 0.02f;
-	bmin -= EPS.xxx;
-	bmax += EPS.xxx;
+    static const float EPS = 0.02f;
+    bmin -= EPS.xxx;
+    bmax += EPS.xxx;
 
-	return AabbInsideFrustum(bmin, bmax);
+    return AabbInsideFrustum(bmin, bmax);
 }
 
 static float2 ComputeYawPitchFromNormal(float3 nWS, float yaw)
 {
-	nWS = normalize(nWS);
+    nWS = normalize(nWS);
 
-    // Rotate normal into local space where +Z is "forward" for pitch calc
-    // yaw rotates around Y (up).
-	float s = sin(yaw);
-	float c = cos(yaw);
+	// Rotate normal into local space where +Z is "forward" for pitch calc
+	// yaw rotates around Y (up).
+    float s = sin(yaw);
+    float c = cos(yaw);
 
-    // inverse yaw rotation around Y
-	float3 nL;
-	nL.x = c * nWS.x + s * nWS.z;
-	nL.y = nWS.y;
-	nL.z = -s * nWS.x + c * nWS.z;
+	// inverse yaw rotation around Y
+    float3 nL;
+    nL.x = c * nWS.x + s * nWS.z;
+    nL.y = nWS.y;
+    nL.z = -s * nWS.x + c * nWS.z;
 
-    // Pitch: tilt forward/back so that local up aligns with normal
-	float pitch = atan2(nL.z, max(nL.y, 1e-6f));
+	// Pitch: tilt forward/back so that local up aligns with normal
+    float pitch = atan2(nL.z, max(nL.y, 1e-6f));
 
-	return float2(yaw, pitch);
+    return float2(yaw, pitch);
 }
 
 [numthreads(256, 1, 1)]
 void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {
-	uint dim = g_CB.ChunkVisibleDim;
-	uint visibleCells = dim * dim;
+    uint dim = g_CB.ChunkVisibleDim;
+    uint visibleCells = dim * dim;
 
-	uint cellIndex = gid.x;
-	if (cellIndex >= visibleCells)
-	{
-		return;
-	}
+    uint cellIndex = gid.x;
+    if (cellIndex >= visibleCells)
+    {
+        return;
+    }
 
-	uint pool = cellIndex;
+    uint pool = cellIndex;
 
-	VisibleCell cell = g_VisibleCellTable[cellIndex];
-	int2 chunkCoord = cell.ChunkCoord;
+    VisibleCell cell = g_VisibleCellTable[cellIndex];
+    int2 chunkCoord = cell.ChunkCoord;
 
-	float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
+    float2 chunkOriginXZ = ChunkCoordToWorldOrigin(chunkCoord, g_CB.ChunkSize);
 
-	float2 chunkOriginClamped = chunkOriginXZ;
-	if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
-	{
-		return;
-	}
+    float2 chunkOriginClamped = chunkOriginXZ;
+    if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
+    {
+        return;
+    }
 
-	PoolChunkCoord pc = g_PoolChunkCoord[pool];
-	float chunkHeight = pc.ChunkHeight;
-	if (chunkHeight == 0.0f)
-	{
-		chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
-	}
+    PoolChunkCoord pc = g_PoolChunkCoord[pool];
+    float chunkHeight = pc.ChunkHeight;
+    if (chunkHeight == 0.0f)
+    {
+        chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
+    }
 
-	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
-	float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + 120.0f, chunkOriginClamped.y + g_CB.ChunkSize);
+    float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - 120.0f, chunkOriginClamped.y);
+    float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + 120.0f, chunkOriginClamped.y + g_CB.ChunkSize);
 
-	if (!AabbInsideFrustum(chunkMin, chunkMax))
-	{
-		return;
-	}
+    if (!AabbInsideFrustum(chunkMin, chunkMax))
+    {
+        return;
+    }
 
-	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
+    float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+    float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
 
-	float2 dChunk = chunkCenterXZ - camXZ;
-	float distChunkSqr = dot(dChunk, dChunk);
+    float2 dChunk = chunkCenterXZ - camXZ;
+    float distChunkSqr = dot(dChunk, dChunk);
 
-	float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
-	if (distChunkSqr > spawnRadiusSqr)
-	{
-		return;
-	}
+    float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
+    if (distChunkSqr > spawnRadiusSqr)
+    {
+        return;
+    }
 
-	float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
-	float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
+    float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
+    float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
 
-	float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
-	if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
-	{
-		return;
-	}
+	// 청크 수준 density: early-out + 샘플 수 스케일에만 사용 (기존 로직 유지)
+    float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
+    if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
+    {
+        return;
+    }
 
-	uint baseSamples = g_CB.SamplesPerChunk;
-	uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
+    uint baseSamples = g_CB.SamplesPerChunk;
+    uint samplesThisChunk = ComputeSamplesPerChunk(baseSamples, distChunkSqr, lod0Sqr, spawnRadiusSqr);
 
-	uint densityScaled = (uint) round((float) samplesThisChunk * saturate(chunkDensity));
-	samplesThisChunk = max(densityScaled, (uint) min(SAMPLES_MIN_FAR, samplesThisChunk));
-	samplesThisChunk = min(samplesThisChunk, baseSamples);
+    uint densityScaled = (uint) round((float) samplesThisChunk * saturate(chunkDensity));
+    samplesThisChunk = max(densityScaled, (uint) min(SAMPLES_MIN_FAR, samplesThisChunk));
+    samplesThisChunk = min(samplesThisChunk, baseSamples);
 
-	if (samplesThisChunk == 0u)
-	{
-		return;
-	}
+    if (samplesThisChunk == 0u)
+    {
+        return;
+    }
 
-	uint base = pool * g_CB.SamplesPerChunk;
+    uint base = pool * g_CB.SamplesPerChunk;
 
-	for (uint s = tid.x; s < samplesThisChunk; s += 256u)
-	{
-		PoolEntry p = g_PoolPositions[base + s];
+    for (uint s = tid.x; s < samplesThisChunk; s += 256u)
+    {
+        PoolEntry p = g_PoolPositions[base + s];
 
-		if (isnan(p.Position.y))
-		{
-			continue;
-		}
+        if (isnan(p.Position.y))
+        {
+            continue;
+        }
 
-		uint speciesId = p.SpeciesId;
-		if (speciesId >= g_CB.NumSpecies)
-		{
-			continue;
-		}
+        uint speciesId = p.SpeciesId;
+        if (speciesId >= g_CB.NumSpecies)
+        {
+            continue;
+        }
 
-		uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
-		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
+        uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
+        uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		float spawnGateBase = saturate(g_CB.SpawnProb * chunkDensity);
-		if (Rand01(seed ^ 0x4444u) > spawnGateBase)
-		{
-			continue;
-		}
+        float2 posXZ = p.Position.xz;
 
-		float2 posXZ = p.Position.xz;
+		// *** 변경: 인스턴스 위치에서 density를 "정확히" 샘플 ***
+        float instDensity = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
+        if (instDensity <= DENSITY_DISABLE_THRESHOLD)
+        {
+            continue;
+        }
 
-		float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
-		float heightMask = ComputeHeightMask(hN);
-		if (heightMask <= 0.001f)
-		{
-			continue;
-		}
+        float spawnGateBase = saturate(g_CB.SpawnProb * instDensity);
+        if (Rand01(seed ^ 0x4444u) > spawnGateBase)
+        {
+            continue;
+        }
 
-		float spawnGate = spawnGateBase * heightMask;
-		if (spawnGate <= 0.001f)
-		{
-			continue;
-		}
+        float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
+        float heightMask = ComputeHeightMask(hN);
+        if (heightMask <= 0.001f)
+        {
+            continue;
+        }
 
-		float press01 = saturate(SampleInteraction(posXZ));
+        float spawnGate = spawnGateBase * heightMask;
+        if (spawnGate <= 0.001f)
+        {
+            continue;
+        }
 
-		if (Rand01(seed ^ 0x4A4Au) > spawnGate)
-		{
-			continue;
-		}
+        float press01 = saturate(SampleInteraction(posXZ));
 
-		float3 posWS = p.Position;
+        if (Rand01(seed ^ 0x4A4Au) > spawnGate)
+        {
+            continue;
+        }
 
-		float scaleT = Rand01(seed ^ 0x5555u);
-		float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
+        float3 posWS = p.Position;
 
-		float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
+        float scaleT = Rand01(seed ^ 0x5555u);
+        float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
+
+        float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
 
 		// Sample terrain normal at instance position.
-		float3 terrainN = SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f);
-		terrainN = normalize(terrainN);
+        float3 terrainN = SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f);
+        terrainN = normalize(terrainN);
 
 		// Compute slope amount: 0 on flat (0,1,0), 1 on vertical walls.
-		float slope01 = saturate(1.0f - terrainN.y);
+        float slope01 = saturate(1.0f - terrainN.y);
 
 		// How much to align to the slope.
-		// Add this to GrassGenConstants if you want:
-		// float NormalAlignStrength; // 0..1
-		float align = saturate(slope01);
-		align *= saturate(g_CB.NormalAlignStrength);
-		
+        float align = saturate(slope01);
+        align *= saturate(g_CB.NormalAlignStrength);
+
 		// Target pitch derived from the terrain normal, keeping yaw random.
-		float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
-		float pitchFromNormal = yp.y;
-		float pitch = normalize(pitchFromNormal * align);
+        float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
+        float pitchFromNormal = yp.y;
 
-		float bend01 = lerp(g_CB.BendStrengthMin, g_CB.BendStrengthMax, Rand01(seed ^ 0x8888u));
+		// FIX: normalize(scalar)는 잘못된 사용. 로직은 "align만큼 pitch 적용" 그대로.
+        float pitch = pitchFromNormal * align;
 
-		uint seed8 = MakeSeed8(seed ^ 0x1234u);
-		uint variantId = MakeVariantId(seed);
-		uint atlasIndex = MakeAtlasIndex(seed);
+        float bend01 = lerp(g_CB.BendStrengthMin, g_CB.BendStrengthMax, Rand01(seed ^ 0x8888u));
 
-		float2 dxz = posWS.xz - camXZ;
-		float distSqr = dot(dxz, dxz);
+        uint seed8 = MakeSeed8(seed ^ 0x1234u);
+        uint variantId = MakeVariantId(seed);
+        uint atlasIndex = MakeAtlasIndex(seed);
 
-		uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
+        float2 dxz = posWS.xz - camXZ;
+        float distSqr = dot(dxz, dxz);
 
-		if (!GrassInstanceAabbInsideFrustum_LOD0(posWS, scale))
-		{
-			continue;
-		}
+        uint lodIndex = (distSqr < lod0Sqr) ? 0u : ((distSqr < lod1Sqr) ? 1u : 2u);
 
-		uint meshId =
+        if (!GrassInstanceAabbInsideFrustum_LOD0(posWS, scale))
+        {
+            continue;
+        }
+
+        uint meshId =
 			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[speciesId] :
 			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[speciesId] :
 							   g_SpeciesLOD2MeshId[speciesId];
 
-		WaveReserveMeshCounter_Grouped(meshId);
+        WaveReserveMeshCounter_Grouped(meshId);
 
-		uint idx = speciesId * 3u + lodIndex;
+        uint idx = speciesId * 3u + lodIndex;
 
-		uint local = 0u;
-		InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);
+        uint local = 0u;
+        InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);
 
-		uint globalIndex = g_SpeciesLodOffsets[idx] + local;
+        uint globalIndex = g_SpeciesLodOffsets[idx] + local;
 
-		if (lodIndex == 0u)
-		{
-			GrassMeshInstance inst = MakeGrassMeshInstance(posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
-			g_OutInstancesLOD0[globalIndex] = inst;
-		}
-		else if (lodIndex == 1u)
-		{
-			GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
-			g_OutInstancesLOD1[globalIndex] = inst;
-		}
-		else
-		{
-			GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
-			g_OutInstancesLOD2[globalIndex] = inst;
-		}
-	}
+        if (lodIndex == 0u)
+        {
+            GrassMeshInstance inst = MakeGrassMeshInstance(posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
+            g_OutInstancesLOD0[globalIndex] = inst;
+        }
+        else if (lodIndex == 1u)
+        {
+            GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
+            g_OutInstancesLOD1[globalIndex] = inst;
+        }
+        else
+        {
+            GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
+            g_OutInstancesLOD2[globalIndex] = inst;
+        }
+    }
 }
