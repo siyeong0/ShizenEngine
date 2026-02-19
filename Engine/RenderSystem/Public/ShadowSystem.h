@@ -41,7 +41,7 @@ namespace shz
             // Bias / PCF
             float ReceiverPlaneDepthBiasClamp = 0.00f;
             float FixedDepthBias = 0.001f;
-            int   FixedFilterSize = 5;
+            int   FixedFilterSize = 3;
         };
 
         ShadowSystem() = default;
