@@ -106,7 +106,12 @@ namespace shz
 				psoCi.PSODesc.ResourceLayout.Variables = vars;
 				psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
 
-				SamplerDesc linearClamp =
+				SamplerDesc pointWrap =
+				{
+					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+					TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
+				};
+				SamplerDesc pointClamp =
 				{
 					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
 					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
@@ -114,7 +119,8 @@ namespace shz
 
 				ImmutableSamplerDesc samplers[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_PointClampSampler", linearClamp },
+					{ SHADER_TYPE_PIXEL, "g_PointWrapSampler", pointWrap },
+					{ SHADER_TYPE_PIXEL, "g_PointClampSampler", pointClamp },
 				};
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);

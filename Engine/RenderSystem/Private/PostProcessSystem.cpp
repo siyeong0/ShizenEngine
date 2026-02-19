@@ -171,9 +171,15 @@ namespace shz
 					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 				};
+				SamplerDesc pointClamp =
+				{
+					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
 				ImmutableSamplerDesc samplers[] =
 				{
 					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+					{ SHADER_TYPE_PIXEL, "g_PointClampSampler", pointClamp },
 				};
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
@@ -307,9 +313,15 @@ namespace shz
 					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
 					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
 				};
+				SamplerDesc pointClamp =
+				{
+					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
 				ImmutableSamplerDesc samplers[] =
 				{
 					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+					{ SHADER_TYPE_PIXEL, "g_PointClampSampler", pointClamp },
 				};
 				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
 				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);

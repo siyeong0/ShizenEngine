@@ -110,6 +110,55 @@ namespace shz
 		}
 
 		// -----------------------------------------------------------------
+		// Create blue noise texture
+		// -----------------------------------------------------------------
+		{
+			AssetRef<Texture> blueNoiseTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/BlueNoise.png");
+			AssetPtr<Texture> blueNoiseTexPtr = m_pAssetManager->Acquire(blueNoiseTexRef);
+
+			Texture* pBlueNoiseTex = blueNoiseTexPtr.Get();
+			const auto& mips = pBlueNoiseTex->GetMips();
+			ASSERT(!mips.empty(), "TextureAsset has no mips.");
+
+			const uint32 width = mips[0].Width;
+			const uint32 height = mips[0].Height;
+
+			TextureDesc desc = {};
+			desc.Name = "BlueNoiseTexture";
+			desc.Type = RESOURCE_DIM_TEX_2D;
+			desc.Width = width;
+			desc.Height = height;
+			desc.MipLevels = static_cast<uint32>(mips.size());
+			desc.ArraySize = 1;
+			desc.Format = pBlueNoiseTex->GetFormat();
+			desc.Usage = USAGE_DEFAULT;
+			desc.BindFlags = BIND_SHADER_RESOURCE;
+
+			std::vector<TextureSubResData> subres;
+			subres.resize(mips.size());
+
+			for (size_t i = 0; i < mips.size(); ++i)
+			{
+				const TextureMip& mip = mips[i];
+				TextureSubResData sr = {};
+				sr.pData = mip.Data.data();
+				sr.Stride = static_cast<uint64>(mip.Width) * GetTextureFormatAttribs(desc.Format).GetElementSize();
+				sr.DepthStride = 0;
+				subres[i] = sr;
+			}
+
+			TextureData initData = {};
+			initData.pSubResources = subres.data();
+			initData.NumSubresources = static_cast<uint32>(subres.size());
+
+			RefCntAutoPtr<ITexture> blueNoiseTex = CreateTexture(desc, &initData);
+			ASSERT(blueNoiseTex, "CreateTexture failed.");
+
+			AddTexture(STRING_HASH("BlueNoiseTex"), std::move(blueNoiseTex));
+			m_pPipelineStateManager->RegisterStaticTextureResource("g_BlueNoiseTex", STRING_HASH("BlueNoiseTex"));
+		}
+
+		// -----------------------------------------------------------------
 		// Create shared buffers
 		// -----------------------------------------------------------------
 		{

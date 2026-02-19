@@ -278,6 +278,8 @@ cbuffer TERRAIN_CONSTANTS
 Texture2DArray<float> g_ShadowMapArray;
 SamplerComparisonState g_ShadowCmpSampler;
 
+Texture2D g_BlueNoiseTex;
+
 // Samplers
 SamplerState g_LinearWrapSampler;
 SamplerState g_LinearClampSampler;
@@ -339,7 +341,7 @@ float3 PackNormal01(float3 n)
 
 static float3 UnpackNormal01(float3 n01)
 {
-    return normalize(n01 * 2.0 - 1.0);
+	return normalize(n01 * 2.0 - 1.0);
 }
 
 // Shading model encode/decode for UNORM8 channel
@@ -359,38 +361,38 @@ static uint DecodeShadingModel_U8(float enc)
 //------------------------------------------------------------------------------
 float2 ClipToUV(float4 clip)
 {
-    float invW = rcp(max(abs(clip.w), 1e-6));
-    float2 ndc = clip.xy * invW; // -1..1
-    float2 uv;
-    uv.x = ndc.x * 0.5 + 0.5;
-    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
-    return uv;
+	float invW = rcp(max(abs(clip.w), 1e-6));
+	float2 ndc = clip.xy * invW; // -1..1
+	float2 uv;
+	uv.x = ndc.x * 0.5 + 0.5;
+	uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+	return uv;
 }
 
 float3 ReconstructWorldPos(float2 uv, float depth01)
 {
-    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
-    float4 ndc = float4(ndcXY, depth01, 1.0);
+	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+	float4 ndc = float4(ndcXY, depth01, 1.0);
 
-    float4 ws = mul(ndc, g_FrameCB.InvViewProj);
-    ws.xyz /= max(ws.w, 1e-6);
-    return ws.xyz;
+	float4 ws = mul(ndc, g_FrameCB.InvViewProj);
+	ws.xyz /= max(ws.w, 1e-6);
+	return ws.xyz;
 }
 
 float3 ReconstructWorldRayDir(float2 uv)
 {
-    float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
+	float2 ndcXY = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
 
-    float4 ndcNear = float4(ndcXY, 0.0, 1.0);
-    float4 ndcFar = float4(ndcXY, 1.0, 1.0);
+	float4 ndcNear = float4(ndcXY, 0.0, 1.0);
+	float4 ndcFar = float4(ndcXY, 1.0, 1.0);
 
-    float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
-    float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
+	float4 wsNear = mul(ndcNear, g_FrameCB.InvViewProj);
+	float4 wsFar = mul(ndcFar, g_FrameCB.InvViewProj);
 
-    wsNear.xyz /= max(wsNear.w, 1e-6);
-    wsFar.xyz /= max(wsFar.w, 1e-6);
+	wsNear.xyz /= max(wsNear.w, 1e-6);
+	wsFar.xyz /= max(wsFar.w, 1e-6);
 
-    return normalize(wsFar.xyz - wsNear.xyz);
+	return normalize(wsFar.xyz - wsNear.xyz);
 }
 
 uint2 SVPosToPixel(float4 svPos)
@@ -420,6 +422,13 @@ float DitherThreshold4x4(int2 pix)
 
 	int idx = (pix.x & 3) + ((pix.y & 3) << 2);
 	return (bayer4[idx] + 0.5) / 16.0;
+}
+
+float GetBlueNoiseDither(int2 pix)
+{
+	float2 uv = float2(pix) / 1024.0;
+	float2 offset = float2(g_FrameCB.FrameIndex * 0.618f, g_FrameCB.FrameIndex * 0.133f);
+	return g_BlueNoiseTex.SampleLevel(g_PointWrapSampler, uv + offset, 0).r;
 }
 
 //------------------------------------------------------------------------------
@@ -464,7 +473,7 @@ float ClipPixelCoverage(float alpha, float4 svPos)
 	float fade = saturate(svPos.z);
 	float cutoff = lerp(0.5, 0.3, fade);
 	float coverage = saturate((alpha - cutoff) / (1.0 - cutoff));
-	float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
+    float t = GetBlueNoiseDither((int2) SVPosToPixel(svPos));
 	clip(coverage - t);
 
 	return coverage;
