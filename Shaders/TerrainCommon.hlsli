@@ -195,12 +195,12 @@ float4 SampleTerrainDiffuseAtWorldXZLevel(float2 worldXZ, float lod)
 // -----------------------------------------------------------------------------
 float3 SampleTerrainNormal(float2 uv)
 {
-	return g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, 0).rgb * 2.0f - 1.0f;
+	return normalize(g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, 0).rgb * 2.0f - 1.0f);
 }
 
 float3 SampleTerrainNormalLevel(float2 uv, float lod)
 {
-	return g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, lod).rgb * 2.0f - 1.0f;
+	return normalize(g_TerrainNormalTex.SampleLevel(g_LinearClampSampler, uv, lod).rgb * 2.0f - 1.0f);
 }
 
 float3 SampleTerrainNormalAtWorldXZ(float2 worldXZ)
