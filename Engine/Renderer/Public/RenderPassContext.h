@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <array>
 
 #include "Primitives/BasicTypes.h"
 
@@ -18,6 +19,7 @@
 #include "Engine/Renderer/Public/PipelineStateManager.h"
 #include "Engine/Renderer/Public/StaticMeshRenderData.h"
 #include "Engine/Renderer/Public/RenderScene.h"
+#include "Engine/Renderer/Public/ViewFamily.h"
 
 namespace shz
 {
@@ -47,26 +49,46 @@ namespace shz
 		View ShadowView;
 
 		// ------------------------------------------------------------
-		// Per-pass packets (Renderer°¡ Ã¤¿ò)
+		// Shadow cascades 
+		// ------------------------------------------------------------
+		static constexpr uint32 MAX_SHADOW_CASCADES = 8;
+
+		std::array<View, MAX_SHADOW_CASCADES> ShadowCascadeViews = {};
+		std::array<ViewFrustumExt, MAX_SHADOW_CASCADES> ShadowCascadeFrustums = {};
+
+		std::array<std::vector<DrawPacket>, MAX_SHADOW_CASCADES> ShadowCascadeDrawPackets = {};
+		std::array<std::vector<uint32>, MAX_SHADOW_CASCADES>     ShadowCascadeInstanceRemaps = {};
+
+		std::vector<DrawIndirectPacket> ShadowIndirectPackets = {};
+
+		// ------------------------------------------------------------
+		// Per-pass packets
 		// ------------------------------------------------------------
 		std::vector<DrawPacket> MainDrawPackets = {};
 		std::vector<DrawPacket> ForwardDrawPackets = {};
-		std::vector<DrawPacket> ShadowDrawPackets = {};
 		std::vector<DrawPacket> DepthPrepassDrawPackets = {};
 
 		std::vector<DrawIndirectPacket> MainIndirectPackets = {};
 		std::vector<DrawIndirectPacket> ForwardIndirectPackets = {};
-		std::vector<DrawIndirectPacket> ShadowIndirectPackets = {};
 		std::vector<DrawIndirectPacket> DepthPrepassIndirectDrawPackets = {};
 
 		void ResetFrame()
 		{
 			MainDrawPackets.clear();
 			ForwardDrawPackets.clear();
-			ShadowDrawPackets.clear();
+			DepthPrepassDrawPackets.clear();
+
 			MainIndirectPackets.clear();
 			ForwardIndirectPackets.clear();
+			DepthPrepassIndirectDrawPackets.clear();
+
 			ShadowIndirectPackets.clear();
+
+			for (uint32 i = 0; i < MAX_SHADOW_CASCADES; ++i)
+			{
+				ShadowCascadeDrawPackets[i].clear();
+				ShadowCascadeInstanceRemaps[i].clear();
+			}
 		}
 	};
 } // namespace shz

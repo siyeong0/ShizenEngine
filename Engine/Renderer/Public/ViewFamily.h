@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include "Engine/Core/Math/Math.h"
+#include "Engine/RHI/Interface/IDeviceContext.h"
 
 namespace shz
 {

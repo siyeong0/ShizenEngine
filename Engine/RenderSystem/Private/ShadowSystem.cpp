@@ -7,12 +7,14 @@
 #include <cstdio>
 #include <cstring>
 
+#include "Engine/GraphicsTools/Public/MapHelper.hpp"
+#include "Engine/RHI/Interface/GraphicsTypes.h"
+
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/RenderResourceRegistry.h"
-#include "Engine/GraphicsTools/Public/MapHelper.hpp"
-#include "Engine/RHI/Interface/GraphicsTypes.h"
+#include "Engine/Renderer/Public/RenderScene.h"
 
 namespace shz
 {
@@ -202,7 +204,6 @@ namespace shz
 		float unitsPerTexelX = extentX / res;
 		float unitsPerTexelY = extentY / res;
 		float unitsPerTexel = std::max(unitsPerTexelX, unitsPerTexelY);
-
 		unitsPerTexel = std::max(unitsPerTexel, 1e-6f);
 
 		// Center snap in light space
@@ -244,9 +245,6 @@ namespace shz
 		const float invH = 1.0f / std::max(maxY - minY, 1e-6f);
 		const float invD = 1.0f / std::max(maxZ - minZ, 1e-6f);
 
-		// x_ndc = x * 2/(r-l) + (-(r+l)/(r-l))
-		// y_ndc = y * 2/(t-b) + (-(t+b)/(t-b))
-		// z_01  = z * 1/(zf-zn) + (-(zn)/(zf-zn))
 		const float sx = 2.0f * invW;
 		const float sy = 2.0f * invH;
 		const float sz = 1.0f * invD;
@@ -258,8 +256,61 @@ namespace shz
 		C.LightSpaceScale = float4(sx, sy, sz, 0.0f);
 		C.LightSpaceScaledBias = float4(bx, by, bz, 0.0f);
 
-		// Margin: 필요하면 여기서 cascadeIdx별로 여유를 넣어도 됨.
 		C.MarginProjSpace = float4(0, 0, 0, 0);
+
+		// ------------------------------------------------------------
+		// NEW: CPU-side cascade View/Frustum cache
+		// ------------------------------------------------------------
+		const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
+			minX, maxX,
+			minY, maxY,
+			minZ, maxZ);
+
+		View& v = m_CascadeViews[cascadeIdx];
+		v.PrevViewMatrix = v.ViewMatrix;
+		v.PrevProjMatrix = v.ProjMatrix;
+		v.PrevViewProjMatrix = v.ViewProjMatrix;
+
+		v.ViewMatrix = lightView;
+		v.ProjMatrix = lightProj;
+		v.ViewProjMatrix = lightView * lightProj;
+
+		v.CameraPosition = lightPosWs;
+
+		v.FieldOfViewY = 0.0f;
+		v.AspectRatio = 1.0f;
+
+		v.Viewport =
+		{
+			0, 0,
+			static_cast<int32>(m_CI.ShadowMapResolution),
+			static_cast<int32>(m_CI.ShadowMapResolution)
+		};
+
+		v.NearPlane = minZ;
+		v.FarPlane = maxZ;
+
+		v.bOrthographic = true;
+		v.OrthographicSize = std::max(maxX - minX, maxY - minY);
+
+		ViewFrustumExt fr{};
+		ExtractViewFrustumPlanesFromMatrix(v.ViewProjMatrix, fr);
+		m_CascadeFrustums[cascadeIdx] = fr;
+	}
+
+	// ------------------------------------------------------------
+	// API: getters
+	// ------------------------------------------------------------
+	const View& ShadowSystem::GetCascadeView(uint32 idx) const
+	{
+		ASSERT(idx < m_CI.NumCascades, "GetCascadeView: idx OOB.");
+		return m_CascadeViews[idx];
+	}
+
+	const ViewFrustumExt& ShadowSystem::GetCascadeFrustum(uint32 idx) const
+	{
+		ASSERT(idx < m_CI.NumCascades, "GetCascadeFrustum: idx OOB.");
+		return m_CascadeFrustums[idx];
 	}
 
 	// ------------------------------------------------------------
@@ -268,13 +319,13 @@ namespace shz
 	void ShadowSystem::Initialize(Renderer& renderer, const CreateInfo& ci)
 	{
 		m_CI = ci;
-		m_CI.NumCascades = std::min(m_CI.NumCascades, kMaxCascades);
+		m_CI.NumCascades = std::min(m_CI.NumCascades, MAX_CASCADES);
 
 		m_ShadowMapTexId = STRING_HASH("ShadowMapArray");
 		m_ShadowMapSRVId = STRING_HASH("ShadowMapArray_SRV");
 		m_ShadowAttribsCBId = STRING_HASH("SHADOW_MAP_ATTRIBS");
 
-		for (uint32 i = 0; i < kMaxCascades; ++i)
+		for (uint32 i = 0; i < MAX_CASCADES; ++i)
 		{
 			char name[64]{};
 			std::snprintf(name, sizeof(name), "ShadowMapArray_Cascade%u_DSV", i);
@@ -352,8 +403,15 @@ namespace shz
 		m_ShadowAttribs.MaxAnisotropy = 1;
 		m_ShadowAttribs.FilterWorldSize = 0.0f;
 
-		for (uint32 c = 0; c < kMaxCascades; ++c)
+		for (uint32 c = 0; c < MAX_CASCADES; ++c)
 			SetCascadeCamSpaceZEnd(m_ShadowAttribs, c, FLT_MAX);
+
+		// clear cache
+		for (uint32 c = 0; c < MAX_CASCADES; ++c)
+		{
+			m_CascadeViews[c] = View{};
+			m_CascadeFrustums[c] = ViewFrustumExt{};
+		}
 	}
 
 	void ShadowSystem::Shutdown()
@@ -363,22 +421,19 @@ namespace shz
 
 	void ShadowSystem::UpdateShadowMatrices(Renderer& renderer, const View& mainView, const float3& lightDirWs)
 	{
-		// Assumptions about View:
-		// - mainView.ViewMatrix, mainView.ProjMatrix exist (as you used earlier)
-		// - mainView.NearPlane / FarPlane exist OR you can replace with g_FrameCB Near/Far.
 		const Matrix4x4 cameraView = mainView.ViewMatrix;
 		const Matrix4x4 cameraProj = mainView.ProjMatrix;
 		const Matrix4x4 cameraWorld = cameraView.Inversed(); // affine ok
 
-		const float tanHalfFovY = std::tan(mainView.FieldOfViewY * 0.5f);
-		const float aspect = mainView.AspectRatio;
-
-		// Use View near/far if present; otherwise replace here.
 		const float camNear = mainView.NearPlane;
-		// float camFar = std::max(mainView.FarPlane, camNear + 1.0f);
-		const float camFar = 500.0f;
+
+		// ------------------------------------------------------------
+		// IMPORTANT: shadow visible distance = 500m (or ci.ShadowFarDistance)
+		// ------------------------------------------------------------
+		const float camFar = std::max(m_CI.ShadowFarDistance, camNear + 1.0f);
+
 		// 1) splits
-		float zEnds[kMaxCascades]{};
+		float zEnds[MAX_CASCADES]{};
 		ComputeCascadeSplits(camNear, camFar, m_CI.NumCascades, m_CI.PartitioningFactor, zEnds);
 
 		// 2) fill per cascade
@@ -395,12 +450,14 @@ namespace shz
 
 			float3 cornersWS[8]{};
 			BuildFrustumCornersWS_ForZRange(cameraWorld, invProj, prevEnd, zEnd, cornersWS);
-			BuildCascade_FrustumFitStabilized(c, cornersWS, lightDirWs, (float)m_CI.ShadowMapResolution);
+
+			BuildCascade_FrustumFitStabilized(
+				c, cornersWS, lightDirWs, (float)m_CI.ShadowMapResolution);
 
 			prevEnd = zEnd;
 		}
 
-		for (uint32 c = m_CI.NumCascades; c < kMaxCascades; ++c)
+		for (uint32 c = m_CI.NumCascades; c < MAX_CASCADES; ++c)
 		{
 			SetCascadeCamSpaceZEnd(m_ShadowAttribs, c, FLT_MAX);
 			auto& C = GetCascadeRef(m_ShadowAttribs, c);
@@ -409,6 +466,9 @@ namespace shz
 			C.LightSpaceScaledBias = float4(0, 0, 0, 0);
 			C.StartEndZ = float4(0, 0, 0, 0);
 			C.MarginProjSpace = float4(0, 0, 0, 0);
+
+			m_CascadeViews[c] = View{};
+			m_CascadeFrustums[c] = ViewFrustumExt{};
 		}
 
 		// Upload
@@ -441,6 +501,9 @@ namespace shz
 				[this, c](RenderPassContext& ctx)
 				{
 					ASSERT(ctx.pImmediateContext, "Context is null.");
+					ASSERT(ctx.pScene, "Scene is null.");
+					ASSERT(ctx.pRegistry, "Registry is null.");
+
 					IDeviceContext* pContext = ctx.pImmediateContext;
 
 					Viewport vp = {};
@@ -460,7 +523,28 @@ namespace shz
 						map->CascadeIndex = c;
 					}
 
-					const std::vector<DrawPacket>& packets = ctx.ShadowDrawPackets;
+					// ------------------------------------------------------------
+					// NEW: cascade별 ObjectTable pack (필수!)
+					// ------------------------------------------------------------
+					IBuffer* pShadowObjectTable = ctx.pRegistry->GetBuffer(STRING_HASH("ShadowPassObjectTable"));
+					ASSERT(pShadowObjectTable, "ShadowPassObjectTable missing.");
+
+					const std::vector<uint32>& remap = ctx.ShadowCascadeInstanceRemaps[c];
+					const std::vector<hlsl::ObjectConstants>& tableCPU = ctx.pScene->GetObjectConstantsTableCPU();
+
+					{
+						MapHelper<hlsl::ObjectConstants> map(pContext, pShadowObjectTable, MAP_WRITE, MAP_FLAG_DISCARD);
+						hlsl::ObjectConstants* dst = map;
+
+						for (size_t i = 0; i < remap.size(); ++i)
+						{
+							const uint32 oc = remap[i];
+							ASSERT(oc < (uint32)tableCPU.size(), "Shadow remap OOB.");
+							dst[i] = tableCPU[oc];
+						}
+					}
+
+					const std::vector<DrawPacket>& packets = ctx.ShadowCascadeDrawPackets[c];
 
 					IPipelineState* pLastPSO = nullptr;
 					IShaderResourceBinding* pLastSRB = nullptr;
@@ -502,7 +586,7 @@ namespace shz
 							pLastIB = pkt.IndexBuffer;
 						}
 
-						// per-draw constants
+						// per-draw constants (StartInstanceLocation = objectTable packed offset)
 						{
 							MapHelper<hlsl::DrawConstants> map(
 								pContext,
@@ -517,9 +601,10 @@ namespace shz
 						pContext->DrawIndexed(pkt.DrawAttribs);
 					}
 
+					// Indirect는 현재 구조상 cascade별 CPU cull이 어려워서 그대로 실행(원하면 확장)
 					for (const DrawIndirectPacket& pkt : ctx.ShadowIndirectPackets)
 					{
-						ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
+						ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid indirect packet.");
 
 						if (pLastPSO != pkt.PSO)
 						{
@@ -536,17 +621,12 @@ namespace shz
 
 						if (pLastVB != pkt.VertexBuffer)
 						{
-							IBuffer* ppVertexBuffers[] = { pkt.VertexBuffer };
-							uint64 pOffsets[] = { 0 };
-
+							IBuffer* ppVB[] = { pkt.VertexBuffer };
+							uint64 offs[] = { 0 };
 							pContext->SetVertexBuffers(
-								0,
-								1,
-								ppVertexBuffers,
-								pOffsets,
+								0, 1, ppVB, offs,
 								RESOURCE_STATE_TRANSITION_MODE_VERIFY,
 								SET_VERTEX_BUFFERS_FLAG_RESET);
-
 							pLastVB = pkt.VertexBuffer;
 						}
 
@@ -565,8 +645,7 @@ namespace shz
 								MAP_WRITE,
 								MAP_FLAG_DISCARD);
 
-							hlsl::DrawConstants* dst = map;
-							dst->StartInstanceLocation = pkt.StartInstanceLocation;
+							map->StartInstanceLocation = pkt.StartInstanceLocation;
 						}
 
 						pContext->DrawIndexedIndirect(dia);

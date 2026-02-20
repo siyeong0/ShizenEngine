@@ -190,20 +190,20 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticBufferCBV("SHADOW_CONSTANTS", STRING_HASH("SHADOW_CONSTANTS"));
 
 			auto createObjectTable = [&](const char* name) -> RefCntAutoPtr<IBuffer>
-				{
-					BufferDesc desc = {};
-					desc.Name = name;
-					desc.Usage = USAGE_DYNAMIC;
-					desc.BindFlags = BIND_SHADER_RESOURCE;
-					desc.CPUAccessFlags = CPU_ACCESS_WRITE;
-					desc.Mode = BUFFER_MODE_STRUCTURED;
-					desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
-					desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Usage = USAGE_DYNAMIC;
+				desc.BindFlags = BIND_SHADER_RESOURCE;
+				desc.CPUAccessFlags = CPU_ACCESS_WRITE;
+				desc.Mode = BUFFER_MODE_STRUCTURED;
+				desc.ElementByteStride = sizeof(hlsl::ObjectConstants);
+				desc.Size = uint64(desc.ElementByteStride) * uint64(DEFAULT_MAX_OBJECT_COUNT);
 
-					RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
-					ASSERT(sb, "Object table create failed.");
-					return sb;
-				};
+				RefCntAutoPtr<IBuffer> sb = CreateBuffer(desc, nullptr);
+				ASSERT(sb, "Object table create failed.");
+				return sb;
+			};
 
 			AddBuffer(STRING_HASH("BasePassObjectTable"), std::move(createObjectTable("BasePassObjectTable")));
 			AddBuffer(STRING_HASH("ForwardPassObjectTable"), std::move(createObjectTable("ForwardPassObjectTable")));
@@ -239,7 +239,7 @@ namespace shz
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_SpecularIBLTex", STRING_HASH("EnvSpecularTex"));
 			m_pPipelineStateManager->RegisterStaticTextureResource("g_BrdfIBLTex", STRING_HASH("EnvBrdfTex"));
 		}
-		
+
 
 		m_pDepthPrepassSystem = std::make_unique<DepthPrepassSystem>();
 		m_pGBufferSystem = std::make_unique<GBufferSystem>();
@@ -404,9 +404,8 @@ namespace shz
 		m_PassCtx.MainViewFrustum = frustumMain;
 
 		// ------------------------------------------------------------
-		// Update Frame/Shadow constants + compute lightViewProj (STABLE)
+		// Update Frame constants
 		// ------------------------------------------------------------
-		Matrix4x4 lightViewProj = {};
 		float3 lightDirWs = {};
 		{
 			MapHelper<hlsl::FrameConstants> frameCB(ctx, pFrameCB, MAP_WRITE, MAP_FLAG_DISCARD);
@@ -440,10 +439,7 @@ namespace shz
 			frameCB->PrevDeltaTime = viewFamily.PrevDeltaTime;
 			frameCB->PrevCurrTime = viewFamily.PrevCurrentTime;
 
-
-			// ------------------------------------------------------------
 			// Global light (first one)
-			// ------------------------------------------------------------
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights()) { globalLight = &l; break; }
 
@@ -457,173 +453,32 @@ namespace shz
 			frameCB->LightDirWS = lightDirWs;
 			frameCB->LightColor = lightColor;
 			frameCB->LightIntensity = lightIntensity;
-
-			// ============================================================
-			// STABLE SHADOW (Camera-locked center + Texel Snap + WorldY near/far)
-			// ============================================================
-			// ----------------------------
-			// Tunables
-			// ----------------------------
-			const float ShadowHalfExtent = 500.0f;  // XY 반범위(m)
-			const float ShadowDepth = 400.0f;  // 라이트 방향 커버 깊이(m)
-			const float PadZ = 30.0f;
-
-			// 월드 높이 범위 (네 월드 스펙)
-			const float WorldMinY = -500.0f;
-			const float WorldMaxY = 1000.0f;
-
-			const float3 lightForward = lightDirWs.Normalized();
-
-			// Robust up
-			float3 up = float3(0, 1, 0);
-			if (Abs(Vector3::Dot(up, lightForward)) > 0.99f) { up = float3(0, 0, 1); }
-
-			// ----------------------------
-			// 0) unitsPerTexel (고정) + centerWs 월드 양자화(이동 안정화의 핵심)
-			// ----------------------------
-			const float extentXY = ShadowHalfExtent * 2.0f;
-			const float unitsPerTexel = extentXY / float(m_pShadowSystem->GetResolution());
-
-			// 카메라 중심을 "텍셀 월드 크기" 단위로 양자화해서 연속 이동을 제거
-			float3 centerWs = view.CameraPosition;
-			centerWs.x = floor(centerWs.x / unitsPerTexel + 0.5f) * unitsPerTexel;
-			centerWs.z = floor(centerWs.z / unitsPerTexel + 0.5f) * unitsPerTexel;
-			// Y는 보통 양자화하지 않음(높낮이 이동 시 점프 방지). 필요하면 고정/클램프 가능.
-			// centerWs.y = view.CameraPosition.y;
-
-			// ----------------------------
-			// 1) light view
-			// ----------------------------
-			const float3 lightPosWs = centerWs - lightForward * ShadowDepth;
-			const Matrix4x4 lightView = Matrix4x4::LookAtLH(lightPosWs, centerWs, up);
-
-			// ----------------------------
-			// 2) Ortho XY (고정 크기)
-			// ----------------------------
-			float minX = -ShadowHalfExtent;
-			float maxX = +ShadowHalfExtent;
-			float minY = -ShadowHalfExtent;
-			float maxY = +ShadowHalfExtent;
-
-			// ----------------------------
-			// 3) near/far: 월드 Y 범위를 대표점 8개로 투영해서 z min/max
-			//    (centerWs가 양자화돼서 이 값도 프레임마다 '덜' 흔들림)
-			// ----------------------------
-			float nearZ = +FLT_MAX;
-			float farZ = -FLT_MAX;
-
-			const float x0 = centerWs.x - ShadowHalfExtent;
-			const float x1 = centerWs.x + ShadowHalfExtent;
-			const float z0 = centerWs.z - ShadowHalfExtent;
-			const float z1 = centerWs.z + ShadowHalfExtent;
-
-			const float3 samplesWS[8] =
-			{
-				float3(x0, WorldMinY, z0),
-				float3(x1, WorldMinY, z0),
-				float3(x0, WorldMinY, z1),
-				float3(x1, WorldMinY, z1),
-
-				float3(x0, WorldMaxY, z0),
-				float3(x1, WorldMaxY, z0),
-				float3(x0, WorldMaxY, z1),
-				float3(x1, WorldMaxY, z1),
-			};
-
-			for (int i = 0; i < 8; ++i)
-			{
-				const float4 pLs4 = float4(samplesWS[i], 1.0f) * lightView;
-				nearZ = Min(nearZ, pLs4.z);
-				farZ = Max(farZ, pLs4.z);
-			}
-
-			nearZ -= PadZ;
-			farZ += PadZ;
-
-			// 안전장치
-			if (farZ < nearZ + 1.0f)
-			{
-				const float mid = 0.5f * (nearZ + farZ);
-				nearZ = mid - 1.0f;
-				farZ = mid + 1.0f;
-			}
-
-			nearZ = -PadZ;
-			farZ = ShadowDepth * 3.0f + PadZ; // 넉넉히
-
-			// ----------------------------
-			// 4) (선택 but 권장) Projection Window Snap in light-space
-			//    - world 양자화만으로도 대부분 끝나지만,
-			//      남는 부동소수/행렬 오차를 한번 더 눌러줌
-			// ----------------------------
-			{
-				// center in light-space
-				const float4 centerLs4 = float4(centerWs, 1.0f) * lightView;
-				const float2 centerLs = float2(centerLs4.x, centerLs4.y);
-
-				// snap to nearest texel in light-space (unitsPerTexel은 위에서 고정 계산)
-				const float2 snapped =
-				{
-					floor(centerLs.x / unitsPerTexel + 0.5f) * unitsPerTexel,
-					floor(centerLs.y / unitsPerTexel + 0.5f) * unitsPerTexel
-				};
-
-				const float2 delta = snapped - centerLs;
-
-				// shift ortho window by delta
-				minX += delta.x;  maxX += delta.x;
-				minY += delta.y;  maxY += delta.y;
-			}
-
-			// ----------------------------
-			// 5) lightProj + lightViewProj
-			// ----------------------------
-			const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
-				minX, maxX,
-				minY, maxY,
-				nearZ, farZ);
-
-			lightViewProj = lightView * lightProj;
-			frameCB->LightViewProj = lightViewProj;
-
-			// ----------------------------
-			// 6) PassCtx ShadowView 갱신
-			// ----------------------------
-			m_PassCtx.ShadowView.PrevViewMatrix = m_PassCtx.ShadowView.ViewMatrix;
-			m_PassCtx.ShadowView.PrevProjMatrix = m_PassCtx.ShadowView.ProjMatrix;
-			m_PassCtx.ShadowView.PrevViewProjMatrix = m_PassCtx.ShadowView.ViewProjMatrix;
-
-			m_PassCtx.ShadowView.CameraPosition = float3(0.0f, 0.0f, 0.0f);
-			m_PassCtx.ShadowView.ViewMatrix = lightView;
-			m_PassCtx.ShadowView.ProjMatrix = lightProj;
-			m_PassCtx.ShadowView.ViewProjMatrix = lightViewProj;
-
-			m_PassCtx.ShadowView.FieldOfViewY = 0.0f;
-			m_PassCtx.ShadowView.AspectRatio = 1.0f;
-
-			m_PassCtx.ShadowView.Viewport =
-			{
-				0, 0,
-				static_cast<int32>(m_pShadowSystem->GetResolution()),
-				static_cast<int32>(m_pShadowSystem->GetResolution())
-			};
-
-			m_PassCtx.ShadowView.NearPlane = nearZ;
-			m_PassCtx.ShadowView.FarPlane = farZ;
-
-			m_PassCtx.ShadowView.bOrthographic = true;
-			m_PassCtx.ShadowView.OrthographicSize = (maxX - minX);
-
 		}
 
+		// ------------------------------------------------------------
+		// Update cascaded shadows (ShadowFarDistance=500 반영은 ShadowSystem 내부 CI)
+		// ------------------------------------------------------------
 		m_pShadowSystem->UpdateShadowMatrices(*this, view, lightDirWs);
 
 		// ------------------------------------------------------------
-		// Shadow frustum (for culling etc.)
+		// NEW: cache cascade view/frustum into PassCtx
 		// ------------------------------------------------------------
-		ViewFrustumExt frustumShadow = {};
-		ExtractViewFrustumPlanesFromMatrix(lightViewProj, frustumShadow);
-		m_PassCtx.ShadowViewFrustum = frustumShadow;
+		const uint32 numCascades = m_pShadowSystem->GetNumCascades();
+		ASSERT(numCascades <= RenderPassContext::kMaxShadowCascades, "Num cascades exceeds context capacity.");
+
+		for (uint32 c = 0; c < numCascades; ++c)
+		{
+			m_PassCtx.ShadowCascadeViews[c] = m_pShadowSystem->GetCascadeView(c);
+			m_PassCtx.ShadowCascadeFrustums[c] = m_pShadowSystem->GetCascadeFrustum(c);
+		}
+
+		// (optional) keep legacy single shadow frustum if you still need it elsewhere
+		// Here we just mirror cascade0 for compatibility
+		if (numCascades > 0)
+		{
+			m_PassCtx.ShadowView = m_PassCtx.ShadowCascadeViews[0];
+			m_PassCtx.ShadowViewFrustum = m_PassCtx.ShadowCascadeFrustums[0];
+		}
 
 		// ------------------------------------------------------------
 		// Common barriers
@@ -643,7 +498,7 @@ namespace shz
 
 		pushBarrier(pErrorTex, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE);
 
-		// Apply pending buffer updates
+		// Apply pending buffer updates (기존 그대로)
 		for (const BufferUpdateDesc& bud : m_PendingBufferUpdates)
 		{
 			IBuffer* pBuf = m_pRegistry->GetBuffer(bud.ResourceId);
@@ -686,33 +541,30 @@ namespace shz
 		// Helper: pack object table using instanceRemap
 		// ------------------------------------------------------------
 		auto packObjectTableFromRemap = [&](IBuffer* pObjectTableSB, const std::vector<uint32>& remap)
+		{
+			ASSERT(pObjectTableSB, "ObjectTableSB is null.");
+			const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
+
+			MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
+			hlsl::ObjectConstants* dst = map;
+
+			for (size_t i = 0; i < remap.size(); ++i)
 			{
-				ASSERT(pObjectTableSB, "ObjectTableSB is null.");
-				const std::vector<hlsl::ObjectConstants>& tableCPU = scene.GetObjectConstantsTableCPU();
-
-				MapHelper<hlsl::ObjectConstants> map(ctx, pObjectTableSB, MAP_WRITE, MAP_FLAG_DISCARD);
-				hlsl::ObjectConstants* dst = map;
-
-				for (size_t i = 0; i < remap.size(); ++i)
-				{
-					const uint32 oc = remap[i];
-					ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
-					dst[i] = tableCPU[oc];
-				}
-			};
+				const uint32 oc = remap[i];
+				ASSERT(oc < static_cast<uint32>(tableCPU.size()), "OcIndex OOB.");
+				dst[i] = tableCPU[oc];
+			}
+		};
 
 		// ------------------------------------------------------------
 		// Build packets + pack object tables
-		// (Visibility + LOD is now inside RenderScene::BuildDrawPackets)
 		// ------------------------------------------------------------
 		std::vector<uint32> instanceRemap;
 
 		auto pipelineResolver = [this](MaterialId matId, uint64 rpKey) -> const MaterialPipelineBinding&
-			{
-				return this->AcquireMaterialPipelineBinding(matId, rpKey);
-			};
-
-		View shadowView = m_PassCtx.ShadowView;
+		{
+			return this->AcquireMaterialPipelineBinding(matId, rpKey);
+		};
 
 		// GBuffer
 		scene.BuildDrawPackets(
@@ -745,41 +597,50 @@ namespace shz
 
 		packObjectTableFromRemap(pForwardPassObjectTable, instanceRemap);
 
-		// Shadow
-		scene.BuildDrawPackets(
-			STRING_HASH("Shadow"),
-			m_PassCtx.ShadowView,
-			view,
-			pipelineResolver,
-			m_PassCtx.ShadowDrawPackets,
-			instanceRemap);
+		// ------------------------------------------------------------
+		// NEW: Shadow cascade별 BuildDrawPackets (cascade view frustum culling)
+		// - passKey는 "Shadow"로 유지 (배치 분류/머터리얼 규칙 그대로)
+		// - renderView만 cascadeView로 바꿔서 culling이 cascade별로 달라짐
+		// - LOD 선택은 "main view 기준"으로 유지 (shadow에서 LOD pop 줄임)
+		// ------------------------------------------------------------
+		for (uint32 c = 0; c < numCascades; ++c)
+		{
+			const View& cascadeView = m_PassCtx.ShadowCascadeViews[c];
 
-		packObjectTableFromRemap(pShadowPassObjectTable, instanceRemap);
+			scene.BuildDrawPackets(
+				STRING_HASH("Shadow"),
+				cascadeView,   // render/cull view = cascade
+				view,          // lod view = main
+				pipelineResolver,
+				m_PassCtx.ShadowCascadeDrawPackets[c],
+				m_PassCtx.ShadowCascadeInstanceRemaps[c]);
+		}
 
+		// Indirect packets (현재는 기존처럼 1회만 구축)
 		scene.BuildIndirectDrawPackets(STRING_HASH("GBuffer"), pipelineResolver, m_PassCtx.MainIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("Forward"), pipelineResolver, m_PassCtx.ForwardIndirectPackets);
-		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
 		scene.BuildIndirectDrawPackets(STRING_HASH("DepthPrepass"), pipelineResolver, m_PassCtx.DepthPrepassIndirectDrawPackets);
+		scene.BuildIndirectDrawPackets(STRING_HASH("Shadow"), pipelineResolver, m_PassCtx.ShadowIndirectPackets);
 
 		IBuffer* pIndirectArgs = m_pRegistry->GetBuffer(STRING_HASH("IndirectArgsBuffer"));
 		IBuffer* pIndirectCounters = m_pRegistry->GetBuffer(STRING_HASH("IndirectDrawCountBuffer"));
 		ASSERT(pIndirectArgs, "IndirectArgs buffer missing.");
 
 		auto patchIndirectPackets = [&](std::vector<DrawIndirectPacket>& packets)
+		{
+			for (DrawIndirectPacket& p : packets)
 			{
-				for (DrawIndirectPacket& p : packets)
-				{
-					p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
-					p.DrawAttribs.pCounterBuffer = pIndirectCounters;
-				}
-			};
+				p.DrawAttribs.pAttribsBuffer = pIndirectArgs;
+				p.DrawAttribs.pCounterBuffer = pIndirectCounters;
+			}
+		};
 		patchIndirectPackets(m_PassCtx.MainIndirectPackets);
 		patchIndirectPackets(m_PassCtx.ForwardIndirectPackets);
-		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
 		patchIndirectPackets(m_PassCtx.DepthPrepassIndirectDrawPackets);
+		patchIndirectPackets(m_PassCtx.ShadowIndirectPackets);
 
 		// ------------------------------------------------------------
-		// Pending transitions
+		// Pending transitions (기존 그대로)
 		// ------------------------------------------------------------
 		if (!m_PendingBarriers.empty())
 		{
@@ -792,7 +653,7 @@ namespace shz
 		m_PendingBarriers.clear();
 
 		// ------------------------------------------------------------
-		// Execute passes
+		// Execute passes (기존 그대로)
 		// ------------------------------------------------------------
 		std::vector<StateTransitionDesc> barriers;
 
@@ -921,42 +782,42 @@ namespace shz
 		// Helpers
 		// -----------------------------------------------------------------
 		auto isWriteAccess = [](const RenderPassResourceAccess& a) -> bool
-			{
-				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-				return false;
-			};
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
 
 		auto hasClearValue = [&](uint64 resourceId) -> bool
-			{
-				return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
-			};
+		{
+			return builder.ClearValues.find(resourceId) != builder.ClearValues.end();
+		};
 
 		auto findClearValue = [&](uint64 resourceId, bool bDepth) -> OptimizedClearValue
+		{
+			OptimizedClearValue cv = {};
+			if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
 			{
-				OptimizedClearValue cv = {};
-				if (auto it = builder.ClearValues.find(resourceId); it != builder.ClearValues.end())
+				cv = it->second;
+			}
+			else
+			{
+				// default: black / depth=1
+				if (bDepth)
 				{
-					cv = it->second;
+					cv.DepthStencil.Depth = 1.f;
+					cv.DepthStencil.Stencil = 0;
 				}
 				else
 				{
-					// default: black / depth=1
-					if (bDepth)
-					{
-						cv.DepthStencil.Depth = 1.f;
-						cv.DepthStencil.Stencil = 0;
-					}
-					else
-					{
-						cv.Color[0] = 0.f;
-						cv.Color[1] = 0.f;
-						cv.Color[2] = 0.f;
-						cv.Color[3] = 0.f;
-					}
+					cv.Color[0] = 0.f;
+					cv.Color[1] = 0.f;
+					cv.Color[2] = 0.f;
+					cv.Color[3] = 0.f;
 				}
-				return cv;
-			};
+			}
+			return cv;
+		};
 
 		// -----------------------------------------------------------------
 		// Build RHI RenderPass + Framebuffer attachments
@@ -1591,19 +1452,19 @@ namespace shz
 			}
 
 			auto createImmutableBuffer = [](IRenderDevice* device, const char* name, BIND_FLAGS bindFlags, const void* pData, uint32 dataSize) -> RefCntAutoPtr<IBuffer>
-				{
-					BufferDesc desc = {};
-					desc.Name = name;
-					desc.Size = dataSize;
-					desc.Usage = USAGE_IMMUTABLE;
-					desc.BindFlags = bindFlags;
-					BufferData initData = {};
-					initData.pData = pData;
-					initData.DataSize = dataSize;
-					RefCntAutoPtr<IBuffer> pBuffer;
-					device->CreateBuffer(desc, &initData, &pBuffer);
-					return pBuffer;
-				};
+			{
+				BufferDesc desc = {};
+				desc.Name = name;
+				desc.Size = dataSize;
+				desc.Usage = USAGE_IMMUTABLE;
+				desc.BindFlags = bindFlags;
+				BufferData initData = {};
+				initData.pData = pData;
+				initData.DataSize = dataSize;
+				RefCntAutoPtr<IBuffer> pBuffer;
+				device->CreateBuffer(desc, &initData, &pBuffer);
+				return pBuffer;
+			};
 
 			const uint32 vbBytes = static_cast<uint32>(packed.size() * sizeof(PackedStaticVertex));
 			RefCntAutoPtr<IBuffer> pVB = createImmutableBuffer(m_pDevice, "StaticMesh_VB", BIND_VERTEX_BUFFER, packed.data(), vbBytes);
@@ -1745,9 +1606,9 @@ namespace shz
 	const MaterialPipelineBinding& Renderer::AcquireMaterialPipelineBinding(MaterialId materialId, uint64 renderPassKey)
 	{
 		auto hashCombine64 = [](uint64 h, uint64 v)
-			{
-				return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
-			};
+		{
+			return h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
+		};
 
 		const uint64 hash = hashCombine64(materialId, renderPassKey);
 		auto it = m_PipelineBindingCache.find(hash);
@@ -1816,47 +1677,47 @@ namespace shz
 		};
 
 		auto bindVarByStages = [&](const char* name, SHADER_TYPE stageMask, auto&& setterFn) -> SHADER_TYPE
+		{
+			SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
+			bool anyBound = false;
+
+			// If mask is known, only try those stages.
+			if (stageMask != SHADER_TYPE_UNKNOWN)
 			{
-				SHADER_TYPE actuallyBound = SHADER_TYPE_UNKNOWN;
-				bool anyBound = false;
-
-				// If mask is known, only try those stages.
-				if (stageMask != SHADER_TYPE_UNKNOWN)
+				for (SHADER_TYPE st : kStages)
 				{
-					for (SHADER_TYPE st : kStages)
-					{
-						if ((stageMask & st) == 0)
-							continue;
+					if ((stageMask & st) == 0)
+						continue;
 
-						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-						if (var)
-						{
-							setterFn(var);
-							anyBound = true;
-							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
-						}
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+					if (var)
+					{
+						setterFn(var);
+						anyBound = true;
+						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
 					}
 				}
+			}
 
-				// Fallback: probe all shaders used by the material/template.
-				if (!anyBound)
+			// Fallback: probe all shaders used by the material/template.
+			if (!anyBound)
+			{
+				for (const RefCntAutoPtr<IShader>& shader : material.GetShaders(pass))
 				{
-					for (const RefCntAutoPtr<IShader>& shader : material.GetShaders(pass))
-					{
-						ASSERT(shader, "Shader in source instance is null.");
-						const SHADER_TYPE st = shader->GetDesc().ShaderType;
+					ASSERT(shader, "Shader in source instance is null.");
+					const SHADER_TYPE st = shader->GetDesc().ShaderType;
 
-						IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
-						if (var)
-						{
-							setterFn(var);
-							actuallyBound = (SHADER_TYPE)(actuallyBound | st);
-						}
+					IShaderResourceVariable* var = out.pSRB->GetVariableByName(st, name);
+					if (var)
+					{
+						setterFn(var);
+						actuallyBound = (SHADER_TYPE)(actuallyBound | st);
 					}
 				}
+			}
 
-				return actuallyBound;
-			};
+			return actuallyBound;
+		};
 
 		// ---------------------------------------------------------------------
 		// Constant Buffers (bind ALL reflected CBs + store them)
@@ -2287,43 +2148,43 @@ namespace shz
 
 		// Access classification
 		auto isWrite = [](const RenderPassResourceAccess& a) -> bool
-			{
-				if (a.Access == RENDER_ACCESS_WRITE)     return true;
-				if (a.Access == RENDER_ACCESS_READ)      return false;
-				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+		{
+			if (a.Access == RENDER_ACCESS_WRITE)     return true;
+			if (a.Access == RENDER_ACCESS_READ)      return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
 
-				switch (a.Usage)
-				{
-				case RENDER_USAGE_RTV:
-				case RENDER_USAGE_DSV_WRITE:
-				case RENDER_USAGE_UAV:
-					return true;
-				default:
-					return false;
-				}
-			};
+			switch (a.Usage)
+			{
+			case RENDER_USAGE_RTV:
+			case RENDER_USAGE_DSV_WRITE:
+			case RENDER_USAGE_UAV:
+				return true;
+			default:
+				return false;
+			}
+		};
 
 		auto isRead = [](const RenderPassResourceAccess& a) -> bool
+		{
+			if (a.Access == RENDER_ACCESS_READ)      return true;
+			if (a.Access == RENDER_ACCESS_WRITE)     return false;
+			if (a.Access == RENDER_ACCESS_READWRITE) return true;
+
+			switch (a.Usage)
 			{
-				if (a.Access == RENDER_ACCESS_READ)      return true;
-				if (a.Access == RENDER_ACCESS_WRITE)     return false;
-				if (a.Access == RENDER_ACCESS_READWRITE) return true;
+			case RENDER_USAGE_SRV:
+			case RENDER_USAGE_CBV:
+			case RENDER_USAGE_DSV_READ:
+			case RENDER_USAGE_INDIRECT_ARGUMENT:
+				return true;
 
-				switch (a.Usage)
-				{
-				case RENDER_USAGE_SRV:
-				case RENDER_USAGE_CBV:
-				case RENDER_USAGE_DSV_READ:
-				case RENDER_USAGE_INDIRECT_ARGUMENT:
-					return true;
+			case RENDER_USAGE_UAV:
+				return false;
 
-				case RENDER_USAGE_UAV:
-					return false;
-
-				default:
-					return false;
-				}
-			};
+			default:
+				return false;
+			}
+		};
 
 		// ------------------------------------------------------------
 		// Build per-resource use lists (deterministic key order via std::map)
@@ -2382,10 +2243,10 @@ namespace shz
 		adj.resize(n);
 
 		auto pushEdge = [&](uint32 u, uint32 v)
-			{
-				if (u == v) return;
-				adj[u].push_back(v);
-			};
+		{
+			if (u == v) return;
+			adj[u].push_back(v);
+		};
 
 		// ------------------------------------------------------------
 		// Dependency rules (simple RenderGraph-lite):
@@ -2444,18 +2305,18 @@ namespace shz
 		}
 
 		auto passName = [&](uint32 passIndex) -> const char*
-			{
-				return m_PassTable.at(m_PassAddOrder[passIndex]).Name.c_str();
-			};
+		{
+			return m_PassTable.at(m_PassAddOrder[passIndex]).Name.c_str();
+		};
 
 		auto dumpUse = [&](uint64 rid, const UseList& ul)
-			{
-				std::cout << "RID=" << rid << "\n  Writers:";
-				for (uint32 w : ul.Writers) std::cout << " " << passName(w);
-				std::cout << "\n  Readers:";
-				for (uint32 r : ul.Readers) std::cout << " " << passName(r);
-				std::cout << "\n\n";
-			};
+		{
+			std::cout << "RID=" << rid << "\n  Writers:";
+			for (uint32 w : ul.Writers) std::cout << " " << passName(w);
+			std::cout << "\n  Readers:";
+			for (uint32 r : ul.Readers) std::cout << " " << passName(r);
+			std::cout << "\n\n";
+		};
 
 		// ------------------------------------------------------------
 		// Finalize adjacency: sort+unique each list, then compute indegree
@@ -2574,11 +2435,11 @@ namespace shz
 		agg.reserve(accesses.size());
 
 		auto isWrite = [](const RenderPassResourceAccess& a)
-			{
-				if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
-				if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
-				return false;
-			};
+		{
+			if (a.Access == RENDER_ACCESS_WRITE || a.Access == RENDER_ACCESS_READWRITE) return true;
+			if (a.Usage == RENDER_USAGE_RTV || a.Usage == RENDER_USAGE_DSV_WRITE || a.Usage == RENDER_USAGE_UAV) return true;
+			return false;
+		};
 
 		for (const auto& a : accesses)
 		{
