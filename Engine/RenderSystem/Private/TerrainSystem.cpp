@@ -436,6 +436,7 @@ namespace shz
 	}
 
 	// Per-frame Update
+// Per-frame Update (Instanced batching)
 	void TerrainSystem::Update(Renderer& renderer, RenderScene* pScene, const View& view)
 	{
 		ASSERT(pScene, "RenderScene is null.");
@@ -451,7 +452,9 @@ namespace shz
 		const uint32 numChunksZ = uint32(std::ceil(worldSizeZ / m_ChunkSize));
 		ASSERT(numChunksX > 0u && numChunksZ > 0u, "Number of chunks must be > 0.");
 
+		// ---------------------------------------------------------------------
 		// Update TerrainCB once per frame.
+		// ---------------------------------------------------------------------
 		{
 			hlsl::TerrainConstants cb = {};
 			cb.WorldOriginXZ = float2{ worldOriginX, worldOriginZ };
@@ -484,11 +487,13 @@ namespace shz
 		}
 
 		auto idx2D = [&](uint32 cx, uint32 cz) -> uint32
-			{
-				return cz * numChunksX + cx;
-			};
+		{
+			return cz * numChunksX + cx;
+		};
 
+		// ---------------------------------------------------------------------
 		// LOD ranges (kept).
+		// ---------------------------------------------------------------------
 		struct LodRange final { float End; };
 		const LodRange lodRanges[5] =
 		{
@@ -500,30 +505,32 @@ namespace shz
 		};
 
 		auto selectLodOnly = [&](float dist) -> uint32
-			{
-				uint32 lod = 0u;
-				if (dist < lodRanges[0].End) { lod = 0u; }
-				else if (dist < lodRanges[1].End) { lod = 1u; }
-				else if (dist < lodRanges[2].End) { lod = 2u; }
-				else if (dist < lodRanges[3].End) { lod = 3u; }
-				else { lod = 4u; }
+		{
+			uint32 lod = 0u;
+			if (dist < lodRanges[0].End) { lod = 0u; }
+			else if (dist < lodRanges[1].End) { lod = 1u; }
+			else if (dist < lodRanges[2].End) { lod = 2u; }
+			else if (dist < lodRanges[3].End) { lod = 3u; }
+			else { lod = 4u; }
 
-				return Clamp(lod, 0u, Max(0u, m_NumLods - 1u));
-			};
+			return Clamp(lod, 0u, Max(0u, m_NumLods - 1u));
+		};
 
 		auto morphForClampedLod = [&](float dist, uint32 lod) -> float
-			{
-				ASSERT(lod + 1 < m_NumLods, "LOD must have a valid next LOD for morphing.");
+		{
+			ASSERT(lod + 1 < m_NumLods, "LOD must have a valid next LOD for morphing.");
 
-				const uint32 idx = Min(lod, 3u);
-				const float d1 = lodRanges[idx].End;
-				const float d0 = d1 * 0.85f;
+			const uint32 idx = Min(lod, 3u);
+			const float d1 = lodRanges[idx].End;
+			const float d0 = d1 * 0.85f;
 
-				const float t = Clamp01((dist - d0) / (d1 - d0));
-				return t * t * (3.0f - 2.0f * t);
-			};
+			const float t = Clamp01((dist - d0) / (d1 - d0));
+			return t * t * (3.0f - 2.0f * t);
+		};
 
-		// Build LOD grid.
+		// ---------------------------------------------------------------------
+		// Build LOD grid (per-chunk chosen lod).
+		// ---------------------------------------------------------------------
 		std::vector<uint8> lodGrid;
 		lodGrid.resize(size_t(numChunksX) * size_t(numChunksZ), uint8(Max(0u, m_NumLods - 1u)));
 
@@ -556,7 +563,9 @@ namespace shz
 			}
 		}
 
+		// ---------------------------------------------------------------------
 		// Neighbor clamp (LOD diff <= 1).
+		// ---------------------------------------------------------------------
 		{
 			bool changed = true;
 			uint32 iter = 0u;
@@ -572,12 +581,12 @@ namespace shz
 						uint8& a = lodGrid[idx2D(cx, cz)];
 
 						auto clampPair = [&](uint32 nx, uint32 nz)
-							{
-								uint8& b = lodGrid[idx2D(nx, nz)];
+						{
+							uint8& b = lodGrid[idx2D(nx, nz)];
 
-								if (b > uint8(a + 1u)) { b = uint8(a + 1u); changed = true; }
-								if (a > uint8(b + 1u)) { a = uint8(b + 1u); changed = true; }
-							};
+							if (b > uint8(a + 1u)) { b = uint8(a + 1u); changed = true; }
+							if (a > uint8(b + 1u)) { a = uint8(b + 1u); changed = true; }
+						};
 
 						if (cx > 0u) { clampPair(cx - 1u, cz); }
 						if (cx + 1u < numChunksX) { clampPair(cx + 1u, cz); }
@@ -588,30 +597,69 @@ namespace shz
 			}
 		}
 
-		// --------------------------------------------------------------------
-		// Build instances for ALL chunks (no visibility cull here)
-		// TerrainSystem always Add; RenderScene will do visibility per-chunk.
-		// --------------------------------------------------------------------
-		std::vector<hlsl::TerrainDrawConstants> instances;
-		instances.reserve(size_t(numChunksX) * size_t(numChunksZ));
-
 		const float yMin = m_HeightOffset;
 		const float yMax = m_HeightOffset + m_HeightScale;
-
 		const float3 cam = view.CameraPosition;
 
 		auto nLod = [&](int32 nx, int32 nz, uint32 lodHere) -> uint32
+		{
+			if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
 			{
-				if (nx < 0 || nz < 0 || nx >= int32(numChunksX) || nz >= int32(numChunksZ))
-				{
-					return lodHere;
-				}
-				else
-				{
-					return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
-				}
-			};
+				return lodHere;
+			}
+			return uint32(lodGrid[idx2D(uint32(nx), uint32(nz))]);
+		};
 
+		// ---------------------------------------------------------------------
+		// Instanced batching:
+		//  - Group chunks by (LOD, StitchMask). Material is single (m_TerrainMaterialId).
+		//  - Concatenate batches into TerrainDrawConstantsBuffer contiguously.
+		//  - Register ONLY one TerrainObject per batch with InstanceCount > 1.
+		// ---------------------------------------------------------------------
+		struct TerrainBatch final
+		{
+			std::vector<hlsl::TerrainDrawConstants> Instances;
+			Box BoundsWS;          // union bounds in world space (stored as local bounds with Identity world)
+			bool bHasBounds = false;
+			uint32 StartInstanceLocation = 0;
+			uint32 InstanceCount = 0;
+			uint32 Lod = 0;
+			uint8  Mask = 0;
+		};
+
+		const uint32 maxLods = m_NumLods;
+		static constexpr uint32 MASK_COUNT = 16;
+
+		// [lod][mask]
+		std::vector<TerrainBatch> batches;
+		batches.resize(size_t(maxLods) * size_t(MASK_COUNT));
+
+		auto batchAt = [&](uint32 lod, uint8 mask) -> TerrainBatch&
+		{
+			ASSERT(lod < maxLods, "batchAt: lod OOB.");
+			ASSERT(mask < MASK_COUNT, "batchAt: mask OOB.");
+			return batches[size_t(lod) * MASK_COUNT + size_t(mask)];
+		};
+
+		auto unionChunkBoundsWS = [&](TerrainBatch& b, float originX, float originZ, float sizeX, float sizeZ)
+		{
+			// chunk bounds in world space (min/max)
+			const float3 mn = float3{ originX, yMin, originZ };
+			const float3 mx = float3{ originX + sizeX, yMax, originZ + sizeZ };
+
+			if (!b.bHasBounds)
+			{
+				b.BoundsWS = Box(mn, mx);
+				b.bHasBounds = true;
+			}
+			else
+			{
+				b.BoundsWS.Encapsulate(mn);
+				b.BoundsWS.Encapsulate(mx);
+			}
+		};
+
+		// Fill batches
 		for (uint32 cz = 0u; cz < numChunksZ; ++cz)
 		{
 			for (uint32 cx = 0u; cx < numChunksX; ++cx)
@@ -625,6 +673,9 @@ namespace shz
 				const float chunkSizeX = (remainX > 0.0f) ? Min(m_ChunkSize, remainX) : 0.0f;
 				const float chunkSizeZ = (remainZ > 0.0f) ? Min(m_ChunkSize, remainZ) : 0.0f;
 
+				if (chunkSizeX <= EPSILON || chunkSizeZ <= EPSILON)
+					continue;
+
 				const uint32 lod = uint32(lodGrid[idx2D(cx, cz)]);
 				ASSERT(lod < m_NumLods, "Invalid LOD.");
 
@@ -634,13 +685,16 @@ namespace shz
 				if (nLod(int32(cx), int32(cz) - 1, lod) > lod) { mask |= STITCH_BOTTOM; }
 				if (nLod(int32(cx), int32(cz) + 1, lod) > lod) { mask |= STITCH_TOP; }
 
-				const float cxw = chunkOriginX + 0.5f * chunkSizeX;
-				const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
-				const float dx = cam.x - cxw;
-				const float dz = cam.z - czw;
-				const float dist = std::sqrt(dx * dx + dz * dz);
-				const float morph = morphForClampedLod(dist, lod);
-				(void)morph;
+				// optional morph (currently unused)
+				{
+					const float cxw = chunkOriginX + 0.5f * chunkSizeX;
+					const float czw = chunkOriginZ + 0.5f * chunkSizeZ;
+					const float dx = cam.x - cxw;
+					const float dz = cam.z - czw;
+					const float dist = std::sqrt(dx * dx + dz * dz);
+					const float morph = (lod + 1 < m_NumLods) ? morphForClampedLod(dist, lod) : 0.0f;
+					(void)morph;
+				}
 
 				hlsl::TerrainDrawConstants dc = {};
 				dc.ChunkOriginXZ = float2{ chunkOriginX, chunkOriginZ };
@@ -652,71 +706,98 @@ namespace shz
 					(chunkSizeZ > EPSILON) ? (1.0f / chunkSizeZ) : 0.0f
 				};
 
-				instances.emplace_back(dc);
+				TerrainBatch& b = batchAt(lod, mask);
+				b.Lod = lod;
+				b.Mask = mask;
+
+				b.Instances.emplace_back(dc);
+				unionChunkBoundsWS(b, chunkOriginX, chunkOriginZ, chunkSizeX, chunkSizeZ);
 			}
 		}
 
-		if (instances.empty())
+		// Count total instances and assign StartInstanceLocation contiguously
+		uint32 totalInstances = 0u;
+		for (uint32 lod = 0; lod < maxLods; ++lod)
 		{
+			for (uint32 mask = 0; mask < MASK_COUNT; ++mask)
+			{
+				TerrainBatch& b = batchAt(lod, uint8(mask));
+				if (b.Instances.empty())
+					continue;
+
+				b.StartInstanceLocation = totalInstances;
+				b.InstanceCount = static_cast<uint32>(b.Instances.size());
+				totalInstances += b.InstanceCount;
+			}
+		}
+
+		if (totalInstances == 0u)
 			return;
+
+		// Build contiguous instance table
+		std::vector<hlsl::TerrainDrawConstants> instanceTable;
+		instanceTable.resize(totalInstances);
+
+		for (uint32 lod = 0; lod < maxLods; ++lod)
+		{
+			for (uint32 mask = 0; mask < MASK_COUNT; ++mask)
+			{
+				TerrainBatch& b = batchAt(lod, uint8(mask));
+				if (b.Instances.empty())
+					continue;
+
+				std::memcpy(
+					instanceTable.data() + b.StartInstanceLocation,
+					b.Instances.data(),
+					size_t(b.InstanceCount) * sizeof(hlsl::TerrainDrawConstants));
+			}
 		}
 
 		// Upload instance table once per frame.
 		{
-			std::vector<uint8> byteBuffer(instances.size() * sizeof(hlsl::TerrainDrawConstants));
-			std::memcpy(byteBuffer.data(), instances.data(), instances.size() * sizeof(hlsl::TerrainDrawConstants));
+			std::vector<uint8> byteBuffer(instanceTable.size() * sizeof(hlsl::TerrainDrawConstants));
+			std::memcpy(byteBuffer.data(), instanceTable.data(), byteBuffer.size());
 			renderer.UpdateBuffer(STRING_HASH("TerrainDrawConstantsBuffer"), std::move(byteBuffer));
 		}
 
-		// Rebuild scene objects.
+		// Rebuild scene terrain objects: now "one object per batch"
 		for (auto h : m_SceneHandles)
 		{
 			pScene->RemoveTerrain(h);
 		}
 		m_SceneHandles.clear();
 
-		// Add per-chunk TerrainObject always; RenderScene will cull per chunk.
+		// Add per-batch TerrainObject (instanced)
+		for (uint32 lod = 0; lod < maxLods; ++lod)
 		{
-			uint32 chunkIndex = 0u;
-
-			for (uint32 cz = 0u; cz < numChunksZ; ++cz)
+			for (uint32 mask = 0; mask < MASK_COUNT; ++mask)
 			{
-				for (uint32 cx = 0u; cx < numChunksX; ++cx)
-				{
-					const hlsl::TerrainDrawConstants& dc = instances[chunkIndex];
+				TerrainBatch& b = batchAt(lod, uint8(mask));
+				if (b.Instances.empty())
+					continue;
 
-					const uint32 lod = uint32(dc.LodIndex);
-					ASSERT(lod < m_NumLods, "Invalid LOD.");
+				ASSERT(b.bHasBounds, "TerrainBatch should have bounds.");
 
-					uint8 mask = STITCH_NONE;
-					if (nLod(int32(cx) - 1, int32(cz), lod) > lod) { mask |= STITCH_LEFT; }
-					if (nLod(int32(cx) + 1, int32(cz), lod) > lod) { mask |= STITCH_RIGHT; }
-					if (nLod(int32(cx), int32(cz) - 1, lod) > lod) { mask |= STITCH_BOTTOM; }
-					if (nLod(int32(cx), int32(cz) + 1, lod) > lod) { mask |= STITCH_TOP; }
+				RenderScene::TerrainObject obj = {};
+				obj.IndexType = VT_UINT16;
 
-					RenderScene::TerrainObject object = {};
-					object.IndexType = VT_UINT16;
+				obj.VertexBuffer = m_pGridVB;
+				obj.IndexBuffer = m_pLodIB[lod][mask];
+				obj.IndexCount = m_LodIndexCount[lod][mask];
 
-					object.VertexBuffer = m_pGridVB;
-					object.IndexBuffer = m_pLodIB[lod][uint32(mask)];
-					object.IndexCount = m_LodIndexCount[lod][uint32(mask)];
+				obj.InstanceCount = b.InstanceCount;
+				obj.StartInstanceLocation = b.StartInstanceLocation;
 
-					object.InstanceCount = 1u;
-					object.StartInstanceLocation = chunkIndex;
+				obj.MaterialId = m_TerrainMaterialId;
+				obj.bCastShadow = true;
 
-					object.MaterialId = m_TerrainMaterialId;
+				// Visibility bounds:
+				// RenderScene expects LocalBounds + World. We store bounds in WS and use Identity world.
+				obj.World = Matrix4x4::Identity();
+				obj.LocalBounds = b.BoundsWS;
 
-					object.bCastShadow = true;
-
-					// Bounds for RenderScene visibility test
-					object.LocalBounds = Box(float3{ 0.0f, yMin, 0.0f }, float3{ dc.ChunkSizeXZ.x, yMax, dc.ChunkSizeXZ.y });
-					object.World = Matrix4x4::Translation(float3{ dc.ChunkOriginXZ.x, 0.0f, dc.ChunkOriginXZ.y });
-
-					Handle<RenderScene::TerrainObject> handle = pScene->AddTerrain(object);
-					m_SceneHandles.push_back(handle);
-
-					++chunkIndex;
-				}
+				Handle<RenderScene::TerrainObject> h = pScene->AddTerrain(obj);
+				m_SceneHandles.push_back(h);
 			}
 		}
 	}
