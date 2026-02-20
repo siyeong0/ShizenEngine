@@ -15,13 +15,13 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	float2 worldXZ = dc.ChunkOriginXZ + grid01 * dc.ChunkSizeXZ;
 
 	float step = (float) (1u << dc.LodIndex);
-
+	float lod = max(log2(step), 0.0f);
+	
 	float y = SampleWorldHeightAtWorldXZ(worldXZ);
 	float3 worldPos = float3(worldXZ.x, y, worldXZ.y);
 
 	float2 uvWorld01 = WorldXZToTerrainUV(worldXZ);
-
-	float3 normalWorld = SampleTerrainNormalAtWorldXZ(worldXZ);
+	float3 normalWorld = SampleTerrainNormalAtWorldXZLevel(worldXZ, lod);
 
 	float3 tangentWorld = float3(1.0f, 0.0f, 0.0f);
 	tangentWorld = normalize(tangentWorld - normalWorld * dot(normalWorld, tangentWorld));
