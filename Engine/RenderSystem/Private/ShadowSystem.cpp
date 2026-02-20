@@ -517,7 +517,7 @@ namespace shz
 						pContext->DrawIndexed(pkt.DrawAttribs);
 					}
 
-					/*for (const DrawIndirectPacket& pkt : ctx.ShadowIndirectPackets)
+					for (const DrawIndirectPacket& pkt : ctx.ShadowIndirectPackets)
 					{
 						ASSERT(pkt.PSO && pkt.SRB && pkt.VertexBuffer && pkt.IndexBuffer, "Invalid draw packet values.");
 
@@ -570,7 +570,7 @@ namespace shz
 						}
 
 						pContext->DrawIndexedIndirect(dia);
-					}*/
+					}
 				});
 		}
 	}
