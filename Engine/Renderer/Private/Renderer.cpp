@@ -443,6 +443,9 @@ namespace shz
 			const RenderScene::LightObject* globalLight = nullptr;
 			for (const auto& l : scene.GetLights()) { globalLight = &l; break; }
 
+			frameCB->Exposure = scene.GetExposure();
+			frameCB->PreExposure = 1.0f / frameCB->Exposure;
+
 			lightDirWs = globalLight ? globalLight->Direction.Normalized() : float3(0, -1, 0);
 			float3 lightColor = globalLight ? globalLight->Color : float3(1, 1, 1);
 			float  lightIntensity = globalLight ? globalLight->Intensity : 1.0f;

@@ -1,5 +1,5 @@
 #include "Common.hlsli"
-#include "PBRLighting.hlsli"
+#include "BxDF.hlsli"
 #include "Shadow.hlsli"
 
 // GBuffer inputs
@@ -17,46 +17,46 @@ Texture2D<float> g_AmbientOcclusionMap;
 
 struct PSInput
 {
-    float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0;
+	float4 Pos : SV_POSITION;
+	float2 UV : TEXCOORD0;
 };
 
 // ------------------------------------------------------------
 // Foliage lighting add-on (deferred friendly)
 // ------------------------------------------------------------
 static float3 EvaluateFoliageAddon(
-    float3 N,
-    float3 V,
-    float3 L,
-    float3 baseColor,
-    float roughness,
-    float shadow,
-    float3 lightColor,
-    float lightIntensity)
+	float3 N,
+	float3 V,
+	float3 L,
+	float3 baseColor,
+	float roughness,
+	float shadow,
+	float3 lightColor,
+	float lightIntensity)
 {
-    float NoL = saturate(dot(N, L));
+	float NoL = saturate(dot(N, L));
 
-    const float wrap = 0.40;
-    float wrapNoL = saturate((dot(N, L) + wrap) / (1.0 + wrap));
+	const float wrap = 0.40;
+	float wrapNoL = saturate((dot(N, L) + wrap) / (1.0 + wrap));
 
-    float back = saturate(dot(-N, L));
-    float backScatter = pow(back, 2.0) * (1.0 - roughness);
+	float back = saturate(dot(-N, L));
+	float backScatter = pow(back, 2.0) * (1.0 - roughness);
 
-    float darkSide = 1.0 - NoL;
-    float wrapStrength = lerp(0.25, 0.55, darkSide);
-    const float backStrength = 0.55;
+	float darkSide = 1.0 - NoL;
+	float wrapStrength = lerp(0.25, 0.55, darkSide);
+	const float backStrength = 0.55;
 
-    float3 add = baseColor * (wrapNoL * wrapStrength + backScatter * backStrength);
+	float3 add = baseColor * (wrapNoL * wrapStrength + backScatter * backStrength);
 
-    float shadowFront = saturate(shadow);
-    float shadowBack = lerp(1.0, shadowFront, 0.2);
-    add *= lerp(shadowBack, shadowFront, NoL);
+	float shadowFront = saturate(shadow);
+	float shadowBack = lerp(1.0, shadowFront, 0.2);
+	add *= lerp(shadowBack, shadowFront, NoL);
 
-    float upWeight = saturate(dot(N, float3(0, 1, 0)));
-    upWeight = lerp(0.35, 1.0, upWeight);
-    add *= upWeight;
+	float upWeight = saturate(dot(N, float3(0, 1, 0)));
+	upWeight = lerp(0.35, 1.0, upWeight);
+	add *= upWeight;
 
-    return add * lightColor * lightIntensity;
+	return add * lightColor * lightIntensity;
 }
 
 // ------------------------------------------------------------
@@ -64,141 +64,122 @@ static float3 EvaluateFoliageAddon(
 // ------------------------------------------------------------
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    float2 uv = PSIn.UV;
+	float2 uv = PSIn.UV;
 
-    float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
+	float depth01 = g_GBufferDepth.Sample(g_LinearClampSampler, uv);
 
-    // Background / sky pixels
-    if (depth01 >= 0.999999)
-    {
-        float3 dirWS = ReconstructWorldRayDir(uv);
-        float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
-        OutColor = float4(sky, 1.0);
-        return;
-    }
+	// Background / sky pixels
+	if (depth01 >= 0.999999)
+	{
+		float3 dirWS = ReconstructWorldRayDir(uv);
+		float3 sky = g_EnvMapTex.Sample(g_LinearClampSampler, dirWS).rgb;
+		OutColor = float4(sky, 1.0);
+		return;
+	}
 
-    float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
-    float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
-    float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
-    float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
+	float4 gb0 = g_GBuffer0.Sample(g_LinearClampSampler, uv);
+	float4 gb1 = g_GBuffer1.Sample(g_LinearClampSampler, uv);
+	float4 gb2 = g_GBuffer2.Sample(g_LinearClampSampler, uv);
+	float4 gb3 = g_GBuffer3.Sample(g_LinearClampSampler, uv);
 
-    float3 baseColor = gb0.rgb;
-    float opacity = gb0.a;
+	float3 baseColor = gb0.rgb;
+	float opacity = gb0.a;
 
-    float3 N = UnpackNormal01(gb1.xyz);
+	float3 N = UnpackNormal01(gb1.xyz);
 
-    float metallic = saturate(gb2.x);
-    float roughness = saturate(gb2.y);
-    float aoMaterial = saturate(gb2.z);
+	float metallic = saturate(gb2.x);
+	float roughness = saturate(gb2.y);
+	float aoMaterial = saturate(gb2.z);
 
-    float3 emissive = gb3.rgb;
-    uint shadingModel = DecodeShadingModel_U8(gb3.a);
+	float3 emissive = gb3.rgb;
+	uint shadingModel = DecodeShadingModel_U8(gb3.a);
 
-    float3 worldPos = ReconstructWorldPos(uv, depth01);
+	float3 worldPos = ReconstructWorldPos(uv, depth01);
 
-    float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
-    float3 L = normalize(-g_FrameCB.LightDirWS);
+	float3 V = normalize(g_FrameCB.CameraPosition - worldPos);
+	float3 L = normalize(-g_FrameCB.LightDirWS);
 
-    // ------------------------------------------------------------
-    // SSAO
-    // ------------------------------------------------------------
-    float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
-    float aoCombined = saturate(aoMaterial * ssao);
+	// ------------------------------------------------------------
+	// SSAO
+	// ------------------------------------------------------------
+	float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
+	float aoCombined = saturate(aoMaterial * ssao);
 
-    // ------------------------------------------------------------
-    // Shadow (CSM)
-    // ------------------------------------------------------------
-    float3 ddxWorldPos = ddx(worldPos);
-    float3 ddyWorldPos = ddy(worldPos);
+	// ------------------------------------------------------------
+	// Shadow (CSM)
+	// ------------------------------------------------------------
+	float3 ddxWorldPos = ddx(worldPos);
+	float3 ddyWorldPos = ddy(worldPos);
 
-    float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
-    float cameraViewSpaceZ = viewPos.z;
-    bool filterAcrossCascades = true;
+	float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
+	float cameraViewSpaceZ = viewPos.z;
+	bool filterAcrossCascades = true;
 
-    FilteredShadow sh = FilterShadowMapCSM(
-        worldPos,
-        ddxWorldPos,
-        ddyWorldPos,
-        cameraViewSpaceZ,
-        filterAcrossCascades);
+	FilteredShadow sh = FilterShadowMapCSM(
+		worldPos,
+		ddxWorldPos,
+		ddyWorldPos,
+		cameraViewSpaceZ,
+		filterAcrossCascades);
 
-    float shadowCSM = sh.LightAmount;
+	float shadowCSM = sh.LightAmount;
 
-    // ------------------------------------------------------------
-    // Contact shadow
-    // ------------------------------------------------------------
-    float contactShadow = g_ContactShadowMap.Sample(g_LinearClampSampler, uv);
-    float shadowFinal = shadowCSM * contactShadow; // 0..1 visibility
+	// ------------------------------------------------------------
+	// Contact shadow
+	// ------------------------------------------------------------
+	float contactShadow = g_ContactShadowMap.Sample(g_LinearClampSampler, uv);
+	float shadowFinal = shadowCSM * contactShadow; // 0..1 visibility
 
-    // ------------------------------------------------------------
-    // Policy knobs (you can make these constants/CB params)
-    // ------------------------------------------------------------
-    float iblScale = 0.25;
-    float directScale = 1.0;
+	// ------------------------------------------------------------
+	// Policy knobs (you can make these constants/CB params)
+	// ------------------------------------------------------------
+	float indirectScale = 0.25;
+	float directScale = 1.0;
 
-    // Compute factors (unscaled)
-    float3 directFactor = 0;
-    float3 iblFactor = 0;
+	// ------------------------------------------------------------
+	// Shading model branching
+	// ------------------------------------------------------------
+	float3 hdr = 0;
+	if (shadingModel == DEFAULT_LIT)
+	{
+		float3 lightRadiance = g_FrameCB.LightColor * g_FrameCB.LightColor;
+		float3 direct = ShadeDirect(N, V, L, lightRadiance, baseColor, metallic, roughness, shadowFinal);
+		float3 indirect = ShadeIndirectIBL(N, V, baseColor, metallic, roughness, aoCombined);
 
-    // ------------------------------------------------------------
-    // Shading model branching
-    // ------------------------------------------------------------
-    if (shadingModel == DEFAULT_LIT)
-    {
-        ComputeLightingFactors(
-            N, V, L,
-            baseColor,
-            metallic,
-            roughness,
-            aoCombined,
-            shadowFinal,
-            g_FrameCB.LightColor,
-            g_FrameCB.LightIntensity,
-            directFactor,
-            iblFactor);
+		hdr = direct * directScale + indirect * indirectScale + emissive;
+	}
+	else if (shadingModel == FOLIAGE)
+	{
+		// Foliage fixes
+		metallic = 0.0;
+		roughness = clamp(roughness, 0.35, 0.85);
 
-        float3 lit = directFactor * directScale + iblFactor * iblScale + emissive;
-        OutColor = float4(lit, opacity);
-        return;
-    }
-    else if (shadingModel == FOLIAGE)
-    {
-        // Foliage fixes
-        metallic = 0.0;
-        roughness = clamp(roughness, 0.35, 0.85);
+		float coverage = saturate(gb2.w);
+		indirectScale = 0.30;
+		directScale = 0.95;
 
-        float coverage = saturate(gb2.w);
-        iblScale = 0.45;
-        directScale = 0.45;
+		float3 lightRadiance = g_FrameCB.LightColor * g_FrameCB.LightColor;
+		float3 direct = ShadeDirect(N, V, L, lightRadiance, baseColor, metallic, roughness, shadowFinal);
+		float3 indirect = ShadeIndirectIBL(N, V, baseColor, metallic, roughness, aoCombined);
 
-        ComputeLightingFactors(
-            N, V, L,
-            baseColor,
-            metallic,
-            roughness,
-            aoCombined,
-            shadowFinal,
-            g_FrameCB.LightColor,
-            g_FrameCB.LightIntensity,
-            directFactor,
-            iblFactor);
+		hdr = direct * directScale + indirect * indirectScale + emissive;
 
-        float3 lit = directFactor * directScale + iblFactor * iblScale + emissive;
-
-        lit += EvaluateFoliageAddon(
-            normalize(N),
-            normalize(V),
-            normalize(L),
-            baseColor,
-            roughness,
-            shadowFinal,
-            g_FrameCB.LightColor,
-            g_FrameCB.LightIntensity);
-
-        OutColor = float4(lit, opacity);
-        return;
-    }
-
-    // Fallback
-    OutColor = float4(baseColor, opacity);
+		hdr += EvaluateFoliageAddon(
+			normalize(N),
+			normalize(V),
+			normalize(L),
+			baseColor,
+			roughness,
+			shadowFinal,
+			g_FrameCB.LightColor,
+			g_FrameCB.LightIntensity);
+	}
+	else
+	{
+		// ASSERT(false);
+		hdr = baseColor;
+	}
+	
+	hdr *= g_FrameCB.PreExposure;
+	OutColor = float4(hdr, opacity);
 }

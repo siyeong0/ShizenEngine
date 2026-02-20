@@ -407,7 +407,8 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - CHUNK_AABB_HALF_Y, chunkOriginClamped.y);
 	float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + CHUNK_AABB_HALF_Y, chunkOriginClamped.y + g_CB.ChunkSize);
 
-	if (!AabbInsideFrustum(chunkMin, chunkMax))
+    float3 ex = float3(0.5, 0.5, 0.5);
+	if (!AabbInsideFrustum(chunkMin - ex, chunkMax + ex))
 	{
 		return false;
 	}
@@ -452,15 +453,15 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 bool GrassInstanceAabbInsideFrustum(float3 posWS, float scale)
 {
 	// Make bounds conservative. Tune these multipliers to your content.
-	float halfXZ = 0.8f * scale; // was 0.5
-	float minY = -0.2f * scale; // allow bending below origin
-	float maxY = 1.8f * scale; // was 1.0
+	float halfXZ = 0.5 * scale; // was 0.5
+	float minY = -0.05 * scale; // allow bending below origin
+	float maxY = 1.05 * scale;
 
 	float3 bmin = posWS + float3(-halfXZ, minY, -halfXZ);
 	float3 bmax = posWS + float3(halfXZ, maxY, halfXZ);
 
 	// Extra pad helps screen-edge precision issues.
-	float pad = 0.05f * scale + 0.05f;
+	float pad = 0.5f * scale;
 	bmin -= pad.xxx;
 	bmax += pad.xxx;
 

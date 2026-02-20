@@ -1,7 +1,6 @@
-#include "HLSL_Structures.hlsli"
+#include "Common.hlsli"
 
 Texture2D<float4> g_InputColor;
-SamplerState g_LinearClampSampler;
 
 struct PSInput
 {
@@ -24,9 +23,8 @@ float3 ToneMapACES(float3 x)
 
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    float3 hdrColor = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb;
-
-    float3 toneMapped = ToneMapACES(hdrColor);
+    float3 hdr = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb * g_FrameCB.Exposure;
+    float3 ldr = ToneMapACES(hdr);
     
-	OutColor = float4(toneMapped, 1.0);
+    OutColor = float4(ldr, 1.0);
 }

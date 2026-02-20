@@ -30,11 +30,16 @@ struct FrameConstants
 	float DeltaTime;
 	float CurrTime;
 
+    float Exposure;
+    float PreExposure;
+    float _pad0;
+    float LightIntensity;
+	
 	float3 LightDirWS;
-	float _pad0;
-
+    float _pad1;
+	
 	float3 LightColor;
-	float LightIntensity;
+    float _pad2;
 
 	float4x4 LightViewProj;
 };

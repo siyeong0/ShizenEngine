@@ -624,7 +624,11 @@ namespace shz
 		{
 			ImGui::gizmo3D("##LightDirection", m_GlobalLight.Direction, ImGui::GetTextLineHeight() * 10);
 			ImGui::ColorEdit3("##LightColor", reinterpret_cast<float*>(&m_GlobalLight.Color));
-			ImGui::SliderFloat("Intensity", &m_GlobalLight.Intensity, 0.01f, 20.0f);
+			ImGui::SliderFloat("Intensity", &m_GlobalLight.Intensity, 0.01f, 10.0f);
+
+			float currExposure = m_pRenderScene->GetExposure();
+			ImGui::SliderFloat("Exposure", &currExposure, 0.1f, 10.0f);
+			m_pRenderScene->SetExposure(currExposure);
 
 			ImGui::Separator();
 			ImGui::TextDisabled("FPS: %.1f", ImGui::GetIO().Framerate);

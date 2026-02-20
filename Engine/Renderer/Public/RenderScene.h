@@ -167,6 +167,9 @@ namespace shz
 		uint32 GetLightCount() const noexcept { return static_cast<uint32>(m_LightDense.size()); }
 		const std::vector<LightObject>& GetLights() const noexcept { return m_LightDense; }
 
+		void SetExposure(float v) { m_Exposure = v; }
+		float GetExposure() const { return m_Exposure; }
+
 		// ------------------------------------------------------------
 		// ObjectConstants
 		// ------------------------------------------------------------
@@ -460,5 +463,7 @@ namespace shz
 
 		mutable LooseGrid                   m_DynamicGrid = {};
 		mutable std::vector<uint32>         m_DynamicCandidates;   // payloads = object dense indices
+
+		float m_Exposure = 2.0f;
 	};
 } // namespace shz
