@@ -7,8 +7,8 @@ Texture2D<float4> g_GBufferNormal; // packed 0..1 (world)
 static const float SSS_MAX_DISTANCE_WS = 0.1;
 static const int SSS_NUM_STEPS = 24;
 
-static const float SSS_DEPTH_BIAS_VZ = 0.01;
-static const float SSS_THICKNESS_VZ = 0.05;
+static const float SSS_DEPTH_BIAS_VZ = 0.002;
+static const float SSS_THICKNESS_VZ = 0.1;
 
 static const float SSS_FADE_START_WS = 25.0;
 static const float SSS_FADE_END_WS = 30.0;
@@ -110,12 +110,6 @@ void main(in PSInput PSIn, out float4 OutSSS : SV_TARGET0)
 
 		if (dz > SSS_DEPTH_BIAS_VZ && dz < adaptiveThickness)
 		{
-			float3 sceneN = UnpackNormal01(g_GBufferNormal.SampleLevel(g_PointClampSampler, suv, 0).xyz);
-			if (dot(sceneN, rayDirWS) < -0.1)
-			{
-				continue;
-			}
-			
 			hit = 1.0;
 			break;
 		}
