@@ -222,7 +222,7 @@ struct GrassBillboardInstance
 // Grass generation constants (Compute)
 // ----------------------------------------------
 #ifndef MAX_GRASS_SPECIES
-#define MAX_GRASS_SPECIES 16
+#define MAX_GRASS_SPECIES 256
 #endif
 
 struct GrassGenConstants
