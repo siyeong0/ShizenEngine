@@ -434,8 +434,12 @@ namespace shz
 
 			frameCB->NearPlane = view.NearPlane;
 			frameCB->FarPlane = view.FarPlane;
+
 			frameCB->DeltaTime = viewFamily.DeltaTime;
 			frameCB->CurrTime = viewFamily.CurrentTime;
+			frameCB->PrevDeltaTime = viewFamily.PrevDeltaTime;
+			frameCB->PrevCurrTime = viewFamily.PrevCurrentTime;
+
 
 			// ------------------------------------------------------------
 			// Global light (first one)

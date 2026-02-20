@@ -333,12 +333,6 @@ namespace shz
 					m_pGrassSystem->AddGrassDesc(gd);
 				};
 
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_A.fbx");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_A1.fbx");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_B.fbx");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_B1.fbx");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_C.fbx");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_big_clump_D.fbx");
 				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A.fbx");
 				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A1.fbx");
 				addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A2.fbx");
@@ -549,6 +543,10 @@ namespace shz
 		const float t = (float)currTime;
 
 		m_Camera.Update(m_InputController, dt);
+
+		m_ViewFamily.PrevDeltaTime = m_ViewFamily.DeltaTime;
+		m_ViewFamily.PrevCurrentTime = m_ViewFamily.CurrentTime;
+
 		m_ViewFamily.DeltaTime = dt;
 		m_ViewFamily.CurrentTime = t;
 

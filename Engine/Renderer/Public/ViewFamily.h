@@ -33,6 +33,10 @@ namespace shz
 
         float DeltaTime;
         float CurrentTime;
+
+        float PrevDeltaTime;
+        float PrevCurrentTime;
+
         uint64 FrameIndex;
 
         uint32 ShowFlags;
