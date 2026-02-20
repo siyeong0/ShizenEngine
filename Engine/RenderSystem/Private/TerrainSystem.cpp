@@ -130,8 +130,10 @@ namespace shz
 		// Materials.
 		ASSERT(!m_CI.SoilMaterialPath.empty(), "Invalid soil material path.");
 		ASSERT(!m_CI.RockyMaterialPath.empty(), "Invalid rocky material path.");
+		ASSERT(!m_CI.m_GravelMaterialPath.empty(), "Invalid gravel material path.");
 		m_SoilMaterialPath = m_CI.SoilMaterialPath;
 		m_RockyMaterialPath = m_CI.RockyMaterialPath;
+		m_GravelMaterialPath = m_CI.GravelMaterialPath;
 
 		// CPU height array from mip0.
 		buildHeightU16FromHeightTexture(*m_HeightTex);
@@ -349,24 +351,32 @@ namespace shz
 			mat.SetFloat("g_MetallicFactor", 0.0f);
 			mat.SetUint("g_MaterialFlags", 0u);
 
-			// Terrain layer textures (Soil + Rocky).
+			// Terrain layer textures (Soil + Rocky + Gravel)
 			const bool bNormalDX = true;
 			const TerrainLayerPaths soil = buildTerrainLayerPaths(m_SoilMaterialPath, bNormalDX);
 			const TerrainLayerPaths rocky = buildTerrainLayerPaths(m_RockyMaterialPath, bNormalDX);
+			const TerrainLayerPaths gravel = buildTerrainLayerPaths(m_GravelMaterialPath, bNormalDX);
 
-			// Soil.
+			// Soil
 			mat.SetTextureAssetRef("g_SoilBaseColorTex", assetManager.RegisterAsset<Texture>(soil.BaseColor));
 			mat.SetTextureAssetRef("g_SoilNormalTex", assetManager.RegisterAsset<Texture>(soil.Normal));
 			mat.SetTextureAssetRef("g_SoilRoughnessTex", assetManager.RegisterAsset<Texture>(soil.Roughness));
 			mat.SetTextureAssetRef("g_SoilAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(soil.AmbientOcclusion));
 			mat.SetTextureAssetRef("g_SoilDisplacementTex", assetManager.RegisterAsset<Texture>(soil.Displacement));
 
-			// Rocky.
+			// Rocky
 			mat.SetTextureAssetRef("g_RockyBaseColorTex", assetManager.RegisterAsset<Texture>(rocky.BaseColor));
 			mat.SetTextureAssetRef("g_RockyNormalTex", assetManager.RegisterAsset<Texture>(rocky.Normal));
 			mat.SetTextureAssetRef("g_RockyRoughnessTex", assetManager.RegisterAsset<Texture>(rocky.Roughness));
 			mat.SetTextureAssetRef("g_RockyAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(rocky.AmbientOcclusion));
 			mat.SetTextureAssetRef("g_RockyDisplacementTex", assetManager.RegisterAsset<Texture>(rocky.Displacement));
+
+			// Gravel
+			mat.SetTextureAssetRef("g_GravelBaseColorTex", assetManager.RegisterAsset<Texture>(gravel.BaseColor));
+			mat.SetTextureAssetRef("g_GravelNormalTex", assetManager.RegisterAsset<Texture>(gravel.Normal));
+			mat.SetTextureAssetRef("g_GravelRoughnessTex", assetManager.RegisterAsset<Texture>(gravel.Roughness));
+			mat.SetTextureAssetRef("g_GravelAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(gravel.AmbientOcclusion));
+			mat.SetTextureAssetRef("g_GravelDisplacementTex", assetManager.RegisterAsset<Texture>(gravel.Displacement));
 
 			// mat.SetCullMode(CULL_MODE_NONE);
 

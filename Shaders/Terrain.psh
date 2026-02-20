@@ -6,13 +6,19 @@ Texture2D g_SoilBaseColorTex;
 Texture2D g_SoilNormalTex;
 Texture2D g_SoilRoughnessTex;
 Texture2D g_SoilAmbientOcclusionTex;
-Texture2D g_SoilDisplacementTex; // Used as height for POM (soil too)
+Texture2D g_SoilDisplacementTex;
 
 Texture2D g_RockyBaseColorTex;
 Texture2D g_RockyNormalTex;
 Texture2D g_RockyRoughnessTex;
 Texture2D g_RockyAmbientOcclusionTex;
-Texture2D g_RockyDisplacementTex; // Used as height for POM (rock)
+Texture2D g_RockyDisplacementTex;
+
+Texture2D g_GravelBaseColorTex;
+Texture2D g_GravelNormalTex;
+Texture2D g_GravelRoughnessTex;
+Texture2D g_GravelAmbientOcclusionTex;
+Texture2D g_GravelDisplacementTex;
 
 // -----------------------------------------------------------------------------
 // Controls (tune later; can be moved to material constants)
@@ -27,19 +33,19 @@ static const float FADE_END_METERS = 140.0f; // Fully faded micro detail
 static const float MIP_BIAS_NEAR = 0.0f;
 static const float MIP_BIAS_FAR = 2.0f;
 
-static const float MACRO_TINT_STRENTH_BASE = 0.5f; // Base strength of macro tint (global diffuse)
+static const float MACRO_TINT_STRENTH_BASE = 0.25f; // Base strength of macro tint (global diffuse)
 
 // -----------------------------------------------------------------------------
-// POM controls (now applies to BOTH soil and rock)
+// POM controls (applies to soil/rock/gravel)
 // -----------------------------------------------------------------------------
-static const float POM_HEIGHT_METERS = 0.1f; // Keep small (terrain POM should be subtle)
+static const float POM_HEIGHT_METERS = 0.2f; // Keep small (terrain POM should be subtle)
 static const float POM_FADE_START = 6.0f;
 static const float POM_FADE_END = 25.0f;
-static const int POM_STEPS_MIN = 4;
-static const int POM_STEPS_MAX = 8;
+static const int POM_STEPS_MIN = 8;
+static const int POM_STEPS_MAX = 16;
 
 // Suppress POM near randomized-cell edges to hide cross-cell blend seams.
-// edgeDist01: 0 at edge, 0.5 at center
+// edgeDist01: 0 at edge, 0.5 at center.
 static const float POM_EDGE_START = 0.06f;
 static const float POM_EDGE_END = 0.22f;
 
@@ -50,69 +56,68 @@ static const float POM_GRAZE_Z_MIN = 0.18f;
 // POM helper (UV in [0..1), wraps internally via frac())
 // heightTex: height map (displacement), assumed white=high (invert below if needed)
 // -----------------------------------------------------------------------------
-static float2 ApplyPOM_UV(
-    float2 baseUV01,
-    Texture2D heightTex,
-    float mipBias,
-    float3 viewDirTS,
-    float pomFade)
+static float2 ApplyPOM_UV(float2 baseUV01, Texture2D heightTex, float mipBias, float3 viewDirTS, float pomFade)
 {
-	if (pomFade <= 0.0f)
-		return baseUV01;
+    if (pomFade <= 0.0f)
+    {
+        return baseUV01;
+    }
 
-	float3 v = viewDirTS;
+    float3 v = viewDirTS;
 
-    // Stabilize direction (avoid huge offsets at grazing)
-	float vz = max(abs(v.z), POM_GRAZE_Z_MIN);
+    // Stabilize direction (avoid huge offsets at grazing).
+    float vz = max(abs(v.z), POM_GRAZE_Z_MIN);
 
-    // More steps for grazing
-	float angleT = saturate(1.0f - vz);
-	int steps = (int) lerp((float) POM_STEPS_MIN, (float) POM_STEPS_MAX, angleT);
-	steps = max(steps, 4);
+    // More steps for grazing.
+    float angleT = saturate(1.0f - vz);
+    int steps = (int) lerp((float) POM_STEPS_MIN, (float) POM_STEPS_MAX, angleT);
+    steps = max(steps, 4);
 
-	float stepSize = 1.0f / (float) steps;
+    float stepSize = 1.0f / (float) steps;
 
-    // Convert "meters height" -> UV offset scale
-	float heightScaleUV = (POM_HEIGHT_METERS / MICRO_METERS_PER_TILE) * pomFade;
+    // Convert "meters height" -> UV offset scale.
+    float heightScaleUV = (POM_HEIGHT_METERS / MICRO_METERS_PER_TILE) * pomFade;
 
-    // Parallax direction in UV space
-	float2 parDir = (v.xy / vz) * heightScaleUV;
+    // Parallax direction in UV space.
+    float2 parDir = (v.xy / vz) * heightScaleUV;
 
-	float2 uv = baseUV01;
-	float layer = 0.0f;
+    float2 uv = baseUV01;
+    float layer = 0.0f;
 
-    // Height: assume white=high (invert if your displacement is opposite)
-	float h = 1.0f - heightTex.SampleBias(g_LinearWrapSampler, uv, mipBias).r;
+    // Height: assume white=high (invert if your displacement is opposite).
+    float h = heightTex.SampleBias(g_LinearWrapSampler, uv, mipBias).r;
 
     [loop]
-	for (int i = 0; i < steps; ++i)
-	{
-		layer += stepSize;
-		uv -= parDir * stepSize;
+    for (int i = 0; i < steps; ++i)
+    {
+        layer += stepSize;
+        uv -= parDir * stepSize;
 
-		uv = frac(uv);
-		h = 1.0f - heightTex.SampleBias(g_LinearWrapSampler, uv, mipBias).r;
+        uv = frac(uv);
+        h = 1.0f - heightTex.SampleBias(g_LinearWrapSampler, uv, mipBias).r;
 
-		if (layer >= h)
-			break;
-	}
+        if (layer >= h)
+        {
+            break;
+        }
+    }
 
-    // One-step refinement
-	float2 uvPrev = frac(uv + parDir * stepSize);
-	float layerPrev = layer - stepSize;
-	float hPrev = 1.0f - heightTex.SampleBias(g_LinearWrapSampler, uvPrev, mipBias).r;
+    // One-step refinement.
+    float2 uvPrev = frac(uv + parDir * stepSize);
+    float layerPrev = layer - stepSize;
+    float hPrev = heightTex.SampleBias(g_LinearWrapSampler, uvPrev, mipBias).r;
 
-	float a = (layerPrev - hPrev);
-	float b = (layer - h);
-	float w = a / (a - b + 1e-6f);
+    float a = (layerPrev - hPrev);
+    float b = (layer - h);
+    float w = a / (a - b + 1e-6f);
 
-	return frac(lerp(uv, uvPrev, saturate(w)));
+    return frac(lerp(uv, uvPrev, saturate(w)));
 }
 
 // -----------------------------------------------------------------------------
-// Randomized micro tiling sampler + POM for BOTH layers
-// - Keeps your original SampleBias workflow.
-// - POM is applied to both soil and rock sampling UV.
+// Randomized micro tiling sampler + POM for soil/rock/gravel
+// - Keeps SampleBias workflow.
+// - POM is applied to all layer UVs.
 // - POM is suppressed near cell edges + distance fade + graze fade (caller provides pomFade).
 // -----------------------------------------------------------------------------
 void SampleCellVariant(
@@ -123,281 +128,319 @@ void SampleCellVariant(
     float pomFade,
     out float3 outSoilBC,
     out float3 outRockBC,
+    out float3 outGravelBC,
     out float outSoilR,
     out float outRockR,
+    out float outGravelR,
     out float outSoilAO,
     out float outRockAO,
+    out float outGravelAO,
     out float3 outSoilNTS,
-    out float3 outRockNTS)
+    out float3 outRockNTS,
+    out float3 outGravelNTS)
 {
-    // Hash -> random parameters per cell
-	float h1 = frac(sin(dot(ci, float2(127.1f, 311.7f))) * 43758.5453f);
-	float h2 = frac(sin(dot(ci, float2(269.5f, 183.3f))) * 43758.5453f);
+    // Hash -> random parameters per cell.
+    float h1 = frac(sin(dot(ci, float2(127.1f, 311.7f))) * 43758.5453f);
+    float h2 = frac(sin(dot(ci, float2(269.5f, 183.3f))) * 43758.5453f);
 
-    // Random offset in meters within the cell [0..RAND_CELL_METERS)
-	float2 offM = frac(float2(h1, h2)) * RAND_CELL_METERS;
+    // Random offset in meters within the cell [0..RAND_CELL_METERS).
+    float2 offM = frac(float2(h1, h2)) * RAND_CELL_METERS;
 
-    // Rotation index 0..3 (90-degree steps)
-	float rotIdxF = floor(frac(h1 * 13.37f) * 4.0f);
-	int rotIdx = (int) rotIdxF;
+    // Rotation index 0..3 (90-degree steps).
+    float rotIdxF = floor(frac(h1 * 13.37f) * 4.0f);
+    int rotIdx = (int) rotIdxF;
 
-    // Mirror flags
-	float mx = (frac(h2 * 7.91f) < 0.5f) ? -1.0f : 1.0f;
-	float my = (frac(h1 * 5.37f) < 0.5f) ? -1.0f : 1.0f;
+    // Mirror flags.
+    float mx = (frac(h2 * 7.91f) < 0.5f) ? -1.0f : 1.0f;
+    float my = (frac(h1 * 5.37f) < 0.5f) ? -1.0f : 1.0f;
 
-    // Build micro UV from world meters (micro scale) + per-cell offset (meters)
-	float2 uvM = (worldPos.xz + offM) / MICRO_METERS_PER_TILE;
+    // Build micro UV from world meters (micro scale) + per-cell offset (meters).
+    float2 uvM = (worldPos.xz + offM) / MICRO_METERS_PER_TILE;
 
-    // Apply mirror
-	uvM.x *= mx;
-	uvM.y *= my;
+    // Apply mirror.
+    uvM.x *= mx;
+    uvM.y *= my;
 
-    // Apply rotation in 90-degree steps
-	float2 u = uvM;
-	if (rotIdx == 1)
-	{
-		u = float2(uvM.y, -uvM.x);
-	}
-	if (rotIdx == 2)
-	{
-		u = float2(-uvM.x, -uvM.y);
-	}
-	if (rotIdx == 3)
-	{
-		u = float2(-uvM.y, uvM.x);
-	}
+    // Apply rotation in 90-degree steps.
+    float2 u = uvM;
+    if (rotIdx == 1)
+    {
+        u = float2(uvM.y, -uvM.x);
+    }
+    if (rotIdx == 2)
+    {
+        u = float2(-uvM.x, -uvM.y);
+    }
+    if (rotIdx == 3)
+    {
+        u = float2(-uvM.y, uvM.x);
+    }
 
-    // Tile space in [0..1)
-	float2 tileUV_Soil = frac(u);
-	float2 tileUV_Rock = tileUV_Soil;
+    // Tile space in [0..1).
+    float2 tileUV_Soil = frac(u);
+    float2 tileUV_Rock = tileUV_Soil;
+    float2 tileUV_Gravel = tileUV_Soil;
 
-    // -------------------------------------------------------------------------
-    // POM (BOTH layers)
-    // NOTE: uses Wrap sampler while marching, and wraps UV with frac()
-    // -------------------------------------------------------------------------
-	tileUV_Soil = ApplyPOM_UV(tileUV_Soil, g_SoilDisplacementTex, mipBias, viewDirTS, pomFade);
-	tileUV_Rock = ApplyPOM_UV(tileUV_Rock, g_RockyDisplacementTex, mipBias, viewDirTS, pomFade);
+    // POM (all layers).
+    tileUV_Soil = ApplyPOM_UV(tileUV_Soil, g_SoilDisplacementTex, mipBias, viewDirTS, pomFade);
+    tileUV_Rock = ApplyPOM_UV(tileUV_Rock, g_RockyDisplacementTex, mipBias, viewDirTS, pomFade);
+    tileUV_Gravel = ApplyPOM_UV(tileUV_Gravel, g_GravelDisplacementTex, mipBias, viewDirTS, pomFade);
 
-    // BaseColor
-	outSoilBC = g_SoilBaseColorTex.SampleBias(g_LinearClampSampler, tileUV_Soil, mipBias).rgb;
-	outRockBC = g_RockyBaseColorTex.SampleBias(g_LinearClampSampler, tileUV_Rock, mipBias).rgb;
+    // BaseColor.
+    outSoilBC = g_SoilBaseColorTex.SampleBias(g_LinearWrapSampler, tileUV_Soil, mipBias).rgb;
+    outRockBC = g_RockyBaseColorTex.SampleBias(g_LinearWrapSampler, tileUV_Rock, mipBias).rgb;
+    outGravelBC = g_GravelBaseColorTex.SampleBias(g_LinearWrapSampler, tileUV_Gravel, mipBias).rgb;
 
-    // Roughness/AO
-	outSoilR = g_SoilRoughnessTex.SampleBias(g_LinearClampSampler, tileUV_Soil, mipBias).r;
-	outRockR = g_RockyRoughnessTex.SampleBias(g_LinearClampSampler, tileUV_Rock, mipBias).r;
+    // Roughness.
+    outSoilR = g_SoilRoughnessTex.SampleBias(g_LinearWrapSampler, tileUV_Soil, mipBias).r;
+    outRockR = g_RockyRoughnessTex.SampleBias(g_LinearWrapSampler, tileUV_Rock, mipBias).r;
+    outGravelR = g_GravelRoughnessTex.SampleBias(g_LinearWrapSampler, tileUV_Gravel, mipBias).r;
 
-	outSoilAO = g_SoilAmbientOcclusionTex.SampleBias(g_LinearClampSampler, tileUV_Soil, mipBias).r;
-	outRockAO = g_RockyAmbientOcclusionTex.SampleBias(g_LinearClampSampler, tileUV_Rock, mipBias).r;
+    // AO.
+    outSoilAO = g_SoilAmbientOcclusionTex.SampleBias(g_LinearWrapSampler, tileUV_Soil, mipBias).r;
+    outRockAO = g_RockyAmbientOcclusionTex.SampleBias(g_LinearWrapSampler, tileUV_Rock, mipBias).r;
+    outGravelAO = g_GravelAmbientOcclusionTex.SampleBias(g_LinearWrapSampler, tileUV_Gravel, mipBias).r;
 
-    // Normal (decoded to [-1..1])
-	outSoilNTS = g_SoilNormalTex.SampleBias(g_LinearClampSampler, tileUV_Soil, mipBias).xyz * 2.0f - 1.0f;
-	outRockNTS = g_RockyNormalTex.SampleBias(g_LinearClampSampler, tileUV_Rock, mipBias).xyz * 2.0f - 1.0f;
+    // Normal (decoded to [-1..1]).
+    outSoilNTS = g_SoilNormalTex.SampleBias(g_LinearWrapSampler, tileUV_Soil, mipBias).xyz * 2.0f - 1.0f;
+    outRockNTS = g_RockyNormalTex.SampleBias(g_LinearWrapSampler, tileUV_Rock, mipBias).xyz * 2.0f - 1.0f;
+    outGravelNTS = g_GravelNormalTex.SampleBias(g_LinearWrapSampler, tileUV_Gravel, mipBias).xyz * 2.0f - 1.0f;
 }
 
 BASE_PS_MAIN_ENTRY()
 {
-	float4 svPos = GET_PSIN_POS();
-	float4 currClip = GET_PSIN_CURR_CLIP();
-	float4 prevClip = GET_PSIN_PREV_CLIP();
-	float3 worldPos = GET_PSIN_WORLD_POS();
-	float2 globalUV = GET_PSIN_UV();
-	float3 normalWS = GET_PSIN_WORLD_NORMAL();
-	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
+    float4 svPos = GET_PSIN_POS();
+    float4 currClip = GET_PSIN_CURR_CLIP();
+    float4 prevClip = GET_PSIN_PREV_CLIP();
+    float3 worldPos = GET_PSIN_WORLD_POS();
+    float2 globalUV = GET_PSIN_UV();
+    float3 normalWS = GET_PSIN_WORLD_NORMAL();
+    float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
     // -------------------------------------------------------------------------
     // Terrain weights (macro classification)
+    // - flow => gravel
     // -------------------------------------------------------------------------
-	float soilWeight = SampleTerrainSoil(globalUV);
-	float rockWeight = SampleTerrainRocky(globalUV);
+    float soilWeight = SampleTerrainSoil(globalUV);
+    float rockWeight = SampleTerrainRocky(globalUV);
+    float gravelWeight = SampleTerrainFlow(globalUV);
 
-    {
-		float s = max(soilWeight + rockWeight, 1e-6f);
-		float invS = rcp(s);
-		soilWeight *= invS;
-		rockWeight *= invS;
-	}
-
-	float wSoil = soilWeight;
-	float wRock = rockWeight;
+    // Normalize all active layers together. When gravelWeight is 0, this matches old behavior.
+    float wSoil = soilWeight;
+    float wRock = rockWeight;
+    float wGravel = gravelWeight;
+    { 
+        float s = max(wSoil + wRock + wGravel, 1e-6f);
+        float invS = rcp(s);
+        wSoil *= invS;
+        wRock *= invS;
+        wGravel *= invS;
+    }
 
     // -------------------------------------------------------------------------
     // Macro tint (global diffuse) + subtle low-frequency procedural noise
     // -------------------------------------------------------------------------
-	float3 globalDiffuse = SampleTerrainDiffuse(globalUV).rgb;
+    float3 globalDiffuse = SampleTerrainDiffuse(globalUV).rgb;
 
-	float macroNoise01 = 0.0f;
+    float macroNoise01 = 0.0f;
     {
-		float2 p = worldPos.xz / MACRO_NOISE_METERS;
-		float2 ip = floor(p);
-		float2 fp = frac(p);
+        float2 p = worldPos.xz / MACRO_NOISE_METERS;
+        float2 ip = floor(p);
+        float2 fp = frac(p);
 
-		fp = fp * fp * (3.0f - 2.0f * fp);
+        fp = fp * fp * (3.0f - 2.0f * fp);
 
-		float2 c00 = ip + float2(0.0f, 0.0f);
-		float2 c10 = ip + float2(1.0f, 0.0f);
-		float2 c01 = ip + float2(0.0f, 1.0f);
-		float2 c11 = ip + float2(1.0f, 1.0f);
+        float2 c00 = ip + float2(0.0f, 0.0f);
+        float2 c10 = ip + float2(1.0f, 0.0f);
+        float2 c01 = ip + float2(0.0f, 1.0f);
+        float2 c11 = ip + float2(1.0f, 1.0f);
 
-		float h00 = frac(sin(dot(c00, float2(127.1f, 311.7f))) * 43758.5453f);
-		float h10 = frac(sin(dot(c10, float2(127.1f, 311.7f))) * 43758.5453f);
-		float h01 = frac(sin(dot(c01, float2(127.1f, 311.7f))) * 43758.5453f);
-		float h11 = frac(sin(dot(c11, float2(127.1f, 311.7f))) * 43758.5453f);
+        float h00 = frac(sin(dot(c00, float2(127.1f, 311.7f))) * 43758.5453f);
+        float h10 = frac(sin(dot(c10, float2(127.1f, 311.7f))) * 43758.5453f);
+        float h01 = frac(sin(dot(c01, float2(127.1f, 311.7f))) * 43758.5453f);
+        float h11 = frac(sin(dot(c11, float2(127.1f, 311.7f))) * 43758.5453f);
 
-		float hx0 = lerp(h00, h10, fp.x);
-		float hx1 = lerp(h01, h11, fp.x);
-		macroNoise01 = lerp(hx0, hx1, fp.y);
-	}
+        float hx0 = lerp(h00, h10, fp.x);
+        float hx1 = lerp(h01, h11, fp.x);
+        macroNoise01 = lerp(hx0, hx1, fp.y);
+    }
 
-	float macroMul = lerp(0.95f, 1.05f, macroNoise01);
-	float3 macroTint = globalDiffuse * macroMul;
+    float macroMul = lerp(0.95f, 1.05f, macroNoise01);
+    float3 macroTint = globalDiffuse * macroMul;
 
     // -------------------------------------------------------------------------
     // Distance fade (micro strength + mip bias)
     // -------------------------------------------------------------------------
-	float2 camXZ = g_FrameCB.CameraPosition.xz;
-	float distXZ = length(worldPos.xz - camXZ);
+    float2 camXZ = g_FrameCB.CameraPosition.xz;
+    float distXZ = length(worldPos.xz - camXZ);
 
-	float fadeT = saturate((distXZ - FADE_START_METERS) / max(FADE_END_METERS - FADE_START_METERS, 1e-6f));
-	float microStrength = 1.0f - fadeT;
+    float fadeT = saturate((distXZ - FADE_START_METERS) / max(FADE_END_METERS - FADE_START_METERS, 1e-6f));
+    float microStrength = 1.0f - fadeT;
 
-	float mipBias = lerp(MIP_BIAS_NEAR, MIP_BIAS_FAR, fadeT);
+    float mipBias = lerp(MIP_BIAS_NEAR, MIP_BIAS_FAR, fadeT);
 
     // -------------------------------------------------------------------------
     // TBN and view direction in tangent space (for POM)
     // -------------------------------------------------------------------------
-	float3 N = normalize(normalWS);
-	float3 T = normalize(tangentWS);
-	float3 B = normalize(cross(N, T));
-	float3x3 TBN = float3x3(T, B, N);
+    float3 N = normalize(normalWS);
+    float3 T = normalize(tangentWS);
+    float3 B = normalize(cross(N, T));
+    float3x3 TBN = float3x3(T, B, N);
 
-	float3 viewDirWS = normalize(g_FrameCB.CameraPosition - worldPos);
-	float3 viewDirTS = normalize(mul(viewDirWS, transpose(TBN)));
+    float3 viewDirWS = normalize(g_FrameCB.CameraPosition - worldPos);
+    float3 viewDirTS = normalize(mul(viewDirWS, transpose(TBN)));
 
+    T = normalize(T - N * dot(T, N));
+    B = normalize(cross(N, T));
+    viewDirTS = float3(
+        dot(viewDirWS, T),
+        dot(viewDirWS, B),
+        dot(viewDirWS, N)
+    );
+    viewDirTS = normalize(viewDirTS);
+    
     // -------------------------------------------------------------------------
-    // POM fade (now applies regardless of rock/soil; still suppressed near cell edges)
+    // POM fade (applies to any active layer; still suppressed near cell edges)
     // -------------------------------------------------------------------------
-	float pomFade = 0.0f;
+    float pomFade = 0.0f;
     {
-		float distFade = smoothstep(POM_FADE_END, POM_FADE_START, distXZ); // 1 near -> 0 far
+        float distFade = smoothstep(POM_FADE_END, POM_FADE_START, distXZ); // 1 near -> 0 far
 
-		float2 cellP2 = worldPos.xz / RAND_CELL_METERS;
-		float2 cellF2 = frac(cellP2);
+        float2 cellP2 = worldPos.xz / RAND_CELL_METERS;
+        float2 cellF2 = frac(cellP2);
 
-		float edgeDist01 = min(min(cellF2.x, 1.0f - cellF2.x), min(cellF2.y, 1.0f - cellF2.y));
-		float edgeFade = smoothstep(POM_EDGE_START, POM_EDGE_END, edgeDist01);
+        float edgeDist01 = min(min(cellF2.x, 1.0f - cellF2.x), min(cellF2.y, 1.0f - cellF2.y));
+        float edgeFade = smoothstep(POM_EDGE_START, POM_EDGE_END, edgeDist01);
 
-		float grazeFade = saturate((abs(viewDirTS.z) - POM_GRAZE_Z_MIN) / max(1.0f - POM_GRAZE_Z_MIN, 1e-6f));
+        float grazeFade = saturate((abs(viewDirTS.z) - POM_GRAZE_Z_MIN) / max(1.0f - POM_GRAZE_Z_MIN, 1e-6f));
 
-        // Weight gate: allow POM where at least one layer is significant
-		float wAny = max(wSoil, wRock);
+        // Weight gate: allow POM where at least one layer is significant.
+        float wAny = max(wSoil, max(wRock, wGravel));
 
-		pomFade = distFade * edgeFade * grazeFade * saturate(wAny * 2.0f);
+        pomFade = distFade * edgeFade * grazeFade * saturate(wAny * 2.0f);
 
-        // Ease-in to reduce noticeable modulation
-		pomFade = pomFade * pomFade;
-	}
+        // Ease-in to reduce noticeable modulation.
+        pomFade = pomFade * pomFade;
+    }
 
     // -------------------------------------------------------------------------
     // Randomized micro tiling (seam-free via 4-cell blending)
     // -------------------------------------------------------------------------
-	float2 cellP = worldPos.xz / RAND_CELL_METERS;
-	float2 cellI = floor(cellP);
-	float2 cellF = frac(cellP);
+    float2 cellP = worldPos.xz / RAND_CELL_METERS;
+    float2 cellI = floor(cellP);
+    float2 cellF = frac(cellP);
 
-	float2 cellW = cellF * cellF * (3.0f - 2.0f * cellF);
+    float2 cellW = cellF * cellF * (3.0f - 2.0f * cellF);
 
-	float3 soilBC00, rockBC00, soilN00, rockN00;
-	float soilR00, rockR00, soilAO00, rockAO00;
+    float3 soilBC00, rockBC00, gravelBC00, soilN00, rockN00, gravelN00;
+    float soilR00, rockR00, gravelR00, soilAO00, rockAO00, gravelAO00;
 
-	float3 soilBC10, rockBC10, soilN10, rockN10;
-	float soilR10, rockR10, soilAO10, rockAO10;
+    float3 soilBC10, rockBC10, gravelBC10, soilN10, rockN10, gravelN10;
+    float soilR10, rockR10, gravelR10, soilAO10, rockAO10, gravelAO10;
 
-	float3 soilBC01, rockBC01, soilN01, rockN01;
-	float soilR01, rockR01, soilAO01, rockAO01;
+    float3 soilBC01, rockBC01, gravelBC01, soilN01, rockN01, gravelN01;
+    float soilR01, rockR01, gravelR01, soilAO01, rockAO01, gravelAO01;
 
-	float3 soilBC11, rockBC11, soilN11, rockN11;
-	float soilR11, rockR11, soilAO11, rockAO11;
+    float3 soilBC11, rockBC11, gravelBC11, soilN11, rockN11, gravelN11;
+    float soilR11, rockR11, gravelR11, soilAO11, rockAO11, gravelAO11;
 
-	SampleCellVariant(cellI + float2(0.0f, 0.0f), worldPos, mipBias, viewDirTS, pomFade,
-                      soilBC00, rockBC00, soilR00, rockR00, soilAO00, rockAO00, soilN00, rockN00);
-	SampleCellVariant(cellI + float2(1.0f, 0.0f), worldPos, mipBias, viewDirTS, pomFade,
-                      soilBC10, rockBC10, soilR10, rockR10, soilAO10, rockAO10, soilN10, rockN10);
-	SampleCellVariant(cellI + float2(0.0f, 1.0f), worldPos, mipBias, viewDirTS, pomFade,
-                      soilBC01, rockBC01, soilR01, rockR01, soilAO01, rockAO01, soilN01, rockN01);
-	SampleCellVariant(cellI + float2(1.0f, 1.0f), worldPos, mipBias, viewDirTS, pomFade,
-                      soilBC11, rockBC11, soilR11, rockR11, soilAO11, rockAO11, soilN11, rockN11);
+    SampleCellVariant(cellI + float2(0.0f, 0.0f), worldPos, mipBias, viewDirTS, pomFade, soilBC00, rockBC00, gravelBC00, soilR00, rockR00, gravelR00, soilAO00, rockAO00, gravelAO00, soilN00, rockN00, gravelN00);
+    SampleCellVariant(cellI + float2(1.0f, 0.0f), worldPos, mipBias, viewDirTS, pomFade, soilBC10, rockBC10, gravelBC10, soilR10, rockR10, gravelR10, soilAO10, rockAO10, gravelAO10, soilN10, rockN10, gravelN10);
+    SampleCellVariant(cellI + float2(0.0f, 1.0f), worldPos, mipBias, viewDirTS, pomFade, soilBC01, rockBC01, gravelBC01, soilR01, rockR01, gravelR01, soilAO01, rockAO01, gravelAO01, soilN01, rockN01, gravelN01);
+    SampleCellVariant(cellI + float2(1.0f, 1.0f), worldPos, mipBias, viewDirTS, pomFade, soilBC11, rockBC11, gravelBC11, soilR11, rockR11, gravelR11, soilAO11, rockAO11, gravelAO11, soilN11, rockN11, gravelN11);
 
-    // Bilerp across cells
-	float3 soilBCx0 = lerp(soilBC00, soilBC10, cellW.x);
-	float3 soilBCx1 = lerp(soilBC01, soilBC11, cellW.x);
-	float3 soilBC = lerp(soilBCx0, soilBCx1, cellW.y);
+    // Bilerp across cells (base color).
+    float3 soilBCx0 = lerp(soilBC00, soilBC10, cellW.x);
+    float3 soilBCx1 = lerp(soilBC01, soilBC11, cellW.x);
+    float3 soilBC = lerp(soilBCx0, soilBCx1, cellW.y);
 
-	float3 rockBCx0 = lerp(rockBC00, rockBC10, cellW.x);
-	float3 rockBCx1 = lerp(rockBC01, rockBC11, cellW.x);
-	float3 rockBC = lerp(rockBCx0, rockBCx1, cellW.y);
+    float3 rockBCx0 = lerp(rockBC00, rockBC10, cellW.x);
+    float3 rockBCx1 = lerp(rockBC01, rockBC11, cellW.x);
+    float3 rockBC = lerp(rockBCx0, rockBCx1, cellW.y);
 
-	float soilRx0 = lerp(soilR00, soilR10, cellW.x);
-	float soilRx1 = lerp(soilR01, soilR11, cellW.x);
-	float soilR = lerp(soilRx0, soilRx1, cellW.y);
+    float3 gravelBCx0 = lerp(gravelBC00, gravelBC10, cellW.x);
+    float3 gravelBCx1 = lerp(gravelBC01, gravelBC11, cellW.x);
+    float3 gravelBC = lerp(gravelBCx0, gravelBCx1, cellW.y);
 
-	float rockRx0 = lerp(rockR00, rockR10, cellW.x);
-	float rockRx1 = lerp(rockR01, rockR11, cellW.x);
-	float rockR = lerp(rockRx0, rockRx1, cellW.y);
+    // Bilerp across cells (roughness).
+    float soilRx0 = lerp(soilR00, soilR10, cellW.x);
+    float soilRx1 = lerp(soilR01, soilR11, cellW.x);
+    float soilR = lerp(soilRx0, soilRx1, cellW.y);
 
-	float soilAOx0 = lerp(soilAO00, soilAO10, cellW.x);
-	float soilAOx1 = lerp(soilAO01, soilAO11, cellW.x);
-	float soilAO = lerp(soilAOx0, soilAOx1, cellW.y);
+    float rockRx0 = lerp(rockR00, rockR10, cellW.x);
+    float rockRx1 = lerp(rockR01, rockR11, cellW.x);
+    float rockR = lerp(rockRx0, rockRx1, cellW.y);
 
-	float rockAOx0 = lerp(rockAO00, rockAO10, cellW.x);
-	float rockAOx1 = lerp(rockAO01, rockAO11, cellW.x);
-	float rockAO = lerp(rockAOx0, rockAOx1, cellW.y);
+    float gravelRx0 = lerp(gravelR00, gravelR10, cellW.x);
+    float gravelRx1 = lerp(gravelR01, gravelR11, cellW.x);
+    float gravelR = lerp(gravelRx0, gravelRx1, cellW.y);
 
-	float3 soilNTSx0 = lerp(soilN00, soilN10, cellW.x);
-	float3 soilNTSx1 = lerp(soilN01, soilN11, cellW.x);
-	float3 nSoilTS = lerp(soilNTSx0, soilNTSx1, cellW.y);
+    // Bilerp across cells (AO).
+    float soilAOx0 = lerp(soilAO00, soilAO10, cellW.x);
+    float soilAOx1 = lerp(soilAO01, soilAO11, cellW.x);
+    float soilAO = lerp(soilAOx0, soilAOx1, cellW.y);
 
-	float3 rockNTSx0 = lerp(rockN00, rockN10, cellW.x);
-	float3 rockNTSx1 = lerp(rockN01, rockN11, cellW.x);
-	float3 nRockTS = lerp(rockNTSx0, rockNTSx1, cellW.y);
+    float rockAOx0 = lerp(rockAO00, rockAO10, cellW.x);
+    float rockAOx1 = lerp(rockAO01, rockAO11, cellW.x);
+    float rockAO = lerp(rockAOx0, rockAOx1, cellW.y);
+
+    float gravelAOx0 = lerp(gravelAO00, gravelAO10, cellW.x);
+    float gravelAOx1 = lerp(gravelAO01, gravelAO11, cellW.x);
+    float gravelAO = lerp(gravelAOx0, gravelAOx1, cellW.y);
+
+    // Bilerp across cells (normal TS).
+    float3 soilNTSx0 = lerp(soilN00, soilN10, cellW.x);
+    float3 soilNTSx1 = lerp(soilN01, soilN11, cellW.x);
+    float3 nSoilTS = lerp(soilNTSx0, soilNTSx1, cellW.y);
+
+    float3 rockNTSx0 = lerp(rockN00, rockN10, cellW.x);
+    float3 rockNTSx1 = lerp(rockN01, rockN11, cellW.x);
+    float3 nRockTS = lerp(rockNTSx0, rockNTSx1, cellW.y);
+
+    float3 gravelNTSx0 = lerp(gravelN00, gravelN10, cellW.x);
+    float3 gravelNTSx1 = lerp(gravelN01, gravelN11, cellW.x);
+    float3 nGravelTS = lerp(gravelNTSx0, gravelNTSx1, cellW.y);
 
     // -------------------------------------------------------------------------
     // Layer blend (weight-only; no height blend)
     // -------------------------------------------------------------------------
-	float3 layerBC = soilBC * wSoil + rockBC * wRock;
+    float3 layerBC = soilBC * wSoil + rockBC * wRock + gravelBC * wGravel;
 
-	float fadeTint = lerp(MACRO_TINT_STRENTH_BASE, 1.0f, fadeT);
-	
-	float3 baseColor = lerp(layerBC, macroTint, fadeTint);
-	baseColor *= g_BaseColorFactor.rgb;
+    float fadeTint = lerp(MACRO_TINT_STRENTH_BASE, 1.0f, fadeT);
 
-	float alpha = 1.0f;
-	float coverage = ClipPixelCoverage(alpha, svPos);
+    float3 baseColor = lerp(layerBC, macroTint, fadeTint);
+    baseColor *= g_BaseColorFactor.rgb;
 
-	float roughness = saturate((soilR * wSoil + rockR * wRock) * g_RoughnessFactor);
-	float metallic = 0.0f;
+    float alpha = 1.0f;
+    float coverage = ClipPixelCoverage(alpha, svPos);
 
-	float ao = soilAO * wSoil + rockAO * wRock;
-	ao = lerp(1.0f, ao, saturate(g_OcclusionStrength));
+    float roughness = saturate((soilR * wSoil + rockR * wRock + gravelR * wGravel) * g_RoughnessFactor);
+    float metallic = 0.0f;
 
-	float3 emissive = g_EmissiveFactor * g_EmissiveIntensity;
+    float ao = soilAO * wSoil + rockAO * wRock + gravelAO * wGravel;
+    ao = lerp(1.0f, ao, saturate(g_OcclusionStrength));
+
+    float3 emissive = g_EmissiveFactor * g_EmissiveIntensity;
 
     // -------------------------------------------------------------------------
     // Normal (NormalDX decode)
     // -------------------------------------------------------------------------
-	float normalScale = g_NormalScale * microStrength;
+    float normalScale = g_NormalScale * microStrength;
 
-	nSoilTS.xy *= normalScale;
-	nRockTS.xy *= normalScale;
+    nSoilTS.xy *= normalScale;
+    nRockTS.xy *= normalScale;
+    nGravelTS.xy *= normalScale;
 
-	nSoilTS.z = sqrt(saturate(1.0f - dot(nSoilTS.xy, nSoilTS.xy)));
-	nRockTS.z = sqrt(saturate(1.0f - dot(nRockTS.xy, nRockTS.xy)));
+    nSoilTS.z = sqrt(saturate(1.0f - dot(nSoilTS.xy, nSoilTS.xy)));
+    nRockTS.z = sqrt(saturate(1.0f - dot(nRockTS.xy, nRockTS.xy)));
+    nGravelTS.z = sqrt(saturate(1.0f - dot(nGravelTS.xy, nGravelTS.xy)));
 
-	float3 nTS = normalize(nSoilTS * wSoil + nRockTS * wRock);
-	float3 normal = normalize(mul(nTS, TBN));
+    float3 nTS = normalize(nSoilTS * wSoil + nRockTS * wRock + nGravelTS * wGravel);
+    float3 normal = normalize(mul(nTS, TBN));
 
-    // Velocity
-	float2 currUV = ClipToUV(currClip);
-	float2 prevUV = ClipToUV(prevClip);
+    // Velocity.
+    float2 currUV = ClipToUV(currClip);
+    float2 prevUV = ClipToUV(prevClip);
 
     SET_PSOUT_ALBEDO(baseColor);
     SET_PSOUT_OPACITY(alpha);
@@ -408,5 +451,5 @@ BASE_PS_MAIN_ENTRY()
     SET_PSOUT_ALPHACOVERAGE(coverage);
     SET_PSOUT_EMISSIVE(emissive);
     SET_PSOUT_VELOCITY(currUV - prevUV);
-	SET_PSOUT_SHADING_MODEL(DEFAULT_LIT);
+    SET_PSOUT_SHADING_MODEL(DEFAULT_LIT);
 }

@@ -42,6 +42,7 @@ namespace shz
 			// PBR layer folders (Soil/Rocky)
 			std::string SoilMaterialPath = {};
 			std::string RockyMaterialPath = {};
+			std::string GravelMaterialPath = {};
 
 			// Geometry controls (SQUARE CHUNKS)
 			float ChunkSize = 64.0f;
@@ -194,6 +195,7 @@ namespace shz
 
 		std::string m_SoilMaterialPath = {};
 		std::string m_RockyMaterialPath = {};
+		std::string m_GravelMaterialPath = {};
 
 		std::string m_TerrainVS = "Terrain.vsh";
 		std::string m_TerrainPS = "Terrain.psh";
