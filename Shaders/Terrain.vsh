@@ -11,7 +11,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 
 	float2 grid01 = vertexPosition.xz * g_TerrainCB.InvChunkGridRes;
 
-    // Use per-instance ChunkSizeXZ to avoid edge UV drift on partial border chunks.
+	// Use per-instance ChunkSizeXZ to avoid edge UV drift on partial border chunks.
 	float2 worldXZ = dc.ChunkOriginXZ + grid01 * dc.ChunkSizeXZ;
 
 	float step = (float) (1u << dc.LodIndex);
@@ -26,8 +26,8 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	float3 tangentWorld = float3(1.0f, 0.0f, 0.0f);
 	tangentWorld = normalize(tangentWorld - normalWorld * dot(normalWorld, tangentWorld));
 
-    SET_VSOUT_WORLD_POS_STATIC(float4(worldPos, 1.0f));
-    SET_VSOUT_UV(uvWorld01);
-    SET_VSOUT_WORLD_NORMAL(normalWorld);
-    SET_VSOUT_WORLD_TANGENT(tangentWorld);
+	SET_VSOUT_WORLD_POS_STATIC(float4(worldPos, 1.0f));
+	SET_VSOUT_UV(uvWorld01);
+	SET_VSOUT_WORLD_NORMAL(normalWorld);
+	SET_VSOUT_WORLD_TANGENT(tangentWorld);
 }

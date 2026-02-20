@@ -21,8 +21,8 @@ cbuffer MATERIAL_CONSTANTS
 
 	float g_MetallicFactor; // scalar
 	uint g_MaterialFlags; // bitmask HAS_*
-    uint g_ShadingMode;
-    uint _pad0;
+	uint g_ShadingMode;
+	uint _pad0;
 }
 
 // Resources
@@ -39,14 +39,14 @@ float3 GetBaseColor(float2 uv)
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
 		baseColor *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv).rgb;
-    }
+	}
 	return baseColor;
 }
 
 float GetOpacity(float2 uv)
 {
 #ifndef MASKED
-    return 1.0;
+	return 1.0;
 #else
 	float alpha = g_BaseColorFactor.a;
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
@@ -112,7 +112,7 @@ float3 GetEmissive(float2 uv)
 
 uint GetShadingMode()
 {
-    return g_ShadingMode;
+	return g_ShadingMode;
 }
 
 #endif //PBR_MATERIAL_HLSLI

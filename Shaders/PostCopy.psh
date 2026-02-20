@@ -4,27 +4,27 @@ Texture2D<float4> g_InputColor;
 
 struct PSInput
 {
-    float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0;
+	float4 Pos : SV_POSITION;
+	float2 UV : TEXCOORD0;
 };
 
 // ACES fitted curve (Narkowicz 2015)
 float3 ToneMapACES(float3 x)
 {
-    // Hardcoded ACES constants
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
+	// Hardcoded ACES constants
+	const float a = 2.51;
+	const float b = 0.03;
+	const float c = 2.43;
+	const float d = 0.59;
+	const float e = 0.14;
 
-    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+	return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    float3 hdr = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb * g_FrameCB.Exposure;
-    float3 ldr = ToneMapACES(hdr);
-    
-    OutColor = float4(ldr, 1.0);
+	float3 hdr = g_InputColor.Sample(g_LinearClampSampler, PSIn.UV).rgb * g_FrameCB.Exposure;
+	float3 ldr = ToneMapACES(hdr);
+	
+	OutColor = float4(ldr, 1.0);
 }

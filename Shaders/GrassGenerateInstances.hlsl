@@ -1,11 +1,3 @@
-//==============================================================================
-// GrassGenerationCS.hlsl
-// - Deterministic & more stable grass spawning (no camera-dependent truncation)
-// - Reduced popping: we never change the "set of candidate samples" by distance.
-//   Instead we use a deterministic probability gate per-sample.
-// - English comments, braces on their own line.
-//==============================================================================
-
 #include "Common.hlsli"
 #include "TerrainCommon.hlsli"
 #include "GrassCommon.hlsli"
@@ -407,7 +399,7 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - CHUNK_AABB_HALF_Y, chunkOriginClamped.y);
 	float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + CHUNK_AABB_HALF_Y, chunkOriginClamped.y + g_CB.ChunkSize);
 
-    float3 ex = float3(0.5, 0.5, 0.5);
+	float3 ex = float3(0.5, 0.5, 0.5);
 	if (!AabbInsideFrustum(chunkMin - ex, chunkMax + ex))
 	{
 		return false;

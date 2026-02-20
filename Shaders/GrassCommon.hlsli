@@ -292,11 +292,11 @@ static float SoftLimitSigned(float x, float limit)
 // x: radians-like phase (can be any continuous value).
 static float TriangleWaveSigned(float x)
 {
-    // frac(x / (2*pi))
-    // 1/(2*pi) = 0.159154943091895
+	// frac(x / (2*pi))
+	// 1/(2*pi) = 0.159154943091895
 	float f = frac(x * 0.159154943091895f);
 
-    // triangle: 1 - 4*abs(f - 0.5)  -> [-1..1]
+	// triangle: 1 - 4*abs(f - 0.5)  -> [-1..1]
 	float tri = 1.0f - 4.0f * abs(f - 0.5f);
 	return tri;
 }
@@ -306,14 +306,14 @@ static float TriangleWaveSigned(float x)
 // -----------------------------------------------------------------------------
 // Returns WORLD-SPACE displacement (XZ only).
 static float3 ApplyGrassWindPosWS(
-    float3 posWS,
-    float scale,
-    float yaw,
-    float bend01,
-    float pressHard,
-    float keepBase,
-    float wTip,
-    uint seed8)
+	float3 posWS,
+	float scale,
+	float yaw,
+	float bend01,
+	float pressHard,
+	float keepBase,
+	float wTip,
+	uint seed8)
 {
 	float2 windDir2 = NormalizeSafe2(g_GrassCB.WindDirXZ, float2(1.0f, 0.0f));
 	float3 windDirWS = float3(windDir2.x, 0.0f, windDir2.y);
@@ -327,16 +327,16 @@ static float3 ApplyGrassWindPosWS(
 	float2 windDirJitter2 = NormalizeSafe2(windDirJittered.xz, windDir2);
 
 	float phase =
-        dot(posWS.xz, windDir2) * g_GrassCB.WindFreq +
-        g_FrameCB.CurrTime * g_GrassCB.WindSpeed +
-        yaw * 0.37f;
+		dot(posWS.xz, windDir2) * g_GrassCB.WindFreq +
+		g_FrameCB.CurrTime * g_GrassCB.WindSpeed +
+		yaw * 0.37f;
 
 	float gust =
-        1.0f +
-        g_GrassCB.WindGust *
-        sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
+		1.0f +
+		g_GrassCB.WindGust *
+		sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
 
-    // IMPORTANT: triangle wave => no "pause" at ends
+	// IMPORTANT: triangle wave => no "pause" at ends
 	float windSignal = TriangleWaveSigned(phase);
 
 	float windFade = saturate(g_GrassCB.InteractionWindFade);
@@ -362,8 +362,8 @@ static float3 ApplyGrassWindPosWS(
 	float flutter = cos(phase * 1.7f + (float(seed8) * 0.11f) + yaw);
 
 	float2 disp2 =
-        along2 * (travel * POS_PER_METER) +
-        perp2 * (travel * POS_PER_METER) * 0.35f * flutter;
+		along2 * (travel * POS_PER_METER) +
+		perp2 * (travel * POS_PER_METER) * 0.35f * flutter;
 
 	return float3(disp2.x, 0.0f, disp2.y);
 }
@@ -372,15 +372,15 @@ static float3 ApplyGrassWindPosWS(
 // Grass UV Wind (same triangle wave signal; matched with position)
 // -----------------------------------------------------------------------------
 static float2 ApplyGrassWindUV(
-    float2 inUV,
-    float3 posWS,
-    float scale,
-    float yaw,
-    float bend01,
-    float pressHard,
-    float keepBase,
-    float wTip,
-    uint seed8)
+	float2 inUV,
+	float3 posWS,
+	float scale,
+	float yaw,
+	float bend01,
+	float pressHard,
+	float keepBase,
+	float wTip,
+	uint seed8)
 {
 	float2 uv = inUV;
 
@@ -396,16 +396,16 @@ static float2 ApplyGrassWindUV(
 	float2 windDirJitter2 = NormalizeSafe2(windDirJittered.xz, windDir2);
 
 	float phase =
-        dot(posWS.xz, windDir2) * g_GrassCB.WindFreq +
-        g_FrameCB.CurrTime * g_GrassCB.WindSpeed +
-        yaw * 0.37f;
+		dot(posWS.xz, windDir2) * g_GrassCB.WindFreq +
+		g_FrameCB.CurrTime * g_GrassCB.WindSpeed +
+		yaw * 0.37f;
 
 	float gust =
-        1.0f +
-        g_GrassCB.WindGust *
-        sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
+		1.0f +
+		g_GrassCB.WindGust *
+		sin(g_FrameCB.CurrTime * (g_GrassCB.WindSpeed * 0.63f) + yaw);
 
-    // IMPORTANT: triangle wave => no "pause" at ends
+	// IMPORTANT: triangle wave => no "pause" at ends
 	float windSignal = TriangleWaveSigned(phase);
 
 	float windFade = saturate(g_GrassCB.InteractionWindFade);

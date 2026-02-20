@@ -23,7 +23,7 @@ BASE_PS_MAIN_ENTRY()
 	float3 emissive = GetEmissive(uv);
 	float3 normal = GetNormal(uv, normalWS, tangentWS);
 
-    uint shadingMode = GetShadingMode();
+	uint shadingMode = GetShadingMode();
 	
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);

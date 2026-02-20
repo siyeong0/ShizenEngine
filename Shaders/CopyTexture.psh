@@ -3,5 +3,5 @@ SamplerState g_LinearClampSampler;
 
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target0
 {
-    return g_SrcTex.Sample(g_LinearClampSampler, uv);
+	return g_SrcTex.Sample(g_LinearClampSampler, uv);
 }

@@ -16,8 +16,8 @@ struct FrameConstants
 	float4x4 Proj;
 	float4x4 ViewProj;
 	
-    float4x4 InvView;
-    float4x4 InvProj;
+	float4x4 InvView;
+	float4x4 InvProj;
 	float4x4 InvViewProj;
 
 	float4 FrustumPlanesWS[6];
@@ -29,17 +29,18 @@ struct FrameConstants
 	float FarPlane;
 	float DeltaTime;
 	float CurrTime;
-
-    float Exposure;
-    float PreExposure;
-    float _pad0;
-    float LightIntensity;
 	
+	float PrevDeltaTime;
+	float PrevCurrTime;
+
+	float Exposure;
+	float PreExposure;
+	
+	float LightIntensity;
 	float3 LightDirWS;
-    float _pad1;
 	
 	float3 LightColor;
-    float _pad2;
+	float _pad2;
 
 	float4x4 LightViewProj;
 };
@@ -79,7 +80,7 @@ struct ShadowMapAttribs
 {
 	float4 ShadowMapDim; // xy = size, zw = inv size
 
-    // replaces float4 CascadeCamSpaceZEnd[2]
+	// replaces float4 CascadeCamSpaceZEnd[2]
 	float4 CascadeCamSpaceZEnd0; // for cascades 0..3
 	float4 CascadeCamSpaceZEnd1; // for cascades 4..7
 
@@ -93,7 +94,7 @@ struct ShadowMapAttribs
 	int FixedFilterSize;
 	int MaxAnisotropy;
 
-    // replaces CascadeAttribs Cascades[8]
+	// replaces CascadeAttribs Cascades[8]
 	CascadeAttribs Cascades0;
 	CascadeAttribs Cascades1;
 	CascadeAttribs Cascades2;

@@ -473,7 +473,7 @@ float ClipPixelCoverage(float alpha, float4 svPos)
 	float fade = saturate(svPos.z);
 	float cutoff = lerp(0.5, 0.3, fade);
 	float coverage = saturate((alpha - cutoff) / (1.0 - cutoff));
-    float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
+	float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
 	clip(coverage - t);
 
 	return coverage;

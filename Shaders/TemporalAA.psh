@@ -8,66 +8,66 @@ Texture2D<float4> g_GBuffer2;
 
 struct PSInput
 {
-    float4 Pos : SV_POSITION;
-    float2 UV : TEXCOORD0;
+	float4 Pos : SV_POSITION;
+	float2 UV : TEXCOORD0;
 };
 
 void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 {
-    float2 uv = PSIn.UV;
+	float2 uv = PSIn.UV;
 
-    float2 velocity = g_Velocity.SampleLevel(g_PointClampSampler, uv, 0);
-    float2 uvPrev = uv - velocity;
+	float2 velocity = g_Velocity.SampleLevel(g_PointClampSampler, uv, 0);
+	float2 uvPrev = uv - velocity;
 
-    float4 currColor = g_CurrentColor.SampleLevel(g_LinearClampSampler, uv, 0);
+	float4 currColor = g_CurrentColor.SampleLevel(g_LinearClampSampler, uv, 0);
 
-    // prevUV 밖이면 history 무효
-    if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
-    {
-        OutColor = currColor;
-        return;
-    }
+	// prevUV 밖이면 history 무효
+	if (any(uvPrev < 0.0f) || any(uvPrev > 1.0f))
+	{
+		OutColor = currColor;
+		return;
+	}
 
-    float4 histColor = g_HistoryColor.SampleLevel(g_LinearClampSampler, uvPrev, 0);
+	float4 histColor = g_HistoryColor.SampleLevel(g_LinearClampSampler, uvPrev, 0);
 
-    // 2. 3x3 Neighborhood Clamp
-    float4 m1 = 0, m2 = 0;
-    float4 lower = 1e9, upper = -1e9;
-    [unroll]
-    for (int x = -1; x <= 1; ++x)
-    {
-        [unroll]
-        for (int y = -1; y <= 1; ++y)
-        {
-            float4 c = g_CurrentColor.SampleLevel(g_PointClampSampler, uv, 0, int2(x, y));
-            lower = min(lower, c);
-            upper = max(upper, c);
-            
-            m1 += c;
-            m2 += c * c;
-        }
-    }
-    
-    float4 mu = m1 / 9.0;
-    float4 sigma = sqrt(abs(m2 / 9.0 - mu * mu));
-    float gamma = 1.5;
-    lower = min(lower, mu - gamma * sigma);
-    upper = max(upper, mu + gamma * sigma);
+	// 2. 3x3 Neighborhood Clamp
+	float4 m1 = 0, m2 = 0;
+	float4 lower = 1e9, upper = -1e9;
+	[unroll]
+	for (int x = -1; x <= 1; ++x)
+	{
+		[unroll]
+		for (int y = -1; y <= 1; ++y)
+		{
+			float4 c = g_CurrentColor.SampleLevel(g_PointClampSampler, uv, 0, int2(x, y));
+			lower = min(lower, c);
+			upper = max(upper, c);
+			
+			m1 += c;
+			m2 += c * c;
+		}
+	}
+	
+	float4 mu = m1 / 9.0;
+	float4 sigma = sqrt(abs(m2 / 9.0 - mu * mu));
+	float gamma = 1.5;
+	lower = min(lower, mu - gamma * sigma);
+	upper = max(upper, mu + gamma * sigma);
 
-    histColor = clamp(histColor, lower, upper);
+	histColor = clamp(histColor, lower, upper);
 
-    float coverage = g_GBuffer2.SampleLevel(g_PointClampSampler, uv, 0).a;
-    float velocityLenPx = length(velocity * g_FrameCB.ViewportSize);
-    float motionFade = saturate(1.0 - velocityLenPx * 0.1);
+	float coverage = g_GBuffer2.SampleLevel(g_PointClampSampler, uv, 0).a;
+	float velocityLenPx = length(velocity * g_FrameCB.ViewportSize);
+	float motionFade = saturate(1.0 - velocityLenPx * 0.1);
 
-    float baseHistoryW = 0.95;
-    float historyW = baseHistoryW * motionFade;
+	float baseHistoryW = 0.95;
+	float historyW = baseHistoryW * motionFade;
 
-    float lumC = dot(currColor.rgb, float3(0.299, 0.587, 0.114));
-    float lumH = dot(histColor.rgb, float3(0.299, 0.587, 0.114));
-    float lumFade = saturate(1.0 - abs(lumC - lumH) * 2.0);
-    historyW *= lumFade;
+	float lumC = dot(currColor.rgb, float3(0.299, 0.587, 0.114));
+	float lumH = dot(histColor.rgb, float3(0.299, 0.587, 0.114));
+	float lumFade = saturate(1.0 - abs(lumC - lumH) * 2.0);
+	historyW *= lumFade;
 
-    float3 resolveColor = lerp(currColor.rgb, histColor.rgb, historyW);
-    OutColor = float4(resolveColor, 1.0);
+	float3 resolveColor = lerp(currColor.rgb, histColor.rgb, historyW);
+	OutColor = float4(resolveColor, 1.0);
 }

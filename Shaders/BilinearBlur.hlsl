@@ -41,5 +41,5 @@ void main(uint3 tid : SV_DispatchThreadID)
 	// weights (sum = 1)
 	float outV = c * 0.5f + (d0 + d1 + d2 + d3) * 0.125f;
 
-    g_Dst[tid.xy] = saturate(outV);
+	g_Dst[tid.xy] = saturate(outV);
 }
