@@ -104,9 +104,8 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	// ------------------------------------------------------------
 	float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
 	ssao = ssao * ssao;
+	
 	float aoCombined = saturate(aoMaterial * ssao);
-
-	aoCombined = aoMaterial;
 	
 	// ------------------------------------------------------------
 	// Shadow (CSM + contact shadow)
@@ -164,15 +163,15 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 
 		hdr = direct * directScale + indirect * indirectScale + emissive;
 
-		//hdr += EvaluateFoliageAddon(
-		//	normalize(N),
-		//	normalize(V),
-		//	normalize(L),
-		//	baseColor,
-		//	roughness,
-		//	shadowFinal,
-		//	g_FrameCB.LightColor,
-		//	g_FrameCB.LightIntensity);
+		hdr += EvaluateFoliageAddon(
+			normalize(N),
+			normalize(V),
+			normalize(L),
+			baseColor,
+			roughness,
+			shadowFinal,
+			g_FrameCB.LightColor,
+			g_FrameCB.LightIntensity);
 	}
 	else
 	{
