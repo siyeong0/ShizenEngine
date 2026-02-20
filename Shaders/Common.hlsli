@@ -22,7 +22,7 @@ struct BaseVSInput
 // ---------------------------------------------------------------------------
 // Jitter toggle
 // ---------------------------------------------------------------------------
-#define APPLY_JITTER 1
+// #define APPLY_JITTER 1
 
 #ifdef APPLY_JITTER
 #define APPLY_JITTER_TO_CLIP(clipPos)  ApplyTAAJittering((clipPos))

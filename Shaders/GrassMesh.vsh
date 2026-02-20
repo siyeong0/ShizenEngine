@@ -120,6 +120,8 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	float3 normal = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
 	float3 tangent = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
 
+	// TODO: g_FramePrevTime -> DYNAMIC -> TAA Jitter
+	
     SET_VSOUT_WORLD_POS_STATIC(float4(p, 1.0f));
     SET_VSOUT_UV(vertexUV);
     SET_VSOUT_WORLD_NORMAL(normal);
