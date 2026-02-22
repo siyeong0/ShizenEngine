@@ -5,13 +5,13 @@ Texture2D<float> g_GBufferDepth; // D3D depth 0..1
 Texture2D<float4> g_GBufferNormal; // packed 0..1 (world)
 
 static const float SSS_MAX_DISTANCE_WS = 0.1;
-static const int SSS_NUM_STEPS = 24;
+static const int SSS_NUM_STEPS = 16;
 
 static const float SSS_DEPTH_BIAS_VZ = 0.002;
 static const float SSS_THICKNESS_VZ = 0.1;
 
-static const float SSS_FADE_START_WS = 25.0;
-static const float SSS_FADE_END_WS = 30.0;
+static const float SSS_FADE_START_WS = 10.0;
+static const float SSS_FADE_END_WS = 15.0;
 
 struct PSInput
 {

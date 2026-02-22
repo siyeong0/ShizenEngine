@@ -370,9 +370,9 @@ namespace shz
 
 			if (pass == EMaterialPass::ShadowDepth)
 			{
-				gpDesc.RasterizerDesc.DepthBias = 2500;
-				gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f;
-				gpDesc.RasterizerDesc.SlopeScaledDepthBias = 16.0f;
+				//gpDesc.RasterizerDesc.DepthBias = 2500;
+				//gpDesc.RasterizerDesc.DepthBiasClamp = 0.0f;
+				//gpDesc.RasterizerDesc.SlopeScaledDepthBias = 16.0f;
 			}
 		}
 

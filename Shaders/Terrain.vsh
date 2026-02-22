@@ -23,8 +23,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	float2 uvWorld01 = WorldXZToTerrainUV(worldXZ);
 	float3 normalWorld = SampleTerrainNormalAtWorldXZLevel(worldXZ, lod);
 
-	float3 tangentWorld = float3(1.0f, 0.0f, 0.0f);
-	tangentWorld = normalize(tangentWorld - normalWorld * dot(normalWorld, tangentWorld));
+	float3 tangentWorld = normalize(float3(1, 0, 0) - normalWorld * normalWorld.x);
 
 	SET_VSOUT_WORLD_POS_STATIC(float4(worldPos, 1.0f));
 	SET_VSOUT_UV(uvWorld01);

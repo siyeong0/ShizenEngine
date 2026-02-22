@@ -121,25 +121,41 @@ namespace shz
 
 			TerrainSystem::CreateInfo tci = {};
 
-			tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/height.png";
+			/*tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/height.png";
 			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/diffuse.png";
 			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/normal.png";
 			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/slope.png";
 			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/flow.png";
 			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/rocky.png";
 			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/soil.png";
-			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
+			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";*/
 
-			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel032_2K-PNG";
-			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
-			tci.GravelMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel015_2K-PNG";
+			tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/height.png";
+			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/diffuse.png";
+			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/normal.png";
+			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/slope.png";
+			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/flow.png";
+			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/rocky.png";
+			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/soil.png";
+			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/vegetation.png";
 
-			tci.ChunkSize = 64.0f;
+			/*tci.ChunkSize = 64.0f;
 			tci.CellSize = 1.0f;
 			tci.WorldSpacing = 1.22f;
 			tci.HeightScale = 1500.0f;
 			tci.HeightOffset = 0.0f;
+			tci.bCenterXZ = true;*/
+
+			tci.ChunkSize = 64.0f;
+			tci.CellSize = 1.0f;
+			tci.WorldSpacing = 1.22f;
+			tci.HeightScale = 4000.0f;
+			tci.HeightOffset = 0.0f;
 			tci.bCenterXZ = true;
+
+			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel032_2K-PNG";
+			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
+			tci.GravelMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel015_2K-PNG";
 
 			m_pTerrainSystem->Initialize(*m_pRenderer, *m_pAssetManager, tci);
 		}

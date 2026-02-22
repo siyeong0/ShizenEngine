@@ -41,11 +41,12 @@ namespace shz
 			bool  QuantizeExtents = true;      // extent -> texel multiple
 			bool  EqualizeExtents = true;      // force square extents for XY
 
-			float ZPadding = 20.0f;            // push zn/zf by padding (light-space)
+			float CasterDistancePadding = 80.0f; // push zn by padding (camera-space)
+			float ZPadding = 10.0f;            // push zn/zf by padding (light-space)
 
 			// Bias / PCF
 			float ReceiverPlaneDepthBiasClamp = 0.00f;
-			float FixedDepthBias = 0.002f;
+			float FixedDepthBias = 0.005f;
 			int   FixedFilterSize = 3;
 		};
 

@@ -293,7 +293,10 @@ BASE_PS_MAIN_ENTRY()
 	float2 globalUV = GET_PSIN_UV();
 	float3 normalWS = GET_PSIN_WORLD_NORMAL();
 	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
-
+	
+	normalWS = SampleTerrainNormalAtWorldXZ(worldPos.xz);
+	tangentWS = normalize(float3(1, 0, 0) - normalWS * normalWS.x);
+	
     // -------------------------------------------------------------------------
     // Terrain weights (macro classification)
     // -------------------------------------------------------------------------

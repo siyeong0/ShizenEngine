@@ -168,6 +168,8 @@ namespace shz
 			maxZ = std::max(maxZ, pLS.z);
 		}
 
+		minZ -= m_CI.CasterDistancePadding; // push zn away from casters to prevent clipping (camera-space padding transformed to light-space by enlarging Z range)
+
 		// 4) Z padding
 		const float zPad = std::max(m_CI.ZPadding, 0.0f);
 		minZ -= zPad;
@@ -200,7 +202,7 @@ namespace shz
 			maxY = cy + 0.5f * extentY;
 		}
 
-		const float res = std::max(shadowMapRes, 1.0f);
+		const float res = shadowMapRes;
 		float unitsPerTexelX = extentX / res;
 		float unitsPerTexelY = extentY / res;
 		float unitsPerTexel = std::max(unitsPerTexelX, unitsPerTexelY);
@@ -256,11 +258,11 @@ namespace shz
 		C.LightSpaceScale = float4(sx, sy, sz, 0.0f);
 		C.LightSpaceScaledBias = float4(bx, by, bz, 0.0f);
 
-		C.MarginProjSpace = float4(0, 0, 0, 0);
+		// PCF footprint margin in NDC ([-1..1])
+		const float pcfRadiusTexels = 1.0f; // 3x3 => 1, 5x5 => 2
+		const float marginXY = (pcfRadiusTexels * 2.0f) / std::max(res, 1.0f);
+		C.MarginProjSpace = float4(marginXY, marginXY, 0.0f, 0.0f);
 
-		// ------------------------------------------------------------
-		// NEW: CPU-side cascade View/Frustum cache
-		// ------------------------------------------------------------
 		const Matrix4x4 lightProj = Matrix4x4::OrthoOffCenter(
 			minX, maxX,
 			minY, maxY,
