@@ -3,6 +3,9 @@
 
 #include <cstring>
 
+#include "Engine/RuntimeData/Public/MaterialManager.h"
+#include "Engine/AssetManager/Public/AssetManager.h"
+
 #include "Engine/Renderer/Public/Renderer.h"
 #include "Engine/Renderer/Public/RenderPassContext.h"
 #include "Engine/Renderer/Public/RenderPassBuilder.h"
@@ -23,25 +26,6 @@ namespace shz
 	}
 
 	static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
-
-	void GrassSystem::ClearGrassDescs()
-	{
-		m_GrassDescs.clear();
-		m_SpeciesIndirect.clear();
-	}
-
-	uint32 GrassSystem::AddGrassDesc(const GrassDesc& desc)
-	{
-		ASSERT(m_GrassDescs.size() < MAX_GRASS_SPECIES, "Max grass species exceeded.");
-		ASSERT(desc.pMesh, "Mesh is null");
-
-		m_GrassDescs.push_back(desc);
-
-		SpeciesIndirect si = {};
-		m_SpeciesIndirect.push_back(si);
-
-		return (uint32)(m_GrassDescs.size() - 1u);
-	}
 
 	void GrassSystem::Initialize(Renderer& renderer)
 	{
@@ -1046,6 +1030,25 @@ namespace shz
 					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesLOD2MeshId")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
+	}
+
+	void GrassSystem::ClearGrassDescs()
+	{
+		m_GrassDescs.clear();
+		m_SpeciesIndirect.clear();
+	}
+
+	uint32 GrassSystem::AddGrassDesc(const GrassDesc& desc)
+	{
+		ASSERT(m_GrassDescs.size() < MAX_GRASS_SPECIES, "Max grass species exceeded.");
+		ASSERT(desc.pMesh, "Mesh is null");
+
+		m_GrassDescs.push_back(desc);
+		
+		SpeciesIndirect si = {};
+		m_SpeciesIndirect.push_back(si);
+
+		return (uint32)(m_GrassDescs.size() - 1u);
 	}
 
 } // namespace shz

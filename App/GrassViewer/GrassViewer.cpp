@@ -130,14 +130,14 @@ namespace shz
 			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/soil.png";
 			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Chroma/vegetation.png";
 
-		/*	tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/height.png";
-			tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/diffuse.png";
-			tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/normal.png";
-			tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/slope.png";
-			tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/flow.png";
-			tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/rocky.png";
-			tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/soil.png";
-			tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/vegetation.png";*/
+			/*	tci.HeightPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/height.png";
+				tci.DiffusePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/diffuse.png";
+				tci.NormalPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/normal.png";
+				tci.SlopePath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/slope.png";
+				tci.FlowPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/flow.png";
+				tci.RockyPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/rocky.png";
+				tci.SoilPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/soil.png";
+				tci.VegetationPath = "C:/Dev/ShizenEngine/Assets/Terrain/Eclipse/vegetation.png";*/
 
 			tci.ChunkSize = 64.0f;
 			tci.CellSize = 1.0f;
@@ -304,16 +304,236 @@ namespace shz
 					{
 						AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
 						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
+
 						StaticMeshLevel grassMeshLevel;
 						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
 						uniform01(grassMeshLevel);
+
 						for (auto matId : grassMeshLevel.GetMaterialSlots())
 						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
 							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
 							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
+
+							const Texture& baseColorTex = *m_pAssetManager->LoadBlocking(mat.GetTextureAssetRef("g_BaseColorTex"));
+							ASSERT(baseColorTex.IsValid(), "BaseColor texture is invalid.");
+							ASSERT(baseColorTex.GetFormat() == TEX_FORMAT_RGBA8_UNORM, "BaseColor must be RGBA8_UNORM for inline alpha SDF build.");
+
+							// ---------------------------------------------------------------------
+							// Inline: Build Alpha SDF (R8) from baseColor alpha using EDT (O(W*H))
+							// - Output encoding: 0..255, 128==boundary (0 dist), inside>128, outside<128
+							// ---------------------------------------------------------------------
+							auto BuildAlphaSdfR8 = [](
+								const Texture& srcRgba,
+								float alphaThreshold,
+								float maxDistRatio) -> Texture
+							{
+								const uint32 W = srcRgba.GetWidth();
+								const uint32 H = srcRgba.GetHeight();
+								const uint8* src = srcRgba.GetData();
+
+								ASSERT(W > 0 && H > 0, "Invalid src size.");
+								ASSERT(srcRgba.GetMips().size() > 0, "No mips in src.");
+								ASSERT(srcRgba.GetMips()[0].Data.size() >= size_t(W) * size_t(H) * 4ull, "Src data size mismatch.");
+
+								const float INF = 1e20f;
+
+								// 1D squared distance transform (Felzenszwalb/Huttenlocher)
+								auto edt1d = [&](const std::vector<float>& f, int n, std::vector<float>& d)
+								{
+									std::vector<int> v(n);
+									std::vector<float> z(n + 1);
+
+									int k = 0;
+									v[0] = 0;
+									z[0] = -INF;
+									z[1] = +INF;
+
+									auto sq = [](float x) { return x * x; };
+
+									for (int q = 1; q < n; ++q)
+									{
+										float s = 0.0f;
+										for (;;)
+										{
+											const int vk = v[k];
+											// intersection point
+											s = ((f[q] + sq(float(q))) - (f[vk] + sq(float(vk)))) / (2.0f * float(q - vk));
+											if (s > z[k]) break;
+											--k;
+										}
+										++k;
+										v[k] = q;
+										z[k] = s;
+										z[k + 1] = +INF;
+									}
+
+									k = 0;
+									for (int q = 0; q < n; ++q)
+									{
+										while (z[k + 1] < float(q)) ++k;
+										const int vk = v[k];
+										const float dx = float(q - vk);
+										d[q] = dx * dx + f[vk];
+									}
+								};
+
+								auto edt2d = [&](const std::vector<uint8>& binary, bool targetOne) -> std::vector<float>
+								{
+									// f = 0 at "feature" pixels, INF elsewhere
+									std::vector<float> f(W * H, INF);
+									for (uint32 y = 0; y < H; ++y)
+									{
+										for (uint32 x = 0; x < W; ++x)
+										{
+											const uint8 b = binary[y * W + x];
+											const bool isFeature = (b != 0) == targetOne;
+											if (isFeature)
+											{
+												f[y * W + x] = 0.0f;
+											}
+										}
+									}
+
+									// pass 1: columns
+									std::vector<float> g(W * H, INF);
+									{
+										std::vector<float> colF(H);
+										std::vector<float> colD(H);
+										for (uint32 x = 0; x < W; ++x)
+										{
+											for (uint32 y = 0; y < H; ++y)
+											{
+												colF[y] = f[y * W + x];
+											}
+											edt1d(colF, int(H), colD);
+											for (uint32 y = 0; y < H; ++y)
+											{
+												g[y * W + x] = colD[y];
+											}
+										}
+									}
+
+									// pass 2: rows
+									std::vector<float> d2(W * H, INF);
+									{
+										std::vector<float> rowF(W);
+										std::vector<float> rowD(W);
+										for (uint32 y = 0; y < H; ++y)
+										{
+											for (uint32 x = 0; x < W; ++x)
+											{
+												rowF[x] = g[y * W + x];
+											}
+											edt1d(rowF, int(W), rowD);
+											for (uint32 x = 0; x < W; ++x)
+											{
+												d2[y * W + x] = rowD[x]; // squared distance
+											}
+										}
+									}
+									return d2;
+								};
+
+								// Build binary mask from alpha
+								std::vector<uint8> inside(W * H, 0);
+								for (uint32 y = 0; y < H; ++y)
+								{
+									for (uint32 x = 0; x < W; ++x)
+									{
+										const uint32 i = (y * W + x) * 4u;
+										const float a = float(src[i + 3u]) * (1.0f / 255.0f);
+										inside[y * W + x] = (a >= alphaThreshold) ? 1u : 0u;
+									}
+								}
+
+								// Distance to nearest outside (for inside pixels)
+								// -> feature pixels are outside==1 (i.e. inside==0)
+								std::vector<float> distToOutside2 = edt2d(inside, /*targetOne*/ false);
+
+								// Distance to nearest inside (for outside pixels)
+								// -> feature pixels are inside==1
+								std::vector<float> distToInside2 = edt2d(inside, /*targetOne*/ true);
+
+								// Output R8 SDF
+								Texture out;
+								out.SetFormat(TEX_FORMAT_R8_UNORM);
+								out.GetMips().resize(1);
+								out.GetMips()[0].Width = W;
+								out.GetMips()[0].Height = H;
+								out.GetMips()[0].Data.resize(size_t(W) * size_t(H));
+
+								const float maxDistPx = maxDistRatio * std::min(W, H);
+								const float invMax = (maxDistPx > 1e-6f) ? (1.0f / maxDistPx) : 1.0f;
+
+								for (uint32 y = 0; y < H; ++y)
+								{
+									for (uint32 x = 0; x < W; ++x)
+									{
+										const uint32 idx = y * W + x;
+										const bool isInside = (inside[idx] != 0);
+
+										// boundary = 0.5
+										float v01 = 0.5f;
+
+										if (isInside)
+										{
+											// inside: 0.5 -> 1.0 as distance increases (saturate at maxDist)
+											const float distPx = std::sqrt(std::max(distToOutside2[idx], 0.0f)); // 0 at edge
+											float t = distPx * invMax; // 0..inf
+											t = std::clamp(t, 0.0f, 1.0f);
+
+											v01 = 0.5f + 0.5f * t; // 0.5..1.0
+										}
+										else
+										{
+											// outside: 0.5 -> 0.0 as distance increases (saturate at maxDist)
+											const float distPx = std::sqrt(std::max(distToInside2[idx], 0.0f)); // 0 at edge
+											float t = distPx * invMax; // 0..inf
+											t = std::clamp(t, 0.0f, 1.0f);
+
+											v01 = 0.5f - 0.5f * t; // 0.5..0.0
+										}
+
+										out.GetMips()[0].Data[idx] = (uint8)std::clamp(v01 * 255.0f + 0.5f, 0.0f, 255.0f);
+									}
+								}
+
+								return out;
+							};
+
+							// --- Build SDF in system memory ---
+							const float alphaThreshold = 0.5f;
+							const float maxDistRatio = 0.1f;
+							Texture alphaSDF = BuildAlphaSdfR8(baseColorTex, alphaThreshold, maxDistRatio);
+							ASSERT(alphaSDF.IsValid(), "AlphaSDF build failed.");
+
+							// --- Upload to GPU and bind ---
+							TextureDesc desc = {};
+							desc.Name = "Grass_AlphaSDF";
+							desc.Type = RESOURCE_DIM_TEX_2D;
+							desc.Width = alphaSDF.GetWidth();
+							desc.Height = alphaSDF.GetHeight();
+							desc.MipLevels = 1;
+							desc.ArraySize = 1;
+							desc.Format = TEX_FORMAT_R8_UNORM;
+							desc.Usage = USAGE_IMMUTABLE;
+							desc.BindFlags = BIND_SHADER_RESOURCE;
+
+							TextureSubResData subRes = {};
+							subRes.pData = alphaSDF.GetData();
+							subRes.Stride = alphaSDF.GetWidth(); // R8: 1 byte/px
+
+							TextureData initData = {};
+							initData.NumSubresources = 1;
+							initData.pSubResources = &subRes;
+
+							const uint64 alphaSDFResId = STRING_HASH(path + "_alphaSDF");
+							m_pRenderer->AddTexture(alphaSDFResId, desc, &initData);
+							mat.SetTextureResource("g_AlphaSDF", alphaSDFResId);
 						}
+
 						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
 					}
 					// LOD1 : Cross-plane

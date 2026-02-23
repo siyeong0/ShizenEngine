@@ -301,6 +301,46 @@ namespace shz
 		return setResourceIdInternal(resourceName, resourceId, /*bRequireTexture*/true, /*bRequireBuffer*/false);
 	}
 
+	AssetRef<Texture>& Material::GetTextureAssetRef(const char* resourceName)
+	{
+		uint32 resIndex = 0;
+		if (!m_BaseTemplate.FindResourceIndex(resourceName, &resIndex))
+		{
+			ASSERT(false, "Invalid resource name.");
+		}
+
+		const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			ASSERT(b.IsTextureBinding(), "%s is not texture type.", resourceName);
+		}
+
+		MaterialResourceBinding& b = m_ResourceBindings[resIndex];
+		ASSERT(b.IsTextureBinding(), "%s is not texture type resource.");
+		ASSERT(b.HasAssetRef(), "%s doesn't have resource id.");
+		return b.TextureRef.value();
+	}
+
+	uint64 Material::GetTextureResource(const char* resourceName)
+	{
+		uint32 resIndex = 0;
+		if (!m_BaseTemplate.FindResourceIndex(resourceName, &resIndex))
+		{
+			return 0;
+		}
+
+		const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(resIndex);
+		if (!IsTextureType(rd.Type))
+		{
+			return 0;
+		}
+
+		MaterialResourceBinding& b = m_ResourceBindings[resIndex];
+		ASSERT(b.IsTextureBinding(), "%s is not texture type resource.", resourceName);
+		ASSERT(b.HasResourceId(), "%s doesn't have resource id.", resourceName);
+		return b.ResourceId;
+	}
+
 	// ---------------------------------------------------------------------
 	// Buffers (StructuredBuffer / RWStructuredBuffer) by ResourceId
 	// ---------------------------------------------------------------------

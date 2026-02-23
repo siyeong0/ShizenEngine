@@ -50,6 +50,8 @@ namespace shz
 
 		std::vector<StaticMeshLevelRenderData>& GetLevels() noexcept { return Levels; }
 		const std::vector<StaticMeshLevelRenderData>& GetLevels() const noexcept { return Levels; }
+
+		StaticMeshLevelRenderData& GetLevel(uint32 lod) noexcept { return Levels[lod]; }
 		const StaticMeshLevelRenderData& GetLevel(uint32 lod) const noexcept { return Levels[lod]; }
 
 		uint32 GetLevelCount() const noexcept { return static_cast<uint32>(Levels.size()); }

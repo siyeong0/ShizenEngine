@@ -217,6 +217,9 @@ namespace shz
 		bool SetTextureAssetRef(const char* resourceName, const AssetRef<Texture>& textureRef);
 		bool SetTextureResource(const char* resourceName, uint64 resourceId);
 
+		AssetRef<Texture>& GetTextureAssetRef(const char* resourceName);
+		uint64 GetTextureResource(const char* resourceName);
+
 		// - For buffers (StructuredBuffer / RWStructuredBuffer), bind by ResourceId
 		bool SetBufferResource(const char* resourceName, uint64 resourceId);
 

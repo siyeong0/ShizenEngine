@@ -2,6 +2,8 @@
 #include "PBRMaterial.hlsli"
 #include "TerrainCommon.hlsli"
 
+Texture2D<float> g_AlphaSDF;
+
 BASE_PS_MAIN_ENTRY()
 {
 	float4 svPos = GET_PSIN_POS();
@@ -45,8 +47,12 @@ BASE_PS_MAIN_ENTRY()
 	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
 	ao = max(aoRoot, ROOT_AO_MIN);
 	
+	float alphaSDF = g_AlphaSDF.Sample(g_LinearClampSampler, uv);
+	float edge = abs(alphaSDF - 0.5) * 4;
+	
 	// Pack to GBuffer
-	SET_PSOUT_ALBEDO(baseColor);
+	// SET_PSOUT_ALBEDO(baseColor);
+	SET_PSOUT_ALBEDO(edge.xxx);
 	SET_PSOUT_OPACITY(alpha);
 	SET_PSOUT_NORMAL(normal);
 	SET_PSOUT_METALLIC(metallic);
