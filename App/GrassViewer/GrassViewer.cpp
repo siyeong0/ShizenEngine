@@ -220,13 +220,13 @@ namespace shz
 							ASSERT(baseColorTex.GetFormat() == TEX_FORMAT_RGBA8_UNORM, "BaseColor must be RGBA8_UNORM for inline alpha SDF build.");
 
 							// ---------------------------------------------------------------------
-							// Inline: Build Alpha SDF (R8) from baseColor alpha using EDT (O(W*H))
-							// - Output encoding: 0..255, 128==boundary (0 dist), inside>128, outside<128
+							// Inline: Build "Inner Depth" (R8) from baseColor alpha using EDT (O(W*H))
+							// - outside: 0
+							// - inside:  edge=0, deepest=1 (normalized PER connected component)
 							// ---------------------------------------------------------------------
-							auto BuildAlphaSdfR8 = [](
+							auto BuildAlphaInnerMaskR8 = [](
 								const Texture& srcRgba,
-								float alphaThreshold,
-								float maxDistRatio) -> Texture
+								float alphaThreshold) -> Texture
 							{
 								const uint32 W = srcRgba.GetWidth();
 								const uint32 H = srcRgba.GetHeight();
@@ -257,7 +257,6 @@ namespace shz
 										for (;;)
 										{
 											const int vk = v[k];
-											// intersection point
 											s = ((f[q] + sq(float(q))) - (f[vk] + sq(float(vk)))) / (2.0f * float(q - vk));
 											if (s > z[k]) break;
 											--k;
@@ -278,9 +277,11 @@ namespace shz
 									}
 								};
 
+								// 2D EDT: distance to nearest "feature"
+								// binary: 0/1, targetOne==true => feature is 1 pixels, else feature is 0 pixels.
 								auto edt2d = [&](const std::vector<uint8>& binary, bool targetOne) -> std::vector<float>
 								{
-									// f = 0 at "feature" pixels, INF elsewhere
+									// f = 0 at feature pixels, INF elsewhere
 									std::vector<float> f(W * H, INF);
 									for (uint32 y = 0; y < H; ++y)
 									{
@@ -332,10 +333,11 @@ namespace shz
 											}
 										}
 									}
+
 									return d2;
 								};
 
-								// Build binary mask from alpha
+								// Build inside mask from alpha
 								std::vector<uint8> inside(W * H, 0);
 								for (uint32 y = 0; y < H; ++y)
 								{
@@ -347,15 +349,88 @@ namespace shz
 									}
 								}
 
-								// Distance to nearest outside (for inside pixels)
-								// -> feature pixels are outside==1 (i.e. inside==0)
+								// Distance-to-edge for INSIDE pixels:
+								// nearest OUTSIDE pixel distance => feature is outside==1 => inside==0
 								std::vector<float> distToOutside2 = edt2d(inside, /*targetOne*/ false);
 
-								// Distance to nearest inside (for outside pixels)
-								// -> feature pixels are inside==1
-								std::vector<float> distToInside2 = edt2d(inside, /*targetOne*/ true);
+								// Connected component labeling on 'inside' to normalize per-leaf scale
+								// Use 8-neighborhood for natural leaf connectivity.
+								std::vector<int32> labels(W * H, -1);
+								std::vector<float> distPx(W * H, 0.0f);
 
-								// Output R8 SDF
+								for (uint32 idx = 0; idx < W * H; ++idx)
+								{
+									// For inside pixels, distToOutside2 is valid; outside can be ignored (keep 0).
+									if (inside[idx] != 0)
+									{
+										distPx[idx] = std::sqrt(std::max(distToOutside2[idx], 0.0f));
+									}
+								}
+
+								std::vector<float> compMaxDist;
+								compMaxDist.reserve(256);
+
+								auto InBounds = [&](int x, int y) -> bool
+								{
+									return (x >= 0 && y >= 0 && x < int(W) && y < int(H));
+								};
+
+								static const int kDirs8[8][2] =
+								{
+									{ -1, -1 }, { 0, -1 }, { 1, -1 },
+									{ -1,  0 },           { 1,  0 },
+									{ -1,  1 }, { 0,  1 }, { 1,  1 },
+								};
+
+								int32 compId = 0;
+
+								std::vector<int32> queue;
+								queue.reserve(4096);
+
+								for (uint32 y0 = 0; y0 < H; ++y0)
+								{
+									for (uint32 x0 = 0; x0 < W; ++x0)
+									{
+										const uint32 idx0 = y0 * W + x0;
+										if (inside[idx0] == 0) continue;
+										if (labels[idx0] >= 0) continue;
+
+										// BFS/DFS
+										float maxD = 0.0f;
+
+										labels[idx0] = compId;
+										queue.clear();
+										queue.push_back(int32(idx0));
+
+										for (size_t qi = 0; qi < queue.size(); ++qi)
+										{
+											const uint32 idx = uint32(queue[qi]);
+											maxD = std::max(maxD, distPx[idx]);
+
+											const int x = int(idx % W);
+											const int y = int(idx / W);
+
+											for (int k = 0; k < 8; ++k)
+											{
+												const int nx = x + kDirs8[k][0];
+												const int ny = y + kDirs8[k][1];
+												if (!InBounds(nx, ny)) continue;
+
+												const uint32 nidx = uint32(ny) * W + uint32(nx);
+												if (inside[nidx] == 0) continue;
+												if (labels[nidx] >= 0) continue;
+
+												labels[nidx] = compId;
+												queue.push_back(int32(nidx));
+											}
+										}
+
+										compMaxDist.push_back(maxD);
+										++compId;
+									}
+								}
+
+								// Output R8 "inner depth"
 								Texture out;
 								out.SetFormat(TEX_FORMAT_R8_UNORM);
 								out.GetMips().resize(1);
@@ -363,37 +438,27 @@ namespace shz
 								out.GetMips()[0].Height = H;
 								out.GetMips()[0].Data.resize(size_t(W) * size_t(H));
 
-								const float maxDistPx = maxDistRatio * std::min(W, H);
-								const float invMax = (maxDistPx > 1e-6f) ? (1.0f / maxDistPx) : 1.0f;
-
 								for (uint32 y = 0; y < H; ++y)
 								{
 									for (uint32 x = 0; x < W; ++x)
 									{
 										const uint32 idx = y * W + x;
-										const bool isInside = (inside[idx] != 0);
 
-										// boundary = 0.5
-										float v01 = 0.5f;
-
-										if (isInside)
+										if (inside[idx] == 0)
 										{
-											// inside: 0.5 -> 1.0 as distance increases (saturate at maxDist)
-											const float distPx = std::sqrt(std::max(distToOutside2[idx], 0.0f)); // 0 at edge
-											float t = distPx * invMax; // 0..inf
-											t = std::clamp(t, 0.0f, 1.0f);
-
-											v01 = 0.5f + 0.5f * t; // 0.5..1.0
+											out.GetMips()[0].Data[idx] = 0u; // outside fixed 0
+											continue;
 										}
-										else
-										{
-											// outside: 0.5 -> 0.0 as distance increases (saturate at maxDist)
-											const float distPx = std::sqrt(std::max(distToInside2[idx], 0.0f)); // 0 at edge
-											float t = distPx * invMax; // 0..inf
-											t = std::clamp(t, 0.0f, 1.0f);
 
-											v01 = 0.5f - 0.5f * t; // 0.5..0.0
-										}
+										const int32 lid = labels[idx];
+										ASSERT(lid >= 0 && lid < int32(compMaxDist.size()), "Invalid component label.");
+
+										const float maxD = compMaxDist[size_t(lid)];
+										// If a component is extremely thin (maxD==0), keep it 0 (edge-only)
+										const float invMax = (maxD > 1e-6f) ? (1.0f / maxD) : 0.0f;
+
+										// edge -> 0, deepest -> 1
+										float v01 = std::clamp(distPx[idx] * invMax, 0.0f, 1.0f);
 
 										out.GetMips()[0].Data[idx] = (uint8)std::clamp(v01 * 255.0f + 0.5f, 0.0f, 255.0f);
 									}
@@ -404,8 +469,7 @@ namespace shz
 
 							// --- Build SDF in system memory ---
 							const float alphaThreshold = 0.5f;
-							const float maxDistRatio = 0.05f;
-							Texture alphaSDF = BuildAlphaSdfR8(baseColorTex, alphaThreshold, maxDistRatio);
+							Texture alphaSDF = BuildAlphaInnerMaskR8(baseColorTex, alphaThreshold);
 							ASSERT(alphaSDF.IsValid(), "AlphaSDF build failed.");
 
 							// --- Upload to GPU and bind ---
@@ -428,10 +492,11 @@ namespace shz
 							initData.NumSubresources = 1;
 							initData.pSubResources = &subRes;
 
-							static uint32 alphaSDFIdx = 1;
-							const uint64 alphaSDFResId = STRING_HASH(path + "_alphaSDF" + std::to_string(alphaSDFIdx++));
+							static uint32 alphaInnerMaskIdx = 1;
+
+							const uint64 alphaSDFResId = STRING_HASH(path + "_EdgeDist" + std::to_string(alphaInnerMaskIdx++));
 							m_pRenderer->AddTexture(alphaSDFResId, desc, &initData);
-							mat.SetTextureResource("g_AlphaSDF", alphaSDFResId);
+							mat.SetTextureResource("g_EdgeDistance", alphaSDFResId);
 						}
 
 						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
@@ -853,10 +918,10 @@ namespace shz
 				m_GrassSettings.InteractionWindFade = 0.95f;
 
 				// Erosion (start subtle)
-				m_GrassSettings.ErosionStrength = 0.25f;   // 0..1 progress
-				m_GrassSettings.ErosionNoiseScale = 14.0f; // 8..48 typical
-				m_GrassSettings.ErosionSmoothness = 0.95f;
-				m_GrassSettings.ErosionMaxDist = 0.9f; 
+				m_GrassSettings.ErosionStrength = 0.0f;   // 0..1 progress
+				m_GrassSettings.ErosionNoiseScale = 16.0f; // 8..48 typical
+				m_GrassSettings.ErosionSmoothness = 0.9f;
+				m_GrassSettings.ErosionMaxDist = 0.165f;
 
 				// Drying look (foliage-appropriate warm yellow-brown)
 				m_GrassSettings.DryTint = float3{ 0.70f, 0.56f, 0.28f };

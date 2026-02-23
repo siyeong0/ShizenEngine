@@ -6,7 +6,7 @@
 #include "TerrainCommon.hlsli"
 #include "GrassCommon.hlsli"
 
-Texture2D<float> g_AlphaSDF; // 0..1, 0.5 boundary, inside>0.5
+Texture2D<float> g_EdgeDistance;
 
 // Two-stage: dry -> clip
 static const float DRY_PHASE_END = 0.6; // ePix<=x : dry tint, ePix>x : clip
@@ -114,8 +114,7 @@ BASE_PS_MAIN_ENTRY()
 	// insideDepth01:
 	//   0 at boundary, 1 deep inside, outside clamps to 0
 	// -------------------------------------------------------------------------
-	float sdf01 = g_AlphaSDF.Sample(g_LinearClampSampler, uv).r;
-	float insideDepth01 = saturate((sdf01 - 0.5) * 2.0);
+	float insideDepth01 = g_EdgeDistance.Sample(g_LinearClampSampler, uv).r;
 
 	float n01 = g_PerlinNoiseTex.Sample(g_LinearWrapSampler, uv * g_GrassCB.ErosionNoiseScale).r;
 
@@ -134,7 +133,7 @@ BASE_PS_MAIN_ENTRY()
 	// strength=1 => front deep inside (1)
 	float erosion = saturate(g_GrassCB.ErosionStrength) * g_GrassCB.ErosionMaxDist;
 
-	erosion *= height01 * 4.0;
+	erosion *= height01 * 16.0;
 	erosion = saturate(erosion);
 	
 	// ePix: 0..1, increases where erosion surpasses local depthEff.
