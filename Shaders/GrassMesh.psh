@@ -96,8 +96,10 @@ BASE_PS_MAIN_ENTRY()
 	// Material sampling
 	// -------------------------------------------------------------------------
 	float3 baseColor = GetBaseColor(uv);
-	float alphaBase = GetOpacity(uv);
+	float alpha = GetOpacity(uv);
 
+	float coverage = ClipPixelCoverage(alpha, svPos);
+	
 	float2 metallicRoughness = GetMetallicRoughness(uv);
 	float metallic = metallicRoughness.x;
 	float roughness = metallicRoughness.y;
@@ -132,9 +134,8 @@ BASE_PS_MAIN_ENTRY()
 	// strength=0 => front at edge (0)
 	// strength=1 => front deep inside (1)
 	float erosion = saturate(g_GrassCB.ErosionStrength) * g_GrassCB.ErosionMaxDist;
-
-	erosion *= height01 * 16.0;
-	erosion = saturate(erosion);
+	
+	float erodeMask = saturate((height01 - 0.05) / (0.15 - 0.05));
 	
 	// ePix: 0..1, increases where erosion surpasses local depthEff.
 	// Use a smooth width so it doesn't shimmer.
@@ -150,11 +151,9 @@ BASE_PS_MAIN_ENTRY()
 	roughness = saturate(roughness + dry01 * g_GrassCB.DryRoughness);
 
 	// keep: 1 before x, 0 after x (with small transition to reduce popping)
-	float keep = 1.0 - smoothstep(DRY_PHASE_END, DRY_PHASE_END + 0.02, ePix);
-
-	// IMPORTANT: feed eroded alpha into coverage/clip logic
-	float alphaEroded = alphaBase * keep;
-	float coverage = ClipPixelCoverage(alphaEroded, svPos);
+	float keep = 1.0 - smoothstep(DRY_PHASE_END, DRY_PHASE_END + 0.02, ePix) * erodeMask;
+	
+	clip(keep - 0.5);
 
 	// -------------------------------------------------------------------------
 	// Root blending uses coverage (now includes erosion)
@@ -176,13 +175,11 @@ BASE_PS_MAIN_ENTRY()
 	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
 	ao = max(aoRoot, ROOT_AO_MIN);
 
-	float alpha = alphaEroded;
-
 	// -------------------------------------------------------------------------
 	// Pack to GBuffer
 	// -------------------------------------------------------------------------
 	SET_PSOUT_ALBEDO(baseColor);
-	SET_PSOUT_OPACITY(alpha);
+	SET_PSOUT_OPACITY(alpha * keep);
 	SET_PSOUT_NORMAL(normal);
 	SET_PSOUT_METALLIC(metallic);
 	SET_PSOUT_ROUGHNESS(roughness);

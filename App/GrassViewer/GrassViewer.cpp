@@ -920,8 +920,8 @@ namespace shz
 				// Erosion (start subtle)
 				m_GrassSettings.ErosionStrength = 0.0f;   // 0..1 progress
 				m_GrassSettings.ErosionNoiseScale = 16.0f; // 8..48 typical
-				m_GrassSettings.ErosionSmoothness = 0.9f;
-				m_GrassSettings.ErosionMaxDist = 0.165f;
+				m_GrassSettings.ErosionSmoothness = 0.75f;
+				m_GrassSettings.ErosionMaxDist = 0.5f;
 
 				// Drying look (foliage-appropriate warm yellow-brown)
 				m_GrassSettings.DryTint = float3{ 0.70f, 0.56f, 0.28f };
