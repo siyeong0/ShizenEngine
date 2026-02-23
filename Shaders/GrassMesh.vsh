@@ -1,3 +1,6 @@
+#define ADDITIONAL_VS_OUT_FIELDS \
+	VS_OUT_FIELD(float, Height01, 0)
+
 #include "Common.hlsli"
 #include "GrassCommon.hlsli"
 
@@ -229,10 +232,13 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 		nPrevWS,
 		tPrevWS
 	);
-
+	
 	// Outputs (dynamic)
 	SET_VSOUT_WORLD_POS_DYNAMIC(float4(pCurrWS, 1.0f), float4(pPrevWS, 1.0f));
 	SET_VSOUT_UV(vertexUV);
 	SET_VSOUT_WORLD_NORMAL(nCurrWS);
 	SET_VSOUT_WORLD_TANGENT(tCurrWS);
+	
+	float height01 = saturate(vertexPosition.y);
+	SET_VSOUT_ADDITIONAL(Height01, height01);
 }

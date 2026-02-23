@@ -1,7 +1,7 @@
-#include "Common.hlsli"
-
 #ifndef GRASS_COMMON_HLSLI
 #define GRASS_COMMON_HLSLI
+
+#include "Common.hlsli"
 
 // ---------------------------------------------------------------------------
 // Constants

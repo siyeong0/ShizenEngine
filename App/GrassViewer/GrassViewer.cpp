@@ -182,7 +182,7 @@ namespace shz
 			// Grass model
 			// ------------------------------------------------------------
 			{
-				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GrassMesh.psh", MATERIAL_BLEND_MODE_MASKED);
 				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
 				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
 
@@ -670,9 +670,12 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			m_Camera.SetRotation(0.0f, 0.0f);
-			m_Camera.SetRotation(-2.63f, -0.13f);
+			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			//m_Camera.SetRotation(0.0f, 0.0f);
+
+			m_Camera.SetPos({ 26.2178898f, 359.614075f, -4.20217f });
+			m_Camera.SetRotation(1.349999f, -0.70f);
+
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
 			m_Camera.SetRotationSpeed(0.01f);
