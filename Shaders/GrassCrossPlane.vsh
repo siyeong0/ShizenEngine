@@ -1,3 +1,6 @@
+#define ADDITIONAL_VS_OUT_FIELDS \
+	VS_OUT_FIELD(float, Height01, 0)
+
 #include "Common.hlsli"
 #include "GrassCommon.hlsli"
 
@@ -92,4 +95,6 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	SET_VSOUT_UV(vertexUV);
 	SET_VSOUT_WORLD_NORMAL(worldNormal);
 	SET_VSOUT_WORLD_TANGENT(worldTangent);
+	
+	SET_VSOUT_ADDITIONAL(Height01, height01);
 }

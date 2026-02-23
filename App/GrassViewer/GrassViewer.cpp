@@ -183,8 +183,8 @@ namespace shz
 			// ------------------------------------------------------------
 			{
 				m_pRenderer->RegisterMaterialTemplate("GrassMesh", "GrassMesh.vsh", "GrassMesh.psh", MATERIAL_BLEND_MODE_MASKED);
-				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
-				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "Grass.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassCrossPlane", "GrassCrossPlane.vsh", "GrassCrossPlane.psh", MATERIAL_BLEND_MODE_MASKED);
+				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GrassBillboard.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMeshLevel& mesh)
 				{
