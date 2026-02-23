@@ -65,6 +65,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GrassCommon.hlsli = Shaders\GrassCommon.hlsli
 		Shaders\GrassCrossPlane.vsh = Shaders\GrassCrossPlane.vsh
 		Shaders\GrassGenerateInstances.hlsl = Shaders\GrassGenerateInstances.hlsl
+		Shaders\GrassMesh.psh = Shaders\GrassMesh.psh
 		Shaders\GrassMesh.vsh = Shaders\GrassMesh.vsh
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\InteractionCompute.hlsl = Shaders\InteractionCompute.hlsl

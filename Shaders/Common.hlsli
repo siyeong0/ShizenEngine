@@ -4,8 +4,9 @@
 #include "HLSL_Structures.hlsli"
 
 // ============================================================================
-// Input
+// Base shader I/O
 // ============================================================================
+
 struct BaseVSInput
 {
 	float3 Position : ATTRIB0;
@@ -30,6 +31,36 @@ struct BaseVSInput
 #define APPLY_JITTER_TO_CLIP(clipPos)  (clipPos)
 #endif
 
+// Slot -> TEXCOORD index mapping (base fields consume TEXCOORD0..5 in non-depth path)
+#define ADDITIONAL_SEMANTIC(slot) ADDITIONAL_SEMANTIC_##slot
+
+#define ADDITIONAL_SEMANTIC_0  TEXCOORD6
+#define ADDITIONAL_SEMANTIC_1  TEXCOORD7
+#define ADDITIONAL_SEMANTIC_2  TEXCOORD8
+#define ADDITIONAL_SEMANTIC_3  TEXCOORD9
+#define ADDITIONAL_SEMANTIC_4  TEXCOORD10
+#define ADDITIONAL_SEMANTIC_5  TEXCOORD11
+#define ADDITIONAL_SEMANTIC_6  TEXCOORD12
+#define ADDITIONAL_SEMANTIC_7  TEXCOORD13
+#define ADDITIONAL_SEMANTIC_8  TEXCOORD14
+#define ADDITIONAL_SEMANTIC_9  TEXCOORD15
+
+// Field emitters
+#define VS_OUT_FIELD(type, name, slot) type name : ADDITIONAL_SEMANTIC(slot);
+#define PS_IN_FIELD(type, name, slot)  type name : ADDITIONAL_SEMANTIC(slot);
+
+// Access helpers (keeps callsites consistent)
+#define VSOUT_ADDITIONAL(name, value)	OUT.name = (value);
+#define PSIN_ADDITIONAL(name)			(IN.name)
+
+#ifndef ADDITIONAL_VS_OUT_FIELDS
+#define ADDITIONAL_VS_OUT_FIELDS /* empty */
+#endif
+
+#ifndef ADDITIONAL_PS_IN_FIELDS
+#define ADDITIONAL_PS_IN_FIELDS  /* empty */
+#endif
+
 // ============================================================================
 // GBuffer / regular path (not depth-only)
 // ============================================================================
@@ -38,12 +69,16 @@ struct BaseVSInput
 struct BaseVSOutput
 {
 	float4 SVPosition : SV_POSITION;
+
 	float4 CurrClip : TEXCOORD0;
 	float4 PrevClip : TEXCOORD1;
 	float2 UV : TEXCOORD2;
 	float3 WorldPosition : TEXCOORD3;
 	float3 WorldNormal : TEXCOORD4;
 	float3 WorldTangent : TEXCOORD5;
+
+	// User-injected additional interpolants (TEXCOORD6+)
+	ADDITIONAL_VS_OUT_FIELDS
 };
 
 #define SET_VSOUT_WORLD_POS_STATIC(pos)                                         \
@@ -66,15 +101,21 @@ struct BaseVSOutput
 #define SET_VSOUT_CURR_CLIP(cc)     OUT.CurrClip   = (cc);
 #define SET_VSOUT_PREV_CLIP(pc)     OUT.PrevClip   = (pc);
 
+#define SET_VSOUT_ADDITIONAL(name, value) OUT.name = (value)
+
 struct BasePSInput
 {
 	float4 SVPosition : SV_POSITION;
+
 	float4 CurrClip : TEXCOORD0;
 	float4 PrevClip : TEXCOORD1;
 	float2 UV : TEXCOORD2;
 	float3 WorldPosition : TEXCOORD3;
 	float3 WorldNormal : TEXCOORD4;
 	float3 WorldTangent : TEXCOORD5;
+
+	// User-injected additional interpolants (TEXCOORD6+)
+	ADDITIONAL_PS_IN_FIELDS
 
 	bool bFrontFace : SV_IsFrontFace;
 };
@@ -87,6 +128,8 @@ struct BasePSInput
 #define GET_PSIN_WORLD_NORMAL()     (IN.bFrontFace ? IN.WorldNormal : -IN.WorldNormal)
 #define GET_PSIN_WORLD_TANGENT()    (IN.WorldTangent)
 #define GET_PSIN_FRONTFACE()        (IN.bFrontFace)
+
+#define GET_PSIN_ADDITIONAL(name)	(IN.name)
 
 struct BasePSOutput
 {
@@ -106,11 +149,11 @@ struct BasePSOutput
 #define SET_PSOUT_AO(ao)                   OUT.GBuffer2.b   = (ao);
 #define SET_PSOUT_ALPHACOVERAGE(ac)        OUT.GBuffer2.a   = (ac);
 #define SET_PSOUT_EMISSIVE(emissive)       OUT.GBuffer3.rgb = (emissive);
-#define SET_PSOUT_SHADING_MODEL(model)	   OUT.GBuffer3.a   = (EncodeShadingModel_U8(model));
+#define SET_PSOUT_SHADING_MODEL(model)     OUT.GBuffer3.a   = (EncodeShadingModel_U8(model));
 #define SET_PSOUT_VELOCITY(velocity)       OUT.Velocity     = (velocity);
 
 #define BASE_VS_MAIN_ENTRY(INST_ID_VAR)    void main(BaseVSInput IN, out BaseVSOutput OUT, uint INST_ID_VAR : SV_InstanceID)
-#define BASE_PS_MAIN_ENTRY()              void main(in BasePSInput IN, out BasePSOutput OUT)
+#define BASE_PS_MAIN_ENTRY()               void main(in BasePSInput IN, out BasePSOutput OUT)
 
 // ============================================================================
 // Depth-only path
@@ -124,71 +167,76 @@ struct BaseVSOutput
 #ifdef MASKED
 	float2 UV : TEXCOORD0;
 #endif
+
+	// Optional extra interpolants even in depth-only (TEXCOORD6+)
+	// (Gaps are OK; we keep the same semantic base so permutations match consistently.)
+	ADDITIONAL_VS_OUT_FIELDS
 };
 
-// In depth-only we do not output these.
+// In depth-only we do not output these base fields.
 #define SET_VSOUT_CURR_CLIP(cc)     /* no-op */
 #define SET_VSOUT_PREV_CLIP(pc)     /* no-op */
 #define SET_VSOUT_WORLD_NORMAL(wn)  /* no-op */
 #define SET_VSOUT_WORLD_TANGENT(wt) /* no-op */
 #define SET_VSOUT_POS(svPos)        OUT.SVPosition = (svPos);
 
+#define SET_VSOUT_ADDITIONAL(name, value) /* no-op */
+
 #ifdef MASKED
 
 	// ------------------------------------------------------------------------
 	// DEPTH_ONLY + MASKED
-	// - Shadow pass: use g_ShadowAttribs mapping
-	// - Non-shadow depth pass: use g_ViewCB.ViewProj (original)
+	// - Shadow pass: use BuildShadowClipFromWorldPos
+	// - Non-shadow depth pass: use g_ViewCB.ViewProj
 	// ------------------------------------------------------------------------
-#ifdef SHADOW
+	#ifdef SHADOW
 
-#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+		#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
 			OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
 
-#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+		#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
 			OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
 
 		// IMPORTANT: Shadow depth should NOT use TAA jitter.
-		// We intentionally bypass APPLY_JITTER_TO_CLIP here.
 
-#else // !SHADOW
+	#else // !SHADOW
 
-#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+		#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
 			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
 
-#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+		#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
 			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
 
-#endif // SHADOW
+	#endif // SHADOW
 
-#define SET_VSOUT_UV(uv)    OUT.UV = (uv);
+	#define SET_VSOUT_UV(uv)    OUT.UV = (uv);
 
 #else // OPAQUE (not masked)
 
 	// ------------------------------------------------------------------------
 	// DEPTH_ONLY + OPAQUE
 	// ------------------------------------------------------------------------
-#ifdef SHADOW
+	#ifdef SHADOW
 
-#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+		#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
 			OUT.SVPosition = BuildShadowClipFromWorldPos((pos).xyz);
 
-#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+		#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
 			OUT.SVPosition = BuildShadowClipFromWorldPos((curr).xyz);
 
 		// No jitter in shadow depth
 
-#else // !SHADOW
+	#else // !SHADOW
 
-#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
+		#define SET_VSOUT_WORLD_POS_STATIC(pos)                                \
 			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((pos), g_ViewCB.ViewProj));
 
-#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
+		#define SET_VSOUT_WORLD_POS_DYNAMIC(curr, prev)                        \
 			OUT.SVPosition = APPLY_JITTER_TO_CLIP(mul((curr), g_ViewCB.ViewProj));
 
-#endif // SHADOW
+	#endif // SHADOW
 
-#define SET_VSOUT_UV(uv)    /* no-op */
+	#define SET_VSOUT_UV(uv)    /* no-op */
 
 #endif // MASKED
 
@@ -199,14 +247,17 @@ struct BasePSInput
 #ifdef MASKED
 	float2 UV : TEXCOORD0;
 #endif
+
+	// Optional extra interpolants in depth-only (TEXCOORD6+)
+	ADDITIONAL_PS_IN_FIELDS
 };
 
 #define GET_PSIN_POS()          (IN.SVPosition)
 
 #ifdef MASKED
-#define GET_PSIN_UV()       (IN.UV)
+	#define GET_PSIN_UV()       (IN.UV)
 #else
-#define GET_PSIN_UV()       (float2(0.0, 0.0))
+	#define GET_PSIN_UV()       (float2(0.0, 0.0))
 #endif
 
 #define GET_PSIN_WORLD_POS()        (float3(0.0, 0.0, 0.0))
@@ -215,6 +266,8 @@ struct BasePSInput
 #define GET_PSIN_WORLD_NORMAL()     (float3(0.0, 0.0, 1.0))
 #define GET_PSIN_WORLD_TANGENT()    (float3(1.0, 0.0, 0.0))
 #define GET_PSIN_FRONTFACE()        (false)
+
+#define GET_PSIN_ADDITIONAL(name)	(0)
 
 struct BasePSOutput { };
 
@@ -227,14 +280,13 @@ struct BasePSOutput { };
 #define SET_PSOUT_AO(ao)                   /* no-op */
 #define SET_PSOUT_ALPHACOVERAGE(ac)        /* no-op */
 #define SET_PSOUT_EMISSIVE(emissive)       /* no-op */
-#define SET_PSOUT_SHADING_MODEL(model)	   /* no-op */
+#define SET_PSOUT_SHADING_MODEL(model)     /* no-op */
 #define SET_PSOUT_VELOCITY(velocity)       /* no-op */
 
 #define BASE_VS_MAIN_ENTRY(INST_ID_VAR)    void main(BaseVSInput IN, out BaseVSOutput OUT, uint INST_ID_VAR : SV_InstanceID)
 #define BASE_PS_MAIN_ENTRY()               void main(in BasePSInput IN)
 
 #endif // DEPTH_ONLY
-
 
 // ============================================================================
 // Common bindings
