@@ -2,6 +2,7 @@
 #define GRASS_COMMON_HLSLI
 
 #include "Common.hlsli"
+#include "TerrainCommon.hlsli"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -432,6 +433,204 @@ static float2 ApplyGrassWindUV(
 	uv += perp * (travel * UV_PER_METER) * 0.35f * flutter;
 
 	return uv;
+}
+
+// -----------------------------------------------------------------------------
+// Grass shading shared helpers (PS only)
+//
+// Notes
+// - Keep VS/CS-only utilities in GrassCommon.hlsli.
+// - Put PS-only shading utilities here to avoid heavy includes in VS/CS.
+//
+// Style
+// - English comments.
+// - Always use braces.
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// HSV helpers
+// -----------------------------------------------------------------------------
+static float3 RgbToHsv(float3 c)
+{
+	float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+
+	float4 p;
+	if (c.g < c.b)
+	{
+		p = float4(c.bg, K.wz);
+	}
+	else
+	{
+		p = float4(c.gb, K.xy);
+	}
+
+	float4 q;
+	if (c.r < p.x)
+	{
+		q = float4(p.xyw, c.r);
+	}
+	else
+	{
+		q = float4(c.r, p.yzx);
+	}
+
+	float d = q.x - min(q.w, q.y);
+	float e = 1e-6;
+
+	float3 hsv;
+	hsv.x = abs(q.z + (q.w - q.y) / (6.0 * d + e));
+	hsv.y = d / (q.x + e);
+	hsv.z = q.x;
+	return hsv;
+}
+
+static float3 HsvToRgb(float3 hsv)
+{
+	float h = hsv.x * 6.0;
+	float i = floor(h);
+	float f = h - i;
+
+	float p = hsv.z * (1.0 - hsv.y);
+	float q = hsv.z * (1.0 - hsv.y * f);
+	float t = hsv.z * (1.0 - hsv.y * (1.0 - f));
+
+	if (i < 1.0)
+	{
+		return float3(hsv.z, t, p);
+	}
+	if (i < 2.0)
+	{
+		return float3(q, hsv.z, p);
+	}
+	if (i < 3.0)
+	{
+		return float3(p, hsv.z, t);
+	}
+	if (i < 4.0)
+	{
+		return float3(p, q, hsv.z);
+	}
+	if (i < 5.0)
+	{
+		return float3(t, p, hsv.z);
+	}
+
+	return float3(hsv.z, p, q);
+}
+
+// -----------------------------------------------------------------------------
+// Drying color grading
+// -----------------------------------------------------------------------------
+static float3 ApplyGrassDrying(float3 baseColor, float dry01)
+{
+	dry01 = saturate(dry01);
+	dry01 = pow(dry01, 0.65);
+
+	float3 hsv = RgbToHsv(baseColor);
+
+	// Saturation drop + value darken
+	hsv.y *= lerp(1.0, (1.0 - g_GrassCB.DrySaturationReduct), dry01);
+	hsv.z *= lerp(1.0, (1.0 - g_GrassCB.DryDarken), dry01);
+
+	float3 c0 = HsvToRgb(hsv);
+
+	// Warm tint blend
+	float3 c1 = c0 * g_GrassCB.DryTint;
+
+	return lerp(c0, c1, dry01);
+}
+
+// -----------------------------------------------------------------------------
+// Height ramp helper
+// - height01 <= h0 : 0
+// - h0..h1         : linear 0..1
+// - height01 >= h1 : 1
+// -----------------------------------------------------------------------------
+static float ComputeHeightRamp01(float height01, float h0, float h1)
+{
+	float denom = max(h1 - h0, 1e-6);
+	return saturate((height01 - h0) / denom);
+}
+
+// -----------------------------------------------------------------------------
+// Erosion progression (depth-space 0..1) used by both:
+// - Mesh path: can clip / alpha-reduce
+// - CrossPlane/Billboard path: color-only drying
+//
+// Inputs
+// - edgeDist01: 0 at boundary, 1 deep inside
+// - erosion01: global erosion front in 0..1
+// - depthEff : edgeDist01 + noise
+//
+// Output
+// - ePix: 0..1, increases when erosion surpasses local depthEff
+// -----------------------------------------------------------------------------
+static float ComputeErosionEPix(
+	Texture2D<float> edgeDistanceTex,
+	float2 uv,
+	float erosionStrength01,
+	float erosionMaxDist01,
+	float erosionSmoothness,
+	float noiseScale,
+	float noiseAmount)
+{
+	float insideDepth01 = edgeDistanceTex.Sample(g_LinearClampSampler, uv).r;
+
+	float n01 = g_PerlinNoiseTex.Sample(g_LinearWrapSampler, uv * noiseScale).r;
+
+	float depthNoise = (n01 - 0.5) * 2.0 * noiseAmount;
+	float depthEff = saturate(insideDepth01 + depthNoise);
+
+	float erosion = saturate(erosionStrength01) * erosionMaxDist01;
+
+	float smoothW = max(erosionSmoothness, 1e-4);
+	float ePix = saturate((erosion - depthEff) / smoothW);
+
+	return ePix;
+}
+
+// -----------------------------------------------------------------------------
+// Coverage shaping used for root blend stability
+// -----------------------------------------------------------------------------
+static float ComputeCoverageMask(float coverage, float start)
+{
+	float m = saturate((coverage - start) / max(1.0 - start, 1e-6));
+	m *= m;
+	return m;
+}
+
+// -----------------------------------------------------------------------------
+// Root blend factor (0..1)
+// - rootMask : stronger near root (height01 small)
+// - covMask  : stronger when coverage is high (avoid halo when alpha is low)
+// -----------------------------------------------------------------------------
+static float ComputeRootBlend(float height01, float coverage)
+{
+	float rootMask = 1.0 - saturate(height01);
+	rootMask *= rootMask;
+
+	float covMask = ComputeCoverageMask(coverage, 0.25);
+
+	return rootMask * covMask;
+}
+
+// -----------------------------------------------------------------------------
+// Apply terrain tint + AO boost near root
+// -----------------------------------------------------------------------------
+static void ApplyRootTerrainBlend(
+	float3 worldPos,
+	float blend01,
+	inout float3 baseColor,
+	inout float ao)
+{
+	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
+	baseColor = lerp(baseColor, terrainTint, blend01 * 0.35);
+
+	const float ROOT_AO_STRENGTH = 0.65;
+	const float ROOT_AO_MIN = 0.25;
+
+	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend01);
+	ao = max(aoRoot, ROOT_AO_MIN);
 }
 
 #endif // GRASS_COMMON_HLSLI

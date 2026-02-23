@@ -3,81 +3,22 @@
 
 #include "Common.hlsli"
 #include "PBRMaterial.hlsli"
-#include "TerrainCommon.hlsli"
 #include "GrassCommon.hlsli"
 
 Texture2D<float> g_EdgeDistance;
 
-// Two-stage: dry -> clip
-static const float DRY_PHASE_END = 0.6; // ePix<=x : dry tint, ePix>x : clip
+// Drying only control
+static const float DRY_PHASE_END = 0.6;
 
-// Fallbacks if you don't have these in g_GrassCB yet
+// Fallbacks (use g_GrassCB.* if you have them)
 static const float SHZ_EROSION_NOISE_AMOUNT_FALLBACK = 0.12;
 
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-static float3 RgbToHsv(float3 c)
-{
-	float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-	float4 p = (c.g < c.b) ? float4(c.bg, K.wz) : float4(c.gb, K.xy);
-	float4 q = (c.r < p.x) ? float4(p.xyw, c.r) : float4(c.r, p.yzx);
-	float d = q.x - min(q.w, q.y);
-	float e = 1e-6;
-	float3 hsv;
-	hsv.x = abs(q.z + (q.w - q.y) / (6.0 * d + e));
-	hsv.y = d / (q.x + e);
-	hsv.z = q.x;
-	return hsv;
-}
-
-static float3 HsvToRgb(float3 hsv)
-{
-	float h = hsv.x * 6.0;
-	float i = floor(h);
-	float f = h - i;
-
-	float p = hsv.z * (1.0 - hsv.y);
-	float q = hsv.z * (1.0 - hsv.y * f);
-	float t = hsv.z * (1.0 - hsv.y * (1.0 - f));
-
-	[branch]
-	if (i < 1.0)
-		return float3(hsv.z, t, p);
-	if (i < 2.0)
-		return float3(q, hsv.z, p);
-	if (i < 3.0)
-		return float3(p, hsv.z, t);
-	if (i < 4.0)
-		return float3(p, q, hsv.z);
-	if (i < 5.0)
-		return float3(t, p, hsv.z);
-	return float3(hsv.z, p, q);
-}
-
-static float3 ApplyDrying(float3 baseColor, float dry01)
-{
-	dry01 = pow(dry01, 0.65);
-
-	float3 hsv = RgbToHsv(baseColor);
-
-	// saturation drop + value darken
-	hsv.y *= lerp(1.0, (1.0 - g_GrassCB.DrySaturationReduct), dry01);
-	hsv.z *= lerp(1.0, (1.0 - g_GrassCB.DryDarken), dry01);
-
-	float3 c0 = HsvToRgb(hsv);
-
-	// warm tint blend
-	float3 c1 = c0 * g_GrassCB.DryTint;
-
-	return lerp(c0, c1, dry01);
-}
+// Height ramp for drying influence
+static const float SHZ_DRY_HEIGHT0 = 0.05;
+static const float SHZ_DRY_HEIGHT1 = 0.15;
 
 BASE_PS_MAIN_ENTRY()
 {
-	// -------------------------------------------------------------------------
-	// Inputs
-	// -------------------------------------------------------------------------
 	float4 svPos = GET_PSIN_POS();
 	float4 currClip = GET_PSIN_CURR_CLIP();
 	float4 prevClip = GET_PSIN_PREV_CLIP();
@@ -92,12 +33,11 @@ BASE_PS_MAIN_ENTRY()
 	float height01 = GET_PSIN_ADDITIONAL(Height01);
 
 	// -------------------------------------------------------------------------
-	// Material sampling
+	// Material
 	// -------------------------------------------------------------------------
 	float3 baseColor = GetBaseColor(uv);
 	float alpha = GetOpacity(uv);
 
-	// Coverage is still driven by original alpha (CrossPlane keeps geometry)
 	float coverage = ClipPixelCoverage(alpha, svPos);
 
 	float2 metallicRoughness = GetMetallicRoughness(uv);
@@ -109,65 +49,42 @@ BASE_PS_MAIN_ENTRY()
 	float3 normal = GetNormal(uv, normalWS, tangentWS);
 
 	// -------------------------------------------------------------------------
-	// Erosion progress per-pixel (depth-space 0..1) - used ONLY for color change
+	// Erosion signal => color only
 	// -------------------------------------------------------------------------
-	float insideDepth01 = g_EdgeDistance.Sample(g_LinearClampSampler, uv).r;
+	float ePix = ComputeErosionEPix(
+		g_EdgeDistance,
+		uv,
+		g_GrassCB.ErosionStrength,
+		g_GrassCB.ErosionMaxDist,
+		g_GrassCB.ErosionSmoothness,
+		g_GrassCB.ErosionNoiseScale,
+		SHZ_EROSION_NOISE_AMOUNT_FALLBACK);
 
-	float n01 = g_PerlinNoiseTex.Sample(g_LinearWrapSampler, uv * g_GrassCB.ErosionNoiseScale).r;
+	float dryBase01 = saturate(ePix / max(DRY_PHASE_END, 1e-4));
 
-	float noiseAmount = SHZ_EROSION_NOISE_AMOUNT_FALLBACK;
-	// float noiseAmount = g_GrassCB.ErosionNoiseAmount;
+	// Optional: limit drying to upper part using Height01 ramp.
+	float dryHeightMask = ComputeHeightRamp01(height01, SHZ_DRY_HEIGHT0, SHZ_DRY_HEIGHT1);
+	float dry01 = dryBase01 * dryHeightMask;
 
-	float erosionSmooth = g_GrassCB.ErosionSmoothness;
-
-	float depthNoise = (n01 - 0.5) * 2.0 * noiseAmount;
-	float depthEff = saturate(insideDepth01 + depthNoise);
-
-	float erosion = saturate(g_GrassCB.ErosionStrength) * g_GrassCB.ErosionMaxDist;
-
-	float ePix = saturate((erosion - depthEff) / max(erosionSmooth, 1e-4));
-
-	// Optional: keep your height-based ramp if you want drying to affect only upper parts.
-	// If you want drying everywhere, set erodeMask = 1.
-	float erodeMask = saturate((height01 - 0.05) / (0.15 - 0.05));
-	float dry01 = saturate(ePix / max(DRY_PHASE_END, 1e-4)) * erodeMask;
-
-	// -------------------------------------------------------------------------
-	// Drying (COLOR ONLY) - NO erosion / NO clip / NO alpha reduction
-	// -------------------------------------------------------------------------
-	baseColor = ApplyDrying(baseColor, dry01);
+	baseColor = ApplyGrassDrying(baseColor, dry01);
 	roughness = saturate(roughness + dry01 * g_GrassCB.DryRoughness);
 
 	// -------------------------------------------------------------------------
-	// Root blending (still uses coverage from original alpha)
+	// Root blend (still uses original coverage)
 	// -------------------------------------------------------------------------
-	float rootMask = 1.0 - height01;
-	rootMask *= rootMask;
-
-	float covMask = saturate((coverage - 0.25) / (1.0 - 0.25));
-	covMask *= covMask;
-
-	float blend = rootMask * covMask;
-
-	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
-	baseColor = lerp(baseColor, terrainTint, blend * 0.35);
-
-	const float ROOT_AO_STRENGTH = 0.65;
-	const float ROOT_AO_MIN = 0.25;
-
-	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
-	ao = max(aoRoot, ROOT_AO_MIN);
+	float blend = ComputeRootBlend(height01, coverage);
+	ApplyRootTerrainBlend(worldPos, blend, baseColor, ao);
 
 	// -------------------------------------------------------------------------
-	// Pack to GBuffer
+	// GBuffer
 	// -------------------------------------------------------------------------
 	SET_PSOUT_ALBEDO(baseColor);
-	SET_PSOUT_OPACITY(alpha); // keep original alpha (no erosion)
+	SET_PSOUT_OPACITY(alpha); // No erosion: keep original alpha
 	SET_PSOUT_NORMAL(normal);
 	SET_PSOUT_METALLIC(metallic);
 	SET_PSOUT_ROUGHNESS(roughness);
 	SET_PSOUT_AO(ao);
-	SET_PSOUT_ALPHACOVERAGE(coverage); // still based on original alpha
+	SET_PSOUT_ALPHACOVERAGE(coverage);
 	SET_PSOUT_EMISSIVE(emissive);
 	SET_PSOUT_VELOCITY(currUV - prevUV);
 	SET_PSOUT_SHADING_MODEL(FOLIAGE);
