@@ -15,6 +15,8 @@
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 #include "Engine/AssetManager/Public/AssimpImporter.h"
 
+#include "Engine/Image/Public/TextureLoader.h"
+
 namespace shz
 {
 	namespace hlsl
@@ -192,109 +194,6 @@ namespace shz
 					mesh.ApplyUniformScale(yScale01);
 					mesh.MoveBottomToOrigin(true);
 				};
-
-				//{
-				//	GrassDesc gd = {};
-				//	StaticMesh grassMesh;
-				//	// LOD0 : Mesh
-				//	{
-				//		AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_default.fbx");
-				//		const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-				//		StaticMeshLevel grassMeshLevel;
-				//		BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-				//		uniform01(grassMeshLevel);
-				//		for (auto matId : grassMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//			mat.SetCullMode(CULL_MODE_NONE);
-				//		}
-				//		grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
-				//	}
-				//	// LOD1 : Cross-plane
-				//	{
-				//		AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/basic/GrassBasic_cross4r.fbx");
-				//		const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-				//		StaticMeshLevel grassCrossMeshLevel;
-				//		BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-				//		uniform01(grassCrossMeshLevel);
-				//		for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//			mat.SetCullMode(CULL_MODE_NONE);
-				//		}
-				//		grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
-				//	}
-				//	// LOD2 : Billboard
-				//	{
-				//		AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/basic/clips/v1.png");
-				//		StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-				//		for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//			mat.SetCullMode(CULL_MODE_NONE);
-				//		}
-				//		grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
-				//	}
-				//	gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
-				//	m_pGrassSystem->AddGrassDesc(gd);
-				//}
-
-				//{
-				//	GrassDesc gd = {};
-				//	StaticMesh grassMesh;
-				//	// LOD0 : Mesh
-				//	{
-				//		AssetRef<AssimpAsset> grassMeshRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower.fbx");
-				//		const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassMeshRef);
-				//		StaticMeshLevel grassMeshLevel;
-				//		BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-				//		uniform01(grassMeshLevel);
-				//		for (auto matId : grassMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//		}
-				//		grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
-				//	}
-				//	// LOD1 : Cross-plane
-				//	{
-				//		AssetRef<AssimpAsset> grassCrossRef = m_pAssetManager->RegisterAsset<AssimpAsset>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/white_flower_cross.fbx");
-				//		const AssimpAsset& grassCrossAssimp = *m_pAssetManager->LoadBlocking(grassCrossRef);
-				//		StaticMeshLevel grassCrossMeshLevel;
-				//		BuildStaticMeshAsset(grassCrossAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-				//		uniform01(grassCrossMeshLevel);
-				//		for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//			mat.SetCullMode(CULL_MODE_NONE);
-				//		}
-				//		grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
-				//	}
-				//	// LOD2 : Billboard
-				//	{
-				//		AssetRef<Texture> grassBillboardTexRef = m_pAssetManager->RegisterAsset<Texture>("C:/Dev/ShizenEngine/Assets/Grass/white-flower/clips/l.png");
-				//		StaticMeshLevel grassBiilboardMeshLevel = StaticMeshLevel::CreateBillboard(grassBillboardTexRef, "GrassBillboard", MATERIAL_BLEND_MODE_MASKED, { 1.0f, 1.0f }, { 0.5f, 0.0f });
-				//		for (auto matId : grassBiilboardMeshLevel.GetMaterialSlots())
-				//		{
-				//			Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-				//			mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
-				//			mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-				//			mat.SetCullMode(CULL_MODE_NONE);
-				//		}
-				//		grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
-				//	}
-				//	gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
-				//	m_pGrassSystem->AddGrassDesc(gd);
-				//}
 
 				auto addGrass = [&](const std::string& path)
 				{
@@ -505,7 +404,7 @@ namespace shz
 
 							// --- Build SDF in system memory ---
 							const float alphaThreshold = 0.5f;
-							const float maxDistRatio = 0.1f;
+							const float maxDistRatio = 0.05f;
 							Texture alphaSDF = BuildAlphaSdfR8(baseColorTex, alphaThreshold, maxDistRatio);
 							ASSERT(alphaSDF.IsValid(), "AlphaSDF build failed.");
 
@@ -529,7 +428,8 @@ namespace shz
 							initData.NumSubresources = 1;
 							initData.pSubResources = &subRes;
 
-							const uint64 alphaSDFResId = STRING_HASH(path + "_alphaSDF");
+							static uint32 alphaSDFIdx = 1;
+							const uint64 alphaSDFResId = STRING_HASH(path + "_alphaSDF" + std::to_string(alphaSDFIdx++));
 							m_pRenderer->AddTexture(alphaSDFResId, desc, &initData);
 							mat.SetTextureResource("g_AlphaSDF", alphaSDFResId);
 						}
@@ -852,26 +752,7 @@ namespace shz
 		m_pTerrainSystem->Update(*m_pRenderer, m_pRenderScene.get(), m_ViewFamily.Views[0]);
 
 		// Update grass render constants
-		{
-			hlsl::GrassRenderConstants ren = {};
-			ren.BaseColorFactor = float4(150.f, 200.f, 100.f, 255.f) / 255.f;
-			ren.Tint = float4{ 1.05f, 1.00f, 0.95f, 1.0f };
-
-			ren.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
-			ren.WindStrength = 0.30f;
-			ren.WindSpeed = 2.25f;
-
-			ren.WindFreq = 3.255f;
-			ren.WindGust = 0.42f;
-			ren.MaxBendAngle = 0.35f;
-			ren._pad1 = 0.0f;
-
-			ren.InteractionBendAngle = 1.0f;
-			ren.InteractionSink = 0.05f;
-			ren.InteractionWindFade = 0.95f;
-
-			m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), ren);
-		}
+		m_pRenderer->UpdateBuffer<hlsl::GrassRenderConstants>(STRING_HASH("GrassRenderConstantsCB"), m_GrassSettings);
 
 		m_UpdateMs = timer.ElapsedMs();
 		const double a = (double)std::clamp(m_TimingEmaAlpha, 0.0f, 1.0f);
@@ -942,7 +823,107 @@ namespace shz
 					m_Camera.SetSpeedUpScales(m_Speed, 1.0f);
 				}
 			}
+
+			// ---------------------------------------------------------------------
+			// Grass Settings UI
+			// ---------------------------------------------------------------------
+			ImGui::Separator();
+			ImGui::Text("Grass");
+
+			// 1) Initialize defaults ONCE (do not override every frame)
+			static bool s_InitGrassDefaults = false;
+			if (!s_InitGrassDefaults)
+			{
+				s_InitGrassDefaults = true;
+
+				// Wind (reasonable outdoor baseline)
+				m_GrassSettings.WindDirXZ = float2{ 0.80f, 0.60f }.Normalized();
+				m_GrassSettings.WindStrength = 0.35f;      // 0.2~0.6 typical
+				m_GrassSettings.WindSpeed = 2.0f;          // 1~4 typical
+				m_GrassSettings.WindFreq = 2.8f;           // 1.5~6 typical
+				m_GrassSettings.WindGust = 0.35f;          // 0~1
+				m_GrassSettings.MaxBendAngle = 0.35f;      // radians-ish (0~1)
+
+				// Interaction
+				m_GrassSettings.InteractionBendAngle = 1.0f;
+				m_GrassSettings.InteractionSink = 0.05f;
+				m_GrassSettings.InteractionWindFade = 0.95f;
+
+				// Erosion (start subtle)
+				m_GrassSettings.ErosionStrength = 0.25f;   // 0..1 progress
+				m_GrassSettings.ErosionNoiseScale = 14.0f; // 8..48 typical
+				m_GrassSettings.ErosionSmoothness = 0.95f;
+				m_GrassSettings.ErosionMaxDist = 0.9f; 
+
+				// Drying look (foliage-appropriate warm yellow-brown)
+				m_GrassSettings.DryTint = float3{ 0.70f, 0.56f, 0.28f };
+				m_GrassSettings.DrySaturationReduct = 0.55f; // 0..1
+				m_GrassSettings.DryDarken = 0.20f;           // 0..0.6
+				m_GrassSettings.DryRoughness = 0.35f;        // 0..1
+			}
+
+			// Optional: Reset button
+			if (ImGui::Button("Reset Grass Defaults"))
+			{
+				s_InitGrassDefaults = false;
+			}
+
+			// 2) Wind
+			if (ImGui::CollapsingHeader("Wind", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				// Direction as 2D vector (normalize on edit)
+				float dir[2] = { m_GrassSettings.WindDirXZ.x, m_GrassSettings.WindDirXZ.y };
+				if (ImGui::DragFloat2("Dir XZ", dir, 0.01f, -1.0f, 1.0f, "%.3f"))
+				{
+					float2 d = float2{ dir[0], dir[1] };
+					const float len2 = d.x * d.x + d.y * d.y;
+					if (len2 < 1e-6f) d = float2{ 1.0f, 0.0f };
+					m_GrassSettings.WindDirXZ = d.Normalized();
+				}
+
+				ImGui::SliderFloat("Strength", &m_GrassSettings.WindStrength, 0.0f, 1.5f, "%.3f");
+				ImGui::SliderFloat("Speed", &m_GrassSettings.WindSpeed, 0.0f, 8.0f, "%.3f");
+				ImGui::SliderFloat("Frequency", &m_GrassSettings.WindFreq, 0.5f, 10.0f, "%.3f");
+				ImGui::SliderFloat("Gust", &m_GrassSettings.WindGust, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Max Bend", &m_GrassSettings.MaxBendAngle, 0.0f, 1.2f, "%.3f");
+
+				ImGui::TextDisabled("Tip: Strength 0.2~0.6, Speed 1~4, Freq 2~6 is a good baseline.");
+			}
+
+			// 3) Interaction
+			if (ImGui::CollapsingHeader("Interaction", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::SliderFloat("Bend Angle", &m_GrassSettings.InteractionBendAngle, 0.0f, 2.0f, "%.3f");
+				ImGui::SliderFloat("Sink", &m_GrassSettings.InteractionSink, 0.0f, 0.20f, "%.3f");
+				ImGui::SliderFloat("Wind Fade", &m_GrassSettings.InteractionWindFade, 0.0f, 1.0f, "%.3f");
+			}
+
+			// 4) Erosion + Drying
+			if (ImGui::CollapsingHeader("Erosion / Drying", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::SliderFloat("Erosion Strength", &m_GrassSettings.ErosionStrength, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Noise Scale", &m_GrassSettings.ErosionNoiseScale, 2.0f, 64.0f, "%.2f");
+				ImGui::SliderFloat("Smoothness", &m_GrassSettings.ErosionSmoothness, 0.01f, 1.0f, "%.3f");
+				ImGui::SliderFloat("MaxDist", &m_GrassSettings.ErosionMaxDist, 0.01f, 1.0f, "%.3f");
+
+				ImGui::Separator();
+
+				float tint[3] = { m_GrassSettings.DryTint.x, m_GrassSettings.DryTint.y, m_GrassSettings.DryTint.z };
+				if (ImGui::ColorEdit3("Dry Tint", tint))
+				{
+					// avoid (0,0,0) which kills the albedo
+					m_GrassSettings.DryTint = float3{ std::max(tint[0], 0.01f), std::max(tint[1], 0.01f), std::max(tint[2], 0.01f) };
+				}
+
+				ImGui::SliderFloat("Saturation Reduce", &m_GrassSettings.DrySaturationReduct, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Darken", &m_GrassSettings.DryDarken, 0.0f, 0.8f, "%.3f");
+				ImGui::SliderFloat("Roughness Add", &m_GrassSettings.DryRoughness, 0.0f, 1.0f, "%.3f");
+
+				ImGui::TextDisabled("Suggested: Smoothness 0.04~0.10, NoiseScale 10~24.");
+				ImGui::TextDisabled("DryTint: warm yellow-brown, SatReduce 0.4~0.7, Darken 0.15~0.35.");
+			}
 		}
+
 		ImGui::End();
 	}
 

@@ -278,6 +278,7 @@ cbuffer TERRAIN_CONSTANTS
 Texture2DArray<float> g_ShadowMapArray;
 SamplerComparisonState g_ShadowCmpSampler;
 
+Texture2D g_PerlinNoiseTex;
 Texture2D g_BlueNoiseTex;
 
 // Samplers

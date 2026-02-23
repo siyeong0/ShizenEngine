@@ -111,7 +111,7 @@ namespace shz
 		// ------------------------------------------------------------
 		// Spawn settings
 		// ------------------------------------------------------------
-		float m_YOffset = -0.01f;
+		float m_YOffset = 0.0f;
 		float m_Jitter = 0.95f;
 		float m_NormalAlignStrength = 0.75f;
 

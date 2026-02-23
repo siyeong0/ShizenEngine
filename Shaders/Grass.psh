@@ -1,11 +1,140 @@
+//#include "Common.hlsli"
+//#include "PBRMaterial.hlsli"
+//#include "TerrainCommon.hlsli"
+
+//BASE_PS_MAIN_ENTRY()
+//{
+//	float4 svPos = GET_PSIN_POS();
+//	float4 currClip = GET_PSIN_CURR_CLIP();
+//	float4 prevClip = GET_PSIN_PREV_CLIP();
+//	float3 worldPos = GET_PSIN_WORLD_POS();
+//	float2 uv = GET_PSIN_UV();
+//	float3 normalWS = GET_PSIN_WORLD_NORMAL();
+//	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
+
+//	float3 baseColor = GetBaseColor(uv);
+//	float alpha = GetOpacity(uv);
+   
+//	float coverage = ClipPixelCoverage(alpha, svPos);
+	
+//	float2 metallicRoughness = GetMetallicRoughness(uv);
+//	float metallic = metallicRoughness.x;
+//	float roughness = metallicRoughness.y;
+//	float ao = GetAmbientOcclusion(uv);
+//	float3 emissive = GetEmissive(uv);
+//	float3 normal = GetNormal(uv, normalWS, tangentWS);
+
+//	float2 currUV = ClipToUV(currClip);
+//	float2 prevUV = ClipToUV(prevClip);
+	
+//	float height01 = saturate((worldPos.y - SampleWorldHeightAtWorldXZ(worldPos.xz)) / 0.25);
+//	float rootMask = 1.0 - height01; 
+//	rootMask = rootMask * rootMask; 
+//	float covMask = saturate((coverage - 0.25) / (1.0 - 0.25));
+//	covMask *= covMask;
+//	float blend = rootMask * covMask;
+
+//	// Base color + terrain tint blend
+//	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
+//	baseColor = lerp(baseColor, terrainTint, blend * 0.35);
+	
+//	// AO boost
+//	const float ROOT_AO_STRENGTH = 0.65;
+//	const float ROOT_AO_MIN = 0.25; 
+	
+//	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
+//	ao = max(aoRoot, ROOT_AO_MIN);
+	
+//	// Pack to GBuffer
+//	SET_PSOUT_ALBEDO(baseColor);
+//	SET_PSOUT_OPACITY(alpha);
+//	SET_PSOUT_NORMAL(normal);
+//	SET_PSOUT_METALLIC(metallic);
+//	SET_PSOUT_ROUGHNESS(roughness);
+//	SET_PSOUT_AO(ao);
+//	SET_PSOUT_ALPHACOVERAGE(coverage);
+//	SET_PSOUT_EMISSIVE(emissive);
+//	SET_PSOUT_VELOCITY(currUV - prevUV);
+//	SET_PSOUT_SHADING_MODEL(FOLIAGE);
+//}
+
 #include "Common.hlsli"
 #include "PBRMaterial.hlsli"
 #include "TerrainCommon.hlsli"
+#include "GrassCommon.hlsli"
 
-Texture2D<float> g_AlphaSDF;
+Texture2D<float> g_AlphaSDF; // 0..1, 0.5 boundary, inside>0.5
+
+// Two-stage: dry -> clip
+static const float DRY_PHASE_END = 0.6; // ePix<=x : dry tint, ePix>x : clip
+
+// Fallbacks if you don't have these in g_GrassCB yet
+static const float SHZ_EROSION_NOISE_AMOUNT_FALLBACK = 0.12;
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+static float3 RgbToHsv(float3 c)
+{
+	float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+	float4 p = (c.g < c.b) ? float4(c.bg, K.wz) : float4(c.gb, K.xy);
+	float4 q = (c.r < p.x) ? float4(p.xyw, c.r) : float4(c.r, p.yzx);
+	float d = q.x - min(q.w, q.y);
+	float e = 1e-6;
+	float3 hsv;
+	hsv.x = abs(q.z + (q.w - q.y) / (6.0 * d + e));
+	hsv.y = d / (q.x + e);
+	hsv.z = q.x;
+	return hsv;
+}
+
+static float3 HsvToRgb(float3 hsv)
+{
+	float h = hsv.x * 6.0;
+	float i = floor(h);
+	float f = h - i;
+
+	float p = hsv.z * (1.0 - hsv.y);
+	float q = hsv.z * (1.0 - hsv.y * f);
+	float t = hsv.z * (1.0 - hsv.y * (1.0 - f));
+
+	[branch]
+	if (i < 1.0)
+		return float3(hsv.z, t, p);
+	if (i < 2.0)
+		return float3(q, hsv.z, p);
+	if (i < 3.0)
+		return float3(p, hsv.z, t);
+	if (i < 4.0)
+		return float3(p, q, hsv.z);
+	if (i < 5.0)
+		return float3(t, p, hsv.z);
+	return float3(hsv.z, p, q);
+}
+
+static float3 ApplyDrying(float3 baseColor, float dry01)
+{
+	dry01 = pow(dry01, 0.65);
+	
+	float3 hsv = RgbToHsv(baseColor);
+
+	// saturation drop + value darken
+	hsv.y *= lerp(1.0, (1.0 - g_GrassCB.DrySaturationReduct), dry01);
+	hsv.z *= lerp(1.0, (1.0 - g_GrassCB.DryDarken), dry01);
+
+	float3 c0 = HsvToRgb(hsv);
+
+	// warm tint blend
+	float3 c1 = c0 * g_GrassCB.DryTint;
+
+	return lerp(c0, c1, dry01);
+}
 
 BASE_PS_MAIN_ENTRY()
 {
+	// -------------------------------------------------------------------------
+	// Inputs
+	// -------------------------------------------------------------------------
 	float4 svPos = GET_PSIN_POS();
 	float4 currClip = GET_PSIN_CURR_CLIP();
 	float4 prevClip = GET_PSIN_PREV_CLIP();
@@ -14,45 +143,99 @@ BASE_PS_MAIN_ENTRY()
 	float3 normalWS = GET_PSIN_WORLD_NORMAL();
 	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
+	// For velocity output
+	float2 currUV = ClipToUV(currClip);
+	float2 prevUV = ClipToUV(prevClip);
+
+	// -------------------------------------------------------------------------
+	// Material sampling
+	// -------------------------------------------------------------------------
 	float3 baseColor = GetBaseColor(uv);
-	float alpha = GetOpacity(uv);
-   
-	float coverage = ClipPixelCoverage(alpha, svPos);
-	
+	float alphaBase = GetOpacity(uv);
+
 	float2 metallicRoughness = GetMetallicRoughness(uv);
 	float metallic = metallicRoughness.x;
 	float roughness = metallicRoughness.y;
+
 	float ao = GetAmbientOcclusion(uv);
 	float3 emissive = GetEmissive(uv);
 	float3 normal = GetNormal(uv, normalWS, tangentWS);
 
-	float2 currUV = ClipToUV(currClip);
-	float2 prevUV = ClipToUV(prevClip);
-	
+	// -------------------------------------------------------------------------
+	// Erosion progress per-pixel (depth-space 0..1)
+	// sdf01:
+	//   0.5 -> boundary
+	//   1.0 -> deep inside (saturated)
+	// insideDepth01:
+	//   0 at boundary, 1 deep inside, outside clamps to 0
+	// -------------------------------------------------------------------------
+	float sdf01 = g_AlphaSDF.Sample(g_LinearClampSampler, uv).r;
+	float insideDepth01 = saturate((sdf01 - 0.5) * 2.0);
+
+	float n01 = g_PerlinNoiseTex.Sample(g_LinearWrapSampler, uv * g_GrassCB.ErosionNoiseScale).r;
+
+	// If you have g_GrassCB.ErosionNoiseAmount / ErosionSmooth, use them.
+	// Otherwise these fallbacks keep it stable.
+	float noiseAmount = SHZ_EROSION_NOISE_AMOUNT_FALLBACK;
+	// float noiseAmount = g_GrassCB.ErosionNoiseAmount;
+
+	float erosionSmooth = g_GrassCB.ErosionSmoothness;
+
+	float depthNoise = (n01 - 0.5) * 2.0 * noiseAmount; // [-amt..+amt]
+	float depthEff = saturate(insideDepth01 + depthNoise);
+
+	// Global erosion front in depth-space:
+	// strength=0 => front at edge (0)
+	// strength=1 => front deep inside (1)
+	float erosion = saturate(g_GrassCB.ErosionStrength) * g_GrassCB.ErosionMaxDist;
+
+	// ePix: 0..1, increases where erosion surpasses local depthEff.
+	// Use a smooth width so it doesn't shimmer.
+	float ePix = saturate((erosion - depthEff) / max(erosionSmooth, 1e-4));
+
+	// -------------------------------------------------------------------------
+	// Phase 1: dry tint in [0..x]
+	// Phase 2: clip away after x
+	// -------------------------------------------------------------------------
+	float dry01 = saturate(ePix / max(DRY_PHASE_END, 1e-4));
+	baseColor = ApplyDrying(baseColor, dry01);
+
+	roughness = saturate(roughness + dry01 * g_GrassCB.DryRoughness);
+
+	// keep: 1 before x, 0 after x (with small transition to reduce popping)
+	float keep = 1.0 - smoothstep(DRY_PHASE_END, DRY_PHASE_END + 0.02, ePix);
+
+	// IMPORTANT: feed eroded alpha into coverage/clip logic
+	float alphaEroded = alphaBase * keep;
+	float coverage = ClipPixelCoverage(alphaEroded, svPos);
+
+	// -------------------------------------------------------------------------
+	// Root blending uses coverage (now includes erosion)
+	// -------------------------------------------------------------------------
 	float height01 = saturate((worldPos.y - SampleWorldHeightAtWorldXZ(worldPos.xz)) / 0.25);
-	float rootMask = 1.0 - height01; 
-	rootMask = rootMask * rootMask; 
+	float rootMask = 1.0 - height01;
+	rootMask *= rootMask;
+
 	float covMask = saturate((coverage - 0.25) / (1.0 - 0.25));
 	covMask *= covMask;
+
 	float blend = rootMask * covMask;
 
-	// Base color + terrain tint blend
 	float3 terrainTint = SampleTerrainDiffuseAtWorldXZLevel(worldPos.xz, /*mip*/5).rgb;
 	baseColor = lerp(baseColor, terrainTint, blend * 0.35);
-	
-	// AO boost
+
 	const float ROOT_AO_STRENGTH = 0.65;
-	const float ROOT_AO_MIN = 0.25; 
-	
+	const float ROOT_AO_MIN = 0.25;
+
 	float aoRoot = lerp(ao, ao * (1.0 - ROOT_AO_STRENGTH), blend);
 	ao = max(aoRoot, ROOT_AO_MIN);
-	
-	float alphaSDF = g_AlphaSDF.Sample(g_LinearClampSampler, uv);
-	float edge = abs(alphaSDF - 0.5) * 4;
-	
+
+	float alpha = alphaEroded;
+
+	// -------------------------------------------------------------------------
 	// Pack to GBuffer
-	// SET_PSOUT_ALBEDO(baseColor);
-	SET_PSOUT_ALBEDO(edge.xxx);
+	// -------------------------------------------------------------------------
+	SET_PSOUT_ALBEDO(baseColor);
 	SET_PSOUT_OPACITY(alpha);
 	SET_PSOUT_NORMAL(normal);
 	SET_PSOUT_METALLIC(metallic);

@@ -25,6 +25,11 @@
 
 namespace shz
 {
+	namespace hlsl
+	{
+#include "Shaders/HLSL_Structures.hlsli"
+	}
+
 	class GrassViewer final : public SampleBase
 	{
 	public:
@@ -74,6 +79,8 @@ namespace shz
 		Handle<RenderScene::LightObject> m_GlobalLightHandle = {};
 
 		float m_Speed = 3.0f;
+
+		hlsl::GrassRenderConstants m_GrassSettings;
 
 		// Profiling
 		double m_UpdateMs = 0.0;

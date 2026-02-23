@@ -277,9 +277,6 @@ struct GrassGenConstants
 // ----------------------------------------------
 struct GrassRenderConstants
 {
-	float4 BaseColorFactor;
-	float4 Tint;
-
 	float2 WindDirXZ;
 	float WindStrength;
 	float WindSpeed;
@@ -293,6 +290,16 @@ struct GrassRenderConstants
 	float InteractionSink;
 	float InteractionWindFade;
 	float _pad2;
+	
+	float ErosionStrength;
+	float ErosionNoiseScale;
+	float ErosionSmoothness;
+	float ErosionMaxDist;
+	
+	float3 DryTint;
+	float DrySaturationReduct;
+	float DryDarken;
+	float DryRoughness;
 };
 
 struct ObjectIndexConstants

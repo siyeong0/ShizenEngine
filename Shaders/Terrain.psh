@@ -38,16 +38,16 @@ static const float MACRO_TINT_STRENTH_BASE = 0.25f;
 // -----------------------------------------------------------------------------
 // POM controls (applies to soil/rock/gravel)
 // -----------------------------------------------------------------------------
-static const float POM_HEIGHT_METERS = 0.2f;
+static const float POM_HEIGHT_METERS = 0.1f;
 static const float POM_FADE_START = 6.0f;
-static const float POM_FADE_END = 25.0f;
-static const int POM_STEPS_MIN = 8;
-static const int POM_STEPS_MAX = 16;
+static const float POM_FADE_END = 15.0f;
+static const int POM_STEPS_MIN = 16;
+static const int POM_STEPS_MAX = 32;
 
 static const float POM_EDGE_START = 0.06f;
 static const float POM_EDGE_END = 0.22f;
 
-static const float POM_GRAZE_Z_MIN = 0.18f;
+static const float POM_GRAZE_Z_MIN = 0.5f;
 
 // -----------------------------------------------------------------------------
 // Small helpers
