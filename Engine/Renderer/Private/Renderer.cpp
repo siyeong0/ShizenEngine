@@ -511,7 +511,7 @@ namespace shz
 		// NEW: cache cascade view/frustum into PassCtx
 		// ------------------------------------------------------------
 		const uint32 numCascades = m_pShadowSystem->GetNumCascades();
-		ASSERT(numCascades <= RenderPassContext::kMaxShadowCascades, "Num cascades exceeds context capacity.");
+		ASSERT(numCascades <= RenderPassContext::MAX_SHADOW_CASCADES, "Num cascades exceeds context capacity.");
 
 		for (uint32 c = 0; c < numCascades; ++c)
 		{

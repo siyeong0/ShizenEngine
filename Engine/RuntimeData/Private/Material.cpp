@@ -312,7 +312,7 @@ namespace shz
 		const MaterialResourceDesc& rd = m_BaseTemplate.GetResource(resIndex);
 		if (!IsTextureType(rd.Type))
 		{
-			ASSERT(b.IsTextureBinding(), "%s is not texture type.", resourceName);
+			ASSERT(false, "%s is not texture type.", resourceName);
 		}
 
 		MaterialResourceBinding& b = m_ResourceBindings[resIndex];

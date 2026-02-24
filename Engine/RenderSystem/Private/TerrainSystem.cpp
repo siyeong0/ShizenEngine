@@ -130,7 +130,7 @@ namespace shz
 		// Materials.
 		ASSERT(!m_CI.SoilMaterialPath.empty(), "Invalid soil material path.");
 		ASSERT(!m_CI.RockyMaterialPath.empty(), "Invalid rocky material path.");
-		ASSERT(!m_CI.m_GravelMaterialPath.empty(), "Invalid gravel material path.");
+		ASSERT(!m_CI.GravelMaterialPath.empty(), "Invalid gravel material path.");
 		m_SoilMaterialPath = m_CI.SoilMaterialPath;
 		m_RockyMaterialPath = m_CI.RockyMaterialPath;
 		m_GravelMaterialPath = m_CI.GravelMaterialPath;

@@ -195,9 +195,8 @@ namespace shz
 					mesh.MoveBottomToOrigin(true);
 				};
 
-				auto addGrass = [&](const std::string& path)
+				auto addGrass = [&](GrassDesc& gd, const std::string& path)
 				{
-					GrassDesc gd = {};
 					StaticMesh grassMesh;
 					// LOD0 : Mesh
 					{
@@ -530,8 +529,7 @@ namespace shz
 						}
 						grassMesh.AddLevel(std::move(grassBiilboardMeshLevel), 0.25f);
 					}
-					gd.pMesh = &m_pRenderer->CreateStaticMeshRenderData(grassMesh);
-					m_pGrassSystem->AddGrassDesc(gd);
+					gd.Variations.push_back(&m_pRenderer->CreateStaticMeshRenderData(grassMesh));
 				};
 
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A.fbx");
@@ -555,11 +553,13 @@ namespace shz
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Fern_02.gltf");
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Fern_03.gltf");
 
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_01.gltf");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_02.gltf");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_03.gltf");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_04.gltf");
-				addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_05.gltf");
+				//GrassDesc assembleGrassDesc;
+				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_01.gltf");
+				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_02.gltf");
+				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_03.gltf");
+				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_04.gltf");
+				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_05.gltf");
+				//m_pGrassSystem->AddGrassDesc(assembleGrassDesc);
 
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
@@ -591,6 +591,21 @@ namespace shz
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_04.gltf");
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_05.gltf");
 				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_06.gltf");
+
+				GrassDesc shortReed;
+				shortReed.Weight = 1.5f;
+				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
+				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_02.gltf");
+				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_03.gltf");
+				m_pGrassSystem->AddGrassDesc(shortReed);
+
+				GrassDesc reed;
+				reed.Weight = 0.1f;
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
+				m_pGrassSystem->AddGrassDesc(reed);
 			}
 
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
@@ -735,11 +750,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			//m_Camera.SetRotation(0.0f, 0.0f);
+			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			m_Camera.SetRotation(0.0f, 0.0f);
 
-			m_Camera.SetPos({ 26.2178898f, 359.614075f, -4.20217f });
-			m_Camera.SetRotation(1.349999f, -0.70f);
+			//m_Camera.SetPos({ 26.2178898f, 359.614075f, -4.20217f });
+			//m_Camera.SetRotation(1.349999f, -0.70f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);

@@ -41,11 +41,11 @@ RWStructuredBuffer<PoolDirty> g_PoolDirty;
 struct PoolEntry
 {
 	float3 Position;
-	uint SpeciesId;
+	uint GrassTypeId; // == flattened typeId
 };
 RWStructuredBuffer<PoolEntry> g_PoolPositions;
 
-// Rendering outputs (packed per species/LOD via prefix sums)
+// Rendering outputs (packed per typeId/LOD via prefix sums)
 RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
 RWStructuredBuffer<GrassCrossPlaneInstance> g_OutInstancesLOD1;
 RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
@@ -54,19 +54,27 @@ RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
 // Layout: uint counter per meshId at byteOffset = meshId*4.
 RWByteAddressBuffer g_MeshInstanceCountBuffer;
 
-// Species/LOD packing buffers
-// Layout: uint[MaxSpecies * 3], idx = speciesId*3 + lod
-RWStructuredBuffer<uint> g_SpeciesLodCounts;
+// Type/LOD packing buffers
+// Layout: uint[MaxTypes * 3], idx = typeId*3 + lod
+RWStructuredBuffer<uint> g_SpeciesLodCounts; // (buffer name kept for minimal C++ churn)
 RWStructuredBuffer<uint> g_SpeciesLodOffsets;
 RWStructuredBuffer<uint> g_SpeciesLodWriteCounters;
 
-// Species -> MeshId lookup (SRV)
+// TypeId -> MeshId lookup (SRV)
 StructuredBuffer<uint> g_SpeciesLOD0MeshId;
 StructuredBuffer<uint> g_SpeciesLOD1MeshId;
 StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 
 // Inputs
 Texture2D<float> g_InteractionField;
+
+// -----------------------------------------------------------------------------
+// NEW: Species weighted selection + variation mapping tables (SRV)
+// -----------------------------------------------------------------------------
+StructuredBuffer<float> g_SpeciesWeightPrefix; // inclusive prefix, size >= NumSpecies
+StructuredBuffer<uint> g_SpeciesVarOffsets; // size >= NumSpecies+1
+StructuredBuffer<uint> g_SpeciesVarCounts; // size >= NumSpecies
+StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat map: index = varOffsets[sp] + var -> typeId
 
 // -----------------------------------------------------------------------------
 // Constants / helpers
@@ -219,10 +227,6 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 
 // -----------------------------------------------------------------------------
 // Distance scaling (stable thinning gate, NOT truncation)
-// - Key change: we do NOT shrink "samplesThisChunk" based on camera.
-//   We always iterate baseSamples, but use a deterministic keep probability.
-// - This prevents camera movement from changing which sample indices exist,
-//   so world placement is stable.
 // -----------------------------------------------------------------------------
 float ComputeDistanceKeep01(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
@@ -284,17 +288,11 @@ bool BallotTestLane(BallotMask b, uint lane)
 uint BallotFirstLane(BallotMask b)
 {
 	if (b.M.x != 0u)
-	{
 		return 0u + firstbitlow(b.M.x);
-	}
 	if (b.M.y != 0u)
-	{
 		return 32u + firstbitlow(b.M.y);
-	}
 	if (b.M.z != 0u)
-	{
 		return 64u + firstbitlow(b.M.z);
-	}
 	return 96u + firstbitlow(b.M.w);
 }
 
@@ -342,15 +340,54 @@ uint MakeSeed8(uint seed)
 {
 	return (WangHash(seed) >> 24) & 0xFFu;
 }
-
 uint MakeVariantId(uint seed)
 {
 	return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
 }
-
 uint MakeAtlasIndex(uint seed)
 {
 	return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
+}
+
+// -----------------------------------------------------------------------------
+// NEW: Weighted species pick + uniform variation pick
+// -----------------------------------------------------------------------------
+uint PickSpeciesWeighted(uint seed)
+{
+	uint num = max(g_CB.NumSpecies, 1u);
+	// inclusive prefix; total weight is last element
+	float total = g_SpeciesWeightPrefix[num - 1u];
+	// if total is 0, fall back to uniform
+	if (total <= 1e-8f)
+	{
+		return WangHash(seed) % num;
+	}
+
+	float r = Rand01(seed ^ 0x5151u) * total;
+
+	// linear scan (NumSpecies <= 256, cheap and deterministic)
+	[unroll]
+	for (uint i = 0u; i < MAX_GRASS_SPECIES; ++i)
+	{
+		if (i >= num)
+			break;
+		if (r <= g_SpeciesWeightPrefix[i])
+			return i;
+	}
+	return num - 1u;
+}
+
+uint PickVariationUniform(uint speciesId, uint seed)
+{
+	uint num = max(g_SpeciesVarCounts[speciesId], 1u);
+	return WangHash(seed ^ 0x7777u) % num;
+}
+
+uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
+{
+	uint base = g_SpeciesVarOffsets[speciesId];
+	uint idx = base + varId;
+	return g_SpeciesVarToTypeId[idx];
 }
 
 // -----------------------------------------------------------------------------
@@ -375,9 +412,7 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	uint visibleCells = dim * dim;
 
 	if (cellIndex >= visibleCells)
-	{
 		return false;
-	}
 
 	VisibleCell cell = g_VisibleCellTable[cellIndex];
 	int2 chunkCoord = cell.ChunkCoord;
@@ -386,9 +421,7 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	float2 chunkOriginClamped = chunkOriginXZ;
 
 	if (!ClampChunkToHeightfield(chunkOriginClamped, g_CB.ChunkSize))
-	{
 		return false;
-	}
 
 	float chunkHeight = g_PoolChunkCoord[cellIndex].ChunkHeight;
 	if (chunkHeight == 0.0f)
@@ -401,9 +434,7 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 
 	float3 ex = float3(0.5, 0.5, 0.5);
 	if (!AabbInsideFrustum(chunkMin - ex, chunkMax + ex))
-	{
 		return false;
-	}
 
 	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
 	float2 chunkCenterXZ = chunkOriginClamped + 0.5f * g_CB.ChunkSize.xx;
@@ -413,18 +444,14 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 
 	float spawnRadiusSqr = g_CB.SpawnRadius * g_CB.SpawnRadius;
 	if (distChunkSqr > spawnRadiusSqr)
-	{
 		return false;
-	}
 
 	float lod0Sqr = g_CB.LOD0Distance * g_CB.LOD0Distance;
 	float lod1Sqr = g_CB.LOD1Distance * g_CB.LOD1Distance;
 
 	float chunkDensity = SampleWorldDensity(chunkCenterXZ, CHUNK_DENSITY_MIP);
 	if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
-	{
 		return false;
-	}
 
 	float keep01 = ComputeDistanceKeep01(distChunkSqr, lod0Sqr, spawnRadiusSqr);
 	keep01 *= saturate(chunkDensity);
@@ -444,15 +471,13 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 
 bool GrassInstanceAabbInsideFrustum(float3 posWS, float scale)
 {
-	// Make bounds conservative. Tune these multipliers to your content.
-	float halfXZ = 0.5 * scale; // was 0.5
-	float minY = -0.05 * scale; // allow bending below origin
+	float halfXZ = 0.5 * scale;
+	float minY = -0.05 * scale;
 	float maxY = 1.05 * scale;
 
 	float3 bmin = posWS + float3(-halfXZ, minY, -halfXZ);
 	float3 bmax = posWS + float3(halfXZ, maxY, halfXZ);
 
-	// Extra pad helps screen-edge precision issues.
 	float pad = 0.5f * scale;
 	bmin -= pad.xxx;
 	bmax += pad.xxx;
@@ -467,27 +492,20 @@ float2 ComputeYawPitchFromNormal(float3 nWS, float yaw)
 	float s = sin(yaw);
 	float c = cos(yaw);
 
-	// Inverse yaw rotation around Y (bring normal into "local yaw" frame)
 	float3 nL;
 	nL.x = c * nWS.x + s * nWS.z;
 	nL.y = nWS.y;
 	nL.z = -s * nWS.x + c * nWS.z;
 
 	float pitch = atan2(nL.z, max(nL.y, 1e-6f));
-
 	return float2(yaw, pitch);
 }
-
-// Fix: silence -Wparameter-usage by initializing all out params on every return path.
-// Do this at the top of EvaluateSpawn(), or before each early-return.
-//
-// Replace your EvaluateSpawn() with this version.
 
 bool EvaluateSpawn(
 	ChunkContext ctx,
 	uint poolBase,
 	uint sampleIndex,
-	out uint outSpeciesId,
+	out uint outTypeId,
 	out uint outLodIndex,
 	out float outPress01,
 	out float outScale,
@@ -500,10 +518,7 @@ bool EvaluateSpawn(
 	out float3 outPosWS
 )
 {
-	// -------------------------------------------------------------------------
-	// Initialize out parameters (required by some compilers' static analysis).
-	// -------------------------------------------------------------------------
-	outSpeciesId = 0u;
+	outTypeId = 0u;
 	outLodIndex = 0u;
 	outPress01 = 0.0f;
 	outScale = 0.0f;
@@ -519,65 +534,50 @@ bool EvaluateSpawn(
 
 	if (isnan(p.Position.y))
 	{
-		// Keep outPosWS in a safe state.
 		outPosWS = float3(0.0f, INVALID_NAN, 0.0f);
 		return false;
 	}
 
-	uint speciesId = p.SpeciesId;
-	if (speciesId >= g_CB.NumSpecies)
-	{
+	uint typeId = p.GrassTypeId;
+	if (typeId >= g_CB.NumGrassTypes)
 		return false;
-	}
 
-	// Deterministic seed based only on world chunk + sample index
+	// Deterministic seed based only on chunk + sample index
 	uint chunkSeed = Hash2i(ctx.ChunkCoord, g_CB.SeedSalt);
 	uint seed = WangHash(chunkSeed ^ (sampleIndex * 0x9E3779B9u));
 
-	// Deterministic thinning (stable instance set)
+	// Stable thinning
 	float keepGate = saturate(ctx.Keep01);
 	if (Rand01(seed ^ 0x1010u) > keepGate)
-	{
 		return false;
-	}
 
 	float2 posXZ = p.Position.xz;
 
 	float instDensity = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
 	if (instDensity <= DENSITY_DISABLE_THRESHOLD)
-	{
 		return false;
-	}
 
 	float spawnGateBase = saturate(g_CB.SpawnProb * instDensity);
 	if (Rand01(seed ^ 0x4444u) > spawnGateBase)
-	{
 		return false;
-	}
 
 	float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
 	float heightMask = ComputeHeightMask(hN);
 	if (heightMask <= 0.001f)
-	{
 		return false;
-	}
 
 	float spawnGate = spawnGateBase * heightMask;
 	if (spawnGate <= 0.001f)
-	{
 		return false;
-	}
 
 	float press01 = saturate(SampleInteraction(posXZ));
 
 	if (Rand01(seed ^ 0x4A4Au) > spawnGate)
-	{
 		return false;
-	}
 
 	float3 posWS = p.Position;
 
-	// LOD decision (representation can change with camera; instance set is stable)
+	// LOD selection
 	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
 	float2 dxz = posWS.xz - camXZ;
 	float distSqr = dot(dxz, dxz);
@@ -595,12 +595,10 @@ bool EvaluateSpawn(
 	terrainN = normalize(terrainN);
 
 	float slope01 = saturate(1.0f - terrainN.y);
-	float align = saturate(slope01);
-	align *= saturate(g_CB.NormalAlignStrength);
+	float align = saturate(slope01) * saturate(g_CB.NormalAlignStrength);
 
 	float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
-	float pitchFromNormal = yp.y;
-	float pitch = pitchFromNormal * align;
+	float pitch = yp.y * align;
 
 	float bend01 = lerp(g_CB.BendStrengthMin, g_CB.BendStrengthMax, Rand01(seed ^ 0x8888u));
 
@@ -609,14 +607,9 @@ bool EvaluateSpawn(
 	uint atlasIndex = MakeAtlasIndex(seed);
 
 	if (!GrassInstanceAabbInsideFrustum(posWS, scale))
-	{
 		return false;
-	}
 
-	// -------------------------------------------------------------------------
-	// Commit out parameters only on success.
-	// -------------------------------------------------------------------------
-	outSpeciesId = speciesId;
+	outTypeId = typeId;
 	outLodIndex = lodIndex;
 	outPress01 = press01;
 	outScale = scale;
@@ -639,9 +632,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 {
 	uint dim = g_CB.ChunkVisibleDim;
 	if (tid.x >= dim || tid.y >= dim)
-	{
 		return;
-	}
 
 	uint cellIndex = tid.y * dim + tid.x;
 	uint pool = cellIndex;
@@ -677,8 +668,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 
 // -----------------------------------------------------------------------------
 // Entry B) FillNewPoolsCS
-// - Generates deterministic candidate points for each chunk
-// - Species chosen uniformly (deterministic)
+// - NOW: weight(species) -> uniform(variation) -> typeId mapping
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -688,17 +678,13 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 	uint cellIndex = gid.x;
 	if (cellIndex >= visibleCells)
-	{
 		return;
-	}
 
 	uint pool = cellIndex;
 
 	PoolDirty pd = g_PoolDirty[pool];
 	if (pd.Dirty != 1u)
-	{
 		return;
-	}
 
 	if (tid.x == 0u)
 	{
@@ -719,7 +705,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
 			g_PoolPositions[base0 + s].Position = float3(0.0f, INVALID_NAN, 0.0f);
-			g_PoolPositions[base0 + s].SpeciesId = 0u;
+			g_PoolPositions[base0 + s].GrassTypeId = 0u;
 		}
 
 		GroupMemoryBarrierWithGroupSync();
@@ -744,7 +730,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 	uint base = pool * g_CB.SamplesPerChunk;
 
-	uint numSpecies = max(g_CB.NumSpecies, 1u);
+	uint numTypes = max(g_CB.NumGrassTypes, 1u);
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
@@ -761,10 +747,18 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
 
-		uint speciesId = WangHash(seed ^ 0xABCDEFu) % numSpecies;
+		// --- NEW: weighted species -> uniform variation -> mapped typeId ---
+		uint speciesId = PickSpeciesWeighted(seed ^ 0xAAAAu);
+		speciesId = min(speciesId, max(g_CB.NumSpecies, 1u) - 1u);
+
+		uint varId = PickVariationUniform(speciesId, seed ^ 0xBBBBu);
+		uint typeId = MapSpeciesVariationToTypeId(speciesId, varId);
+
+		// safety clamp
+		typeId = (typeId < numTypes) ? typeId : (typeId % numTypes);
 
 		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
-		g_PoolPositions[base + s].SpeciesId = speciesId;
+		g_PoolPositions[base + s].GrassTypeId = typeId;
 	}
 
 	GroupMemoryBarrierWithGroupSync();
@@ -776,16 +770,14 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 }
 
 // -----------------------------------------------------------------------------
-// Entry B-1) ClearSpeciesCountersCS
+// Entry B-1) ClearSpeciesCountersCS  (buffer names kept)
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
 {
 	uint n = MAX_GRASS_SPECIES * 3u;
 	if (tid.x >= n)
-	{
 		return;
-	}
 
 	g_SpeciesLodCounts[tid.x] = 0u;
 	g_SpeciesLodOffsets[tid.x] = 0u;
@@ -794,8 +786,6 @@ void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
 
 // -----------------------------------------------------------------------------
 // Entry B-2) CountInstancesFromPoolsCS
-// - Stable spawn: iterate ALL base samples, deterministic keep gate.
-// - This removes "camera-dependent instance set" popping.
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -804,16 +794,14 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	ChunkContext ctx;
 	if (!BuildChunkContext(cellIndex, ctx))
-	{
 		return;
-	}
 
 	uint pool = cellIndex;
 	uint base = pool * g_CB.SamplesPerChunk;
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint speciesId;
+		uint typeId;
 		uint lodIndex;
 		float press01;
 		float scale;
@@ -825,12 +813,10 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint atlasIndex;
 		float3 posWS;
 
-		if (!EvaluateSpawn(ctx, base, s, speciesId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
-		{
+		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
 			continue;
-		}
 
-		uint idx = speciesId * 3u + lodIndex;
+		uint idx = typeId * 3u + lodIndex;
 		InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
 	}
 }
@@ -841,17 +827,17 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 [numthreads(1, 1, 1)]
 void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 {
-	uint numSpecies = min(max(g_CB.NumSpecies, 1u), (uint) MAX_GRASS_SPECIES);
+	uint numTypes = min(max(g_CB.NumGrassTypes, 1u), (uint) MAX_GRASS_SPECIES);
 
 	uint running0 = 0u;
 	uint running1 = 0u;
 	uint running2 = 0u;
 
-	for (uint s = 0u; s < numSpecies; ++s)
+	for (uint t = 0u; t < numTypes; ++t)
 	{
-		uint i0 = s * 3u + 0u;
-		uint i1 = s * 3u + 1u;
-		uint i2 = s * 3u + 2u;
+		uint i0 = t * 3u + 0u;
+		uint i1 = t * 3u + 1u;
+		uint i2 = t * 3u + 2u;
 
 		uint c0 = g_SpeciesLodCounts[i0];
 		uint c1 = g_SpeciesLodCounts[i1];
@@ -873,7 +859,6 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 
 // -----------------------------------------------------------------------------
 // Entry C) BuildInstancesFromPoolsCS
-// - Uses the exact same EvaluateSpawn() as Count.
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -882,16 +867,14 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	ChunkContext ctx;
 	if (!BuildChunkContext(cellIndex, ctx))
-	{
 		return;
-	}
 
 	uint pool = cellIndex;
 	uint base = pool * g_CB.SamplesPerChunk;
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint speciesId;
+		uint typeId;
 		uint lodIndex;
 		float press01;
 		float scale;
@@ -903,20 +886,17 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint atlasIndex;
 		float3 posWS;
 
-		if (!EvaluateSpawn(ctx, base, s, speciesId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
-		{
+		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
 			continue;
-		}
 
 		uint meshId =
-			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[speciesId] :
-			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[speciesId] :
-							   g_SpeciesLOD2MeshId[speciesId];
+			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
+			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
+							   g_SpeciesLOD2MeshId[typeId];
 
-		// Keep mesh counters for indirect draws (grouped wave atomic).
 		WaveReserveMeshCounter_Grouped(meshId);
 
-		uint idx = speciesId * 3u + lodIndex;
+		uint idx = typeId * 3u + lodIndex;
 
 		uint local = 0u;
 		InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);

@@ -2,6 +2,8 @@
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
 #include <cstring>
+#include <algorithm>
+#include <numeric>
 
 #include "Engine/RuntimeData/Public/MaterialManager.h"
 #include "Engine/AssetManager/Public/AssetManager.h"
@@ -25,8 +27,6 @@ namespace shz
 #include "Shaders/HLSL_Structures.hlsli"
 	}
 
-	static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
-
 	void GrassSystem::Initialize(Renderer& renderer)
 	{
 		{
@@ -42,6 +42,40 @@ namespace shz
 		}
 	}
 
+	// ------------------------------------------------------------
+	// Helpers: build flatten tables (CPU)
+	// ------------------------------------------------------------
+	static void BuildSpeciesTypeTables(
+		const std::vector<GrassDesc>& species,
+		std::vector<uint32>& outSpeciesVarOffset,
+		std::vector<uint32>& outSpeciesVarCount,
+		std::vector<uint32>& outTypeToSpecies,
+		std::vector<uint32>& outTypeToVariation)
+	{
+		const uint32 numSpecies = (uint32)species.size();
+
+		outSpeciesVarOffset.assign(numSpecies + 1u, 0u);
+		outSpeciesVarCount.assign(numSpecies, 0u);
+		outTypeToSpecies.clear();
+		outTypeToVariation.clear();
+
+		uint32 running = 0u;
+		for (uint32 s = 0u; s < numSpecies; ++s)
+		{
+			const uint32 vCount = std::max<uint32>(1u, species[s].GetNumVariations());
+			outSpeciesVarOffset[s] = running;
+			outSpeciesVarCount[s] = vCount;
+
+			for (uint32 v = 0u; v < vCount; ++v)
+			{
+				outTypeToSpecies.push_back(s);
+				outTypeToVariation.push_back(v);
+				++running;
+			}
+		}
+		outSpeciesVarOffset[numSpecies] = running;
+	}
+
 	void GrassSystem::InstallPasses(
 		Renderer& renderer,
 		RenderScene& scene,
@@ -50,17 +84,38 @@ namespace shz
 		m_pInteractionSystem = &interaction;
 
 		ASSERT(!m_GrassDescs.empty(), "No grass species. Call AddGrassDesc().");
-		ASSERT(m_GrassDescs.size() == m_SpeciesIndirect.size(), "Internal species arrays mismatch.");
+
+		// Validate species/variations
+		for (uint32 s = 0u; s < (uint32)m_GrassDescs.size(); ++s)
+		{
+			const GrassDesc& gd = m_GrassDescs[s];
+			ASSERT(gd.Weight >= 0.0f, "GrassDesc.Weight must be >= 0");
+			ASSERT(!gd.Variations.empty(), "GrassDesc.Variations is empty. Add at least 1 variation mesh.");
+			for (auto* pMesh : gd.Variations)
+			{
+				ASSERT(pMesh, "Variation mesh is null.");
+			}
+		}
+
+		// Build flatten mapping (typeId = (species,variation))
+		BuildSpeciesTypeTables(
+			m_GrassDescs,
+			m_SpeciesVarOffset,
+			m_SpeciesVarCount,
+			m_TypeToSpecies,
+			m_TypeToVariation);
+
+		const uint32 numSpecies = (uint32)m_GrassDescs.size();
+		const uint32 numTypes = (uint32)m_TypeToSpecies.size();
+
+		ASSERT(numTypes <= MAX_GRASS_SPECIES, "Total (species*variations) exceeds MAX_GRASS_SPECIES.");
 
 		const uint32 visibleDim = 2u * m_ChunkHalfExtent;
 		const uint32 visibleCells = visibleDim * visibleDim;
 		const uint32 numPools = visibleCells;
 
-		const uint32 numSpecies = (uint32)m_GrassDescs.size();
-		ASSERT(numSpecies <= MAX_GRASS_SPECIES, "Max grass species exceeded.");
-
 		// ---------------------------------------------------------------------
-		// Buffers (render instances) - shared per LOD, packed by species
+		// Buffers (render instances) - shared per LOD, packed by typeId
 		// ---------------------------------------------------------------------
 		{
 			BufferDesc bd = {};
@@ -115,10 +170,8 @@ namespace shz
 		}
 
 		// ---------------------------------------------------------------------
-		// Species packing buffers
-		// - "Grass_SpeciesLodCounts" (YOU will bind)
-		// - "Grass_SpeciesLodOffsets" (YOU will bind)
-		// - "Grass_SpeciesLodWriteCounters" (internal)
+		// Species/LOD packing buffers
+		// Layout still: uint[MaxTypes * 3], idx = typeId*3 + lod
 		// ---------------------------------------------------------------------
 		{
 			BufferDesc bd = {};
@@ -140,7 +193,7 @@ namespace shz
 			renderer.AddBuffer(STRING_HASH("Grass_SpeciesLodWriteCounters"), bd);
 		}
 
-		// Species -> MeshId lookup tables (SRV only)
+		// TypeId -> MeshId lookup tables (SRV only)
 		{
 			BufferDesc bd = {};
 			bd.Usage = USAGE_DEFAULT;
@@ -161,6 +214,43 @@ namespace shz
 		}
 
 		// ---------------------------------------------------------------------
+		// NEW: Species-weighted selection tables + (species,variation)->typeId mapping
+		// ---------------------------------------------------------------------
+		{
+			// Species Weights (float)
+			BufferDesc bd = {};
+			bd.Usage = USAGE_DEFAULT;
+			bd.BindFlags = BIND_SHADER_RESOURCE;
+			bd.Mode = BUFFER_MODE_STRUCTURED;
+
+			bd.ElementByteStride = 4;
+			bd.Size = uint64(MAX_GRASS_SPECIES) * 4ull;
+
+			bd.Name = "Grass_SpeciesWeights";
+			renderer.AddBuffer(STRING_HASH("Grass_SpeciesWeights"), bd);
+
+			// Species Weight Prefix (inclusive prefix; last value = totalWeight)
+			bd.Name = "Grass_SpeciesWeightPrefix";
+			renderer.AddBuffer(STRING_HASH("Grass_SpeciesWeightPrefix"), bd);
+
+			// Per-species variation offsets (uint), size = MAX_GRASS_SPECIES + 1
+			bd.Size = uint64(MAX_GRASS_SPECIES + 1u) * 4ull;
+			bd.Name = "Grass_SpeciesVarOffsets";
+			renderer.AddBuffer(STRING_HASH("Grass_SpeciesVarOffsets"), bd);
+
+			// Per-species variation counts (uint), size = MAX_GRASS_SPECIES
+			bd.Size = uint64(MAX_GRASS_SPECIES) * 4ull;
+			bd.Name = "Grass_SpeciesVarCounts";
+			renderer.AddBuffer(STRING_HASH("Grass_SpeciesVarCounts"), bd);
+
+			// Flat mapping: index = varOffsets[species] + variation => typeId
+			// size = MAX_GRASS_SPECIES (worst-case numTypes)
+			bd.Size = uint64(MAX_GRASS_SPECIES) * 4ull;
+			bd.Name = "Grass_SpeciesVarToTypeId";
+			renderer.AddBuffer(STRING_HASH("Grass_SpeciesVarToTypeId"), bd);
+		}
+
+		// ---------------------------------------------------------------------
 		// Constants buffer (CS)
 		// ---------------------------------------------------------------------
 		{
@@ -174,19 +264,32 @@ namespace shz
 		}
 
 		// ---------------------------------------------------------------------
-		// Allocate indirect mesh ranges per species + per LOD
+		// Allocate indirect mesh ranges per typeId + per LOD
+		// typeId corresponds to a specific (species,variation)
 		// ---------------------------------------------------------------------
-		for (uint32 sp = 0u; sp < numSpecies; ++sp)
+		m_TypeIndirect.clear();
+		m_TypeIndirect.resize(numTypes);
+
+		std::vector<uint32> lod0MeshIds(numTypes);
+		std::vector<uint32> lod1MeshIds(numTypes);
+		std::vector<uint32> lod2MeshIds(numTypes);
+
+		for (uint32 typeId = 0u; typeId < numTypes; ++typeId)
 		{
+			const uint32 sp = m_TypeToSpecies[typeId];
+			const uint32 vr = m_TypeToVariation[typeId];
+
 			const GrassDesc& gd = m_GrassDescs[sp];
+			const StaticMeshRenderData* pMesh = gd.Variations[vr];
+			ASSERT(pMesh, "Type mesh is null");
 
-			const uint32 lod0Sections = (uint32)gd.pMesh->GetLevel(0).Sections.size();
-			const uint32 lod1Sections = (uint32)gd.pMesh->GetLevel(1).Sections.size();
-			const uint32 lod2Sections = (uint32)gd.pMesh->GetLevel(2).Sections.size();
+			const uint32 lod0Sections = (uint32)pMesh->GetLevel(0).Sections.size();
+			const uint32 lod1Sections = (uint32)pMesh->GetLevel(1).Sections.size();
+			const uint32 lod2Sections = (uint32)pMesh->GetLevel(2).Sections.size();
 
-			m_SpeciesIndirect[sp].LOD0 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD0_Species", lod0Sections);
-			m_SpeciesIndirect[sp].LOD1 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD1_Species", lod1Sections);
-			m_SpeciesIndirect[sp].LOD2 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD2_Species", lod2Sections);
+			m_TypeIndirect[typeId].LOD0 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD0_Type", lod0Sections);
+			m_TypeIndirect[typeId].LOD1 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD1_Type", lod1Sections);
+			m_TypeIndirect[typeId].LOD2 = renderer.GetIndirectArgsSystem()->AllocateMesh("GrassLOD2_Type", lod2Sections);
 
 			auto SetMeshTemplates = [&](const StaticMeshLevelRenderData& mesh, uint32 baseSlot)
 			{
@@ -205,11 +308,15 @@ namespace shz
 				}
 			};
 
-			SetMeshTemplates(gd.pMesh->GetLevel(0), m_SpeciesIndirect[sp].LOD0.BaseSlot);
-			SetMeshTemplates(gd.pMesh->GetLevel(1), m_SpeciesIndirect[sp].LOD1.BaseSlot);
-			SetMeshTemplates(gd.pMesh->GetLevel(2), m_SpeciesIndirect[sp].LOD2.BaseSlot);
+			SetMeshTemplates(pMesh->GetLevel(0), m_TypeIndirect[typeId].LOD0.BaseSlot);
+			SetMeshTemplates(pMesh->GetLevel(1), m_TypeIndirect[typeId].LOD1.BaseSlot);
+			SetMeshTemplates(pMesh->GetLevel(2), m_TypeIndirect[typeId].LOD2.BaseSlot);
 
-			// Register indirect objects to RenderScene (one per species per LOD)
+			lod0MeshIds[typeId] = m_TypeIndirect[typeId].LOD0.MeshId;
+			lod1MeshIds[typeId] = m_TypeIndirect[typeId].LOD1.MeshId;
+			lod2MeshIds[typeId] = m_TypeIndirect[typeId].LOD2.MeshId;
+
+			// Register indirect objects to RenderScene (one per typeId per LOD)
 			{
 				RenderScene::IndirectObjectDesc d = {};
 				d.bCastShadow = true;
@@ -218,61 +325,111 @@ namespace shz
 				// LOD0
 				d.bDepthPrepass = false;
 				d.bCastShadow = true;
-				d.pMesh = &gd.pMesh->GetLevel(0);
-				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD0.BaseSlot;
-				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD0.MeshId;
-				d.StartInstanceLocation = sp * 3u + 0u;
+				d.pMesh = &pMesh->GetLevel(0);
+				d.IndirectBaseSlot = m_TypeIndirect[typeId].LOD0.BaseSlot;
+				d.IndirectMeshId = m_TypeIndirect[typeId].LOD0.MeshId;
+				d.StartInstanceLocation = typeId * 3u + 0u;
 				scene.AddIndirect(d);
 
 				// LOD1
 				d.bDepthPrepass = false;
 				d.bCastShadow = true;
-				d.pMesh = &gd.pMesh->GetLevel(1);
-				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD1.BaseSlot;
-				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD1.MeshId;
-				d.StartInstanceLocation = sp * 3u + 1u;
+				d.pMesh = &pMesh->GetLevel(1);
+				d.IndirectBaseSlot = m_TypeIndirect[typeId].LOD1.BaseSlot;
+				d.IndirectMeshId = m_TypeIndirect[typeId].LOD1.MeshId;
+				d.StartInstanceLocation = typeId * 3u + 1u;
 				scene.AddIndirect(d);
 
 				// LOD2
 				d.bDepthPrepass = false;
 				d.bCastShadow = false;
-				d.pMesh = &gd.pMesh->GetLevel(2);
-				d.IndirectBaseSlot = m_SpeciesIndirect[sp].LOD2.BaseSlot;
-				d.IndirectMeshId = m_SpeciesIndirect[sp].LOD2.MeshId;
-				d.StartInstanceLocation = sp * 3u + 2u;
+				d.pMesh = &pMesh->GetLevel(2);
+				d.IndirectBaseSlot = m_TypeIndirect[typeId].LOD2.BaseSlot;
+				d.IndirectMeshId = m_TypeIndirect[typeId].LOD2.MeshId;
+				d.StartInstanceLocation = typeId * 3u + 2u;
 				scene.AddIndirect(d);
 			}
 		}
 
-
-		auto uploadSpeciesMeshIdTable = [&](uint64 bufferId, const std::vector<uint32>& meshIds)
+		// Upload helper
+		auto uploadU32Table = [&](uint64 bufferId, const std::vector<uint32>& values, uint32 maxCount)
 		{
 			std::vector<uint8> bytes;
-			bytes.resize(size_t(MAX_GRASS_SPECIES) * sizeof(uint32), 0);
+			bytes.resize(size_t(maxCount) * sizeof(uint32), 0);
 
-			const uint32 count = (uint32)std::min<size_t>(meshIds.size(), MAX_GRASS_SPECIES);
+			const uint32 count = (uint32)std::min<size_t>(values.size(), maxCount);
 			if (count > 0)
 			{
-				std::memcpy(bytes.data(), meshIds.data(), size_t(count) * sizeof(uint32));
+				std::memcpy(bytes.data(), values.data(), size_t(count) * sizeof(uint32));
 			}
-
 			renderer.UpdateBuffer(bufferId, std::move(bytes));
 		};
 
-		std::vector<uint32> lod0MeshIds(numSpecies);
-		std::vector<uint32> lod1MeshIds(numSpecies);
-		std::vector<uint32> lod2MeshIds(numSpecies);
-
-		for (uint32 s = 0; s < numSpecies; ++s)
+		auto uploadF32Table = [&](uint64 bufferId, const std::vector<float>& values, uint32 maxCount)
 		{
-			lod0MeshIds[s] = m_SpeciesIndirect[s].LOD0.MeshId;
-			lod1MeshIds[s] = m_SpeciesIndirect[s].LOD1.MeshId;
-			lod2MeshIds[s] = m_SpeciesIndirect[s].LOD2.MeshId;
+			std::vector<uint8> bytes;
+			bytes.resize(size_t(maxCount) * sizeof(float), 0);
+
+			const uint32 count = (uint32)std::min<size_t>(values.size(), maxCount);
+			if (count > 0)
+			{
+				std::memcpy(bytes.data(), values.data(), size_t(count) * sizeof(float));
+			}
+			renderer.UpdateBuffer(bufferId, std::move(bytes));
+		};
+
+		// Upload typeId -> meshId tables
+		uploadU32Table(STRING_HASH("Grass_SpeciesLOD0MeshId"), lod0MeshIds, MAX_GRASS_SPECIES);
+		uploadU32Table(STRING_HASH("Grass_SpeciesLOD1MeshId"), lod1MeshIds, MAX_GRASS_SPECIES);
+		uploadU32Table(STRING_HASH("Grass_SpeciesLOD2MeshId"), lod2MeshIds, MAX_GRASS_SPECIES);
+
+		// Upload species weights + prefix
+		{
+			std::vector<float> weights(numSpecies, 0.0f);
+			for (uint32 s = 0u; s < numSpecies; ++s)
+			{
+				weights[s] = std::max(0.0f, m_GrassDescs[s].Weight);
+			}
+
+			std::vector<float> prefix(numSpecies, 0.0f);
+			float running = 0.0f;
+			for (uint32 s = 0u; s < numSpecies; ++s)
+			{
+				running += weights[s];
+				prefix[s] = running;
+			}
+
+			// If all zero, make uniform on GPU by uploading 1s + prefix.
+			if (running <= 1e-8f)
+			{
+				for (uint32 s = 0u; s < numSpecies; ++s)
+				{
+					weights[s] = 1.0f;
+					prefix[s] = float(s + 1u);
+				}
+			}
+
+			uploadF32Table(STRING_HASH("Grass_SpeciesWeights"), weights, MAX_GRASS_SPECIES);
+			uploadF32Table(STRING_HASH("Grass_SpeciesWeightPrefix"), prefix, MAX_GRASS_SPECIES);
 		}
 
-		uploadSpeciesMeshIdTable(STRING_HASH("Grass_SpeciesLOD0MeshId"), lod0MeshIds);
-		uploadSpeciesMeshIdTable(STRING_HASH("Grass_SpeciesLOD1MeshId"), lod1MeshIds);
-		uploadSpeciesMeshIdTable(STRING_HASH("Grass_SpeciesLOD2MeshId"), lod2MeshIds);
+		// Upload species variation offset/count and mapping (species,variation)->typeId
+		{
+			// Offsets size = numSpecies+1, counts size = numSpecies
+			std::vector<uint32> offsets(m_SpeciesVarOffset);
+			std::vector<uint32> counts(m_SpeciesVarCount);
+
+			// mapping flat: index = offsets[s] + v => typeId
+			std::vector<uint32> mapTypeId(numTypes, 0u);
+			for (uint32 t = 0u; t < numTypes; ++t)
+			{
+				mapTypeId[t] = t;
+			}
+
+			uploadU32Table(STRING_HASH("Grass_SpeciesVarOffsets"), offsets, MAX_GRASS_SPECIES + 1u);
+			uploadU32Table(STRING_HASH("Grass_SpeciesVarCounts"), counts, MAX_GRASS_SPECIES);
+			uploadU32Table(STRING_HASH("Grass_SpeciesVarToTypeId"), mapTypeId, MAX_GRASS_SPECIES);
+		}
 
 		// ---------------------------------------------------------------------
 		// One-time init of tables using UpdateBuffer (CPU)
@@ -325,7 +482,7 @@ namespace shz
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
-			[this, &renderer, numSpecies](RenderPassContext& ctx)
+			[this, &renderer, numSpecies, numTypes](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext && ctx.pRegistry, "invalid ctx");
 				ASSERT(m_pUpdatePoolsCSO && m_pUpdatePoolsSRB, "UpdatePools PSO/SRB not ready");
@@ -340,35 +497,33 @@ namespace shz
 						MAP_WRITE,
 						MAP_FLAG_DISCARD);
 
-					// Visible window
+					// !!! 중요: NumSpecies 누락되면 weighted pick이 깨짐/항상 0번 고정될 수 있음
+					map->NumSpecies = numSpecies;
+					map->NumGrassTypes = numTypes;
+
 					map->ChunkVisibleDim = 2u * m_ChunkHalfExtent;
 					map->ChunkHalfExtent = (int)m_ChunkHalfExtent;
-					map->NumPools = map->ChunkVisibleDim * map->ChunkVisibleDim;
 					map->SamplesPerChunk = m_SamplesPerChunk;
+
 					map->ChunkSize = m_ChunkSize;
+					map->SpawnRadius = m_SpawnRadius;
+					map->Jitter = m_Jitter;
+					map->SeedSalt = m_SeedSalt;
 
-					map->NumSpecies = numSpecies;
+					map->YOffset = m_YOffset;
+					map->NormalAlignStrength = m_NormalAlignStrength;
 
-					// Global tuning (shared for now)
-					// NOTE: If you want per-species tuning, extend constants to arrays.
 					const GrassDesc& base = m_GrassDescs[0];
 					map->LOD0Distance = base.LOD0Distance;
 					map->LOD1Distance = base.LOD1Distance;
 					map->LodHysteresis = base.LodHysteresis;
 
-					map->YOffset = m_YOffset;
-					map->Jitter = m_Jitter;
-					map->NormalAlignStrength = m_NormalAlignStrength;
-
 					map->MinScale = m_MinScale;
 					map->MaxScale = m_MaxScale;
 					map->SpawnProb = m_SpawnProb;
-					map->SpawnRadius = m_SpawnRadius;
-
 					map->BendStrengthMin = m_BendStrengthMin;
-					map->BendStrengthMax = m_BendStrengthMax;
-					map->SeedSalt = m_SeedSalt;
 
+					map->BendStrengthMax = m_BendStrengthMax;
 					map->DensityContrast = m_DensityContrast;
 					map->DensityPow = m_DensityPow;
 					map->SlopeToDensity = m_SlopeToDensity;
@@ -453,6 +608,7 @@ namespace shz
 
 		// =====================================================================
 		// Pass B) FillNewPools
+		// - now uses species weights + uniform variation
 		// =====================================================================
 		renderer.AddPass(
 			"Grass_FillNewPools",
@@ -464,9 +620,13 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_PoolChunkCoord"), RENDER_ACCESS_WRITE);
 				b.DeclareBufferUAV(STRING_HASH("Grass_VisibleCellTable"), RENDER_ACCESS_READ);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
+
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesWeights"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesWeightPrefix"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesVarOffsets"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesVarCounts"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesVarToTypeId"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -476,17 +636,6 @@ namespace shz
 				ASSERT(m_pFillNewPoolsCSO && m_pFillNewPoolsSRB, "FillNewPools PSO/SRB not ready");
 
 				IDeviceContext* pContext = ctx.pImmediateContext;
-
-				{
-					StateTransitionDesc tr =
-					{
-						renderer.GetTexture(STRING_HASH("TerrainHeight")),
-						RESOURCE_STATE_UNKNOWN,
-						RESOURCE_STATE_SHADER_RESOURCE,
-						STATE_TRANSITION_FLAG_UPDATE_STATE
-					};
-					pContext->TransitionResourceStates(1, &tr);
-				}
 
 				pContext->SetPipelineState(m_pFillNewPoolsCSO);
 				pContext->CommitShaderResources(m_pFillNewPoolsSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -525,6 +674,15 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_PoolDirty",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+					{ SHADER_TYPE_COMPUTE, "g_InteractionField",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+					// NEW: selection tables
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesWeights",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesVarOffsets",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesVarCounts",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesVarToTypeId",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				rl.Variables = vars;
 				rl.NumVariables = _countof(vars);
@@ -574,6 +732,33 @@ namespace shz
 				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_PoolPositions"))
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolPositions")));
+				}
+
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
+				{
+					v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+
+				// NEW table bindings
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesWeights"))
+				{
+					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesWeights")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix"))
+				{
+					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesWeightPrefix")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesVarOffsets"))
+				{
+					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesVarOffsets")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesVarCounts"))
+				{
+					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesVarCounts")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
+				if (auto* v = m_pFillNewPoolsSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesVarToTypeId"))
+				{
+					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesVarToTypeId")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
 			});
 
@@ -658,7 +843,7 @@ namespace shz
 			});
 
 		// =====================================================================
-		// Pass B-2) CountInstancesFromPools (species/lod counts)
+		// Pass B-2) CountInstancesFromPools (typeId/lod counts)
 		// =====================================================================
 		renderer.AddPass(
 			"Grass_CountSpeciesInstances",
@@ -671,9 +856,7 @@ namespace shz
 
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodCounts"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -866,7 +1049,7 @@ namespace shz
 			});
 
 		// =====================================================================
-		// Pass C) BuildInstancesFromPools (packed by species, still mesh-counted)
+		// Pass C) BuildInstancesFromPools (packed by typeId)
 		// =====================================================================
 		renderer.AddPass(
 			"Grass_BuildInstancesFromPools",
@@ -886,9 +1069,11 @@ namespace shz
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodOffsets"), RENDER_ACCESS_READ);
 				b.DeclareBufferUAV(STRING_HASH("Grass_SpeciesLodWriteCounters"), RENDER_ACCESS_WRITE);
 
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainVegetation"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLOD0MeshId"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLOD1MeshId"));
+				b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesLOD2MeshId"));
+
 				b.DeclareTextureSRVRead(STRING_HASH("InteractionField"));
-				b.DeclareTextureSRVRead(STRING_HASH("TerrainHeight"));
 
 				b.DeclareBufferCBVRead(STRING_HASH("GrassGenConstants"));
 			},
@@ -935,13 +1120,18 @@ namespace shz
 					{ SHADER_TYPE_COMPUTE, "g_VisibleCellTable",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolPositions",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_PoolChunkCoord",            SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_InteractionField",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLodOffsets",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 					{ SHADER_TYPE_COMPUTE, "g_SpeciesLodWriteCounters",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD0MeshId", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD1MeshId", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD2MeshId", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD0MeshId",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD1MeshId",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_SpeciesLOD2MeshId",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+					// Instance count buffer used by IndirectArgs
+					{ SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer",   SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+
+					{ SHADER_TYPE_COMPUTE, "g_InteractionField",          SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
 				rl.Variables = vars;
 				rl.NumVariables = _countof(vars);
@@ -969,6 +1159,7 @@ namespace shz
 				m_pBuildInstancesCSO = renderer.AcquirePipelineState(psoCI);
 				ASSERT(m_pBuildInstancesCSO, "AcquireCompute(BuildInstancesFromPools) failed");
 
+				// Outputs are UAVs declared as globals in HLSL: set as STATIC variables on PSO
 				if (auto* pVar = m_pBuildInstancesCSO->GetStaticVariableByName(SHADER_TYPE_COMPUTE, "g_OutInstancesLOD0"))
 				{
 					pVar->Set(renderer.GetBufferUAV(STRING_HASH("GrassInstanceBufferLOD0")));
@@ -1001,14 +1192,12 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_PoolChunkCoord")));
 				}
+
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_MeshInstanceCountBuffer"))
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("IndirectMeshInstanceCountBuffer")));
 				}
-				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
-				{
-					v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-				}
+
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesLodOffsets"))
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_SpeciesLodOffsets")));
@@ -1017,6 +1206,7 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferUAV(STRING_HASH("Grass_SpeciesLodWriteCounters")));
 				}
+
 				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesLOD0MeshId"))
 				{
 					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesLOD0MeshId")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
@@ -1029,25 +1219,36 @@ namespace shz
 				{
 					v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesLOD2MeshId")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				}
+
+				if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_InteractionField"))
+				{
+					v->Set(renderer.GetTextureSRV(STRING_HASH("InteractionField")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				}
 			});
 	}
 
 	void GrassSystem::ClearGrassDescs()
 	{
 		m_GrassDescs.clear();
-		m_SpeciesIndirect.clear();
+		m_TypeIndirect.clear();
+
+		m_SpeciesVarOffset.clear();
+		m_SpeciesVarCount.clear();
+		m_TypeToSpecies.clear();
+		m_TypeToVariation.clear();
 	}
 
 	uint32 GrassSystem::AddGrassDesc(const GrassDesc& desc)
 	{
 		ASSERT(m_GrassDescs.size() < MAX_GRASS_SPECIES, "Max grass species exceeded.");
-		ASSERT(desc.pMesh, "Mesh is null");
+
+		ASSERT(!desc.Variations.empty(), "GrassDesc.Variations must have at least 1 mesh.");
+		for (auto* p : desc.Variations)
+		{
+			ASSERT(p, "Variation mesh is null");
+		}
 
 		m_GrassDescs.push_back(desc);
-		
-		SpeciesIndirect si = {};
-		m_SpeciesIndirect.push_back(si);
-
 		return (uint32)(m_GrassDescs.size() - 1u);
 	}
 

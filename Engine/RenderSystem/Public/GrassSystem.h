@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #include "Primitives/BasicTypes.h"
 #include "Engine/Core/Common/Public/RefCntAutoPtr.hpp"
@@ -17,13 +18,23 @@ namespace shz
 	class InteractionSystem;
 	struct StaticMeshRenderData;
 
+	// ------------------------------------------------------------
+	// Grass description
+	// - Weight: species selection probability (relative weight)
+	// - Variations: chosen uniformly 1/N once species is chosen
+	// ------------------------------------------------------------
 	struct GrassDesc final
 	{
 		float LOD0Distance = 12.0f;
 		float LOD1Distance = 35.0f;
 		float LodHysteresis = 1.0f;
 
-		const StaticMeshRenderData* pMesh = nullptr;
+		float Weight = 1.0f;
+
+		// Variation meshes (each variation has full LOD chain like your old pMesh)
+		std::vector<const StaticMeshRenderData*> Variations;
+
+		uint32 GetNumVariations() const { return (uint32)Variations.size(); }
 	};
 
 	class GrassSystem final
@@ -47,7 +58,12 @@ namespace shz
 		// -----------------------------------------------------------------
 		void ClearGrassDescs();
 		uint32 AddGrassDesc(const GrassDesc& desc);
+
 		uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
+		uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); } // (species,variation) flattened types
+
+	private:
+		static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
 
 	private:
 		// ------------------------------------------------------------
@@ -63,19 +79,20 @@ namespace shz
 		uint  m_ChunkHalfExtent = 32;
 		float m_ChunkSize = 4.0f;
 
-		uint  m_SamplesPerChunk = 256;
+		uint  m_SamplesPerChunk = 512;
 
 		// ------------------------------------------------------------
-		// Per-species indirect mesh handles (per LOD)
+		// Per-type indirect mesh handles (per LOD)
+		// "type" = (species, variation) flattened
 		// ------------------------------------------------------------
-		struct SpeciesIndirect final
+		struct TypeIndirect final
 		{
 			IndirectArgsSystem::MeshHandle LOD0 = {};
 			IndirectArgsSystem::MeshHandle LOD1 = {};
 			IndirectArgsSystem::MeshHandle LOD2 = {};
 		};
 
-		std::vector<SpeciesIndirect> m_SpeciesIndirect;
+		std::vector<TypeIndirect> m_TypeIndirect;
 
 		// ------------------------------------------------------------
 		// Interaction system reference
@@ -107,6 +124,16 @@ namespace shz
 		// Species descs
 		// ------------------------------------------------------------
 		std::vector<GrassDesc> m_GrassDescs;
+
+		// ------------------------------------------------------------
+		// Flattened type mapping (CPU)
+		// typeId -> (speciesId, variationId)
+		// Also keep per-species variation offset/count for GPU tables.
+		// ------------------------------------------------------------
+		std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
+		std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
+		std::vector<uint32> m_TypeToSpecies;    // size = numTypes
+		std::vector<uint32> m_TypeToVariation;  // size = numTypes
 
 		// ------------------------------------------------------------
 		// Spawn settings

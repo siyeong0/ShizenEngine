@@ -227,48 +227,52 @@ struct GrassBillboardInstance
 
 struct GrassGenConstants
 {
-	uint NumSpecies;
+	// ---- selection domain ----
+	uint NumSpecies; // number of base species (GrassDesc count)
+	uint NumGrassTypes; // number of flattened types (= sum of variations over species)
+	uint SamplesPerChunk;
+	int ChunkHalfExtent;
+
+	// ---- pool/chunk ----
+	uint ChunkVisibleDim; // dim = 2*ChunkHalfExtent
+	float ChunkSize;
+	float SpawnRadius;
+	float Jitter;
+
+	// ---- deterministic ----
+	uint SeedSalt;
 	float YOffset;
 	float NormalAlignStrength;
 	float _pad0;
 
+	// ---- LOD ----
 	float LOD0Distance;
 	float LOD1Distance;
-	float LodHysteresis;
+	float LodHysteresis; // kept for future hysteresis usage
 	float _pad1;
 
-	uint ChunkVisibleDim;
-	float ChunkSize;
-
-	int ChunkHalfExtent;
-	uint SamplesPerChunk;
-	uint NumPools;
-	float Jitter;
-
+	// ---- scale/spawn ----
 	float MinScale;
 	float MaxScale;
 	float SpawnProb;
-	float SpawnRadius;
-
 	float BendStrengthMin;
-	float BendStrengthMax;
-	uint SeedSalt;
-	uint _pad2;
 
+	float BendStrengthMax;
 	float DensityContrast;
 	float DensityPow;
-	float _pad3;
-	float _pad4;
-
 	float SlopeToDensity;
+
+	// ---- height masks (normalized 0..1) ----
 	float HeightMinN;
 	float HeightMaxN;
 	float HeightFadeN;
+	float _pad2;
 
+	// ---- interaction ring buffer ----
 	float2 InteractionOriginXZ;
 	float2 InteractionInvWorldSizeXZ;
 
-	uint2 InteractionTexelOrigin;
+	uint2 InteractionTexelOrigin; // ring-buffer texel origin
 	float2 InteractionInvFieldSize;
 };
 
