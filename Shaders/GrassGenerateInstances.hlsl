@@ -2,15 +2,11 @@
 // GrassGenerateInstances.hlsl
 // - ¡°Patch mask + point sampling¡± (canonical)
 // - ROUND patches: Worley(Cellular) distance field (no noise textures)
-// - Cluster params (per your spec):
-//     ClusterStrength : 0..1 (0 disables)
-//     ClusterScale    : patch size in meters (bigger => bigger patches, lower freq)
-//     ClusterJitter   : 0..1 domain warp amount relative to patch size
-//
-// - Species selection: MUTUAL EXCLUSION (winner-takes-all + boundary gap)
-//     * Choose species by max(score = W * factor)
-//     * Kill near boundaries: if (best - second) < gap => reject (no spawn)
-//     * Spawn probability uses baseDensity * best (normalized by totalW)
+// - Priority + exclusion workflow:
+//     1) Special patch winner-takes-all (+ boundary gap)
+//     2) Try spawn special
+//     3) Else spawn base
+//     4) Base density is suppressed inside special patches
 // ============================================================================
 
 #include "Common.hlsli"
@@ -88,8 +84,12 @@ StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat index -> typeId
 StructuredBuffer<float4> g_TypeParams0;
 
 // Per-species clustering params
-// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, _)
+// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, BaseSuppressInPatch01)
 StructuredBuffer<float4> g_SpeciesClusterParams;
+
+// NEW: per-species flags
+// bit0: IsSpecial (macro patch species)
+StructuredBuffer<uint> g_SpeciesFlags;
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -103,10 +103,16 @@ static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 
 static const float CHUNK_AABB_HALF_Y = 20.0f;
 
-// Mutual exclusion tuning (shader-only; tweak these)
-static const float ME_MIN_BEST_SCORE = 1e-5f; // reject if best is basically zero
-static const float ME_GAP_ABS_MIN = 0.015f; // absolute boundary gap in score space
-static const float ME_GAP_REL = 0.20f; // relative gap: gap must be >= ME_GAP_REL * best
+// Special patch winner exclusion tuning
+static const float SP_MIN_BEST_SCORE = 1e-5f;
+static const float SP_GAP_ABS_MIN = 0.015f;
+static const float SP_GAP_REL = 0.20f;
+
+// Special patch mask threshold (must be inside patch enough)
+static const float SP_MIN_MASK_TO_SPAWN = 0.10f;
+
+// Base selection exclusion tuning (optional, lighter)
+static const float BS_MIN_BEST_SCORE = 1e-6f;
 
 // -----------------------------------------------------------------------------
 // Hash / random
@@ -157,7 +163,7 @@ float2 Hash02(uint2 p)
 
 float2 Smooth2(float2 t)
 {
-	// smootherstep
+    // smootherstep
 	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
@@ -191,7 +197,7 @@ float2 DomainWarp2D(float2 x, float warpAmp, uint seed)
 	if (warpAmp <= 0.0f)
 		return x;
 
-	// VERY low freq to avoid grid-looking artifacts
+    // VERY low freq to avoid grid-looking artifacts
 	float wx = ValueNoise2D(x * 0.21f, seed ^ 0x1111u);
 	float wz = ValueNoise2D(x * 0.21f + 13.37f, seed ^ 0x2222u);
 
@@ -209,15 +215,15 @@ float WorleyF1(float2 x, uint seed)
 
 	float best = 1e9f;
 
-	[unroll]
+    [unroll]
 	for (int j = -1; j <= 1; ++j)
 	{
-		[unroll]
+        [unroll]
 		for (int i = -1; i <= 1; ++i)
 		{
 			uint2 cell = (uint2) (p + float2(i, j));
 
-			// per-cell random point in cell
+            // per-cell random point in cell
 			float2 rnd = Hash02(cell ^ uint2(seed, seed * 1664525u));
 			float2 q = float2(i, j) + rnd - f;
 
@@ -233,16 +239,16 @@ float WorleyRoundField01(float2 x, uint seed)
 {
 	float f1a = WorleyF1(x, seed ^ 0xA53u);
 
-	// rotate & offset a bit (helps break repetition)
+    // rotate & offset a bit (helps break repetition)
 	const float2x2 R = float2x2(0.80901699f, -0.58778525f,
-	                           0.58778525f, 0.80901699f);
+                               0.58778525f, 0.80901699f);
 	float2 xr = mul(R, x + 7.13f);
 	float f1b = WorleyF1(xr, seed ^ 0xB71u);
 
-	// combine
+    // combine
 	float f = min(f1a, f1b * 1.05f);
 
-	// normalize-ish
+    // normalize-ish
 	return saturate(f * 1.25f);
 }
 
@@ -314,7 +320,7 @@ float SampleInteraction(float2 worldXZ)
 // -----------------------------------------------------------------------------
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
-	[unroll]
+    [unroll]
 	for (int i = 0; i < 6; ++i)
 	{
 		float4 P = g_FrameCB.FrustumPlanesWS[i];
@@ -349,20 +355,6 @@ bool GrassInstanceAabbInsideFrustum(float3 posWS, float scale)
 }
 
 // -----------------------------------------------------------------------------
-// Distance thinning gate (stable)
-// -----------------------------------------------------------------------------
-float ComputeDistanceKeep01(float distSqr, float lod0Sqr, float spawnRadiusSqr)
-{
-	float dist = sqrt(max(distSqr, 0.0f));
-	float lod0 = sqrt(max(lod0Sqr, 0.0f));
-	float spawnR = sqrt(max(spawnRadiusSqr, 0.0f));
-
-	float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
-	t = saturate(t);
-	return 1.0f - t;
-}
-
-// -----------------------------------------------------------------------------
 // Wave mesh counter reserve helpers (grouped by meshId)
 // -----------------------------------------------------------------------------
 struct BallotMask
@@ -376,7 +368,6 @@ BallotMask WaveBallotAll()
 	b.M = WaveActiveBallot(true);
 	return b;
 }
-
 bool BallotAny(BallotMask b)
 {
 	return (b.M.x | b.M.y | b.M.z | b.M.w) != 0u;
@@ -400,9 +391,9 @@ bool BallotTestLane(BallotMask b, uint lane)
 	uint bit = lane & 31u;
 
 	uint w =
-		(word == 0u) ? b.M.x :
-		(word == 1u) ? b.M.y :
-		(word == 2u) ? b.M.z : b.M.w;
+        (word == 0u) ? b.M.x :
+        (word == 1u) ? b.M.y :
+        (word == 2u) ? b.M.z : b.M.w;
 
 	return ((w >> bit) & 1u) != 0u;
 }
@@ -425,7 +416,7 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 
 	uint myBase = 0u;
 
-	[loop]
+    [loop]
 	while (BallotAny(remaining))
 	{
 		uint leaderLane = BallotFirstLane(remaining);
@@ -495,13 +486,13 @@ float ComputePatchMask01(uint speciesId, float2 worldXZ)
 	if (strength <= 1e-5f)
 		return 1.0f;
 
-	// noise space where 1 cell ~= 1 patch unit
+    // noise space where 1 cell ~= 1 patch unit
 	float2 x = worldXZ / scaleM;
 
-	// species-stable seed
+    // species-stable seed
 	uint spSeed = WangHash((speciesId + 1u) ^ g_CB.SeedSalt ^ 0xC1D2E3F4u);
 
-	// domain warp in noise space
+    // domain warp in noise space
 	float warpAmp = jitter01 * 0.45f;
 	x = DomainWarp2D(x, warpAmp, spSeed);
 
@@ -549,7 +540,6 @@ struct ChunkContext
 	float Lod0Sqr;
 	float Lod1Sqr;
 	float ChunkDensity;
-	float Keep01;
 };
 
 bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
@@ -596,9 +586,6 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	if (chunkDensity <= DENSITY_DISABLE_THRESHOLD)
 		return false;
 
-	float keep01 = ComputeDistanceKeep01(distChunkSqr, lod0Sqr, spawnRadiusSqr);
-	keep01 *= saturate(chunkDensity);
-
 	ctx.ChunkCoord = chunkCoord;
 	ctx.ChunkOriginClampedXZ = chunkOriginClamped;
 	ctx.ChunkCenterXZ = chunkCenterXZ;
@@ -607,7 +594,6 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	ctx.Lod0Sqr = lod0Sqr;
 	ctx.Lod1Sqr = lod1Sqr;
 	ctx.ChunkDensity = chunkDensity;
-	ctx.Keep01 = keep01;
 
 	return true;
 }
@@ -642,104 +628,167 @@ uint MakeAtlasIndex(uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// MUTUAL EXCLUSION species selection at point x:
-//
-// score_s = W_s * factor_s
-// factor_s = (1-strength + strength*M_s)
-//
-// Choose argmax(score).
-// Reject near boundaries: (best-second) < gap => return false.
-// Return bestScore to build spawnProb = saturate(baseDensity * bestScore / totalW).
+// Special-first pattern
 // -----------------------------------------------------------------------------
-bool SelectSpecies_MutualExclusion(
-	float2 worldXZ,
-	uint seed,
-	out uint outSpeciesId,
-	out float outBestScore
+bool IsSpecialSpecies(uint s)
+{
+	return (g_SpeciesFlags[s] & 1u) != 0u;
+}
+
+// Returns:
+//  - outSpecialId: chosen special species (if any)
+//  - outBestScore/outSecondScore: scores in weight space
+//  - outBestMask: patch mask of chosen winner
+//  - outBaseScale: multiplicative scale for base density (<=1) due to all special patches
+bool SelectSpecialPatchWinner(
+    float2 worldXZ,
+    uint seed,
+    out uint outSpecialId,
+    out float outBestScore,
+    out float outSecondScore,
+    out float outBestMask,
+    out float outBaseScale
 )
 {
-	outSpeciesId = 0u;
-	outBestScore = 0.0f;
+	outSpecialId = 0u;
+	outBestScore = -1.0f;
+	outSecondScore = -1.0f;
+	outBestMask = 0.0f;
+	outBaseScale = 1.0f;
 
 	uint num = max(g_CB.NumSpecies, 1u);
 
-	float totalW = g_SpeciesWeightPrefix[num - 1u];
-	float invTotalW = (totalW > 1e-8f) ? rcp(totalW) : 0.0f;
+    // totalW over ONLY specials (computed on the fly)
+	float totalW = 0.0f;
 
-	// Track best and second best
-	float best = -1.0f;
-	float second = -1.0f;
-	uint bestId = 0u;
+	uint salt = WangHash(seed ^ 0x51515151u);
 
-	// Optional: random tie-break salt
-	uint salt = WangHash(seed ^ 0x2C2C2C2Cu);
-
-	[loop]
+    [loop]
 	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
 	{
 		if (s >= num)
 			break;
+		if (!IsSpecialSpecies(s))
+			continue;
 
-		float W = (invTotalW > 0.0f) ? GetSpeciesWeight(s) : 1.0f;
+		float W = max(GetSpeciesWeight(s), 0.0f);
 		if (W <= 0.0f)
 			continue;
+
+		totalW += W;
 
 		float4 cp = g_SpeciesClusterParams[s];
 		float strength = saturate(cp.x);
 
-		float M = (strength > 1e-5f) ? ComputePatchMask01(s, worldXZ) : 1.0f;
-		float factor = (1.0f - strength + strength * M);
+        // Special patch mask MUST be meaningful (even if strength small)
+		float M = ComputePatchMask01(s, worldXZ);
 
-		// score (density-independent)
-		float score = max(W * factor, 0.0f);
+        // score: weight * mask (patch membership)
+        // (strength influences mask shape already; score uses M directly)
+		float score = W * M;
 
-		// Deterministic tiny tie-break to avoid flicker when equal
-		// (does NOT affect ordering unless extremely close)
+        // tiny tie-break
 		score += (Rand01(salt ^ (s * 0x9E3779B9u)) - 0.5f) * 1e-7f;
 
-		if (score > best)
+        // base density suppression field:
+        // cp.w is BaseSuppressInPatch01: 0=no suppress, 1=full suppress at mask==1
+		float suppress = saturate(cp.w);
+		float scale = 1.0f - suppress * M; // inside patch => smaller
+		outBaseScale = min(outBaseScale, scale);
+
+		if (score > outBestScore)
 		{
-			second = best;
-			best = score;
-			bestId = s;
+			outSecondScore = outBestScore;
+			outBestScore = score;
+			outSpecialId = s;
+			outBestMask = M;
 		}
-		else if (score > second)
+		else if (score > outSecondScore)
 		{
-			second = score;
+			outSecondScore = score;
 		}
 	}
 
-	if (best < ME_MIN_BEST_SCORE)
+    // If no specials found, just return false (but baseScale might remain 1)
+	if (totalW <= 1e-8f)
 		return false;
 
-	// Boundary rejection: need a confident winner
-	float gap = max(ME_GAP_ABS_MIN, ME_GAP_REL * best);
-	if ((best - max(second, 0.0f)) < gap)
+    // Need confident winner
+	if (outBestScore < SP_MIN_BEST_SCORE)
 		return false;
 
-	outSpeciesId = bestId;
-	outBestScore = best; // in same units as weights (0..totalW)
+	float gap = max(SP_GAP_ABS_MIN, SP_GAP_REL * outBestScore);
+	if ((outBestScore - max(outSecondScore, 0.0f)) < gap)
+		return false;
+
+    // Must be sufficiently inside patch, otherwise treat as outside
+	if (outBestMask < SP_MIN_MASK_TO_SPAWN)
+		return false;
+
 	return true;
 }
 
+// Base winner: choose a base species (non-special) by max(weight)
+// (you can extend later: multiply micro masks / biome constraints here)
+bool SelectBaseWinner(
+    float2 worldXZ,
+    uint seed,
+    out uint outBaseSpeciesId,
+    out float outBestScore
+)
+{
+	outBaseSpeciesId = 0u;
+	outBestScore = -1.0f;
+
+	uint num = max(g_CB.NumSpecies, 1u);
+
+	uint salt = WangHash(seed ^ 0x61616161u);
+
+    [loop]
+	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
+	{
+		if (s >= num)
+			break;
+		if (IsSpecialSpecies(s))
+			continue;
+
+		float W = max(GetSpeciesWeight(s), 0.0f);
+		if (W <= 0.0f)
+			continue;
+
+		float score = W;
+
+        // tiny tie-break
+		score += (Rand01(salt ^ (s * 0x9E3779B9u)) - 0.5f) * 1e-7f;
+
+		if (score > outBestScore)
+		{
+			outBestScore = score;
+			outBaseSpeciesId = s;
+		}
+	}
+
+	return (outBestScore > BS_MIN_BEST_SCORE);
+}
+
 // -----------------------------------------------------------------------------
-// EvaluateSpawn: mutual exclusion + point sampling
+// EvaluateSpawn: special-first then base fill
 // -----------------------------------------------------------------------------
 bool EvaluateSpawn(
-	ChunkContext ctx,
-	uint poolBase,
-	uint sampleIndex,
-	out uint outTypeId,
-	out uint outLodIndex,
-	out float outPress01,
-	out float outScale,
-	out float outYaw,
-	out float outPitch,
-	out float outBend01,
-	out uint outSeed8,
-	out uint outVariantId,
-	out uint outAtlasIndex,
-	out float3 outPosWS
+    ChunkContext ctx,
+    uint poolBase,
+    uint sampleIndex,
+    out uint outTypeId,
+    out uint outLodIndex,
+    out float outPress01,
+    out float outScale,
+    out float outYaw,
+    out float outPitch,
+    out float outBend01,
+    out uint outSeed8,
+    out uint outVariantId,
+    out uint outAtlasIndex,
+    out float3 outPosWS
 )
 {
 	outTypeId = 0u;
@@ -769,32 +818,66 @@ bool EvaluateSpawn(
 
 	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u));
 
-	float keepGate = saturate(ctx.Keep01);
-	if (Rand01(seed ^ 0x1010u) > keepGate)
-		return false;
+    // --- Special-first selection ---
+	uint spId;
+	float spBest, spSecond, spMask, baseScale;
+	bool hasSpecial = SelectSpecialPatchWinner(posXZ, seed, spId, spBest, spSecond, spMask, baseScale);
 
-	uint speciesId;
-	float bestScore;
-	if (!SelectSpecies_MutualExclusion(posXZ, seed, speciesId, bestScore))
-		return false;
+    // Base density suppression inside special patches (even if special fails to spawn)
+	float baseD = D * saturate(baseScale);
 
-	float totalW = g_SpeciesWeightPrefix[max(g_CB.NumSpecies, 1u) - 1u];
-	float invTotalW = (totalW > 1e-8f) ? rcp(totalW) : 0.0f;
+    // Compute totalW across all species for normalization fallback (keeps stable)
+	uint num = max(g_CB.NumSpecies, 1u);
+	float totalW_all = g_SpeciesWeightPrefix[num - 1u];
+	float invTotalW_all = (totalW_all > 1e-8f) ? rcp(totalW_all) : 0.0f;
 
-	// Spawn probability:
-	//   baseDensity * bestScore / totalW
-	// - bestScore already includes W and factor (0..W)
-	// - This keeps overall density roughly stable while enforcing exclusivity
-	float spawnProb = saturate(D * bestScore * invTotalW);
-	if (spawnProb <= 0.001f)
-		return false;
+    // Try spawn special if we have a confident patch winner
+	uint chosenSpecies = INVALID_U32;
 
-	float th = StablePointThreshold01(posXZ, seed ^ 0xBADC0DEu);
-	if (th > spawnProb)
-		return false;
+	if (hasSpecial)
+	{
+        // Special spawn probability:
+        // - use (W*Mask)/totalW_all so global density remains stable-ish
+		float spProb = saturate(D * spBest * invTotalW_all);
 
-	uint varId = PickVariationUniform(speciesId, seed ^ 0xBBBBu);
-	uint typeId = MapSpeciesVariationToTypeId(speciesId, varId);
+        // You can optionally boost special visibility a bit:
+        // spProb = saturate(spProb * 1.15f);
+
+		if (spProb > 0.001f)
+		{
+			float th = StablePointThreshold01(posXZ, seed ^ 0xBADC0DEu);
+			if (th <= spProb)
+			{
+				chosenSpecies = spId;
+			}
+		}
+	}
+
+    // If no special instance, fill with base
+	if (chosenSpecies == INVALID_U32)
+	{
+		uint baseId;
+		float baseBest;
+		if (!SelectBaseWinner(posXZ, seed, baseId, baseBest))
+			return false;
+
+        // Base spawn prob:
+        // - use base density suppressed in patch zones
+        // - normalized by totalW_all (simple, stable)
+		float baseProb = saturate(baseD * baseBest * invTotalW_all);
+		if (baseProb <= 0.001f)
+			return false;
+
+		float th = StablePointThreshold01(posXZ, seed ^ 0xC0FFEEu);
+		if (th > baseProb)
+			return false;
+
+		chosenSpecies = baseId;
+	}
+
+    // Map species -> variation -> type
+	uint varId = PickVariationUniform(chosenSpecies, seed ^ 0xBBBBu);
+	uint typeId = MapSpeciesVariationToTypeId(chosenSpecies, varId);
 
 	if (typeId >= g_CB.NumGrassTypes)
 		typeId = typeId % max(g_CB.NumGrassTypes, 1u);
@@ -813,8 +896,8 @@ bool EvaluateSpawn(
 	float distSqr = dot(dxz, dxz);
 
 	uint lodIndex =
-		(distSqr < ctx.Lod0Sqr) ? 0u :
-		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
+        (distSqr < ctx.Lod0Sqr) ? 0u :
+        (distSqr < ctx.Lod1Sqr) ? 1u : 2u;
 
 	float scaleT = Rand01(seed ^ 0x5555u);
 	float scale = lerp(minScale, maxScale, scaleT);
@@ -1019,7 +1102,11 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint seed8, variantId, atlasIndex;
 		float3 posWS;
 
-		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
+		if (!EvaluateSpawn(ctx, base, s,
+                           typeId, lodIndex,
+                           press01, scale, yaw, pitch, bend01,
+                           seed8, variantId, atlasIndex,
+                           posWS))
 			continue;
 
 		uint idx = typeId * 3u + lodIndex;
@@ -1085,13 +1172,17 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint seed8, variantId, atlasIndex;
 		float3 posWS;
 
-		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
+		if (!EvaluateSpawn(ctx, base, s,
+                           typeId, lodIndex,
+                           press01, scale, yaw, pitch, bend01,
+                           seed8, variantId, atlasIndex,
+                           posWS))
 			continue;
 
 		uint meshId =
-			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
-			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-			                   g_SpeciesLOD2MeshId[typeId];
+            (lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
+            (lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
+                               g_SpeciesLOD2MeshId[typeId];
 
 		WaveReserveMeshCounter_Grouped(meshId);
 

@@ -221,16 +221,13 @@ struct GrassBillboardInstance
 // ----------------------------------------------
 // Grass generation constants (Compute)
 // ----------------------------------------------
+// ----------------------------------------------
+// Grass generation constants (Compute)
+// ----------------------------------------------
 #ifndef MAX_GRASS_SPECIES
 #define MAX_GRASS_SPECIES 256
 #endif
 
-// ============================================================================
-// HLSL_Structures.hlsli (ONLY the GrassGenConstants part)
-// - Global LOD distances here
-// - Removed: SpawnProb, SlopeToDensity
-// - Per-type params come from SRV g_TypeParams0
-// ============================================================================
 struct GrassGenConstants
 {
 	uint NumSpecies; // base species count
@@ -264,7 +261,6 @@ struct GrassGenConstants
 	uint2 InteractionTexelOrigin;
 	float2 InteractionInvFieldSize;
 };
-
 
 // ----------------------------------------------
 // Grass rendering constants

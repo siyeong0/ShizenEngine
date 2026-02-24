@@ -20,17 +20,26 @@ namespace shz
 
     struct GrassDesc final
     {
+        // selection weight (relative)
         float Weight = 1.0f;
 
+        // per-type scale / bend (shared across variations of this species)
         float MinScale = 0.30f;
         float MaxScale = 0.35f;
 
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
+        // clustering (macro patch)
         float ClusterStrength = 0.0f; // 0..1, 0 disables
         float ClusterScale = 16.0f;
         float ClusterJitter = 0.35f; // 0..1
+
+        // NEW: special-first workflow flags
+        // - IsSpecial: participates in "macro patch winner" stage
+        // - BaseSuppressInPatch: how much base grass density is suppressed inside this patch
+        bool  IsSpecial = false;
+        float BaseSuppressInPatch = 0.65f; // 0..1 (1 => base almost removed inside patch)
 
         std::vector<const StaticMeshRenderData*> Variations;
 
@@ -70,7 +79,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 4096;
+        uint  m_SamplesPerChunk = 2048;
 
         float m_LOD0Distance = 20.0f;
         float m_LOD1Distance = 60.0f;
