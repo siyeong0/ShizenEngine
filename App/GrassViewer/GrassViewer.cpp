@@ -534,25 +534,27 @@ namespace shz
 
 				// Grass
 				{
-					GrassDesc gd;
-					gd.Weight = 1.5f;  
-					gd.MinScale = 0.4f;
-					gd.MaxScale = 0.1f;
-					gd.ClusterStrength = 1.0f;  
-					gd.ClusterScale = 1.5f;
-					gd.ClusterJitter = 0.01f;
+				GrassDesc gd;
+				gd.Weight = 0.4f;
+				gd.MinScale = 0.20f;
+				gd.MaxScale = 0.30f;
+				gd.ClusterStrength = 0.20f; 
+				gd.ClusterScale = 2.0f;
+				gd.ClusterJitter = 0.05f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/realistics_grass_07/scene.gltf");
+				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_1.fbx");
+				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_2.fbx");
+				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_3.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+				m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				// Reed (tall, wetland-ish clumps)
 				{
 					GrassDesc gd;
-					gd.Weight = 0.45f;   // common in appropriate biome but not everywhere
-					gd.MinScale = 0.20f;
-					gd.MaxScale = 0.25f;
+					gd.Weight = 0.25f;   // common in appropriate biome but not everywhere
+					gd.MinScale = 0.30f;
+					gd.MaxScale = 0.35f;
 					gd.ClusterStrength = 0.90f;   // strong patches
 					gd.ClusterScale = 12.0f;   // big clumps
 					gd.ClusterJitter = 0.25f;
@@ -570,8 +572,8 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.20f;   // occasional
-					gd.MinScale = 0.14f;
-					gd.MaxScale = 0.22f;
+					gd.MinScale = 0.3f;
+					gd.MaxScale = 0.4f;
 					gd.ClusterStrength = 0.5f;
 					gd.ClusterScale = 1.4f;
 					gd.ClusterJitter = 0.75f;
@@ -587,8 +589,8 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.3f;   // rarer than daisies
-					gd.MinScale = 0.22f;
-					gd.MaxScale = 0.40f;
+					gd.MinScale = 0.3f;
+					gd.MaxScale = 0.4f;
 					gd.ClusterStrength = 0.82f;
 					gd.ClusterScale = 4.5f;
 					gd.ClusterJitter = 0.05f;
@@ -605,8 +607,8 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.2f;
-					gd.MinScale = 0.20f;
-					gd.MaxScale = 0.35f;
+					gd.MinScale = 0.4f;
+					gd.MaxScale = 0.5f;
 					gd.ClusterStrength = 0.75f;
 					gd.ClusterScale = 16.8f;
 					gd.ClusterJitter = 0.70f;
@@ -627,8 +629,8 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.2f;   // very rare
-					gd.MinScale = 0.18f;
-					gd.MaxScale = 0.30f;
+					gd.MinScale = 0.3f;
+					gd.MaxScale = 0.35f;
 					gd.ClusterStrength = 0.05f;   // basically no clumping
 					gd.ClusterScale = 0.9f;
 					gd.ClusterJitter = 0.85f;
@@ -643,7 +645,7 @@ namespace shz
 					GrassDesc gd;
 					gd.Weight = 0.06f;   // rare-ish
 					gd.MinScale = 0.90f;
-					gd.MaxScale = 1.60f;
+					gd.MaxScale = 1.00f;
 					gd.ClusterStrength = 0.05f;   // small groups
 					gd.ClusterScale = 1.0f;
 					gd.ClusterJitter = 0.45f;
