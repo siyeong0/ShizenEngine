@@ -258,7 +258,6 @@ struct GrassGenConstants
 	uint2 InteractionTexelOrigin;
 	float2 InteractionInvFieldSize;
 };
-
 // ----------------------------------------------
 // Grass rendering constants
 // ----------------------------------------------

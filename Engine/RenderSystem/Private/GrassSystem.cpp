@@ -1,11 +1,3 @@
-// ============================================================================
-// GrassSystem.cpp
-// - Special-first macro patch workflow
-// - Added GPU table:
-//   * Grass_SpeciesFlags (uint per speciesId): bit0=IsSpecial
-// - Extended Grass_SpeciesClusterParams.w = BaseSuppressInPatch (0..1)
-// ============================================================================
-
 #include "pch.h"
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 
@@ -276,20 +268,6 @@ namespace shz
             renderer.AddBuffer(STRING_HASH("Grass_SpeciesClusterParams"), bd);
         }
 
-        // NEW: per-species flags (uint)
-        {
-            BufferDesc bd = {};
-            bd.Usage = USAGE_DEFAULT;
-            bd.BindFlags = BIND_SHADER_RESOURCE;
-            bd.Mode = BUFFER_MODE_STRUCTURED;
-
-            bd.ElementByteStride = 4;
-            bd.Size = uint64(MAX_GRASS_SPECIES) * 4ull;
-
-            bd.Name = "Grass_SpeciesFlags";
-            renderer.AddBuffer(STRING_HASH("Grass_SpeciesFlags"), bd);
-        }
-
         // Constants CB
         {
             BufferDesc bd = {};
@@ -495,19 +473,6 @@ namespace shz
                     gd.BaseSuppressInPatch);
             }
             uploadF32x4Table(STRING_HASH("Grass_SpeciesClusterParams"), spParams, MAX_GRASS_SPECIES);
-        }
-
-        // NEW: Species flags (bit0=IsSpecial)
-        {
-            std::vector<uint32> flags(numSpecies, 0u);
-            for (uint32 s = 0u; s < numSpecies; ++s)
-            {
-                uint32 f = 0u;
-                if (m_GrassDescs[s].IsSpecial)
-                    f |= 1u;
-                flags[s] = f;
-            }
-            uploadU32Table(STRING_HASH("Grass_SpeciesFlags"), flags, MAX_GRASS_SPECIES);
         }
 
         // One-time init: VisibleCellTable / PoolChunkCoord / PoolDirty
@@ -880,7 +845,6 @@ namespace shz
 
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_TypeParams0"));
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesClusterParams"));
-                b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesFlags"));
 
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesWeightPrefix"));
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesVarOffsets"));
@@ -990,8 +954,6 @@ namespace shz
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_TypeParams0")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
                 if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesClusterParams"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesClusterParams")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-                if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesFlags"))
-                    v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesFlags")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 
                 if (auto* v = m_pCountSpeciesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesWeightPrefix")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
@@ -1110,7 +1072,6 @@ namespace shz
 
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_TypeParams0"));
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesClusterParams"));
-                b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesFlags"));
 
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesWeightPrefix"));
                 b.DeclareBufferSRVRead(STRING_HASH("Grass_SpeciesVarOffsets"));
@@ -1248,9 +1209,6 @@ namespace shz
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_TypeToSpecies")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
                 if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesClusterParams"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesClusterParams")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-
-                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesFlags"))
-                    v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesFlags")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 
                 if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesWeightPrefix")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);

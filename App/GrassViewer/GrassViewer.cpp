@@ -535,7 +535,7 @@ namespace shz
 				// Grass
 				{
 					GrassDesc gd;
-					gd.Weight = 2.0f;
+					gd.Weight = 0.4f;
 					gd.MinScale = 0.20f;
 					gd.MaxScale = 0.30f;
 					gd.ClusterStrength = 0.20f;
@@ -636,23 +636,23 @@ namespace shz
 					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
-				// Blue flower
-				{
-					GrassDesc gd;
-					gd.Weight = 0.16f;   // very rare
-					gd.MinScale = 0.3f;
-					gd.MaxScale = 0.35f;
-					gd.ClusterStrength = 0.05f;   // basically no clumping
-					gd.ClusterScale = 0.9f;
-					gd.ClusterJitter = 0.85f;
+				//// Blue flower
+				//{
+				//	GrassDesc gd;
+				//	gd.Weight = 0.16f;   // very rare
+				//	gd.MinScale = 0.3f;
+				//	gd.MaxScale = 0.35f;
+				//	gd.ClusterStrength = 0.05f;   // basically no clumping
+				//	gd.ClusterScale = 0.9f;
+				//	gd.ClusterJitter = 0.85f;
 
-					gd.IsSpecial = true;
-					gd.BaseSuppressInPatch = 1.0f;
+				//	gd.IsSpecial = true;
+				//	gd.BaseSuppressInPatch = 1.0f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
-				}
+				//	m_pGrassSystem->AddGrassDesc(gd);
+				//}
 
 				// Bush
 				{

@@ -1,12 +1,8 @@
 // ============================================================================
 // GrassGenerateInstances.hlsl
-// - “Patch mask + point sampling” (canonical)
-// - ROUND patches: Worley(Cellular) distance field (no noise textures)
-// - Priority + exclusion workflow:
-//     1) Special patch winner-takes-all (+ boundary gap)
-//     2) Try spawn special
-//     3) Else spawn base
-//     4) Base density is suppressed inside special patches
+// - Voronoi cluster (cell -> 1 species) + round-ish mask
+// - FIX: axis-streak artifacts -> seed-based rotation + isotropic (decorrelated) domain warp
+// - Keeps your existing buffers/packing/prefix logic intact
 // ============================================================================
 
 #include "Common.hlsli"
@@ -83,13 +79,9 @@ StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat index -> typeId
 // Per-type params (minScale,maxScale,bendMin,bendMax)
 StructuredBuffer<float4> g_TypeParams0;
 
-// Per-species clustering params
-// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, BaseSuppressInPatch01)
+// Per-species clustering params (kept; used for “shape” tuning per chosen species)
+// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, UNUSED/Reserved)
 StructuredBuffer<float4> g_SpeciesClusterParams;
-
-// NEW: per-species flags
-// bit0: IsSpecial (macro patch species)
-StructuredBuffer<uint> g_SpeciesFlags;
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -103,16 +95,13 @@ static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 
 static const float CHUNK_AABB_HALF_Y = 20.0f;
 
-// Special patch winner exclusion tuning
-static const float SP_MIN_BEST_SCORE = 1e-5f;
-static const float SP_GAP_ABS_MIN = 0.015f;
-static const float SP_GAP_REL = 0.20f;
+// Voronoi boundary gap tuning
+static const float VC_GAP_ABS_MIN = 0.035f; // absolute gap width (noise space units)
+static const float VC_GAP_REL = 0.12f; // relative to strength -> sharper gap
 
-// Special patch mask threshold (must be inside patch enough)
-static const float SP_MIN_MASK_TO_SPAWN = 0.10f;
-
-// Base selection exclusion tuning (optional, lighter)
-static const float BS_MIN_BEST_SCORE = 1e-6f;
+// Spawn density tuning
+static const float CLUSTER_SPAWN_BOOST = 1.35f; // makes clusters less sparse
+static const float MIN_FILL_IN_CELL = 0.30f; // ensures some fill even near edges (0..1)
 
 // -----------------------------------------------------------------------------
 // Hash / random
@@ -163,8 +152,23 @@ float2 Hash02(uint2 p)
 
 float2 Smooth2(float2 t)
 {
-    // smootherstep
+	// smootherstep
 	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// -----------------------------------------------------------------------------
+// Small helpers: rotation / isotropy
+// -----------------------------------------------------------------------------
+float2 Rotate2D(float2 v, float a)
+{
+	float s = sin(a);
+	float c = cos(a);
+	return float2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+float RandomAngle(uint seed)
+{
+	return Rand01(seed ^ 0x31415927u) * GRASS_TWO_PI;
 }
 
 // -----------------------------------------------------------------------------
@@ -192,64 +196,101 @@ float ValueNoise2D(float2 x, uint seed)
 	return lerp(a, b, u.y);
 }
 
-float2 DomainWarp2D(float2 x, float warpAmp, uint seed)
+// -----------------------------------------------------------------------------
+// FIX: Isotropic/Decorrelated domain warp
+// - Prevents “one-axis streak” artifacts from correlated warp channels.
+// -----------------------------------------------------------------------------
+float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 {
 	if (warpAmp <= 0.0f)
 		return x;
 
-    // VERY low freq to avoid grid-looking artifacts
-	float wx = ValueNoise2D(x * 0.21f, seed ^ 0x1111u);
-	float wz = ValueNoise2D(x * 0.21f + 13.37f, seed ^ 0x2222u);
+	float2 p = x;
+	float2 w = 0.0f;
 
-	float2 w = (float2(wx, wz) * 2.0f - 1.0f) * warpAmp;
-	return x + w;
+	float amp = 1.0f;
+	float freq = 0.18f;
+
+	[unroll]
+	for (int o = 0; o < 3; ++o)
+	{
+		uint so = WangHash(seed ^ (0x9E3779B9u * (uint) (o + 1)));
+
+		float a = Rand01(so ^ 0x1234u) * GRASS_TWO_PI;
+
+		float2 pr = Rotate2D(p * freq, a);
+
+		float nx = ValueNoise2D(pr + float2(11.13f, 7.77f), so ^ 0x1111u);
+		float nz = ValueNoise2D(pr + float2(3.33f, 19.19f), so ^ 0x2222u);
+
+		float2 ww = (float2(nx, nz) * 2.0f - 1.0f);
+		float len = max(length(ww), 1e-3f);
+		ww /= len;
+
+		w += ww * amp;
+
+		amp *= 0.5f;
+		freq *= 2.03f;
+	}
+
+	return x + w * (warpAmp * 0.35f);
 }
+// -----------------------------------------------------------------------------
+// WORLEY(Cellular) distance field + seed retrieval (Voronoi)
+// -----------------------------------------------------------------------------
+struct WorleyResult
+{
+	float F1;
+	float F2;
+	uint2 SeedCell; // integer cell coordinate of nearest seed
+	float2 SeedPos; // nearest seed position in cell space
+};
 
-// -----------------------------------------------------------------------------
-// WORLEY(Cellular) distance field for round patches
-// -----------------------------------------------------------------------------
-float WorleyF1(float2 x, uint seed)
+WorleyResult WorleyF1F2_WithSeed(float2 x, uint seed)
 {
 	float2 p = floor(x);
 	float2 f = frac(x);
 
-	float best = 1e9f;
+	float best1 = 1e9f;
+	float best2 = 1e9f;
 
-    [unroll]
+	uint2 bestCell = 0u;
+	float2 bestPos = 0.0f;
+
+	[unroll]
 	for (int j = -1; j <= 1; ++j)
 	{
-        [unroll]
+		[unroll]
 		for (int i = -1; i <= 1; ++i)
 		{
-			uint2 cell = (uint2) (p + float2(i, j));
+			float2 cellF = p + float2(i, j);
+			uint2 cell = (uint2) cellF;
 
-            // per-cell random point in cell
 			float2 rnd = Hash02(cell ^ uint2(seed, seed * 1664525u));
-			float2 q = float2(i, j) + rnd - f;
-
+			float2 feature = float2(i, j) + rnd;
+			float2 q = feature - f;
 			float d2 = dot(q, q);
-			best = min(best, d2);
+
+			if (d2 < best1)
+			{
+				best2 = best1;
+				best1 = d2;
+				bestCell = cell;
+				bestPos = cellF + rnd;
+			}
+			else if (d2 < best2)
+			{
+				best2 = d2;
+			}
 		}
 	}
 
-	return sqrt(best);
-}
-
-float WorleyRoundField01(float2 x, uint seed)
-{
-	float f1a = WorleyF1(x, seed ^ 0xA53u);
-
-    // rotate & offset a bit (helps break repetition)
-	const float2x2 R = float2x2(0.80901699f, -0.58778525f,
-                               0.58778525f, 0.80901699f);
-	float2 xr = mul(R, x + 7.13f);
-	float f1b = WorleyF1(xr, seed ^ 0xB71u);
-
-    // combine
-	float f = min(f1a, f1b * 1.05f);
-
-    // normalize-ish
-	return saturate(f * 1.25f);
+	WorleyResult r;
+	r.F1 = sqrt(best1);
+	r.F2 = sqrt(best2);
+	r.SeedCell = bestCell;
+	r.SeedPos = bestPos;
+	return r;
 }
 
 // -----------------------------------------------------------------------------
@@ -320,7 +361,7 @@ float SampleInteraction(float2 worldXZ)
 // -----------------------------------------------------------------------------
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
-    [unroll]
+	[unroll]
 	for (int i = 0; i < 6; ++i)
 	{
 		float4 P = g_FrameCB.FrustumPlanesWS[i];
@@ -372,32 +413,28 @@ bool BallotAny(BallotMask b)
 {
 	return (b.M.x | b.M.y | b.M.z | b.M.w) != 0u;
 }
-
 BallotMask BallotAndNot(BallotMask a, BallotMask b)
 {
 	BallotMask r;
 	r.M = uint4(a.M.x & ~b.M.x, a.M.y & ~b.M.y, a.M.z & ~b.M.z, a.M.w & ~b.M.w);
 	return r;
 }
-
 uint BallotCountBits(BallotMask b)
 {
 	return countbits(b.M.x) + countbits(b.M.y) + countbits(b.M.z) + countbits(b.M.w);
 }
-
 bool BallotTestLane(BallotMask b, uint lane)
 {
 	uint word = lane >> 5;
 	uint bit = lane & 31u;
 
 	uint w =
-        (word == 0u) ? b.M.x :
-        (word == 1u) ? b.M.y :
-        (word == 2u) ? b.M.z : b.M.w;
+		(word == 0u) ? b.M.x :
+		(word == 1u) ? b.M.y :
+		(word == 2u) ? b.M.z : b.M.w;
 
 	return ((w >> bit) & 1u) != 0u;
 }
-
 uint BallotFirstLane(BallotMask b)
 {
 	if (b.M.x != 0u)
@@ -416,7 +453,7 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 
 	uint myBase = 0u;
 
-    [loop]
+	[loop]
 	while (BallotAny(remaining))
 	{
 		uint leaderLane = BallotFirstLane(remaining);
@@ -473,58 +510,35 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 }
 
 // -----------------------------------------------------------------------------
-// PATCH FIELD (ROUND): Worley distance -> patch mask
-// -----------------------------------------------------------------------------
-float ComputePatchMask01(uint speciesId, float2 worldXZ)
-{
-	float4 cp = g_SpeciesClusterParams[speciesId];
-
-	float strength = saturate(cp.x);
-	float scaleM = max(cp.y, 0.001f); // patch size in meters
-	float jitter01 = saturate(cp.z);
-
-	if (strength <= 1e-5f)
-		return 1.0f;
-
-    // noise space where 1 cell ~= 1 patch unit
-	float2 x = worldXZ / scaleM;
-
-    // species-stable seed
-	uint spSeed = WangHash((speciesId + 1u) ^ g_CB.SeedSalt ^ 0xC1D2E3F4u);
-
-    // domain warp in noise space
-	float warpAmp = jitter01 * 0.45f;
-	x = DomainWarp2D(x, warpAmp, spSeed);
-
-	float F = WorleyRoundField01(x, spSeed); // 0..1
-
-	float radius = lerp(0.62f, 0.40f, strength);
-	float softness = lerp(0.18f, 0.08f, strength);
-
-	float M = 1.0f - smoothstep(radius - softness, radius + softness, F);
-
-	float k = lerp(1.0f, 2.2f, strength);
-	M = saturate(pow(M, k));
-
-	return M;
-}
-
-// -----------------------------------------------------------------------------
 // “Point sampling” threshold generator (stable, blue-noise-ish)
 // -----------------------------------------------------------------------------
 float StablePointThreshold01(float2 worldXZ, uint seed)
 {
+	// cell-based stable threshold (no directional bias)
 	const float freq = 0.35f;
-
 	float2 g = worldXZ * freq;
-	int2 ig = int2(floor(g));
 
+	int2 ig = int2(floor(g));
+	float2 f = frac(g);
+
+	// rotate local coords per-cell to avoid axis-aligned artifacts
+	uint h = Hash2i(ig, seed ^ 0xA53A9E37u);
+	float ang = Rand01(h ^ 0xBEEF1234u) * GRASS_TWO_PI;
+	float s = sin(ang), c = cos(ang);
+	float2 fr;
+	fr.x = c * (f.x - 0.5f) - s * (f.y - 0.5f);
+	fr.y = s * (f.x - 0.5f) + c * (f.y - 0.5f);
+	fr += 0.5f;
+
+	// hash threshold from cell + small smooth intra-cell variation (no dot with fixed axis)
 	uint2 cell = uint2(ig) ^ uint2(seed, seed * 1664525u);
 	float base = Hash01(cell);
 
-	float2 f = frac(g);
-	float j = dot(f, float2(0.37f, 0.63f));
-	return saturate(base * 0.85f + j * 0.15f);
+	// use radial-ish term (isotropic)
+	float r = saturate(length(fr - 0.5f.xx) * 1.41421356f); // 0 center .. 1 corners
+	float intra = 1.0f - r; // center slightly favored, but isotropic
+
+	return saturate(base * 0.85f + intra * 0.15f);
 }
 
 // -----------------------------------------------------------------------------
@@ -628,167 +642,111 @@ uint MakeAtlasIndex(uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// Special-first pattern
+// Voronoi cluster -> one species (weight-based), and round-ish mask in cell
 // -----------------------------------------------------------------------------
-bool IsSpecialSpecies(uint s)
+uint PickSpeciesFromCluster(uint clusterHash)
 {
-	return (g_SpeciesFlags[s] & 1u) != 0u;
-}
-
-// Returns:
-//  - outSpecialId: chosen special species (if any)
-//  - outBestScore/outSecondScore: scores in weight space
-//  - outBestMask: patch mask of chosen winner
-//  - outBaseScale: multiplicative scale for base density (<=1) due to all special patches
-bool SelectSpecialPatchWinner(
-    float2 worldXZ,
-    uint seed,
-    out uint outSpecialId,
-    out float outBestScore,
-    out float outSecondScore,
-    out float outBestMask,
-    out float outBaseScale
-)
-{
-	outSpecialId = 0u;
-	outBestScore = -1.0f;
-	outSecondScore = -1.0f;
-	outBestMask = 0.0f;
-	outBaseScale = 1.0f;
-
 	uint num = max(g_CB.NumSpecies, 1u);
+	float total = g_SpeciesWeightPrefix[num - 1u];
+	if (total <= 1e-8f)
+	{
+		// fallback: uniform
+		return WangHash(clusterHash) % num;
+	}
 
-    // totalW over ONLY specials (computed on the fly)
-	float totalW = 0.0f;
+	float r = Rand01(clusterHash ^ 0x13579BDFu) * total;
 
-	uint salt = WangHash(seed ^ 0x51515151u);
-
-    [loop]
+	[loop]
 	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
 	{
 		if (s >= num)
 			break;
-		if (!IsSpecialSpecies(s))
-			continue;
-
-		float W = max(GetSpeciesWeight(s), 0.0f);
-		if (W <= 0.0f)
-			continue;
-
-		totalW += W;
-
-		float4 cp = g_SpeciesClusterParams[s];
-		float strength = saturate(cp.x);
-
-        // Special patch mask MUST be meaningful (even if strength small)
-		float M = ComputePatchMask01(s, worldXZ);
-
-        // score: weight * mask (patch membership)
-        // (strength influences mask shape already; score uses M directly)
-		float score = W * M;
-
-        // tiny tie-break
-		score += (Rand01(salt ^ (s * 0x9E3779B9u)) - 0.5f) * 1e-7f;
-
-        // base density suppression field:
-        // cp.w is BaseSuppressInPatch01: 0=no suppress, 1=full suppress at mask==1
-		float suppress = saturate(cp.w);
-		float scale = 1.0f - suppress * M; // inside patch => smaller
-		outBaseScale = min(outBaseScale, scale);
-
-		if (score > outBestScore)
-		{
-			outSecondScore = outBestScore;
-			outBestScore = score;
-			outSpecialId = s;
-			outBestMask = M;
-		}
-		else if (score > outSecondScore)
-		{
-			outSecondScore = score;
-		}
+		if (r <= g_SpeciesWeightPrefix[s])
+			return s;
 	}
-
-    // If no specials found, just return false (but baseScale might remain 1)
-	if (totalW <= 1e-8f)
-		return false;
-
-    // Need confident winner
-	if (outBestScore < SP_MIN_BEST_SCORE)
-		return false;
-
-	float gap = max(SP_GAP_ABS_MIN, SP_GAP_REL * outBestScore);
-	if ((outBestScore - max(outSecondScore, 0.0f)) < gap)
-		return false;
-
-    // Must be sufficiently inside patch, otherwise treat as outside
-	if (outBestMask < SP_MIN_MASK_TO_SPAWN)
-		return false;
-
-	return true;
+	return num - 1u;
 }
 
-// Base winner: choose a base species (non-special) by max(weight)
-// (you can extend later: multiply micro masks / biome constraints here)
-bool SelectBaseWinner(
-    float2 worldXZ,
-    uint seed,
-    out uint outBaseSpeciesId,
-    out float outBestScore
-)
+struct ClusterEvalOut
 {
-	outBaseSpeciesId = 0u;
-	outBestScore = -1.0f;
+	uint SpeciesId;
+	float Mask; // 0..1
+	float CellEdgeKeep; // 0..1 (0 near boundary)
+};
 
-	uint num = max(g_CB.NumSpecies, 1u);
+ClusterEvalOut EvaluateVoronoiCluster(float2 worldXZ, uint seed /*unused*/)
+{
+	ClusterEvalOut o;
+	o.SpeciesId = 0u;
+	o.Mask = 0.0f;
+	o.CellEdgeKeep = 1.0f;
 
-	uint salt = WangHash(seed ^ 0x61616161u);
+	const float MacroCellMeters = 6.0f;
+	uint vorSeed = WangHash(g_CB.SeedSalt ^ 0xCAFEBABEu);
 
-    [loop]
-	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
-	{
-		if (s >= num)
-			break;
-		if (IsSpecialSpecies(s))
-			continue;
+	// 0) "종 결정" 좌표: 절대 회전/워프 금지 (방향성 방지)
+	float2 x_id = worldXZ / max(MacroCellMeters, 1e-3f);
 
-		float W = max(GetSpeciesWeight(s), 0.0f);
-		if (W <= 0.0f)
-			continue;
+	// 1) Voronoi for identity
+	WorleyResult wr0 = WorleyF1F2_WithSeed(x_id, vorSeed);
 
-		float score = W;
+	uint clusterHash = Hash2u(wr0.SeedCell ^ uint2(vorSeed, vorSeed * 1664525u));
+	uint spId = PickSpeciesFromCluster(clusterHash);
 
-        // tiny tie-break
-		score += (Rand01(salt ^ (s * 0x9E3779B9u)) - 0.5f) * 1e-7f;
+	float4 cp = g_SpeciesClusterParams[spId];
+	float strength = saturate(cp.x);
+	float jitter01 = saturate(cp.z);
 
-		if (score > outBestScore)
-		{
-			outBestScore = score;
-			outBaseSpeciesId = s;
-		}
-	}
+	// 2) "마스크/경계" 좌표: 여기서만 변형 (cell 고정 변형)
+	uint cellSeed = WangHash(clusterHash ^ 0x9E3779B9u);
 
-	return (outBestScore > BS_MIN_BEST_SCORE);
+	float2 x_mask = x_id;
+
+	// (중요) 전역 고정 회전 제거! 대신 "cell마다 다른 회전"만 사용
+	x_mask = Rotate2D(x_mask, Rand01(cellSeed ^ 0xABCDu) * GRASS_TWO_PI);
+
+	// cell 기반 워프 (같은 cell이면 동일 -> 클러스터 유지)
+	x_mask = DomainWarp2D_Isotropic(x_mask, jitter01 * 0.22f, cellSeed);
+
+	// 3) mask Voronoi는 변형 좌표에서 평가
+	WorleyResult wr = WorleyF1F2_WithSeed(x_mask, vorSeed);
+
+	float edge = saturate(wr.F2 - wr.F1);
+	float gapW = max(VC_GAP_ABS_MIN, VC_GAP_REL * lerp(0.06f, 0.14f, strength));
+	float edgeKeep = smoothstep(gapW, gapW * 2.0f, edge);
+
+	float radius = lerp(0.84f, 0.58f, strength);
+	float softness = lerp(0.24f, 0.12f, strength);
+
+	float core = 1.0f - smoothstep(radius - softness, radius + softness, wr.F1);
+	float k = lerp(1.0f, 2.4f, strength);
+	float M = saturate(pow(saturate(core), k));
+
+	M *= lerp(MIN_FILL_IN_CELL, 1.0f, edgeKeep);
+
+	o.SpeciesId = spId;
+	o.Mask = saturate(M);
+	o.CellEdgeKeep = edgeKeep;
+	return o;
 }
-
 // -----------------------------------------------------------------------------
-// EvaluateSpawn: special-first then base fill
+// EvaluateSpawn: Voronoi cell -> 1 species, spawn prob by mask
 // -----------------------------------------------------------------------------
 bool EvaluateSpawn(
-    ChunkContext ctx,
-    uint poolBase,
-    uint sampleIndex,
-    out uint outTypeId,
-    out uint outLodIndex,
-    out float outPress01,
-    out float outScale,
-    out float outYaw,
-    out float outPitch,
-    out float outBend01,
-    out uint outSeed8,
-    out uint outVariantId,
-    out uint outAtlasIndex,
-    out float3 outPosWS
+	ChunkContext ctx,
+	uint poolBase,
+	uint sampleIndex,
+	out uint outTypeId,
+	out uint outLodIndex,
+	out float outPress01,
+	out float outScale,
+	out float outYaw,
+	out float outPitch,
+	out float outBend01,
+	out uint outSeed8,
+	out uint outVariantId,
+	out uint outAtlasIndex,
+	out float3 outPosWS
 )
 {
 	outTypeId = 0u;
@@ -818,60 +776,23 @@ bool EvaluateSpawn(
 
 	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u));
 
-    // --- Special-first selection ---
-	uint spId;
-	float spBest, spSecond, spMask, baseScale;
-	bool hasSpecial = SelectSpecialPatchWinner(posXZ, seed, spId, spBest, spSecond, spMask, baseScale);
+	// 1) Voronoi cluster evaluation
+	ClusterEvalOut ce = EvaluateVoronoiCluster(posXZ, seed);
+	uint chosenSpecies = ce.SpeciesId;
 
-    // Base density suppression inside special patches (even if special fails to spawn)
-	float baseD = D * saturate(baseScale);
+	// 2) Spawn probability inside cell
+	// - D controls overall density
+	// - ce.Mask gives round-ish dense core and thinner edges
+	// - boost to avoid sparse cluster look
+	float prob = saturate(D * ce.Mask * CLUSTER_SPAWN_BOOST);
+	if (prob <= 0.001f)
+		return false;
 
-    // Compute totalW across all species for normalization fallback (keeps stable)
-	uint num = max(g_CB.NumSpecies, 1u);
-	float totalW_all = g_SpeciesWeightPrefix[num - 1u];
-	float invTotalW_all = (totalW_all > 1e-8f) ? rcp(totalW_all) : 0.0f;
+	float th = StablePointThreshold01(posXZ, seed ^ 0xC0FFEEu);
+	if (th > prob)
+		return false;
 
-    // Try spawn special if we have a confident patch winner
-	uint chosenSpecies = INVALID_U32;
-
-	if (hasSpecial)
-	{
-		float specialDensity = D;
-		float spProb = saturate(specialDensity * spMask); 
-
-		if (spProb > 0.001f)
-		{
-			float th = StablePointThreshold01(posXZ, seed ^ 0xBADC0DEu);
-			if (th <= spProb)
-			{
-				chosenSpecies = spId;
-			}
-		}
-	}
-
-    // If no special instance, fill with base
-	if (chosenSpecies == INVALID_U32)
-	{
-		uint baseId;
-		float baseBest;
-		if (!SelectBaseWinner(posXZ, seed, baseId, baseBest))
-			return false;
-
-        // Base spawn prob:
-        // - use base density suppressed in patch zones
-        // - normalized by totalW_all (simple, stable)
-		float baseProb = saturate(baseD * baseBest * invTotalW_all);
-		if (baseProb <= 0.001f)
-			return false;
-
-		float th = StablePointThreshold01(posXZ, seed ^ 0xC0FFEEu);
-		if (th > baseProb)
-			return false;
-
-		chosenSpecies = baseId;
-	}
-
-    // Map species -> variation -> type
+	// Map species -> variation -> type
 	uint varId = PickVariationUniform(chosenSpecies, seed ^ 0xBBBBu);
 	uint typeId = MapSpeciesVariationToTypeId(chosenSpecies, varId);
 
@@ -892,8 +813,8 @@ bool EvaluateSpawn(
 	float distSqr = dot(dxz, dxz);
 
 	uint lodIndex =
-        (distSqr < ctx.Lod0Sqr) ? 0u :
-        (distSqr < ctx.Lod1Sqr) ? 1u : 2u;
+		(distSqr < ctx.Lod0Sqr) ? 0u :
+		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
 
 	float scaleT = Rand01(seed ^ 0x5555u);
 	float scale = lerp(minScale, maxScale, scaleT);
@@ -1099,10 +1020,10 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s,
-                           typeId, lodIndex,
-                           press01, scale, yaw, pitch, bend01,
-                           seed8, variantId, atlasIndex,
-                           posWS))
+		                   typeId, lodIndex,
+		                   press01, scale, yaw, pitch, bend01,
+		                   seed8, variantId, atlasIndex,
+		                   posWS))
 			continue;
 
 		uint idx = typeId * 3u + lodIndex;
@@ -1169,16 +1090,16 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s,
-                           typeId, lodIndex,
-                           press01, scale, yaw, pitch, bend01,
-                           seed8, variantId, atlasIndex,
-                           posWS))
+		                   typeId, lodIndex,
+		                   press01, scale, yaw, pitch, bend01,
+		                   seed8, variantId, atlasIndex,
+		                   posWS))
 			continue;
 
 		uint meshId =
-            (lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
-            (lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-                               g_SpeciesLOD2MeshId[typeId];
+			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
+			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
+			                   g_SpeciesLOD2MeshId[typeId];
 
 		WaveReserveMeshCounter_Grouped(meshId);
 
