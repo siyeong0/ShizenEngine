@@ -1,3 +1,11 @@
+// ============================================================================
+// GrassGenerateInstances.hlsl
+// - Weighted species pick + uniform variation pick
+// - Per-type params (minScale/maxScale/bendMin/bendMax) come from SRV table
+// - Global LOD distances are in constants (NOT per-species anymore)
+// - Removed: SpawnProb (fixed 1.0), SlopeToDensity (unused)
+// ============================================================================
+
 #include "Common.hlsli"
 #include "TerrainCommon.hlsli"
 #include "GrassCommon.hlsli"
@@ -69,12 +77,18 @@ StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 Texture2D<float> g_InteractionField;
 
 // -----------------------------------------------------------------------------
-// NEW: Species weighted selection + variation mapping tables (SRV)
+// Species weighted selection + variation mapping tables (SRV)
 // -----------------------------------------------------------------------------
 StructuredBuffer<float> g_SpeciesWeightPrefix; // inclusive prefix, size >= NumSpecies
 StructuredBuffer<uint> g_SpeciesVarOffsets; // size >= NumSpecies+1
 StructuredBuffer<uint> g_SpeciesVarCounts; // size >= NumSpecies
 StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat map: index = varOffsets[sp] + var -> typeId
+
+// -----------------------------------------------------------------------------
+// NEW: Per-type parameters table (SRV)
+// typeParams0[typeId] = float4(minScale, maxScale, bendMin, bendMax)
+// -----------------------------------------------------------------------------
+StructuredBuffer<float4> g_TypeParams0;
 
 // -----------------------------------------------------------------------------
 // Constants / helpers
@@ -350,14 +364,13 @@ uint MakeAtlasIndex(uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// NEW: Weighted species pick + uniform variation pick
+// Weighted species pick + uniform variation pick
 // -----------------------------------------------------------------------------
 uint PickSpeciesWeighted(uint seed)
 {
 	uint num = max(g_CB.NumSpecies, 1u);
-	// inclusive prefix; total weight is last element
 	float total = g_SpeciesWeightPrefix[num - 1u];
-	// if total is 0, fall back to uniform
+
 	if (total <= 1e-8f)
 	{
 		return WangHash(seed) % num;
@@ -365,7 +378,6 @@ uint PickSpeciesWeighted(uint seed)
 
 	float r = Rand01(seed ^ 0x5151u) * total;
 
-	// linear scan (NumSpecies <= 256, cheap and deterministic)
 	[unroll]
 	for (uint i = 0u; i < MAX_GRASS_SPECIES; ++i)
 	{
@@ -542,6 +554,12 @@ bool EvaluateSpawn(
 	if (typeId >= g_CB.NumGrassTypes)
 		return false;
 
+	float4 typeP = g_TypeParams0[typeId];
+	float minScale = typeP.x;
+	float maxScale = max(typeP.y, minScale);
+	float bendMin = typeP.z;
+	float bendMax = max(typeP.w, bendMin);
+
 	// Deterministic seed based only on chunk + sample index
 	uint chunkSeed = Hash2i(ctx.ChunkCoord, g_CB.SeedSalt);
 	uint seed = WangHash(chunkSeed ^ (sampleIndex * 0x9E3779B9u));
@@ -557,7 +575,8 @@ bool EvaluateSpawn(
 	if (instDensity <= DENSITY_DISABLE_THRESHOLD)
 		return false;
 
-	float spawnGateBase = saturate(g_CB.SpawnProb * instDensity);
+	// SpawnProb removed: fixed to 1.0
+	float spawnGateBase = saturate(instDensity);
 	if (Rand01(seed ^ 0x4444u) > spawnGateBase)
 		return false;
 
@@ -587,7 +606,7 @@ bool EvaluateSpawn(
 		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
 
 	float scaleT = Rand01(seed ^ 0x5555u);
-	float scale = lerp(g_CB.MinScale, g_CB.MaxScale, scaleT);
+	float scale = lerp(minScale, maxScale, scaleT);
 
 	float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
 
@@ -600,7 +619,7 @@ bool EvaluateSpawn(
 	float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
 	float pitch = yp.y * align;
 
-	float bend01 = lerp(g_CB.BendStrengthMin, g_CB.BendStrengthMax, Rand01(seed ^ 0x8888u));
+	float bend01 = lerp(bendMin, bendMax, Rand01(seed ^ 0x8888u));
 
 	uint seed8 = MakeSeed8(seed ^ 0x1234u);
 	uint variantId = MakeVariantId(seed);
@@ -668,7 +687,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 
 // -----------------------------------------------------------------------------
 // Entry B) FillNewPoolsCS
-// - NOW: weight(species) -> uniform(variation) -> typeId mapping
+// - weight(species) -> uniform(variation) -> typeId mapping
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -747,14 +766,12 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 
 		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
 
-		// --- NEW: weighted species -> uniform variation -> mapped typeId ---
 		uint speciesId = PickSpeciesWeighted(seed ^ 0xAAAAu);
 		speciesId = min(speciesId, max(g_CB.NumSpecies, 1u) - 1u);
 
 		uint varId = PickVariationUniform(speciesId, seed ^ 0xBBBBu);
 		uint typeId = MapSpeciesVariationToTypeId(speciesId, varId);
 
-		// safety clamp
 		typeId = (typeId < numTypes) ? typeId : (typeId % numTypes);
 
 		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
@@ -770,7 +787,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 }
 
 // -----------------------------------------------------------------------------
-// Entry B-1) ClearSpeciesCountersCS  (buffer names kept)
+// Entry B-1) ClearSpeciesCountersCS
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)

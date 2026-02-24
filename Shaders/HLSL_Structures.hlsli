@@ -225,6 +225,12 @@ struct GrassBillboardInstance
 #define MAX_GRASS_SPECIES 256
 #endif
 
+// ============================================================================
+// HLSL_Structures.hlsli (ONLY the GrassGenConstants part)
+// - Global LOD distances here
+// - Removed: SpawnProb, SlopeToDensity
+// - Per-type params come from SRV g_TypeParams0
+// ============================================================================
 struct GrassGenConstants
 {
 	// ---- selection domain ----
@@ -245,28 +251,23 @@ struct GrassGenConstants
 	float NormalAlignStrength;
 	float _pad0;
 
-	// ---- LOD ----
+	// ---- LOD (GLOBAL) ----
 	float LOD0Distance;
 	float LOD1Distance;
 	float LodHysteresis; // kept for future hysteresis usage
 	float _pad1;
 
-	// ---- scale/spawn ----
-	float MinScale;
-	float MaxScale;
-	float SpawnProb;
-	float BendStrengthMin;
-
-	float BendStrengthMax;
+	// ---- density shaping ----
 	float DensityContrast;
 	float DensityPow;
-	float SlopeToDensity;
+	float _pad2;
+	float _pad3;
 
 	// ---- height masks (normalized 0..1) ----
 	float HeightMinN;
 	float HeightMaxN;
 	float HeightFadeN;
-	float _pad2;
+	float _pad4;
 
 	// ---- interaction ring buffer ----
 	float2 InteractionOriginXZ;

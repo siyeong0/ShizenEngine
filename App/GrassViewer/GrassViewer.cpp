@@ -532,80 +532,36 @@ namespace shz
 					gd.Variations.push_back(&m_pRenderer->CreateStaticMeshRenderData(grassMesh));
 				};
 
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A.fbx");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A1.fbx");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A2.fbx");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A3.fbx");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Grass_small_clump_A4.fbx");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Dandelion_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Dandelion_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Dandelion_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Dandelion_04.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Ezepnik_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Ezepnik_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Ezepnik_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Ezepnik_04.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Ezepnik_05.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Fern_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Fern_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Fern_03.gltf");
-
-				//GrassDesc assembleGrassDesc;
-				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_01.gltf");
-				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_02.gltf");
-				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_03.gltf");
-				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_04.gltf");
-				//addGrass(assembleGrassDesc, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Field_Assemble_05.gltf");
-				//m_pGrassSystem->AddGrassDesc(assembleGrassDesc);
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_04.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_05.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Plantain_06.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_06.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_07.gltf");
-
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_01.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_02.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_03.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_04.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_05.gltf");
-				//addGrass("C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Short_06.gltf");
-
-				GrassDesc shortReed;
-				shortReed.Weight = 1.5f;
-				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
-				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_02.gltf");
-				addGrass(shortReed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_03.gltf");
-				m_pGrassSystem->AddGrassDesc(shortReed);
-
 				GrassDesc reed;
-				reed.Weight = 0.1f;
+				reed.MinScale = 0.15f;
+				reed.MaxScale = 0.25f;
+				reed.Weight = 0.5f;
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_02.gltf");
+				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_03.gltf");
 				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
 				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
 				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
 				addGrass(reed, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
 				m_pGrassSystem->AddGrassDesc(reed);
+
+				GrassDesc realGrass;
+				realGrass.MinScale = 0.08f;
+				realGrass.MaxScale = 0.19f;
+				realGrass.Weight = 0.5f;
+				addGrass(realGrass, "C:/Dev/ShizenEngine/Assets/Grass/realistics_grass_07/scene.gltf");
+				m_pGrassSystem->AddGrassDesc(realGrass);
+
+				GrassDesc daisy;
+				daisy.MinScale = 0.15f;
+				daisy.MaxScale = 0.20f;
+				daisy.Weight = 0.1f;
+				addGrass(daisy, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
+				addGrass(daisy, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
+				addGrass(daisy, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
+				m_pGrassSystem->AddGrassDesc(daisy);
+
+
 			}
 
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
