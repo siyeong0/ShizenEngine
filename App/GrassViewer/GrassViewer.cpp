@@ -534,19 +534,18 @@ namespace shz
 
 				// Grass
 				{
-				GrassDesc gd;
-				gd.Weight = 0.4f;
-				gd.MinScale = 0.20f;
-				gd.MaxScale = 0.30f;
-				gd.ClusterStrength = 0.20f; 
-				gd.ClusterScale = 2.0f;
-				gd.ClusterJitter = 0.05f;
+					GrassDesc gd;
+					gd.Weight = 0.1f;
+					gd.MinScale = 0.20f;
+					gd.MaxScale = 0.30f;
+					gd.ClusterStrength = 0.20f;
+					gd.ClusterScale = 2.0f;
+					gd.ClusterJitter = 0.05f;
 
-				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_1.fbx");
-				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_2.fbx");
-				addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_3.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_1.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_3.fbx");
 
-				m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				// Reed (tall, wetland-ish clumps)
