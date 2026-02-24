@@ -33,7 +33,7 @@ static const float FADE_END_METERS = 140.0f; // Fully faded micro detail
 static const float MIP_BIAS_NEAR = 0.0f;
 static const float MIP_BIAS_FAR = 2.0f;
 
-static const float MACRO_TINT_STRENTH_BASE = 0.25f;
+static const float MACRO_TINT_STRENTH_BASE = 0.05f;
 
 // -----------------------------------------------------------------------------
 // POM controls (applies to soil/rock/gravel)

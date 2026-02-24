@@ -173,8 +173,8 @@ struct TerrainDrawConstants
 // ----------------------------------------------
 // Indirect
 // ----------------------------------------------
-#define MAX_NUM_INDIRECTS 1024
-#define MAX_NUM_INDIRECT_MESHES 2048
+#define MAX_NUM_INDIRECTS 2048
+#define MAX_NUM_INDIRECT_MESHES 8192
 
 struct IndirectArgsTemplate
 {
@@ -233,49 +233,38 @@ struct GrassBillboardInstance
 // ============================================================================
 struct GrassGenConstants
 {
-	// ---- selection domain ----
-	uint NumSpecies; // number of base species (GrassDesc count)
-	uint NumGrassTypes; // number of flattened types (= sum of variations over species)
+	uint NumSpecies; // base species count
+	uint NumGrassTypes; // flattened type count (sum variations)
 	uint SamplesPerChunk;
 	int ChunkHalfExtent;
 
-	// ---- pool/chunk ----
 	uint ChunkVisibleDim; // dim = 2*ChunkHalfExtent
 	float ChunkSize;
 	float SpawnRadius;
 	float Jitter;
 
-	// ---- deterministic ----
 	uint SeedSalt;
 	float YOffset;
 	float NormalAlignStrength;
 	float _pad0;
 
-	// ---- LOD (GLOBAL) ----
 	float LOD0Distance;
 	float LOD1Distance;
-	float LodHysteresis; // kept for future hysteresis usage
+	float LodHysteresis;
 	float _pad1;
 
-	// ---- density shaping ----
 	float DensityContrast;
 	float DensityPow;
 	float _pad2;
 	float _pad3;
 
-	// ---- height masks (normalized 0..1) ----
-	float HeightMinN;
-	float HeightMaxN;
-	float HeightFadeN;
-	float _pad4;
-
-	// ---- interaction ring buffer ----
 	float2 InteractionOriginXZ;
 	float2 InteractionInvWorldSizeXZ;
 
-	uint2 InteractionTexelOrigin; // ring-buffer texel origin
+	uint2 InteractionTexelOrigin;
 	float2 InteractionInvFieldSize;
 };
+
 
 // ----------------------------------------------
 // Grass rendering constants

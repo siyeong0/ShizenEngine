@@ -1,9 +1,16 @@
 // ============================================================================
 // GrassGenerateInstances.hlsl
-// - Weighted species pick + uniform variation pick
-// - Per-type params (minScale/maxScale/bendMin/bendMax) come from SRV table
-// - Global LOD distances are in constants (NOT per-species anymore)
-// - Removed: SpawnProb (fixed 1.0), SlopeToDensity (unused)
+// - ¡°Patch mask + point sampling¡± (canonical)
+// - ROUND patches: Worley(Cellular) distance field (no noise textures)
+// - Cluster params (per your spec):
+//     ClusterStrength : 0..1 (0 disables)
+//     ClusterScale    : patch size in meters (bigger => bigger patches, lower freq)
+//     ClusterJitter   : 0..1 domain warp amount relative to patch size
+//
+// - Species selection: MUTUAL EXCLUSION (winner-takes-all + boundary gap)
+//     * Choose species by max(score = W * factor)
+//     * Kill near boundaries: if (best - second) < gap => reject (no spawn)
+//     * Spawn probability uses baseDensity * best (normalized by totalW)
 // ============================================================================
 
 #include "Common.hlsli"
@@ -38,37 +45,30 @@ struct PoolDirty
 	uint3 _pad;
 };
 
-// -----------------------------------------------------------------------------
-// UAVs / SRVs
-// -----------------------------------------------------------------------------
 RWStructuredBuffer<VisibleCell> g_VisibleCellTable;
 RWStructuredBuffer<PoolChunkCoord> g_PoolChunkCoord;
 RWStructuredBuffer<PoolDirty> g_PoolDirty;
 
-// Pool entries
 struct PoolEntry
 {
 	float3 Position;
-	uint GrassTypeId; // == flattened typeId
+	uint Seed; // per-point seed (NOT typeId)
 };
 RWStructuredBuffer<PoolEntry> g_PoolPositions;
 
-// Rendering outputs (packed per typeId/LOD via prefix sums)
+// Outputs (STATIC variables in PSO on C++ side)
 RWStructuredBuffer<GrassMeshInstance> g_OutInstancesLOD0;
 RWStructuredBuffer<GrassCrossPlaneInstance> g_OutInstancesLOD1;
 RWStructuredBuffer<GrassBillboardInstance> g_OutInstancesLOD2;
 
-// Per-mesh counter (IndirectArgs mesh-based).
-// Layout: uint counter per meshId at byteOffset = meshId*4.
+// Per-mesh counter (ByteAddress) : meshId*4 = uint counter
 RWByteAddressBuffer g_MeshInstanceCountBuffer;
 
 // Type/LOD packing buffers
-// Layout: uint[MaxTypes * 3], idx = typeId*3 + lod
-RWStructuredBuffer<uint> g_SpeciesLodCounts; // (buffer name kept for minimal C++ churn)
+RWStructuredBuffer<uint> g_SpeciesLodCounts;
 RWStructuredBuffer<uint> g_SpeciesLodOffsets;
 RWStructuredBuffer<uint> g_SpeciesLodWriteCounters;
 
-// TypeId -> MeshId lookup (SRV)
 StructuredBuffer<uint> g_SpeciesLOD0MeshId;
 StructuredBuffer<uint> g_SpeciesLOD1MeshId;
 StructuredBuffer<uint> g_SpeciesLOD2MeshId;
@@ -76,36 +76,40 @@ StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 // Inputs
 Texture2D<float> g_InteractionField;
 
-// -----------------------------------------------------------------------------
-// Species weighted selection + variation mapping tables (SRV)
-// -----------------------------------------------------------------------------
-StructuredBuffer<float> g_SpeciesWeightPrefix; // inclusive prefix, size >= NumSpecies
+// Species selection tables (inclusive prefix)
+StructuredBuffer<float> g_SpeciesWeightPrefix; // prefix sum of Weight (size >= NumSpecies)
+
+// Species variation tables
 StructuredBuffer<uint> g_SpeciesVarOffsets; // size >= NumSpecies+1
 StructuredBuffer<uint> g_SpeciesVarCounts; // size >= NumSpecies
-StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat map: index = varOffsets[sp] + var -> typeId
+StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat index -> typeId
 
-// -----------------------------------------------------------------------------
-// NEW: Per-type parameters table (SRV)
-// typeParams0[typeId] = float4(minScale, maxScale, bendMin, bendMax)
-// -----------------------------------------------------------------------------
+// Per-type params (minScale,maxScale,bendMin,bendMax)
 StructuredBuffer<float4> g_TypeParams0;
 
+// Per-species clustering params
+// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, _)
+StructuredBuffer<float4> g_SpeciesClusterParams;
+
 // -----------------------------------------------------------------------------
-// Constants / helpers
+// Constants
 // -----------------------------------------------------------------------------
 static const uint INVALID_U32 = 0xFFFFFFFFu;
 static const float INVALID_NAN = asfloat(0x7FC00000u);
 
-// Density / sampling tuning
 static const float CHUNK_DENSITY_MIP = 1.0f;
 static const float INSTANCE_DENSITY_MIP = 0.0f;
 static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 
-// Height bounds for conservative chunk AABB (tune to your world)
 static const float CHUNK_AABB_HALF_Y = 20.0f;
 
+// Mutual exclusion tuning (shader-only; tweak these)
+static const float ME_MIN_BEST_SCORE = 1e-5f; // reject if best is basically zero
+static const float ME_GAP_ABS_MIN = 0.015f; // absolute boundary gap in score space
+static const float ME_GAP_REL = 0.20f; // relative gap: gap must be >= ME_GAP_REL * best
+
 // -----------------------------------------------------------------------------
-// Random / Hash (deterministic)
+// Hash / random
 // -----------------------------------------------------------------------------
 uint WangHash(uint seed)
 {
@@ -127,6 +131,119 @@ uint Hash2i(int2 v, uint salt)
 	uint x = (uint) v.x;
 	uint y = (uint) v.y;
 	return (x * 73856093u) ^ (y * 19349663u) ^ salt;
+}
+
+uint Hash2u(uint2 p)
+{
+	uint h = p.x * 1664525u + 1013904223u;
+	h ^= p.y * 22695477u + 1u;
+	h = WangHash(h);
+	return h;
+}
+
+float Hash01(uint2 p)
+{
+	return (Hash2u(p) & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+}
+
+float2 Hash02(uint2 p)
+{
+	uint h0 = Hash2u(p);
+	uint h1 = WangHash(h0 ^ 0x9E3779B9u);
+	float a = (h0 & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+	float b = (h1 & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+	return float2(a, b);
+}
+
+float2 Smooth2(float2 t)
+{
+	// smootherstep
+	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// -----------------------------------------------------------------------------
+// Tiny procedural value noise (ONLY for mild domain warp)
+// -----------------------------------------------------------------------------
+float ValueNoise2D(float2 x, uint seed)
+{
+	float2 p = floor(x);
+	float2 f = frac(x);
+
+	uint2 i00 = (uint2) p + uint2(0, 0);
+	uint2 i10 = (uint2) p + uint2(1, 0);
+	uint2 i01 = (uint2) p + uint2(0, 1);
+	uint2 i11 = (uint2) p + uint2(1, 1);
+
+	float v00 = Hash01(i00 ^ uint2(seed, seed * 1664525u));
+	float v10 = Hash01(i10 ^ uint2(seed, seed * 1664525u));
+	float v01 = Hash01(i01 ^ uint2(seed, seed * 1664525u));
+	float v11 = Hash01(i11 ^ uint2(seed, seed * 1664525u));
+
+	float2 u = Smooth2(f);
+
+	float a = lerp(v00, v10, u.x);
+	float b = lerp(v01, v11, u.x);
+	return lerp(a, b, u.y);
+}
+
+float2 DomainWarp2D(float2 x, float warpAmp, uint seed)
+{
+	if (warpAmp <= 0.0f)
+		return x;
+
+	// VERY low freq to avoid grid-looking artifacts
+	float wx = ValueNoise2D(x * 0.21f, seed ^ 0x1111u);
+	float wz = ValueNoise2D(x * 0.21f + 13.37f, seed ^ 0x2222u);
+
+	float2 w = (float2(wx, wz) * 2.0f - 1.0f) * warpAmp;
+	return x + w;
+}
+
+// -----------------------------------------------------------------------------
+// WORLEY(Cellular) distance field for round patches
+// -----------------------------------------------------------------------------
+float WorleyF1(float2 x, uint seed)
+{
+	float2 p = floor(x);
+	float2 f = frac(x);
+
+	float best = 1e9f;
+
+	[unroll]
+	for (int j = -1; j <= 1; ++j)
+	{
+		[unroll]
+		for (int i = -1; i <= 1; ++i)
+		{
+			uint2 cell = (uint2) (p + float2(i, j));
+
+			// per-cell random point in cell
+			float2 rnd = Hash02(cell ^ uint2(seed, seed * 1664525u));
+			float2 q = float2(i, j) + rnd - f;
+
+			float d2 = dot(q, q);
+			best = min(best, d2);
+		}
+	}
+
+	return sqrt(best);
+}
+
+float WorleyRoundField01(float2 x, uint seed)
+{
+	float f1a = WorleyF1(x, seed ^ 0xA53u);
+
+	// rotate & offset a bit (helps break repetition)
+	const float2x2 R = float2x2(0.80901699f, -0.58778525f,
+	                           0.58778525f, 0.80901699f);
+	float2 xr = mul(R, x + 7.13f);
+	float f1b = WorleyF1(xr, seed ^ 0xB71u);
+
+	// combine
+	float f = min(f1a, f1b * 1.05f);
+
+	// normalize-ish
+	return saturate(f * 1.25f);
 }
 
 // -----------------------------------------------------------------------------
@@ -154,16 +271,14 @@ bool ClampChunkToHeightfield(inout float2 chunkOriginXZ, float chunkSize)
 	float2 e = o + chunkSize.xx;
 
 	if (e.x < hfMin.x || e.y < hfMin.y || o.x > hfMax.x || o.y > hfMax.y)
-	{
 		return false;
-	}
 
 	chunkOriginXZ = clamp(chunkOriginXZ, hfMin - chunkSize.xx, hfMax);
 	return true;
 }
 
 // -----------------------------------------------------------------------------
-// Height / Density / Interaction sampling
+// Density / interaction
 // -----------------------------------------------------------------------------
 float RemapDensity(float d, float contrast01)
 {
@@ -194,27 +309,8 @@ float SampleInteraction(float2 worldXZ)
 	return g_InteractionField.SampleLevel(g_LinearWrapSampler, uv, 0.0f).r;
 }
 
-float ComputeHeightMask(float hN)
-{
-	float hMinN = g_CB.HeightMinN;
-	float hMaxN = g_CB.HeightMaxN;
-	float hFadeN = max(g_CB.HeightFadeN, 1e-6f);
-
-	if (hMaxN <= hMinN)
-	{
-		hMinN = 0.0f;
-		hMaxN = 1.0f;
-		hFadeN = 0.03f;
-	}
-
-	float a = smoothstep(hMinN, hMinN + hFadeN, hN);
-	float b = 1.0f - smoothstep(hMaxN - hFadeN, hMaxN, hN);
-
-	return saturate(a * b);
-}
-
 // -----------------------------------------------------------------------------
-// Frustum culling (AABB vs 6 planes)
+// Frustum culling
 // -----------------------------------------------------------------------------
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
@@ -231,16 +327,29 @@ bool AabbInsideFrustum(float3 bmin, float3 bmax)
 		v.z = (n.z >= 0.0f) ? bmax.z : bmin.z;
 
 		if (dot(n, v) + d < 0.0f)
-		{
 			return false;
-		}
 	}
-
 	return true;
 }
 
+bool GrassInstanceAabbInsideFrustum(float3 posWS, float scale)
+{
+	float halfXZ = 0.5 * scale;
+	float minY = -0.05 * scale;
+	float maxY = 1.05 * scale;
+
+	float3 bmin = posWS + float3(-halfXZ, minY, -halfXZ);
+	float3 bmax = posWS + float3(halfXZ, maxY, halfXZ);
+
+	float pad = 0.5f * scale;
+	bmin -= pad.xxx;
+	bmax += pad.xxx;
+
+	return AabbInsideFrustum(bmin, bmax);
+}
+
 // -----------------------------------------------------------------------------
-// Distance scaling (stable thinning gate, NOT truncation)
+// Distance thinning gate (stable)
 // -----------------------------------------------------------------------------
 float ComputeDistanceKeep01(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 {
@@ -250,12 +359,11 @@ float ComputeDistanceKeep01(float distSqr, float lod0Sqr, float spawnRadiusSqr)
 
 	float t = (dist - lod0) / max(spawnR - lod0, 1e-6f);
 	t = saturate(t);
-
 	return 1.0f - t;
 }
 
 // -----------------------------------------------------------------------------
-// Mesh counter reserve helpers (wave optimized, grouped by meshId)
+// Wave mesh counter reserve helpers (grouped by meshId)
 // -----------------------------------------------------------------------------
 struct BallotMask
 {
@@ -337,9 +445,7 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 		base = WaveReadLaneAt(base, leaderLane);
 
 		if (BallotTestLane(group, lane))
-		{
 			myBase = base;
-		}
 
 		remaining = BallotAndNot(remaining, group);
 	}
@@ -348,47 +454,20 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 }
 
 // -----------------------------------------------------------------------------
-// Per-instance random helpers (deterministic)
+// Species weights from prefix table
 // -----------------------------------------------------------------------------
-uint MakeSeed8(uint seed)
+float GetSpeciesWeight(uint s)
 {
-	return (WangHash(seed) >> 24) & 0xFFu;
-}
-uint MakeVariantId(uint seed)
-{
-	return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
-}
-uint MakeAtlasIndex(uint seed)
-{
-	return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
+	if (s == 0u)
+		return max(g_SpeciesWeightPrefix[0], 0.0f);
+	float a = g_SpeciesWeightPrefix[s - 1u];
+	float b = g_SpeciesWeightPrefix[s];
+	return max(b - a, 0.0f);
 }
 
 // -----------------------------------------------------------------------------
-// Weighted species pick + uniform variation pick
+// Variation mapping
 // -----------------------------------------------------------------------------
-uint PickSpeciesWeighted(uint seed)
-{
-	uint num = max(g_CB.NumSpecies, 1u);
-	float total = g_SpeciesWeightPrefix[num - 1u];
-
-	if (total <= 1e-8f)
-	{
-		return WangHash(seed) % num;
-	}
-
-	float r = Rand01(seed ^ 0x5151u) * total;
-
-	[unroll]
-	for (uint i = 0u; i < MAX_GRASS_SPECIES; ++i)
-	{
-		if (i >= num)
-			break;
-		if (r <= g_SpeciesWeightPrefix[i])
-			return i;
-	}
-	return num - 1u;
-}
-
 uint PickVariationUniform(uint speciesId, uint seed)
 {
 	uint num = max(g_SpeciesVarCounts[speciesId], 1u);
@@ -403,7 +482,62 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 }
 
 // -----------------------------------------------------------------------------
-// Shared spawn logic (must match between Count and Build)
+// PATCH FIELD (ROUND): Worley distance -> patch mask
+// -----------------------------------------------------------------------------
+float ComputePatchMask01(uint speciesId, float2 worldXZ)
+{
+	float4 cp = g_SpeciesClusterParams[speciesId];
+
+	float strength = saturate(cp.x);
+	float scaleM = max(cp.y, 0.001f); // patch size in meters
+	float jitter01 = saturate(cp.z);
+
+	if (strength <= 1e-5f)
+		return 1.0f;
+
+	// noise space where 1 cell ~= 1 patch unit
+	float2 x = worldXZ / scaleM;
+
+	// species-stable seed
+	uint spSeed = WangHash((speciesId + 1u) ^ g_CB.SeedSalt ^ 0xC1D2E3F4u);
+
+	// domain warp in noise space
+	float warpAmp = jitter01 * 0.45f;
+	x = DomainWarp2D(x, warpAmp, spSeed);
+
+	float F = WorleyRoundField01(x, spSeed); // 0..1
+
+	float radius = lerp(0.62f, 0.40f, strength);
+	float softness = lerp(0.18f, 0.08f, strength);
+
+	float M = 1.0f - smoothstep(radius - softness, radius + softness, F);
+
+	float k = lerp(1.0f, 2.2f, strength);
+	M = saturate(pow(M, k));
+
+	return M;
+}
+
+// -----------------------------------------------------------------------------
+// ¡°Point sampling¡± threshold generator (stable, blue-noise-ish)
+// -----------------------------------------------------------------------------
+float StablePointThreshold01(float2 worldXZ, uint seed)
+{
+	const float freq = 0.35f;
+
+	float2 g = worldXZ * freq;
+	int2 ig = int2(floor(g));
+
+	uint2 cell = uint2(ig) ^ uint2(seed, seed * 1664525u);
+	float base = Hash01(cell);
+
+	float2 f = frac(g);
+	float j = dot(f, float2(0.37f, 0.63f));
+	return saturate(base * 0.85f + j * 0.15f);
+}
+
+// -----------------------------------------------------------------------------
+// Shared spawn logic
 // -----------------------------------------------------------------------------
 struct ChunkContext
 {
@@ -422,7 +556,6 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 {
 	uint dim = g_CB.ChunkVisibleDim;
 	uint visibleCells = dim * dim;
-
 	if (cellIndex >= visibleCells)
 		return false;
 
@@ -437,9 +570,7 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 
 	float chunkHeight = g_PoolChunkCoord[cellIndex].ChunkHeight;
 	if (chunkHeight == 0.0f)
-	{
 		chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginClamped, 5.0f);
-	}
 
 	float3 chunkMin = float3(chunkOriginClamped.x, chunkHeight - CHUNK_AABB_HALF_Y, chunkOriginClamped.y);
 	float3 chunkMax = float3(chunkOriginClamped.x + g_CB.ChunkSize, chunkHeight + CHUNK_AABB_HALF_Y, chunkOriginClamped.y + g_CB.ChunkSize);
@@ -481,22 +612,6 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	return true;
 }
 
-bool GrassInstanceAabbInsideFrustum(float3 posWS, float scale)
-{
-	float halfXZ = 0.5 * scale;
-	float minY = -0.05 * scale;
-	float maxY = 1.05 * scale;
-
-	float3 bmin = posWS + float3(-halfXZ, minY, -halfXZ);
-	float3 bmax = posWS + float3(halfXZ, maxY, halfXZ);
-
-	float pad = 0.5f * scale;
-	bmin -= pad.xxx;
-	bmax += pad.xxx;
-
-	return AabbInsideFrustum(bmin, bmax);
-}
-
 float2 ComputeYawPitchFromNormal(float3 nWS, float yaw)
 {
 	nWS = normalize(nWS);
@@ -513,6 +628,103 @@ float2 ComputeYawPitchFromNormal(float3 nWS, float yaw)
 	return float2(yaw, pitch);
 }
 
+uint MakeSeed8(uint seed)
+{
+	return (WangHash(seed) >> 24) & 0xFFu;
+}
+uint MakeVariantId(uint seed)
+{
+	return (WangHash(seed ^ 0xBEEFu) >> 30) & 0x3u;
+}
+uint MakeAtlasIndex(uint seed)
+{
+	return (WangHash(seed ^ 0xCAFEFu) >> 29) & 0x7u;
+}
+
+// -----------------------------------------------------------------------------
+// MUTUAL EXCLUSION species selection at point x:
+//
+// score_s = W_s * factor_s
+// factor_s = (1-strength + strength*M_s)
+//
+// Choose argmax(score).
+// Reject near boundaries: (best-second) < gap => return false.
+// Return bestScore to build spawnProb = saturate(baseDensity * bestScore / totalW).
+// -----------------------------------------------------------------------------
+bool SelectSpecies_MutualExclusion(
+	float2 worldXZ,
+	uint seed,
+	out uint outSpeciesId,
+	out float outBestScore
+)
+{
+	outSpeciesId = 0u;
+	outBestScore = 0.0f;
+
+	uint num = max(g_CB.NumSpecies, 1u);
+
+	float totalW = g_SpeciesWeightPrefix[num - 1u];
+	float invTotalW = (totalW > 1e-8f) ? rcp(totalW) : 0.0f;
+
+	// Track best and second best
+	float best = -1.0f;
+	float second = -1.0f;
+	uint bestId = 0u;
+
+	// Optional: random tie-break salt
+	uint salt = WangHash(seed ^ 0x2C2C2C2Cu);
+
+	[loop]
+	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
+	{
+		if (s >= num)
+			break;
+
+		float W = (invTotalW > 0.0f) ? GetSpeciesWeight(s) : 1.0f;
+		if (W <= 0.0f)
+			continue;
+
+		float4 cp = g_SpeciesClusterParams[s];
+		float strength = saturate(cp.x);
+
+		float M = (strength > 1e-5f) ? ComputePatchMask01(s, worldXZ) : 1.0f;
+		float factor = (1.0f - strength + strength * M);
+
+		// score (density-independent)
+		float score = max(W * factor, 0.0f);
+
+		// Deterministic tiny tie-break to avoid flicker when equal
+		// (does NOT affect ordering unless extremely close)
+		score += (Rand01(salt ^ (s * 0x9E3779B9u)) - 0.5f) * 1e-7f;
+
+		if (score > best)
+		{
+			second = best;
+			best = score;
+			bestId = s;
+		}
+		else if (score > second)
+		{
+			second = score;
+		}
+	}
+
+	if (best < ME_MIN_BEST_SCORE)
+		return false;
+
+	// Boundary rejection: need a confident winner
+	float gap = max(ME_GAP_ABS_MIN, ME_GAP_REL * best);
+	if ((best - max(second, 0.0f)) < gap)
+		return false;
+
+	outSpeciesId = bestId;
+	outBestScore = best; // in same units as weights (0..totalW)
+	return true;
+}
+
+// -----------------------------------------------------------------------------
+// EvaluateSpawn: mutual exclusion + point sampling
+// -----------------------------------------------------------------------------
 bool EvaluateSpawn(
 	ChunkContext ctx,
 	uint poolBase,
@@ -540,19 +752,52 @@ bool EvaluateSpawn(
 	outSeed8 = 0u;
 	outVariantId = 0u;
 	outAtlasIndex = 0u;
-	outPosWS = float3(0.0f, 0.0f, 0.0f);
+	outPosWS = float3(0, 0, 0);
 
 	PoolEntry p = g_PoolPositions[poolBase + sampleIndex];
-
 	if (isnan(p.Position.y))
 	{
 		outPosWS = float3(0.0f, INVALID_NAN, 0.0f);
 		return false;
 	}
 
-	uint typeId = p.GrassTypeId;
-	if (typeId >= g_CB.NumGrassTypes)
+	float2 posXZ = p.Position.xz;
+
+	float D = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
+	if (D <= DENSITY_DISABLE_THRESHOLD)
 		return false;
+
+	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u));
+
+	float keepGate = saturate(ctx.Keep01);
+	if (Rand01(seed ^ 0x1010u) > keepGate)
+		return false;
+
+	uint speciesId;
+	float bestScore;
+	if (!SelectSpecies_MutualExclusion(posXZ, seed, speciesId, bestScore))
+		return false;
+
+	float totalW = g_SpeciesWeightPrefix[max(g_CB.NumSpecies, 1u) - 1u];
+	float invTotalW = (totalW > 1e-8f) ? rcp(totalW) : 0.0f;
+
+	// Spawn probability:
+	//   baseDensity * bestScore / totalW
+	// - bestScore already includes W and factor (0..W)
+	// - This keeps overall density roughly stable while enforcing exclusivity
+	float spawnProb = saturate(D * bestScore * invTotalW);
+	if (spawnProb <= 0.001f)
+		return false;
+
+	float th = StablePointThreshold01(posXZ, seed ^ 0xBADC0DEu);
+	if (th > spawnProb)
+		return false;
+
+	uint varId = PickVariationUniform(speciesId, seed ^ 0xBBBBu);
+	uint typeId = MapSpeciesVariationToTypeId(speciesId, varId);
+
+	if (typeId >= g_CB.NumGrassTypes)
+		typeId = typeId % max(g_CB.NumGrassTypes, 1u);
 
 	float4 typeP = g_TypeParams0[typeId];
 	float minScale = typeP.x;
@@ -560,43 +805,9 @@ bool EvaluateSpawn(
 	float bendMin = typeP.z;
 	float bendMax = max(typeP.w, bendMin);
 
-	// Deterministic seed based only on chunk + sample index
-	uint chunkSeed = Hash2i(ctx.ChunkCoord, g_CB.SeedSalt);
-	uint seed = WangHash(chunkSeed ^ (sampleIndex * 0x9E3779B9u));
-
-	// Stable thinning
-	float keepGate = saturate(ctx.Keep01);
-	if (Rand01(seed ^ 0x1010u) > keepGate)
-		return false;
-
-	float2 posXZ = p.Position.xz;
-
-	float instDensity = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
-	if (instDensity <= DENSITY_DISABLE_THRESHOLD)
-		return false;
-
-	// SpawnProb removed: fixed to 1.0
-	float spawnGateBase = saturate(instDensity);
-	if (Rand01(seed ^ 0x4444u) > spawnGateBase)
-		return false;
-
-	float hN = SampleTerrainSurfaceHeight01AtWorldXZ(posXZ);
-	float heightMask = ComputeHeightMask(hN);
-	if (heightMask <= 0.001f)
-		return false;
-
-	float spawnGate = spawnGateBase * heightMask;
-	if (spawnGate <= 0.001f)
-		return false;
-
 	float press01 = saturate(SampleInteraction(posXZ));
-
-	if (Rand01(seed ^ 0x4A4Au) > spawnGate)
-		return false;
-
 	float3 posWS = p.Position;
 
-	// LOD selection
 	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
 	float2 dxz = posWS.xz - camXZ;
 	float distSqr = dot(dxz, dxz);
@@ -610,9 +821,7 @@ bool EvaluateSpawn(
 
 	float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
 
-	float3 terrainN = SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f);
-	terrainN = normalize(terrainN);
-
+	float3 terrainN = normalize(SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f));
 	float slope01 = saturate(1.0f - terrainN.y);
 	float align = saturate(slope01) * saturate(g_CB.NormalAlignStrength);
 
@@ -644,7 +853,7 @@ bool EvaluateSpawn(
 }
 
 // -----------------------------------------------------------------------------
-// Entry A) UpdateChunkPoolsCS (poolIndex == cellIndex)
+// Entry A) UpdateChunkPoolsCS
 // -----------------------------------------------------------------------------
 [numthreads(8, 8, 1)]
 void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
@@ -687,7 +896,6 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 
 // -----------------------------------------------------------------------------
 // Entry B) FillNewPoolsCS
-// - weight(species) -> uniform(variation) -> typeId mapping
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -720,11 +928,10 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	if (!ClampChunkToHeightfield(chunkOriginXZ, g_CB.ChunkSize))
 	{
 		uint base0 = pool * g_CB.SamplesPerChunk;
-
 		for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 		{
 			g_PoolPositions[base0 + s].Position = float3(0.0f, INVALID_NAN, 0.0f);
-			g_PoolPositions[base0 + s].GrassTypeId = 0u;
+			g_PoolPositions[base0 + s].Seed = 0u;
 		}
 
 		GroupMemoryBarrierWithGroupSync();
@@ -737,7 +944,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	}
 
 	float chunkHeight = SampleWorldHeightAtWorldXZLevel(chunkOriginXZ, 5.0f);
-
 	if (tid.x == 0u)
 	{
 		PoolChunkCoord pc = g_PoolChunkCoord[pool];
@@ -749,8 +955,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 	uint base = pool * g_CB.SamplesPerChunk;
 
-	uint numTypes = max(g_CB.NumGrassTypes, 1u);
-
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
 		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
@@ -758,24 +962,16 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		float ux = Rand01(seed ^ 0x2222u);
 		float uz = Rand01(seed ^ 0x3333u);
 
-		float jx = (ux - 0.5f) * g_CB.Jitter;
-		float jz = (uz - 0.5f) * g_CB.Jitter;
+		float jx = (Rand01(seed ^ 0x4444u) - 0.5f) * g_CB.Jitter;
+		float jz = (Rand01(seed ^ 0x5555u) - 0.5f) * g_CB.Jitter;
 
 		float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
 		float2 posXZ = chunkOriginXZ + localXZ;
 
 		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
 
-		uint speciesId = PickSpeciesWeighted(seed ^ 0xAAAAu);
-		speciesId = min(speciesId, max(g_CB.NumSpecies, 1u) - 1u);
-
-		uint varId = PickVariationUniform(speciesId, seed ^ 0xBBBBu);
-		uint typeId = MapSpeciesVariationToTypeId(speciesId, varId);
-
-		typeId = (typeId < numTypes) ? typeId : (typeId % numTypes);
-
 		g_PoolPositions[base + s].Position = float3(posXZ.x, y, posXZ.y);
-		g_PoolPositions[base + s].GrassTypeId = typeId;
+		g_PoolPositions[base + s].Seed = seed;
 	}
 
 	GroupMemoryBarrierWithGroupSync();
@@ -818,16 +1014,9 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint typeId;
-		uint lodIndex;
-		float press01;
-		float scale;
-		float yaw;
-		float pitch;
-		float bend01;
-		uint seed8;
-		uint variantId;
-		uint atlasIndex;
+		uint typeId, lodIndex;
+		float press01, scale, yaw, pitch, bend01;
+		uint seed8, variantId, atlasIndex;
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
@@ -891,16 +1080,9 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint typeId;
-		uint lodIndex;
-		float press01;
-		float scale;
-		float yaw;
-		float pitch;
-		float bend01;
-		uint seed8;
-		uint variantId;
-		uint atlasIndex;
+		uint typeId, lodIndex;
+		float press01, scale, yaw, pitch, bend01;
+		uint seed8, variantId, atlasIndex;
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s, typeId, lodIndex, press01, scale, yaw, pitch, bend01, seed8, variantId, atlasIndex, posWS))
@@ -909,7 +1091,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		uint meshId =
 			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
 			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-							   g_SpeciesLOD2MeshId[typeId];
+			                   g_SpeciesLOD2MeshId[typeId];
 
 		WaveReserveMeshCounter_Grouped(meshId);
 

@@ -1,9 +1,3 @@
-// ============================================================================
-// GrassSystem.h
-// - Removed per-species LOD distances (now global in GrassSystem)
-// - Added per-species spawn params: Min/MaxScale, BendStrengthMin/Max
-// - Removed unused global spawn params (SpawnProb etc.)
-// ============================================================================
 #pragma once
 #include <string>
 #include <vector>
@@ -19,161 +13,115 @@
 
 namespace shz
 {
-	class Renderer;
-	class RenderScene;
-	class InteractionSystem;
-	struct StaticMeshRenderData;
+    class Renderer;
+    class RenderScene;
+    class InteractionSystem;
+    struct StaticMeshRenderData;
 
-	// ------------------------------------------------------------
-	// Grass description
-	// - Weight: species selection probability (relative weight)
-	// - Variations: chosen uniformly 1/N once species is chosen
-	// - Per-species spawn params live here (scale/bend)
-	// ------------------------------------------------------------
-	struct GrassDesc final
-	{
-		float Weight = 1.0f;
+    struct GrassDesc final
+    {
+        float Weight = 1.0f;
 
-		// Per-species params (applied to all variations of this species)
-		float MinScale = 0.30f;
-		float MaxScale = 0.35f;
+        float MinScale = 0.30f;
+        float MaxScale = 0.35f;
 
-		float BendStrengthMin = 0.65f;
-		float BendStrengthMax = 0.75f;
+        float BendStrengthMin = 0.65f;
+        float BendStrengthMax = 0.75f;
 
-		// Variation meshes (each variation has full LOD chain)
-		std::vector<const StaticMeshRenderData*> Variations;
+        float ClusterStrength = 0.0f; // 0..1, 0 disables
+        float ClusterScale = 16.0f;
+        float ClusterJitter = 0.35f; // 0..1
 
-		uint32 GetNumVariations() const { return (uint32)Variations.size(); }
-	};
+        std::vector<const StaticMeshRenderData*> Variations;
 
-	class GrassSystem final
-	{
-	public:
-		GrassSystem() = default;
-		~GrassSystem() = default;
+        uint32 GetNumVariations() const { return (uint32)Variations.size(); }
+    };
 
-		GrassSystem(const GrassSystem&) = delete;
-		GrassSystem& operator=(const GrassSystem&) = delete;
+    class GrassSystem final
+    {
+    public:
+        GrassSystem() = default;
+        ~GrassSystem() = default;
 
-		void Initialize(Renderer& renderer);
+        GrassSystem(const GrassSystem&) = delete;
+        GrassSystem& operator=(const GrassSystem&) = delete;
 
-		void InstallPasses(
-			Renderer& renderer,
-			RenderScene& scene,
-			const InteractionSystem& interaction);
+        void Initialize(Renderer& renderer);
 
-		// -----------------------------------------------------------------
-		// Species API
-		// -----------------------------------------------------------------
-		void ClearGrassDescs();
-		uint32 AddGrassDesc(const GrassDesc& desc);
+        void InstallPasses(
+            Renderer& renderer,
+            RenderScene& scene,
+            const InteractionSystem& interaction);
 
-		uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
-		uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); } // (species,variation) flattened types
+        void ClearGrassDescs();
+        uint32 AddGrassDesc(const GrassDesc& desc);
 
-	private:
-		static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
+        uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
+        uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); }
 
-	private:
-		// ------------------------------------------------------------
-		// Limits (render instance buffers)
-		// ------------------------------------------------------------
-		static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
-		static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
-		static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
+    private:
+        static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
 
-		// ------------------------------------------------------------
-		// Chunk pool config (VisibleDim = 2*HalfExtent)
-		// ------------------------------------------------------------
-		uint  m_ChunkHalfExtent = 32;
-		float m_ChunkSize = 4.0f;
+    private:
+        static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
+        static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
+        static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
-		uint  m_SamplesPerChunk = 2048;
+        uint  m_ChunkHalfExtent = 32;
+        float m_ChunkSize = 4.0f;
 
-		// ------------------------------------------------------------
-		// GLOBAL LOD distances (moved out of GrassDesc)
-		// ------------------------------------------------------------
-		float m_LOD0Distance = 12.0f;
-		float m_LOD1Distance = 35.0f;
-		float m_LodHysteresis = 1.0f;
+        uint  m_SamplesPerChunk = 1024;
 
-		// ------------------------------------------------------------
-		// Per-type indirect mesh handles (per LOD)
-		// "type" = (species, variation) flattened
-		// ------------------------------------------------------------
-		struct TypeIndirect final
-		{
-			IndirectArgsSystem::MeshHandle LOD0 = {};
-			IndirectArgsSystem::MeshHandle LOD1 = {};
-			IndirectArgsSystem::MeshHandle LOD2 = {};
-		};
+        float m_LOD0Distance = 20.0f;
+        float m_LOD1Distance = 60.0f;
+        float m_LodHysteresis = 1.0f;
 
-		std::vector<TypeIndirect> m_TypeIndirect;
+        struct TypeIndirect final
+        {
+            IndirectArgsSystem::MeshHandle LOD0 = {};
+            IndirectArgsSystem::MeshHandle LOD1 = {};
+            IndirectArgsSystem::MeshHandle LOD2 = {};
+        };
 
-		// ------------------------------------------------------------
-		// Interaction system reference
-		// ------------------------------------------------------------
-		const InteractionSystem* m_pInteractionSystem = nullptr;
+        std::vector<TypeIndirect> m_TypeIndirect;
 
-		// ------------------------------------------------------------
-		// ChunkPool PSOs/SRBs (Compute only)
-		// ------------------------------------------------------------
-		RefCntAutoPtr<IPipelineState>         m_pUpdatePoolsCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pUpdatePoolsSRB;
+        const InteractionSystem* m_pInteractionSystem = nullptr;
 
-		RefCntAutoPtr<IPipelineState>         m_pFillNewPoolsCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pFillNewPoolsSRB;
+        RefCntAutoPtr<IPipelineState>         m_pUpdatePoolsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pUpdatePoolsSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_pClearSpeciesCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pClearSpeciesSRB;
+        RefCntAutoPtr<IPipelineState>         m_pFillNewPoolsCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pFillNewPoolsSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_pCountSpeciesCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pCountSpeciesSRB;
+        RefCntAutoPtr<IPipelineState>         m_pClearSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pClearSpeciesSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_pPrefixSpeciesCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSpeciesSRB;
+        RefCntAutoPtr<IPipelineState>         m_pCountSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pCountSpeciesSRB;
 
-		RefCntAutoPtr<IPipelineState>         m_pBuildInstancesCSO;
-		RefCntAutoPtr<IShaderResourceBinding> m_pBuildInstancesSRB;
+        RefCntAutoPtr<IPipelineState>         m_pPrefixSpeciesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pPrefixSpeciesSRB;
 
-		// ------------------------------------------------------------
-		// Species descs
-		// ------------------------------------------------------------
-		std::vector<GrassDesc> m_GrassDescs;
+        RefCntAutoPtr<IPipelineState>         m_pBuildInstancesCSO;
+        RefCntAutoPtr<IShaderResourceBinding> m_pBuildInstancesSRB;
 
-		// ------------------------------------------------------------
-		// Flattened type mapping (CPU)
-		// typeId -> (speciesId, variationId)
-		// Also keep per-species variation offset/count for GPU tables.
-		// ------------------------------------------------------------
-		std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
-		std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
-		std::vector<uint32> m_TypeToSpecies;    // size = numTypes
-		std::vector<uint32> m_TypeToVariation;  // size = numTypes
+        std::vector<GrassDesc> m_GrassDescs;
 
-		// ------------------------------------------------------------
-		// Spawn settings (GLOBAL)
-		// ------------------------------------------------------------
-		float m_YOffset = 0.0f;
-		float m_Jitter = 0.95f;
-		float m_NormalAlignStrength = 0.75f;
+        std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
+        std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
+        std::vector<uint32> m_TypeToSpecies;    // size = numTypes
+        std::vector<uint32> m_TypeToVariation;  // size = numTypes
 
-		float m_SpawnRadius = 128.0f;
-		uint  m_SeedSalt = 0xA53A9E37u;
+        float m_YOffset = 0.0f;
+        float m_Jitter = 0.95f;
+        float m_NormalAlignStrength = 0.75f;
 
-		// density shaping
-		float m_DensityContrast = 0.28f;
-		float m_DensityPow = 0.70f;
+        float m_SpawnRadius = 128.0f;
+        uint  m_SeedSalt = 0xA53A9E37u;
 
-		// height masks
-		float m_HeightMinN = 0.00f;
-		float m_HeightMaxN = 1.00f;
-		float m_HeightFadeN = 0.03f;
+        float m_DensityContrast = 0.28f;
+        float m_DensityPow = 0.70f;
 
-		// ------------------------------------------------------------
-		// Shader path (single file, multiple entry points)
-		// ------------------------------------------------------------
-		std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
-	};
+        std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
+    };
 } // namespace shz
