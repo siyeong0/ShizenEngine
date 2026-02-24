@@ -685,7 +685,7 @@ ClusterEvalOut EvaluateVoronoiCluster(float2 worldXZ, uint seed /*unused*/)
 	uint vorSeed = WangHash(g_CB.SeedSalt ^ 0xCAFEBABEu);
 
 	// 0) "종 결정" 좌표: 절대 회전/워프 금지 (방향성 방지)
-	float2 x_id = worldXZ / max(MacroCellMeters, 1e-3f);
+	float2 x_id = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(MacroCellMeters, 1e-3f);
 
 	// 1) Voronoi for identity
 	WorleyResult wr0 = WorleyF1F2_WithSeed(x_id, vorSeed);
