@@ -542,8 +542,10 @@ namespace shz
 					gd.ClusterScale = 2.0f;
 					gd.ClusterJitter = 0.05f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_1.fbx");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/grass/grass_3.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Gras_small_017.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
 
 					m_pGrassSystem->AddGrassDesc(gd);
 				}

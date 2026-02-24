@@ -126,7 +126,7 @@ namespace shz
 		AssetRef<Texture> RegisterAsset(const std::string& sourcePath, bool bSRGB)
 		{
 			TextureImportSettings setting = {};
-			setting.bSRGB = bSRGB;
+			setting.bSRGB = false; // TODO: support sRGB setting for texture import
 			return AssetRef<Texture>(RegisterAsset(AssetTypeTraits<Texture>::TypeID, sourcePath, setting));
 		}
 
