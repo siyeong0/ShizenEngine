@@ -155,7 +155,7 @@ namespace shz
 			//tci.HeightOffset = 0.0f;
 			//tci.bCenterXZ = true;
 
-			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel032_2K-PNG";
+			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
 			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 			tci.GravelMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel015_2K-PNG";
 
@@ -535,7 +535,7 @@ namespace shz
 				// Grass
 				{
 					GrassDesc gd;
-					gd.Weight = 0.1f;
+					gd.Weight = 0.2f;
 					gd.MinScale = 0.20f;
 					gd.MaxScale = 0.30f;
 					gd.ClusterStrength = 0.20f;
@@ -551,7 +551,7 @@ namespace shz
 				// Reed (tall, wetland-ish clumps)
 				{
 					GrassDesc gd;
-					gd.Weight = 0.25f;   // common in appropriate biome but not everywhere
+					gd.Weight = 0.15f;   // common in appropriate biome but not everywhere
 					gd.MinScale = 0.30f;
 					gd.MaxScale = 0.35f;
 					gd.ClusterStrength = 0.90f;   // strong patches
@@ -570,7 +570,7 @@ namespace shz
 				// Daisy flower (small, sprinkled, occasional mini-patches)
 				{
 					GrassDesc gd;
-					gd.Weight = 0.20f;   // occasional
+					gd.Weight = 0.15f;   // occasional
 					gd.MinScale = 0.3f;
 					gd.MaxScale = 0.4f;
 					gd.ClusterStrength = 0.5f;
@@ -587,7 +587,7 @@ namespace shz
 				// Orange flower
 				{
 					GrassDesc gd;
-					gd.Weight = 0.3f;   // rarer than daisies
+					gd.Weight = 0.15f;   // rarer than daisies
 					gd.MinScale = 0.3f;
 					gd.MaxScale = 0.4f;
 					gd.ClusterStrength = 0.82f;
@@ -605,7 +605,7 @@ namespace shz
 				// Lavender flower
 				{
 					GrassDesc gd;
-					gd.Weight = 0.2f;
+					gd.Weight = 0.15f;
 					gd.MinScale = 0.4f;
 					gd.MaxScale = 0.5f;
 					gd.ClusterStrength = 0.75f;
@@ -627,7 +627,7 @@ namespace shz
 				// Blue flower
 				{
 					GrassDesc gd;
-					gd.Weight = 0.2f;   // very rare
+					gd.Weight = 0.1f;   // very rare
 					gd.MinScale = 0.3f;
 					gd.MaxScale = 0.35f;
 					gd.ClusterStrength = 0.05f;   // basically no clumping
@@ -642,7 +642,7 @@ namespace shz
 				// Bush
 				{
 					GrassDesc gd;
-					gd.Weight = 0.06f;   // rare-ish
+					gd.Weight = 0.1f;   // rare-ish
 					gd.MinScale = 0.90f;
 					gd.MaxScale = 1.00f;
 					gd.ClusterStrength = 0.05f;   // small groups
