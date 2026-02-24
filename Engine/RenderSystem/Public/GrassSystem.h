@@ -79,7 +79,7 @@ namespace shz
         uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 2048;
+        uint  m_SamplesPerChunk = 512;
 
         float m_LOD0Distance = 20.0f;
         float m_LOD1Distance = 60.0f;

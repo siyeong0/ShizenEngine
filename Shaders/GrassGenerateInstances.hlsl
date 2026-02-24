@@ -836,12 +836,8 @@ bool EvaluateSpawn(
 
 	if (hasSpecial)
 	{
-        // Special spawn probability:
-        // - use (W*Mask)/totalW_all so global density remains stable-ish
-		float spProb = saturate(D * spBest * invTotalW_all);
-
-        // You can optionally boost special visibility a bit:
-        // spProb = saturate(spProb * 1.15f);
+		float specialDensity = D;
+		float spProb = saturate(specialDensity * spMask); 
 
 		if (spProb > 0.001f)
 		{
