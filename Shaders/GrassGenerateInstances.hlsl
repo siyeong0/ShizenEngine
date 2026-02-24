@@ -101,7 +101,7 @@ static const float CHUNK_AABB_HALF_Y = 20.0f;
 static const float VORONOI_MACRO_CELL_METERS = 24.0f;
 
 // spawn tuning
-static const float CLUSTER_SPAWN_BOOST = 1.35f; // cluster area denser than base
+static const float CLUSTER_SPAWN_BOOST = 1.0f; // cluster area denser than base
 
 #ifndef MAX_CELL_CLUSTERS
 #define MAX_CELL_CLUSTERS 4u
@@ -521,26 +521,41 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 // -----------------------------------------------------------------------------
 // “Point sampling” threshold generator (stable, no axis bias)
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// “Point sampling” threshold generator
+// - BlueNoiseTex 기반 (균일/자연스러운 분포)
+// - intra(원형 bias) 제거
+// - seed로 타일/오프셋을 바꿔 반복감 감소
+// -----------------------------------------------------------------------------
 float StablePointThreshold01(float2 worldXZ, uint seed)
 {
-	const float freq = 0.35f;
-	float2 g = worldXZ * freq;
+	// 블루노이즈 스케일: 값이 클수록 월드에서 더 자주 반복됨(=작은 패턴)
+	// 일단 0.075~0.12 사이에서 튜닝 추천
+	const float blueFreq = 0.085f;
 
-	int2 ig = int2(floor(g));
-	float2 f = frac(g);
+	// seed 기반 타일 오프셋/미러로 반복감 완화
+	uint h = WangHash(seed ^ 0xA53A9E37u);
+	float2 off = float2(
+		((h >> 0) & 1023u) * (1.0f / 1024.0f),
+		((h >> 10) & 1023u) * (1.0f / 1024.0f));
 
-	uint h = Hash2i(ig, seed ^ 0xA53A9E37u);
-	float ang = Rand01(h ^ 0xBEEF1234u) * GRASS_TWO_PI;
+	// 간단한 미러/회전(90도) 섞기
+	uint mode = (h >> 24) & 3u;
 
-	float2 fr = Rotate2D(f - 0.5f.xx, ang) + 0.5f.xx;
+	float2 uv = frac(worldXZ * blueFreq + off);
 
-	uint baseH = Hash2i(ig, seed ^ 0x1A2B3C4Du);
-	float base = (baseH & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+	if (mode == 1u)
+		uv = float2(uv.y, uv.x);
+	else if (mode == 2u)
+		uv = float2(1.0f - uv.x, uv.y);
+	else if (mode == 3u)
+		uv = float2(uv.x, 1.0f - uv.y);
 
-	float r = saturate(length(fr - 0.5f.xx) * 1.41421356f);
-	float intra = 1.0f - r;
+	float bn = g_BlueNoiseTex.SampleLevel(g_LinearWrapSampler, uv, 0.0f).r;
 
-	return saturate(base * 0.85f + intra * 0.15f);
+	// seed로 미세한 셔플(정확히 같은 bn가 반복될 때 약간 깨기)
+	float sh = Rand01(h ^ 0x1BADC0DEu);
+	return frac(bn + sh * (1.0f / 256.0f));
 }
 
 // -----------------------------------------------------------------------------
@@ -877,13 +892,20 @@ bool EvaluateSpawn(
 
     // Choose species: base(0) vs cell species
 	float rSel = Rand01(seed ^ 0x51EC7EEDu);
-	uint chosenSpecies = (rSel < cc.ClusterSelect01) ? cc.CellSpecies : 0u;
+	float sel = cc.ClusterSelect01;
+	sel = saturate(sel + cc.ClusterMask01 * 0.35f);
+	sel = saturate(sel * lerp(1.0f, 1.35f, cc.ClusterSelect01));
 
-    // Spawn probability
-    // - base: prob ~ D
-    // - cluster species: prob ~ D * boost (and slightly scaled by mask)
-	float boost = lerp(1.0f, CLUSTER_SPAWN_BOOST, cc.ClusterMask01);
+	uint chosenSpecies = (rSel < sel) ? cc.CellSpecies : 0u;
+
+	float mask = cc.ClusterMask01;
+	mask = pow(saturate(mask), 0.65f);
+
+	float boost = lerp(1.0f, CLUSTER_SPAWN_BOOST, mask);
 	float prob = D * ((chosenSpecies == 0u) ? 1.0f : boost);
+	prob = (chosenSpecies == 0u) ? prob : saturate(prob * 1.15f);
+
+	prob = saturate(prob);
 
 	prob = saturate(prob);
 	if (prob <= 0.001f)
@@ -1060,13 +1082,23 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	{
 		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
 
-		float ux = Rand01(seed ^ 0x2222u);
-		float uz = Rand01(seed ^ 0x3333u);
+		float fN = (float) max(g_CB.SamplesPerChunk, 1u);
+		uint gridDim = (uint) ceil(sqrt(fN));
+		gridDim = max(gridDim, 1u);
 
-		float jx = (Rand01(seed ^ 0x4444u) - 0.5f) * g_CB.Jitter;
-		float jz = (Rand01(seed ^ 0x5555u) - 0.5f) * g_CB.Jitter;
+		uint ix = (gridDim > 0u) ? (s % gridDim) : 0u;
+		uint iz = (gridDim > 0u) ? (s / gridDim) : 0u;
 
-		float2 localXZ = (float2(ux, uz) + float2(jx, jz)) * g_CB.ChunkSize;
+		float2 cell01 = (float2(ix, iz) + 0.5f.xx) / (float) gridDim;
+
+		float2 j01 = (Hash02_u2(uint2(ix, iz) ^ uint2(chunkSeed, seed)) - 0.5f.xx);
+		
+		float jitterCell = saturate(g_CB.Jitter) * 0.35f;
+
+		cell01 += j01 * (jitterCell / (float) gridDim);
+		cell01 = saturate(cell01);
+
+		float2 localXZ = cell01 * g_CB.ChunkSize;
 		float2 posXZ = chunkOriginXZ + localXZ;
 
 		float y = SampleTerrainSurfaceHeightAtWorldXZ(posXZ) + g_CB.YOffset;
