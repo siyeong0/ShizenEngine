@@ -75,7 +75,10 @@ namespace shz
         m_pInteractionSystem = &interaction;
 
         ASSERT(!m_GrassDescs.empty(), "No grass species. Call AddGrassDesc().");
+        ASSERT(m_GrassDescs.size() <= MAX_GRASS_SPECIES, "Max grass species exceeded.");
+        ASSERT(m_GrassDescs[0].GetNumVariations() > 0, "Species[0] must be BaseGrass and have at least 1 variation.");
 
+        // Validate
         for (uint32 s = 0u; s < (uint32)m_GrassDescs.size(); ++s)
         {
             const GrassDesc& gd = m_GrassDescs[s];
@@ -89,12 +92,9 @@ namespace shz
             ASSERT(gd.BendStrengthMin >= 0.0f, "GrassDesc.BendStrengthMin must be >= 0");
             ASSERT(gd.BendStrengthMax >= gd.BendStrengthMin, "GrassDesc.BendStrengthMax must be >= BendStrengthMin");
 
-            ASSERT(gd.ClusterStrength >= 0.0f, "ClusterStrength must be >= 0");
+            ASSERT(gd.ClusterStrength >= 0.0f && gd.ClusterStrength <= 1.0f, "ClusterStrength must be in [0..1]");
             ASSERT(gd.ClusterScale >= 0.0f, "ClusterScale must be >= 0");
-            ASSERT(gd.ClusterJitter >= 0.0f, "ClusterJitter must be >= 0");
-
-            ASSERT(gd.BaseSuppressInPatch >= 0.0f && gd.BaseSuppressInPatch <= 1.0f,
-                "BaseSuppressInPatch must be in [0..1]");
+            ASSERT(gd.ClusterJitter >= 0.0f && gd.ClusterJitter <= 1.0f, "ClusterJitter must be in [0..1]");
 
             for (auto* pMesh : gd.Variations)
                 ASSERT(pMesh, "Variation mesh is null.");
@@ -214,7 +214,7 @@ namespace shz
             renderer.AddBuffer(STRING_HASH("Grass_SpeciesLOD2MeshId"), bd);
         }
 
-        // Species weighted selection tables
+        // Species weighted selection tables + variation tables
         {
             BufferDesc bd = {};
             bd.Usage = USAGE_DEFAULT;
@@ -406,6 +406,9 @@ namespace shz
         uploadU32Table(STRING_HASH("Grass_SpeciesLOD2MeshId"), lod2MeshIds, MAX_GRASS_SPECIES);
 
         // Species weight prefix
+        // NOTE:
+        // - Shader will ignore species[0] weight for choosing cell species;
+        //   it only uses it for "prefix baseW subtraction", so keep it valid.
         {
             std::vector<float> weights(numSpecies, 0.0f);
             for (uint32 s = 0u; s < numSpecies; ++s)
@@ -460,7 +463,7 @@ namespace shz
             uploadF32x4Table(STRING_HASH("Grass_TypeParams0"), typeParams, MAX_GRASS_SPECIES);
         }
 
-        // Per-species clustering params (w = BaseSuppressInPatch)
+        // Per-species clustering params (w reserved)
         {
             std::vector<float4> spParams(numSpecies);
             for (uint32 s = 0u; s < numSpecies; ++s)
@@ -470,7 +473,7 @@ namespace shz
                     gd.ClusterStrength,
                     gd.ClusterScale,
                     gd.ClusterJitter,
-                    gd.BaseSuppressInPatch);
+                    0.0f);
             }
             uploadF32x4Table(STRING_HASH("Grass_SpeciesClusterParams"), spParams, MAX_GRASS_SPECIES);
         }
@@ -828,7 +831,7 @@ namespace shz
             });
 
         // =====================================================================
-        // Pass B-2) CountInstancesFromPools (needs ClusterParams + Flags)
+        // Pass B-2) CountInstancesFromPools
         // =====================================================================
         renderer.AddPass(
             "Grass_CountSpeciesInstances",
@@ -901,7 +904,6 @@ namespace shz
 
                     { SHADER_TYPE_COMPUTE, "g_TypeParams0",              SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_SpeciesClusterParams",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-                    { SHADER_TYPE_COMPUTE, "g_SpeciesFlags",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 
                     { SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix",      SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_SpeciesVarOffsets",        SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -1044,7 +1046,7 @@ namespace shz
             });
 
         // =====================================================================
-        // Pass C) BuildInstancesFromPools (needs ClusterParams + Flags)
+        // Pass C) BuildInstancesFromPools
         // =====================================================================
         renderer.AddPass(
             "Grass_BuildInstancesFromPools",
@@ -1132,10 +1134,7 @@ namespace shz
                     { SHADER_TYPE_COMPUTE, "g_SpeciesLOD2MeshId",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 
                     { SHADER_TYPE_COMPUTE, "g_TypeParams0",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-                    { SHADER_TYPE_COMPUTE, "g_TypeToSpecies",           SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_SpeciesClusterParams",    SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-
-                    { SHADER_TYPE_COMPUTE, "g_SpeciesFlags",             SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 
                     { SHADER_TYPE_COMPUTE, "g_SpeciesWeightPrefix",     SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
                     { SHADER_TYPE_COMPUTE, "g_SpeciesVarOffsets",       SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
@@ -1205,8 +1204,6 @@ namespace shz
 
                 if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_TypeParams0"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_TypeParams0")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
-                if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_TypeToSpecies"))
-                    v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_TypeToSpecies")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
                 if (auto* v = m_pBuildInstancesSRB->GetVariableByName(SHADER_TYPE_COMPUTE, "g_SpeciesClusterParams"))
                     v->Set(renderer.GetBufferSRV(STRING_HASH("Grass_SpeciesClusterParams")), SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 
@@ -1251,9 +1248,9 @@ namespace shz
         ASSERT(desc.BendStrengthMin >= 0.0f, "GrassDesc.BendStrengthMin must be >= 0");
         ASSERT(desc.BendStrengthMax >= desc.BendStrengthMin, "GrassDesc.BendStrengthMax must be >= BendStrengthMin");
 
-        ASSERT(desc.ClusterStrength >= 0.0f, "ClusterStrength must be >= 0");
+        ASSERT(desc.ClusterStrength >= 0.0f && desc.ClusterStrength <= 1.0f, "ClusterStrength must be in [0..1]");
         ASSERT(desc.ClusterScale >= 0.0f, "ClusterScale must be >= 0");
-        ASSERT(desc.ClusterJitter >= 0.0f, "ClusterJitter must be >= 0");
+        ASSERT(desc.ClusterJitter >= 0.0f && desc.ClusterJitter <= 1.0f, "ClusterJitter must be in [0..1]");
 
         m_GrassDescs.push_back(desc);
         return (uint32)(m_GrassDescs.size() - 1u);

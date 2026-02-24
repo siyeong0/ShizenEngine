@@ -917,7 +917,7 @@ namespace shz
 		// Bind textures
 		uint32 materialFlag = 0;
 
-		auto bindTexture = [&](const char* shaderVar, const std::string& texPath) -> bool
+		auto bindTexture = [&](const char* shaderVar, const std::string& texPath, bool bSRGB) -> bool
 		{
 			if (!setting.bRegisterTextureAssets)
 				return false;
@@ -928,7 +928,7 @@ namespace shz
 			if (texPath.empty())
 				return false;
 
-			const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath);
+			const AssetRef<Texture> texRef = pAssetManager->RegisterAsset<Texture>(texPath, bSRGB);
 			if (!texRef)
 				return false;
 
@@ -943,7 +943,7 @@ namespace shz
 				{ aiTextureType_BASE_COLOR, aiTextureType_DIFFUSE },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_BaseColorTex", path))
+				if (bindTexture("g_BaseColorTex", path, true))
 					materialFlag |= hlsl::MAT_HAS_BASECOLOR;
 			}
 		}
@@ -955,7 +955,7 @@ namespace shz
 				{ aiTextureType_NORMALS, aiTextureType_NORMAL_CAMERA, aiTextureType_HEIGHT },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_NormalTex", path))
+				if (bindTexture("g_NormalTex", path, false))
 					materialFlag |= hlsl::MAT_HAS_NORMAL;
 			}
 		}
@@ -967,7 +967,7 @@ namespace shz
 				{ aiTextureType_METALNESS, aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_UNKNOWN },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_MetallicRoughnessTex", path))
+				if (bindTexture("g_MetallicRoughnessTex", path, false))
 					materialFlag |= hlsl::MAT_HAS_MR;
 			}
 		}
@@ -979,7 +979,7 @@ namespace shz
 				{ aiTextureType_AMBIENT_OCCLUSION, aiTextureType_LIGHTMAP, aiTextureType_AMBIENT },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_AOTex", path))
+				if (bindTexture("g_AOTex", path, false))
 					materialFlag |= hlsl::MAT_HAS_AO;
 			}
 		}
@@ -991,7 +991,7 @@ namespace shz
 				{ aiTextureType_EMISSIVE },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_EmissiveTex", path))
+				if (bindTexture("g_EmissiveTex", path, true))
 					materialFlag |= hlsl::MAT_HAS_EMISSIVE;
 			}
 		}
@@ -1003,7 +1003,7 @@ namespace shz
 				{ aiTextureType_HEIGHT, aiTextureType_DISPLACEMENT },
 				sceneFilePath, sceneDir, searchRoots, pIndex, path, outError))
 			{
-				if (bindTexture("g_HeightTex", path))
+				if (bindTexture("g_HeightTex", path, false))
 					materialFlag |= hlsl::MAT_HAS_HEIGHT;
 			}
 		}

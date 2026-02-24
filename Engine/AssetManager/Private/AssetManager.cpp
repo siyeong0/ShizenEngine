@@ -95,7 +95,7 @@ namespace shz
 	// AssetManager Registry
 	// ------------------------------------------------------------
 
-	AssetID AssetManager::RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath)
+	AssetID AssetManager::RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath, const AssetImportSetting& setting)
 	{
 		ASSERT(typeID != 0, "Invalid AssetTypeID.");
 		ASSERT(!sourcePath.empty(), "Path is empty.");
@@ -108,6 +108,7 @@ namespace shz
 		AssetMeta meta = {};
 		meta.TypeID = typeID;
 		meta.SourcePath = sourcePath;
+		meta.Payload = setting;
 
 		// Registry should be idempotent: override/update meta if already exists.
 		m_Registry.Register(id, meta);

@@ -18,28 +18,26 @@ namespace shz
     class InteractionSystem;
     struct StaticMeshRenderData;
 
+    // ---------------------------------------------------------------------
+    // GrassDesc
+    // - species 0 is reserved as BaseGrass (caller responsibility: add base first)
+    // - Weight: used for choosing the "cell species" among species[1..]
+    //   (base weight is ignored for that selection; base is used as fallback outside clusters)
+    // - Cluster params are used ONLY for non-base species to form 1~2 sub-clusters in a cell.
+    // ---------------------------------------------------------------------
     struct GrassDesc final
     {
-        // selection weight (relative)
         float Weight = 1.0f;
 
-        // per-type scale / bend (shared across variations of this species)
         float MinScale = 0.30f;
         float MaxScale = 0.35f;
 
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
-        // clustering (macro patch)
-        float ClusterStrength = 0.0f; // 0..1, 0 disables
-        float ClusterScale = 16.0f;
-        float ClusterJitter = 0.35f; // 0..1
-
-        // NEW: special-first workflow flags
-        // - IsSpecial: participates in "macro patch winner" stage
-        // - BaseSuppressInPatch: how much base grass density is suppressed inside this patch
-        bool  IsSpecial = false;
-        float BaseSuppressInPatch = 0.65f; // 0..1 (1 => base almost removed inside patch)
+        float ClusterStrength = 0.0f; // 0..1, 0 disables (=> will behave as base-only)
+        float ClusterScale = 16.0f;   // meters (sub-cluster radius-ish)
+        float ClusterJitter = 0.35f;  // 0..1
 
         std::vector<const StaticMeshRenderData*> Variations;
 

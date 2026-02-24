@@ -113,10 +113,24 @@ namespace shz
 		template <typename T>
 		AssetRef<T> RegisterAsset(const std::string& sourcePath)
 		{
-			return AssetRef<T>(RegisterAsset(AssetTypeTraits<T>::TypeID, sourcePath));
+			return AssetRef<T>(RegisterAsset(AssetTypeTraits<T>::TypeID, sourcePath, {}));
 		}
 
-		AssetID RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath);
+		template <typename Texture>
+		AssetRef<Texture> RegisterAsset(const std::string& sourcePath, const TextureImportSettings& setting)
+		{
+			return AssetRef<Texture>(RegisterAsset(AssetTypeTraits<Texture>::TypeID, sourcePath, setting));
+		}
+
+		template <typename Texture>
+		AssetRef<Texture> RegisterAsset(const std::string& sourcePath, bool bSRGB)
+		{
+			TextureImportSettings setting = {};
+			setting.bSRGB = bSRGB;
+			return AssetRef<Texture>(RegisterAsset(AssetTypeTraits<Texture>::TypeID, sourcePath, setting));
+		}
+
+		AssetID RegisterAsset(const AssetTypeID typeID, const std::string& sourcePath, const AssetImportSetting& setting);
 		void UnregisterAsset(const AssetID& id);
 
 		void RegisterImporter(AssetTypeID typeId, LoaderFn loader);

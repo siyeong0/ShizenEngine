@@ -103,8 +103,6 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	// SSAO
 	// ------------------------------------------------------------
 	float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
-	ssao = ssao * ssao;
-	
 	float aoCombined = saturate(aoMaterial * ssao);
 	
 	// ------------------------------------------------------------

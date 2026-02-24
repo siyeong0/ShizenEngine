@@ -119,7 +119,7 @@ namespace shz
 		ASSERT(!m_CI.SoilPath.empty(), "Invalid soil texture path.");
 		ASSERT(!m_CI.VegetationPath.empty(), "Invalid vegetation texture path.");
 
-		m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath);
+		m_DiffuseTexRef = assetManager.RegisterAsset<Texture>(m_CI.DiffusePath, true);
 		m_NormalTexRef = assetManager.RegisterAsset<Texture>(m_CI.NormalPath);
 		m_SlopeTexRef = assetManager.RegisterAsset<Texture>(m_CI.SlopePath);
 		m_FlowTexRef = assetManager.RegisterAsset<Texture>(m_CI.FlowPath);
@@ -358,21 +358,21 @@ namespace shz
 			const TerrainLayerPaths gravel = buildTerrainLayerPaths(m_GravelMaterialPath, bNormalDX);
 
 			// Soil
-			mat.SetTextureAssetRef("g_SoilBaseColorTex", assetManager.RegisterAsset<Texture>(soil.BaseColor));
+			mat.SetTextureAssetRef("g_SoilBaseColorTex", assetManager.RegisterAsset<Texture>(soil.BaseColor, true));
 			mat.SetTextureAssetRef("g_SoilNormalTex", assetManager.RegisterAsset<Texture>(soil.Normal));
 			mat.SetTextureAssetRef("g_SoilRoughnessTex", assetManager.RegisterAsset<Texture>(soil.Roughness));
 			mat.SetTextureAssetRef("g_SoilAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(soil.AmbientOcclusion));
 			mat.SetTextureAssetRef("g_SoilDisplacementTex", assetManager.RegisterAsset<Texture>(soil.Displacement));
 
 			// Rocky
-			mat.SetTextureAssetRef("g_RockyBaseColorTex", assetManager.RegisterAsset<Texture>(rocky.BaseColor));
+			mat.SetTextureAssetRef("g_RockyBaseColorTex", assetManager.RegisterAsset<Texture>(rocky.BaseColor, true));
 			mat.SetTextureAssetRef("g_RockyNormalTex", assetManager.RegisterAsset<Texture>(rocky.Normal));
 			mat.SetTextureAssetRef("g_RockyRoughnessTex", assetManager.RegisterAsset<Texture>(rocky.Roughness));
 			mat.SetTextureAssetRef("g_RockyAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(rocky.AmbientOcclusion));
 			mat.SetTextureAssetRef("g_RockyDisplacementTex", assetManager.RegisterAsset<Texture>(rocky.Displacement));
 
 			// Gravel
-			mat.SetTextureAssetRef("g_GravelBaseColorTex", assetManager.RegisterAsset<Texture>(gravel.BaseColor));
+			mat.SetTextureAssetRef("g_GravelBaseColorTex", assetManager.RegisterAsset<Texture>(gravel.BaseColor, true));
 			mat.SetTextureAssetRef("g_GravelNormalTex", assetManager.RegisterAsset<Texture>(gravel.Normal));
 			mat.SetTextureAssetRef("g_GravelRoughnessTex", assetManager.RegisterAsset<Texture>(gravel.Roughness));
 			mat.SetTextureAssetRef("g_GravelAmbientOcclusionTex", assetManager.RegisterAsset<Texture>(gravel.AmbientOcclusion));
