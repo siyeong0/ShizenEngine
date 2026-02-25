@@ -196,16 +196,6 @@ namespace shz
 					mesh.MoveBottomToOrigin(true);
 				};
 
-				// -----------------------------------------------------------------------------
-// Refactor: addGrassVariation
-// - Single texture read pass builds:
-//   * inside-mask (from alpha threshold)
-//   * dominantColor (mean RGB of inside pixels, gamma-aware optional)
-// - EDT (Felzenszwalb/Huttenlocher) builds per-component normalized "inner depth" R8
-// - Reuse loaded AssimpAsset for LOD0/LOD1 (avoid duplicate load)
-// - Billboard material uses dominantColor -> g_BaseColorFactor
-// -----------------------------------------------------------------------------
-
 				auto addGrassVariation = [&](GrassDesc& gd, const std::string& path)
 				{
 					// ---------------------------------------------
@@ -1019,11 +1009,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			m_Camera.SetRotation(0.0f, 0.0f);
+			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			//m_Camera.SetRotation(0.0f, 0.0f);
 
-			//m_Camera.SetPos({ 26.2178898f, 359.614075f, -4.20217f });
-			//m_Camera.SetRotation(1.349999f, -0.70f);
+			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
+			m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
