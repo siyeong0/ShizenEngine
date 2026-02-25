@@ -1,0 +1,132 @@
+#define ADDITIONAL_PS_IN_FIELDS \
+	PS_IN_FIELD(nointerpolation float3, ViewDirOS, 0)
+
+#include "Common.hlsli"
+#include "PBRMaterial.hlsli"
+#include "ImpostorCommon.hlsli"
+
+float3 GetNormalWS_FromAtlas(float2 uv)
+{
+	float3 normalSample = g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz;
+	float3 nOS = UnpackNormal01(normalSample);
+
+	// your convention fix
+	nOS.x = -nOS.x;
+	nOS.xy *= g_NormalScale;
+
+	// Camera basis in WS (InvView rows/cols depending on your matrix packing)
+	float3 camR = normalize(g_FrameCB.InvView[0].xyz);
+	float3 camU = normalize(g_FrameCB.InvView[1].xyz);
+	float3 camF = normalize(g_FrameCB.InvView[2].xyz);
+
+	// Treat normal texture as camera-facing impostor space (R,U,-F)
+	float3 nWS = nOS.x * camR + nOS.y * camU + nOS.z * (-camF);
+	return normalize(nWS);
+}
+
+float4 NormalizeWeights(float4 w)
+{
+	float s = w.x + w.y + w.z + w.w;
+	// avoid div0; if s==0 just pick first view
+	if (s <= 1e-6f)
+		return float4(1, 0, 0, 0);
+	return w / s;
+}
+
+struct ImpostorSample
+{
+	float3 BaseColor;
+	float  Alpha;
+	float2 MR;
+	float3 Emissive;
+	float  AO;
+	float3 NormalWS;
+};
+
+ImpostorSample SampleImpostorView(float2 uvLocal, uint viewIndex)
+{
+	ImpostorSample o;
+
+	float2 uv = AtlasTileUV(uvLocal, viewIndex);
+
+	o.BaseColor = GetBaseColor(uv);
+	o.Alpha     = GetOpacity(uv);
+	o.MR        = GetMetallicRoughness(uv);
+	o.Emissive  = GetEmissive(uv);
+	o.AO        = GetAmbientOcclusion(uv);
+	o.NormalWS  = GetNormalWS_FromAtlas(uv);
+
+	return o;
+}
+
+BASE_PS_MAIN_ENTRY()
+{
+	float4 svPos     = GET_PSIN_POS();
+	float2 uvLocal   = GET_PSIN_UV();
+	float3 viewDirOS = GET_PSIN_ADDITIONAL(ViewDirOS);
+
+	// Compute 4-view neighborhood (indices + weights)
+	Impostor4 v = ComputeImpostorViews(viewDirOS);
+
+	// Normalize weights (important if your ComputeImpostorViews isn't perfectly normalized)
+	float4 w = NormalizeWeights(float4(v.w00, v.w10, v.w01, v.w11));
+
+	// Sample 4 views
+	ImpostorSample s00 = SampleImpostorView(uvLocal, v.i00);
+	ImpostorSample s10 = SampleImpostorView(uvLocal, v.i10);
+	ImpostorSample s01 = SampleImpostorView(uvLocal, v.i01);
+	ImpostorSample s11 = SampleImpostorView(uvLocal, v.i11);
+
+	// Blend (linear)
+	float3 baseColor =
+		s00.BaseColor * w.x +
+		s10.BaseColor * w.y +
+		s01.BaseColor * w.z +
+		s11.BaseColor * w.w;
+
+	float alpha =
+		s00.Alpha * w.x +
+		s10.Alpha * w.y +
+		s01.Alpha * w.z +
+		s11.Alpha * w.w;
+
+	float2 mr =
+		s00.MR * w.x +
+		s10.MR * w.y +
+		s01.MR * w.z +
+		s11.MR * w.w;
+
+	float3 emissive =
+		s00.Emissive * w.x +
+		s10.Emissive * w.y +
+		s01.Emissive * w.z +
+		s11.Emissive * w.w;
+
+	float ao =
+		s00.AO * w.x +
+		s10.AO * w.y +
+		s01.AO * w.z +
+		s11.AO * w.w;
+
+	// Normal blend then renormalize
+	float3 normalWS =
+		s00.NormalWS * w.x +
+		s10.NormalWS * w.y +
+		s01.NormalWS * w.z +
+		s11.NormalWS * w.w;
+	normalWS = normalize(normalWS);
+
+	// Alpha coverage / clip (use blended alpha)
+	float coverage = ClipPixelCoverage(alpha, svPos);
+
+	// Outputs
+	SET_PSOUT_ALBEDO(baseColor);
+	SET_PSOUT_OPACITY(alpha);
+	SET_PSOUT_NORMAL(normalWS);
+	SET_PSOUT_METALLIC(mr.x);
+	SET_PSOUT_ROUGHNESS(mr.y);
+	SET_PSOUT_AO(ao);
+	SET_PSOUT_ALPHACOVERAGE(coverage);
+	SET_PSOUT_EMISSIVE(emissive);
+	SET_PSOUT_SHADING_MODEL(GetShadingMode());
+}

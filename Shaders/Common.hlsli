@@ -180,7 +180,7 @@ struct BaseVSOutput
 #define SET_VSOUT_WORLD_TANGENT(wt) /* no-op */
 #define SET_VSOUT_POS(svPos)        OUT.SVPosition = (svPos);
 
-#define SET_VSOUT_ADDITIONAL(name, value) /* no-op */
+#define SET_VSOUT_ADDITIONAL(name, value) OUT.name = (value);
 
 #ifdef MASKED
 
@@ -267,7 +267,7 @@ struct BasePSInput
 #define GET_PSIN_WORLD_TANGENT()    (float3(1.0, 0.0, 0.0))
 #define GET_PSIN_FRONTFACE()        (false)
 
-#define GET_PSIN_ADDITIONAL(name)	(0)
+#define GET_PSIN_ADDITIONAL(name)	(IN.name)
 
 struct BasePSOutput { };
 
@@ -387,6 +387,31 @@ static float4 BuildShadowClipFromWorldPos(float3 worldPos)
 // ============================================================================
 // Helpers
 // ============================================================================
+
+static const float EPS = 1e-6f;
+static const float PI = 3.14159265358979323846;
+static const float TWO_PI = 6.28318530718;
+
+float3 NormalizeSafe3(float3 v, float3 fallback)
+{
+	float len2 = dot(v, v);
+	if (len2 < EPS)
+	{
+		return fallback;
+	}
+	return v * rsqrt(len2);
+}
+
+float2 NormalizeSafe2(float2 v, float2 fallback)
+{
+	float len2 = dot(v, v);
+	if (len2 < EPS)
+	{
+		return fallback;
+	}
+	return v * rsqrt(len2);
+}
+
 float3 PackNormal01(float3 n)
 {
 	return n * 0.5 + 0.5;

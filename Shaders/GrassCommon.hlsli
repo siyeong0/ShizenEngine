@@ -24,25 +24,6 @@ cbuffer GRASS_RENDER_CONSTANTS
 // ---------------------------------------------------------------------------
 // Math utilities
 // ---------------------------------------------------------------------------
-float3 NormalizeSafe3(float3 v, float3 fallback)
-{
-	float len2 = dot(v, v);
-	if (len2 < GRASS_EPS)
-	{
-		return fallback;
-	}
-	return v * rsqrt(len2);
-}
-
-float2 NormalizeSafe2(float2 v, float2 fallback)
-{
-	float len2 = dot(v, v);
-	if (len2 < GRASS_EPS)
-	{
-		return fallback;
-	}
-	return v * rsqrt(len2);
-}
 
 // Rotate vector around Y axis by yaw (radians)
 float3 ApplyYaw(float3 v, float yaw)

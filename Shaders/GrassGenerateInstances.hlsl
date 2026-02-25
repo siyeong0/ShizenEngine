@@ -135,7 +135,7 @@ float Rand01(uint seed)
 
 uint Hash2i(int2 v, uint salt)
 {
-    // Preserve bit-pattern for negative coords (stable).
+	// Preserve bit-pattern for negative coords (stable).
 	uint x = asuint(v.x);
 	uint y = asuint(v.y);
 	return (x * 73856093u) ^ (y * 19349663u) ^ salt;
@@ -203,11 +203,11 @@ float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 	float amp = 1.0f;
 	float freq = 0.18f;
 
-    [unroll]
+	[unroll]
 	for (int o = 0; o < 3; ++o)
 	{
 		uint so = WangHash(seed ^ (0x9E3779B9u * (uint) (o + 1)));
-        // Cheap axis-independent directions from hashes (avoid sin/cos).
+		// Cheap axis-independent directions from hashes (avoid sin/cos).
 		float2 hh = Hash02(uint2(so, so ^ 0xBADC0DEu));
 		float2 dir = normalize((hh * 2.0f - 1.0f) + 1e-3f);
 
@@ -292,7 +292,7 @@ float SampleInteraction(float2 worldXZ)
 // -----------------------------------------------------------------------------
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
-    [unroll]
+	[unroll]
 	for (int i = 0; i < 6; ++i)
 	{
 		float4 P = g_FrameCB.FrustumPlanesWS[i];
@@ -381,7 +381,7 @@ uint WaveReserveMeshCounter(uint meshId)
 	BallotMask remaining = WaveBallotAll();
 	uint myBase = 0u;
 
-    [loop]
+	[loop]
 	while (BallotAny(remaining))
 	{
 		uint leaderLane = BallotFirstLane(remaining);
@@ -429,12 +429,12 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 // -----------------------------------------------------------------------------
 float StablePointThreshold01(float2 worldXZ, uint seed)
 {
-    const float freq = 0.35f;
-    int2 ig = int2(floor(worldXZ * freq));
-    uint h = Hash2i(ig, seed ^ 0xA53A9E37u);
-    uint2 cell = uint2(ig) ^ uint2(seed, seed * 1664525u);
-    float base = Hash01(cell ^ uint2(h, WangHash(h)));
-    return base;
+	const float freq = 0.35f;
+	int2 ig = int2(floor(worldXZ * freq));
+	uint h = Hash2i(ig, seed ^ 0xA53A9E37u);
+	uint2 cell = uint2(ig) ^ uint2(seed, seed * 1664525u);
+	float base = Hash01(cell ^ uint2(h, WangHash(h)));
+	return base;
 }
 
 // -----------------------------------------------------------------------------
@@ -551,7 +551,7 @@ uint PickSubsetIndexFromPrefix(StructuredBuffer<float> prefix, uint subsetCount,
 
 	uint lo = 0u;
 	uint hi = n - 1u;
-    [loop]
+	[loop]
 	while (lo < hi)
 	{
 		uint mid = (lo + hi) >> 1;
@@ -617,7 +617,7 @@ SpecialClusterEval EvaluateSpecialCluster(float2 worldXZ)
 	float scaleM = clamp(cp.y, CLUSTER_SCALE_MIN_M, CLUSTER_SCALE_MAX_M);
 	float jitter01 = saturate(cp.z);
 
-    // If this species has no clustering, early-out -> mask 0
+	// If this species has no clustering, early-out -> mask 0
 	if (strength <= 1e-4f)
 	{
 		return o;
@@ -626,7 +626,7 @@ SpecialClusterEval EvaluateSpecialCluster(float2 worldXZ)
 	float2 cellOriginXZ = g_TerrainCB.WorldOriginXZ + float2(cellI) * SPECIAL_MACRO_CELL_METERS;
 	float2 pLocal = worldXZ - cellOriginXZ;
 
-    // Very mild / conditional warp (optional)
+	// Very mild / conditional warp (optional)
 	float2 pw = pLocal;
 	if (jitter01 > 1e-4f && strength > 0.25f)
 	{
@@ -643,13 +643,13 @@ SpecialClusterEval EvaluateSpecialCluster(float2 worldXZ)
 		nBlob = max(nBlob, 2u);
 	}
 
-    // Radius in meters
+	// Radius in meters
 	float rBase = scaleM * lerp(0.55f, 0.90f, strength);
 	float soft = lerp(0.28f, 0.10f, strength);
 
 	float mask = 0.0f;
 
-    [unroll]
+	[unroll]
 	for (uint b = 0u; b < 4u; ++b)
 	{
 		if (b >= nBlob)
@@ -669,13 +669,13 @@ SpecialClusterEval EvaluateSpecialCluster(float2 worldXZ)
 		float2 d = (pw - c) * invR;
 		float d2 = dot(d, d);
 
-        // d2 ~ 1 at boundary. Softness in squared domain.
+		// d2 ~ 1 at boundary. Softness in squared domain.
 		float edge0 = (1.0f - soft) * (1.0f - soft);
 		float edge1 = (1.0f + soft) * (1.0f + soft);
 
 		float blob = 1.0f - smoothstep(edge0, edge1, d2);
 
-        // Only sharpen when strong (avoid pow always)
+		// Only sharpen when strong (avoid pow always)
 		if (strength > 0.5f)
 		{
 			float k = lerp(1.2f, 3.0f, strength);
@@ -696,11 +696,11 @@ SpecialClusterEval EvaluateSpecialCluster(float2 worldXZ)
 // Spawn evaluation (COUNT - lightweight)
 // -----------------------------------------------------------------------------
 bool EvaluateSpawn_Count(
-    ChunkContext ctx,
-    uint poolBase,
-    uint sampleIndex,
-    out uint outTypeId,
-    out uint outLodIndex)
+	ChunkContext ctx,
+	uint poolBase,
+	uint sampleIndex,
+	out uint outTypeId,
+	out uint outLodIndex)
 {
 	outTypeId = 0u;
 	outLodIndex = 0u;
@@ -712,7 +712,7 @@ bool EvaluateSpawn_Count(
 	float3 posWS = p.Position;
 	float2 posXZ = posWS.xz;
 
-    // Use chunk density in count path to avoid extra texture reads.
+	// Use chunk density in count path to avoid extra texture reads.
 	float D = ctx.ChunkDensity;
 	if (D <= DENSITY_DISABLE_THRESHOLD)
 		return false;
@@ -769,20 +769,20 @@ bool EvaluateSpawn_Count(
 // Spawn evaluation (BUILD - full)
 // -----------------------------------------------------------------------------
 bool EvaluateSpawn_Build(
-    ChunkContext ctx,
-    uint poolBase,
-    uint sampleIndex,
-    out uint outTypeId,
-    out uint outLodIndex,
-    out float outPress01,
-    out float outScale,
-    out float outYaw,
-    out float outPitch,
-    out float outBend01,
-    out uint outSeed8,
-    out uint outVariantId,
-    out uint outAtlasIndex,
-    out float3 outPosWS)
+	ChunkContext ctx,
+	uint poolBase,
+	uint sampleIndex,
+	out uint outTypeId,
+	out uint outLodIndex,
+	out float outPress01,
+	out float outScale,
+	out float outYaw,
+	out float outPitch,
+	out float outBend01,
+	out uint outSeed8,
+	out uint outVariantId,
+	out uint outAtlasIndex,
+	out float3 outPosWS)
 {
 	outTypeId = 0u;
 	outLodIndex = 0u;
@@ -996,7 +996,7 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	uint chunkSeed = Hash2i(chunkCoord, g_CB.SeedSalt);
 	uint base = pool * g_CB.SamplesPerChunk;
 
-    // NOTE: still random+jitter. If you want stratified grid+jitter, replace here.
+	// NOTE: still random+jitter. If you want stratified grid+jitter, replace here.
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
 		uint seed = WangHash(chunkSeed ^ (s * 0x9E3779B9u));
@@ -1124,16 +1124,16 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float3 posWS;
 
 		if (!EvaluateSpawn_Build(ctx, base, s,
-            typeId, lodIndex,
-            press01, scale, yaw, pitch, bend01,
-            seed8, variantId, atlasIndex,
-            posWS))
+			typeId, lodIndex,
+			press01, scale, yaw, pitch, bend01,
+			seed8, variantId, atlasIndex,
+			posWS))
 			continue;
 
 		uint meshId =
-            (lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
-            (lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-                               g_SpeciesLOD2MeshId[typeId];
+			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
+			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
+							   g_SpeciesLOD2MeshId[typeId];
 
 		WaveReserveMeshCounter(meshId);
 

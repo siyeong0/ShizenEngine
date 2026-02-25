@@ -60,17 +60,24 @@ float GetOpacity(float2 uv)
 float3 GetNormal(float2 uv, float3 normalWS, float3 tangentWS)
 {
 	float3 N = normalize(normalWS);
+
 	if ((g_MaterialFlags & MAT_HAS_NORMAL) != 0)
 	{
 		float3 T = normalize(tangentWS);
+		T = normalize(T - N * dot(N, T));
 		float3 B = normalize(cross(N, T));
 
-		float3 nTS = UnpackNormal01(g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz);
+		float3 normalSample = g_NormalTex.Sample(g_LinearWrapSampler, uv).xyz;
+		float3 nTS = UnpackNormal01(normalSample);
+
 		nTS.xy *= g_NormalScale;
+		nTS = normalize(nTS);
 
 		float3x3 TBN = float3x3(T, B, N);
+
 		N = normalize(mul(nTS, TBN));
 	}
+	
 	return N;
 }
 

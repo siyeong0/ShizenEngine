@@ -7,13 +7,9 @@ StructuredBuffer<GrassBillboardInstance> g_GrassInstances;
 
 void GetCameraBasisWS(out float3 rightWS, out float3 upWS, out float3 forwardWS)
 {
-	rightWS = float3(g_FrameCB.InvView._11, g_FrameCB.InvView._21, g_FrameCB.InvView._31);
-	upWS = float3(g_FrameCB.InvView._12, g_FrameCB.InvView._22, g_FrameCB.InvView._32);
-	forwardWS = float3(g_FrameCB.InvView._13, g_FrameCB.InvView._23, g_FrameCB.InvView._33);
-
-	rightWS = NormalizeSafe3(rightWS, float3(1, 0, 0));
-	upWS = NormalizeSafe3(upWS, float3(0, 1, 0));
-	forwardWS = NormalizeSafe3(forwardWS, float3(0, 0, 1));
+	rightWS = normalize(g_FrameCB.InvView[0].xyz);
+	upWS = normalize(g_FrameCB.InvView[1].xyz);
+	forwardWS = normalize(g_FrameCB.InvView[2].xyz);
 }
 
 float3 RotateAroundUp(float3 v, float3 upWS, float yaw)
