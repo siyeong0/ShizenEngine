@@ -537,13 +537,13 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.4f;
-					gd.MinScale = 0.05f;
+					gd.MinScale = 0.15f;
 					gd.MaxScale = 0.20f;
 
-					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Gras_small_017.fbx");
-					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Gras_small_017.fbx");
+					// addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
+					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
+					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
 
 					m_pGrassSystem->AddGrassDesc(gd);
 				}

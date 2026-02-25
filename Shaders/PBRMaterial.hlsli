@@ -51,7 +51,7 @@ float GetOpacity(float2 uv)
 	float alpha = g_BaseColorFactor.a;
 	if ((g_MaterialFlags & MAT_HAS_BASECOLOR) != 0)
 	{
-		alpha *= g_BaseColorTex.Sample(g_LinearWrapSampler, uv).a;
+		alpha *= g_BaseColorTex.SampleLevel(g_LinearWrapSampler, uv, 0.0).a;
 	}
 	return alpha;
 #endif

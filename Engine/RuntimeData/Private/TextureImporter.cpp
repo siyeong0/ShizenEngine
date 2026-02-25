@@ -187,9 +187,11 @@ namespace shz
 			totalBytes += static_cast<uint64>(tm.Data.size());
 			mips.emplace_back(static_cast<TextureMip&&>(tm));
 		}
+
 		// ------------------------------------------------------------
-// Preserve alpha test coverage across mip chain
-// (keep alpha coverage logic, replace background RGB logic to avoid white mips)
+// Preserve alpha test coverage across mip chain (MODERATE)
+// - Keep alpha coverage logic but make it less aggressive
+// - Keep background RGB fix to avoid white mips
 // ------------------------------------------------------------
 		if (setting.bPreserveAlphaCoverage)
 		{
@@ -217,6 +219,11 @@ namespace shz
 				auto Clamp01 = [](float v) -> float
 				{
 					return std::min(std::max(v, 0.0f), 1.0f);
+				};
+
+				auto Lerp = [](float a, float b, float t) -> float
+				{
+					return a + (b - a) * t;
 				};
 
 				auto ComputeAlphaMinMaxU8 = [&](const TextureMip& mip, uint8& outMin, uint8& outMax)
@@ -274,20 +281,22 @@ namespace shz
 					}
 				};
 
+				// outCumGreater[t] = number of pixels with alpha > t
 				auto BuildCumGreater = [&](const std::array<uint32, 256>& hist, std::array<uint64, 256>& outCumGreater)
 				{
 					outCumGreater.fill(0);
 
 					uint64 running = 0;
-					running = hist[255];
-					outCumGreater[254] = running;
-
-					for (int t = 253; t >= 0; --t)
+					for (int a = 255; a >= 0; --a)
 					{
-						running += static_cast<uint64>(hist[t + 1]);
-						outCumGreater[static_cast<size_t>(t)] = running;
+						// when threshold is (a-1), pixels with alpha > (a-1) include alpha==a
+						// We'll fill: outCumGreater[t] = sum_{k=t+1..255} hist[k]
+						if (a < 255)
+						{
+							outCumGreater[static_cast<size_t>(a)] = running;
+						}
+						running += static_cast<uint64>(hist[static_cast<size_t>(a)]);
 					}
-
 					outCumGreater[255] = 0;
 				};
 
@@ -359,7 +368,7 @@ namespace shz
 				};
 
 				// ------------------------------------------------------------
-				// Aggressive per-mip target coverage from mip0: block-max proxy (KEEP)
+				// Aggressive per-mip target coverage from mip0: block-max proxy (KEEP as option)
 				// ------------------------------------------------------------
 				auto SampleAlphaU8_Mip0 = [&](uint32 x, uint32 y) -> uint8
 				{
@@ -427,6 +436,82 @@ namespace shz
 					}
 
 					return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
+				};
+
+				// ------------------------------------------------------------
+				// NEW: Less aggressive target coverage from mip0 (area-like proxy)
+				// - Use 9 samples per block (still cheap)
+				// ------------------------------------------------------------
+				auto ComputeTargetCoverageFromMip0_AreaProxy = [&](uint32 mipLevel, float cutoff01f) -> float
+				{
+					const TextureMip& m0 = mips[0];
+					const uint32 w0 = m0.Width;
+					const uint32 h0 = m0.Height;
+					if (w0 == 0 || h0 == 0 || m0.Data.empty())
+					{
+						return 0.0f;
+					}
+
+					const float cutoff = Clamp01(cutoff01f);
+					const float cutoffU8f = cutoff * 255.0f;
+
+					const uint32 step = (mipLevel >= 31) ? 1u : (1u << mipLevel);
+					const uint32 block = std::max(step, 1u);
+
+					auto PassAt = [&](uint32 x, uint32 y) -> uint64
+					{
+						const uint8 a = SampleAlphaU8_Mip0(x, y);
+						return (static_cast<float>(a) > cutoffU8f) ? 1ull : 0ull;
+					};
+
+					uint64 pass = 0;
+					uint64 count = 0;
+
+					for (uint32 by = 0; by < h0; by += block)
+					{
+						const uint32 y0 = by;
+						const uint32 y1 = std::min(by + block, h0);
+						const uint32 yc = y0 + (y1 - y0) / 2u;
+						const uint32 yb = (y1 > 0) ? (y1 - 1u) : y0;
+						const uint32 ym = yc;
+
+						for (uint32 bx = 0; bx < w0; bx += block)
+						{
+							const uint32 x0 = bx;
+							const uint32 x1 = std::min(bx + block, w0);
+							const uint32 xc = x0 + (x1 - x0) / 2u;
+							const uint32 xb = (x1 > 0) ? (x1 - 1u) : x0;
+							const uint32 xm = xc;
+
+							// 9-sample proxy (corners + center + edge-midpoints)
+							uint64 local = 0;
+							local += PassAt(x0, y0);
+							local += PassAt(xb, y0);
+							local += PassAt(x0, yb);
+							local += PassAt(xb, yb);
+							local += PassAt(xc, yc);
+							local += PassAt(xm, y0);
+							local += PassAt(xm, yb);
+							local += PassAt(x0, ym);
+							local += PassAt(xb, ym);
+
+							pass += local;
+							count += 9;
+						}
+					}
+
+					return (count > 0) ? (static_cast<float>(pass) / static_cast<float>(count)) : 0.0f;
+				};
+
+				// Mixed target: mostly area proxy, some block-max (to prevent over-thinning)
+				auto ComputeTargetCoverageFromMip0_Mixed = [&](uint32 mipLevel, float cutoff01f) -> float
+				{
+					const float tArea = ComputeTargetCoverageFromMip0_AreaProxy(mipLevel, cutoff01f);
+					const float tMax = ComputeTargetCoverageFromMip0_BlockMaxProxy(mipLevel, cutoff01f);
+
+					// Less aggressive than pure block-max
+					const float wMax = 0.30f; // 0.25~0.40 recommended
+					return Clamp01(tArea * (1.0f - wMax) + tMax * wMax);
 				};
 
 				// ------------------------------------------------------------
@@ -541,9 +626,8 @@ namespace shz
 					}
 
 					// Multi-pass dilation: for non-seed pixels, copy RGB from highest-alpha neighbor.
-					// For tiny mips this converges fast; for bigger mips cap the passes.
 					const uint32 maxDim = std::max(w, h);
-					const int maxPasses = static_cast<int>(std::min<uint32>(maxDim, 16u)); // aggressive but bounded
+					const int maxPasses = static_cast<int>(std::min<uint32>(maxDim, 12u)); // slightly cheaper than before
 
 					for (int p = 0; p < maxPasses; ++p)
 					{
@@ -610,7 +694,6 @@ namespace shz
 								}
 								else
 								{
-									// If neighbors don't help (very tiny mip), fall back to avg color.
 									mip.Data[i + 0] = fbR;
 									mip.Data[i + 1] = fbG;
 									mip.Data[i + 2] = fbB;
@@ -644,7 +727,7 @@ namespace shz
 
 				if (!bSkip)
 				{
-					const float t0 = ComputeTargetCoverageFromMip0_BlockMaxProxy(0u, alphaCutoff01);
+					const float t0 = ComputeTargetCoverageFromMip0_Mixed(0u, alphaCutoff01);
 					if (t0 < 0.0025f || t0 > 0.9975f)
 					{
 						bSkip = true;
@@ -653,8 +736,13 @@ namespace shz
 
 				if (!bSkip)
 				{
+					// ------------------------------------------------------------
+					// Moderation knobs (tuned to avoid "too strong" preservation)
+					// ------------------------------------------------------------
 					const float kScaleMin = 0.0f;
-					const float kScaleMax = 1024.0f;
+					const float kScaleMax = 4.0f;     // IMPORTANT: cap scale hard (2~8 recommended)
+
+					const float kPreserveStrength = 0.50f; // 0..1 (0.35~0.65 recommended)
 
 					const float cutoff = Clamp01(alphaCutoff01);
 					const float cutoffU8f = cutoff * 255.0f;
@@ -678,12 +766,11 @@ namespace shz
 							continue;
 						}
 
-						// For higher mips, seeds may vanish; propagation handles that and falls back to avg.
 						PropagateRGBFromSeeds(tm, seedAlphaU8, avgRGB01);
 					}
 
 					// ------------------------------------------------------------
-					// (B) Alpha coverage preservation: mip1..n only (KEEP behavior)
+					// (B) Alpha coverage preservation: mip1..n only (MODERATE)
 					// ------------------------------------------------------------
 					for (uint32 mip = 1; mip < desc.MipLevels; ++mip)
 					{
@@ -693,11 +780,13 @@ namespace shz
 							continue;
 						}
 
-						float target = ComputeTargetCoverageFromMip0_BlockMaxProxy(mip, alphaCutoff01);
+						// Less aggressive target coverage
+						float target = ComputeTargetCoverageFromMip0_Mixed(mip, alphaCutoff01);
 
-						const float kBiasBase = 1.10f;
-						const float kBiasSlope = 0.05f;
-						const float bias = std::min(kBiasBase + kBiasSlope * static_cast<float>(mip), 2.00f);
+						// Much smaller bias than before
+						const float kBiasBase = 1.02f;   // 1.00~1.05
+						const float kBiasSlope = 0.01f;  // 0.00~0.02
+						const float bias = std::min(kBiasBase + kBiasSlope * static_cast<float>(mip), 1.10f);
 						target = std::min(target * bias, 0.9999f);
 
 						if (target < 0.001f || target > 0.999f)
@@ -752,14 +841,15 @@ namespace shz
 						float denom = static_cast<float>(chosenT) + 0.5f;
 						denom = std::max(denom, 0.5f);
 
-						float scale = cutoffU8f / denom;
-						scale = std::min(std::max(scale, kScaleMin), kScaleMax);
+						float scaleRaw = cutoffU8f / denom;
+						scaleRaw = std::min(std::max(scaleRaw, kScaleMin), kScaleMax);
+
+						// Moderate application: pull scale toward 1
+						const float scale = Lerp(1.0f, scaleRaw, kPreserveStrength);
 
 						ApplyScalePremulRGB(tm, scale);
 
-						// Optional: After alpha scaling, run a short propagation again to be extra safe
-						// (alpha boosts can make previously irrelevant pixels more visible).
-						// Comment out if you want it cheaper.
+						// Cheap safety: a short propagation helps hide any newly-visible junk
 						PropagateRGBFromSeeds(tm, seedAlphaU8, avgRGB01);
 					}
 				}
