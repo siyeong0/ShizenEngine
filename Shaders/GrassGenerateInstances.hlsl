@@ -1,10 +1,15 @@
 // ============================================================================
 // GrassGenerateInstances.hlsl
+// - A style: Base Grass carpet + Flower overlay clusters
+//   * Base grass species: [0 .. NumBaseGrassSpecies-1] (default 16)
+//   * Flower species:     [NumBaseGrassSpecies .. NumSpecies-1]
+// - For each candidate point:
+//   * Spawn grass (carpet) from grass species weights (NO cluster mask)
+//   * Spawn flower (overlay) based on macro-cell flower selection + organic cluster mask
+// - Flower areas still keep grass because grass pass is independent.
 // - Fix: Voronoi/Worley integer cell handling for negative coordinates (NO uint-cast)
-// - Macro Voronoi cell chooses ONE non-base species (>=1)
-// - Inside that Voronoi cell, generate 1~4 organic sub-clusters (not perfect circles)
-// - Outside sub-clusters => BaseGrass (species 0)
-// - No special-first workflow flags; simple base vs cellSpecies selection
+// - BlueNoise threshold generator (StablePointThreshold01) used
+// - FillNewPoolsCS uses stratified grid + small jitter (already in your code)
 // ============================================================================
 
 #include "Common.hlsli"
@@ -71,7 +76,13 @@ StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 Texture2D<float> g_InteractionField;
 
 // Species selection tables (inclusive prefix)
-StructuredBuffer<float> g_SpeciesWeightPrefix; // prefix sum of Weight (size >= NumSpecies)
+// - For grass: this buffer stores prefix for species[0..NumBaseGrassSpecies-1]
+StructuredBuffer<float> g_SpeciesWeightPrefix;
+
+// Flower selection table (inclusive prefix) for flowers only
+// - size >= NumFlowers (NumSpecies - NumBaseGrassSpecies)
+// - flowerSpecies = NumBaseGrassSpecies + selectedIndex
+StructuredBuffer<float> g_FlowerWeightPrefix;
 
 // Species variation tables
 StructuredBuffer<uint> g_SpeciesVarOffsets; // size >= NumSpecies+1
@@ -100,8 +111,8 @@ static const float CHUNK_AABB_HALF_Y = 20.0f;
 // "Macro Voronoi cell" world scale in meters (controls big region size)
 static const float VORONOI_MACRO_CELL_METERS = 24.0f;
 
-// spawn tuning
-static const float CLUSTER_SPAWN_BOOST = 1.0f; // cluster area denser than base
+// For flowers: inside cluster area slightly denser than base flower probability
+static const float FLOWER_CLUSTER_BOOST = 1.35f;
 
 #ifndef MAX_CELL_CLUSTERS
 #define MAX_CELL_CLUSTERS 4u
@@ -128,7 +139,6 @@ float Rand01(uint seed)
 // IMPORTANT: keep int2 -> hash stable for negatives
 uint Hash2i(int2 v, uint salt)
 {
-    // reinterpret signed bits as uint, then mix
 	uint x = asuint(v.x);
 	uint y = asuint(v.y);
 	uint h = (x * 73856093u) ^ (y * 19349663u) ^ salt;
@@ -157,7 +167,6 @@ float2 Hash02_u2(uint2 p)
 	return float2(a, b);
 }
 
-// int2 버전: 음수 셀 좌표에서도 일정한 난수 생성
 float2 Hash02_i2(int2 cell, uint seed)
 {
 	uint h = Hash2i(cell, seed);
@@ -169,7 +178,6 @@ float2 Hash02_i2(int2 cell, uint seed)
 
 float2 Smooth2(float2 t)
 {
-    // smootherstep
 	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
@@ -226,7 +234,7 @@ float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 	float amp = 1.0f;
 	float freq = 0.18f;
 
-    [unroll]
+	[unroll]
 	for (int o = 0; o < 3; ++o)
 	{
 		uint so = WangHash(seed ^ (0x9E3779B9u * (uint) (o + 1)));
@@ -252,14 +260,13 @@ float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 
 // -----------------------------------------------------------------------------
 // WORLEY(Cellular) distance field + seed retrieval (Voronoi)
-// FIX: keep SeedCell as int2 (no uint cast!) to avoid negative-space artifacts
 // -----------------------------------------------------------------------------
 struct WorleyResult
 {
 	float F1;
 	float F2;
-	int2 SeedCell; // integer cell coordinate of nearest seed (SIGNED)
-	float2 SeedPos; // nearest seed position in cell space
+	int2 SeedCell; // SIGNED
+	float2 SeedPos;
 };
 
 WorleyResult WorleyF1F2_WithSeed(float2 x, uint seed)
@@ -275,18 +282,15 @@ WorleyResult WorleyF1F2_WithSeed(float2 x, uint seed)
 	int2 bestCell = int2(0, 0);
 	float2 bestPos = 0.0f;
 
-    [unroll]
+	[unroll]
 	for (int j = -1; j <= 1; ++j)
 	{
-        [unroll]
+		[unroll]
 		for (int i = -1; i <= 1; ++i)
 		{
 			int2 cell = p + int2(i, j);
 
-            // stable random offset per cell (works for negative cells)
-			float2 rnd = Hash02_i2(cell, seed); // 0..1
-
-            // feature point in this neighbor cell (relative to pF)
+			float2 rnd = Hash02_i2(cell, seed);
 			float2 feature = float2(i, j) + rnd;
 			float2 q = feature - f;
 
@@ -382,7 +386,7 @@ float SampleInteraction(float2 worldXZ)
 // -----------------------------------------------------------------------------
 bool AabbInsideFrustum(float3 bmin, float3 bmax)
 {
-    [unroll]
+	[unroll]
 	for (int i = 0; i < 6; ++i)
 	{
 		float4 P = g_FrameCB.FrustumPlanesWS[i];
@@ -448,12 +452,7 @@ bool BallotTestLane(BallotMask b, uint lane)
 {
 	uint word = lane >> 5;
 	uint bit = lane & 31u;
-
-	uint w =
-        (word == 0u) ? b.M.x :
-        (word == 1u) ? b.M.y :
-        (word == 2u) ? b.M.z : b.M.w;
-
+	uint w = (word == 0u) ? b.M.x : (word == 1u) ? b.M.y : (word == 2u) ? b.M.z : b.M.w;
 	return ((w >> bit) & 1u) != 0u;
 }
 uint BallotFirstLane(BallotMask b)
@@ -471,10 +470,9 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 {
 	uint lane = WaveGetLaneIndex();
 	BallotMask remaining = WaveBallotAll();
-
 	uint myBase = 0u;
 
-    [loop]
+	[loop]
 	while (BallotAny(remaining))
 	{
 		uint leaderLane = BallotFirstLane(remaining);
@@ -519,27 +517,17 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 }
 
 // -----------------------------------------------------------------------------
-// “Point sampling” threshold generator (stable, no axis bias)
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// “Point sampling” threshold generator
-// - BlueNoiseTex 기반 (균일/자연스러운 분포)
-// - intra(원형 bias) 제거
-// - seed로 타일/오프셋을 바꿔 반복감 감소
+// BlueNoise threshold generator (stable, no axis bias)
 // -----------------------------------------------------------------------------
 float StablePointThreshold01(float2 worldXZ, uint seed)
 {
-	// 블루노이즈 스케일: 값이 클수록 월드에서 더 자주 반복됨(=작은 패턴)
-	// 일단 0.075~0.12 사이에서 튜닝 추천
-	const float blueFreq = 0.085f;
+	const float blueFreq = 0.85f;
 
-	// seed 기반 타일 오프셋/미러로 반복감 완화
 	uint h = WangHash(seed ^ 0xA53A9E37u);
 	float2 off = float2(
 		((h >> 0) & 1023u) * (1.0f / 1024.0f),
 		((h >> 10) & 1023u) * (1.0f / 1024.0f));
 
-	// 간단한 미러/회전(90도) 섞기
 	uint mode = (h >> 24) & 3u;
 
 	float2 uv = frac(worldXZ * blueFreq + off);
@@ -553,13 +541,12 @@ float StablePointThreshold01(float2 worldXZ, uint seed)
 
 	float bn = g_BlueNoiseTex.SampleLevel(g_LinearWrapSampler, uv, 0.0f).r;
 
-	// seed로 미세한 셔플(정확히 같은 bn가 반복될 때 약간 깨기)
 	float sh = Rand01(h ^ 0x1BADC0DEu);
 	return frac(bn + sh * (1.0f / 256.0f));
 }
 
 // -----------------------------------------------------------------------------
-// Shared spawn logic
+// Shared chunk context
 // -----------------------------------------------------------------------------
 struct ChunkContext
 {
@@ -625,7 +612,6 @@ bool BuildChunkContext(uint cellIndex, out ChunkContext ctx)
 	ctx.Lod0Sqr = lod0Sqr;
 	ctx.Lod1Sqr = lod1Sqr;
 	ctx.ChunkDensity = chunkDensity;
-
 	return true;
 }
 
@@ -659,37 +645,64 @@ uint MakeAtlasIndex(uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// Species selection: macro-cell chooses ONE non-base species (skip species 0)
+// Species selection helpers
 // -----------------------------------------------------------------------------
-uint PickNonBaseSpeciesFromCell(uint cellHash)
+uint PickGrassSpecies(uint seed)
 {
-	uint num = max(g_CB.NumSpecies, 1u);
-	if (num <= 1u)
+	uint nGrass = min(max(g_CB.NumBaseGrassSpecies, 1u), g_CB.NumSpecies);
+	if (nGrass == 1u)
 		return 0u;
 
-	float baseW = max(g_SpeciesWeightPrefix[0], 0.0f);
-	float total = max(g_SpeciesWeightPrefix[num - 1u] - baseW, 0.0f);
-
+	float total = max(g_SpeciesWeightPrefix[nGrass - 1u], 0.0f);
 	if (total <= 1e-8f)
-		return 1u + (WangHash(cellHash) % (num - 1u));
+		return WangHash(seed ^ 0x13579BDFu) % nGrass;
+
+	float r = Rand01(seed ^ 0x2468ACE0u) * total;
+
+	[loop]
+	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
+	{
+		if (s >= nGrass)
+			break;
+
+		if (r <= g_SpeciesWeightPrefix[s])
+			return s;
+	}
+	return nGrass - 1u;
+}
+
+uint PickFlowerSpeciesFromCell(uint cellHash)
+{
+	uint base = min(g_CB.NumBaseGrassSpecies, g_CB.NumSpecies);
+	uint num = g_CB.NumSpecies;
+	if (num <= base)
+		return 0u;
+
+	uint numFlowers = num - base;
+	if (numFlowers == 1u)
+		return base;
+
+	float total = max(g_FlowerWeightPrefix[numFlowers - 1u], 0.0f);
+	if (total <= 1e-8f)
+		return base + (WangHash(cellHash) % numFlowers);
 
 	float r = Rand01(cellHash ^ 0x13579BDFu) * total;
 
-    [loop]
-	for (uint s = 1u; s < MAX_GRASS_SPECIES; ++s)
+	[loop]
+	for (uint i = 0u; i < MAX_GRASS_SPECIES; ++i)
 	{
-		if (s >= num)
+		if (i >= numFlowers)
 			break;
-		float pref = g_SpeciesWeightPrefix[s] - baseW;
-		if (r <= pref)
-			return s;
+
+		if (r <= g_FlowerWeightPrefix[i])
+			return base + i;
 	}
 
 	return num - 1u;
 }
 
 // -----------------------------------------------------------------------------
-// Organic blob helpers (not perfect circles)
+// Organic blob helpers
 // -----------------------------------------------------------------------------
 float SmoothMin(float a, float b, float k)
 {
@@ -697,109 +710,87 @@ float SmoothMin(float a, float b, float k)
 	return lerp(b, a, h) - k * h * (1.0f - h);
 }
 
-// Signed distance to rotated ellipse (centered at 0)
-// a,b = radii in local space, ang = rotation
 float SdEllipseRot(float2 p, float2 ab, float ang)
 {
 	float2 q = Rotate2D(p, ang);
-    // approximate ellipse sdf (good enough for masking)
 	float2 k = q / max(ab, 1e-6f.xx);
-	return length(k) - 1.0f; // <0 inside
+	return length(k) - 1.0f;
 }
 
-// Convert union SDF to mask
 float SdfToMask(float d, float softness)
 {
-    // inside negative => 1, outside positive => 0
 	return 1.0f - smoothstep(-softness, +softness, d);
 }
 
-struct CellClusterOut
+struct FlowerClusterOut
 {
-	uint CellSpecies; // chosen non-base species (>=1) or 0 if none
-	float ClusterMask01; // 0..1 (where sub-clusters exist)
-	float ClusterSelect01; // 0..1 (mask shaped by strength)
+	uint FlowerSpecies;
+	float ClusterMask01;
+	float ClusterSelect01;
 };
 
-// -----------------------------------------------------------------------------
-// EvaluateCellClusters
-// - robust in negative coordinates (no need to subtract WorldOrigin)
-// - macro Voronoi cell: choose one non-base species
-// - within the cell, union 1~4 warped ellipses + smooth-min => organic shapes
-// -----------------------------------------------------------------------------
-CellClusterOut EvaluateCellClusters(float2 worldXZ)
+FlowerClusterOut EvaluateFlowerClusters(float2 worldXZ)
 {
-	CellClusterOut o;
-	o.CellSpecies = 0u;
+	FlowerClusterOut o;
+	o.FlowerSpecies = 0u;
 	o.ClusterMask01 = 0.0f;
 	o.ClusterSelect01 = 0.0f;
+
+	uint base = min(g_CB.NumBaseGrassSpecies, g_CB.NumSpecies);
+	if (g_CB.NumSpecies <= base)
+		return o;
 
 	uint vorSeed = WangHash(g_CB.SeedSalt ^ 0xCAFEBABEu);
 
 	float macroScale = max(VORONOI_MACRO_CELL_METERS, 1e-3f);
-
-    // IMPORTANT: use absolute world space directly (signed safe now)
 	float2 x_macro = worldXZ / macroScale;
 
-    // Find macro-cell (Voronoi)
 	WorleyResult wr = WorleyF1F2_WithSeed(x_macro, vorSeed);
 
-    // Stable cellHash from SIGNED seed cell
 	uint cellHash = Hash2i(wr.SeedCell, vorSeed ^ 0x31415926u);
 
-    // choose ONE non-base species for this cell
-	uint cellSp = PickNonBaseSpeciesFromCell(cellHash);
-	o.CellSpecies = cellSp;
+	uint flowerSp = PickFlowerSpeciesFromCell(cellHash);
+	o.FlowerSpecies = flowerSp;
 
-	if (cellSp == 0u)
-		return o;
-
-	float4 cp = g_SpeciesClusterParams[cellSp];
+	float4 cp = g_SpeciesClusterParams[flowerSp];
 	float strength = saturate(cp.x);
-	float clusterScaleM = max(cp.y, 0.01f); // meters
+	float clusterScaleM = max(cp.y, 0.01f);
 	float jitter01 = saturate(cp.z);
 
+	// If cluster disabled, treat as no flower clusters
 	if (strength <= 1e-5f)
 		return o;
 
-    // Local coordinates around this cell's seed feature position (macro-space)
-	float2 local = (x_macro - wr.SeedPos); // roughly within [-1..1] near seed
+	float2 local = (x_macro - wr.SeedPos);
 
-    // Per-cell isotropic warp/rotation (prevents streaks, keeps “round-ish but organic”)
 	uint warpSeed = WangHash(cellHash ^ 0x9E3779B9u);
 	float baseAng = Rand01(warpSeed ^ 0xABCDu) * GRASS_TWO_PI;
 	local = Rotate2D(local, baseAng);
 
-    // stronger jitter => more warp
 	float warpAmp = jitter01 * lerp(0.10f, 0.28f, strength);
 	local = DomainWarp2D_Isotropic(local, warpAmp, warpSeed);
 
-    // Cluster count: small clusterScale vs macro => more clusters
 	float ratio = clusterScaleM / macroScale;
 	uint clusterCount =
-        (ratio < 0.18f) ? 4u :
-        (ratio < 0.30f) ? 3u :
-        (ratio < 0.55f) ? 2u : 1u;
+		(ratio < 0.18f) ? 4u :
+		(ratio < 0.30f) ? 3u :
+		(ratio < 0.55f) ? 2u : 1u;
 
-    // little randomness
-    {
+	{
 		float r = Rand01(cellHash ^ 0xC001D00Du);
 		if (clusterCount < MAX_CELL_CLUSTERS && r < saturate((strength - 0.35f) * 0.65f))
 			clusterCount = min(clusterCount + 1u, MAX_CELL_CLUSTERS);
 		clusterCount = max(1u, min(clusterCount, MAX_CELL_CLUSTERS));
 	}
 
-    // meters -> macro-space radius
 	float baseR = clamp(clusterScaleM / macroScale, 0.08f, 0.80f);
 
-    // softer edge when low strength
 	float soft = lerp(0.22f, 0.10f, strength) * max(baseR, 0.12f);
 	float kSmooth = lerp(0.08f, 0.03f, strength);
 
-    // Union SDF of multiple blobs (ellipses)
 	float dUnion = 1e9f;
 
-    [unroll]
+	[unroll]
 	for (uint i = 0u; i < MAX_CELL_CLUSTERS; ++i)
 	{
 		if (i >= clusterCount)
@@ -807,18 +798,15 @@ CellClusterOut EvaluateCellClusters(float2 worldXZ)
 
 		uint si = WangHash(cellHash ^ (0xBADC0FFEu + 17u * i));
 
-        // blob center offset (macro units)
 		float2 off = Hash02_i2(wr.SeedCell + int2((int) (i * 31u), (int) (i * 57u)), si) * 2.0f - 1.0f;
-		off *= lerp(0.10f, 0.65f, jitter01); // allow wider spread if jitter is high
+		off *= lerp(0.10f, 0.65f, jitter01);
 
-        // blob anisotropy + rotation
 		float blobAng = Rand01(si ^ 0x2468ACE0u) * GRASS_TWO_PI;
-		float ar = lerp(0.65f, 1.45f, Rand01(si ^ 0x11112222u)); // aspect ratio
+		float ar = lerp(0.65f, 1.45f, Rand01(si ^ 0x11112222u));
 		float rr = baseR * lerp(0.80f, 1.20f, Rand01(si ^ 0x33334444u));
 
 		float2 ab = float2(rr * ar, rr / max(ar, 1e-3f));
 
-        // extra micro-warp per blob to break “ellipse look”
 		float2 p = local - off;
 		p = DomainWarp2D_Isotropic(p, warpAmp * 0.55f, si ^ 0xFACECAFEu);
 
@@ -826,56 +814,54 @@ CellClusterOut EvaluateCellClusters(float2 worldXZ)
 		dUnion = SmoothMin(dUnion, d, kSmooth);
 	}
 
-    // Convert to mask
 	float mask = SdfToMask(dUnion, soft);
-
-    // Strength shapes core (less “perfect fill”)
 	float k = lerp(1.0f, 2.8f, strength);
 	mask = saturate(pow(saturate(mask), k));
 
 	o.ClusterMask01 = mask;
 	o.ClusterSelect01 = saturate(mask * strength);
-
 	return o;
 }
 
 // -----------------------------------------------------------------------------
-// EvaluateSpawn
-// - decide base vs cluster species inside cell
+// Spawn output
 // -----------------------------------------------------------------------------
-bool EvaluateSpawn(
-    ChunkContext ctx,
-    uint poolBase,
-    uint sampleIndex,
-    out uint outTypeId,
-    out uint outLodIndex,
-    out float outPress01,
-    out float outScale,
-    out float outYaw,
-    out float outPitch,
-    out float outBend01,
-    out uint outSeed8,
-    out uint outVariantId,
-    out uint outAtlasIndex,
-    out float3 outPosWS
-)
+struct SpawnOut
 {
-	outTypeId = 0u;
-	outLodIndex = 0u;
-	outPress01 = 0.0f;
-	outScale = 0.0f;
-	outYaw = 0.0f;
-	outPitch = 0.0f;
-	outBend01 = 0.0f;
-	outSeed8 = 0u;
-	outVariantId = 0u;
-	outAtlasIndex = 0u;
-	outPosWS = float3(0, 0, 0);
+	uint TypeId;
+	uint LodIndex;
+	float Press01;
+	float Scale;
+	float Yaw;
+	float Pitch;
+	float Bend01;
+	uint Seed8;
+	uint VariantId;
+	uint AtlasIndex;
+	float3 PosWS;
+};
+
+// -----------------------------------------------------------------------------
+// Spawn attempt: Grass (carpet)
+// -----------------------------------------------------------------------------
+bool TrySpawnGrass(ChunkContext ctx, uint poolBase, uint sampleIndex, out SpawnOut o)
+{
+	o.TypeId = 0u;
+	o.LodIndex = 0u;
+	o.Press01 = 0.0f;
+	o.Scale = 0.0f;
+	o.Yaw = 0.0f;
+	o.Pitch = 0.0f;
+	o.Bend01 = 0.0f;
+	o.Seed8 = 0u;
+	o.VariantId = 0u;
+	o.AtlasIndex = 0u;
+	o.PosWS = float3(0, 0, 0);
 
 	PoolEntry p = g_PoolPositions[poolBase + sampleIndex];
 	if (isnan(p.Position.y))
 	{
-		outPosWS = float3(0.0f, INVALID_NAN, 0.0f);
+		o.PosWS = float3(0.0f, INVALID_NAN, 0.0f);
 		return false;
 	}
 
@@ -887,27 +873,8 @@ bool EvaluateSpawn(
 
 	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u));
 
-    // Evaluate macro-cell clusters
-	CellClusterOut cc = EvaluateCellClusters(posXZ);
-
-    // Choose species: base(0) vs cell species
-	float rSel = Rand01(seed ^ 0x51EC7EEDu);
-	float sel = cc.ClusterSelect01;
-	sel = saturate(sel + cc.ClusterMask01 * 0.35f);
-	sel = saturate(sel * lerp(1.0f, 1.35f, cc.ClusterSelect01));
-
-	uint chosenSpecies = (rSel < sel) ? cc.CellSpecies : 0u;
-
-	float mask = cc.ClusterMask01;
-	mask = pow(saturate(mask), 0.65f);
-
-	float boost = lerp(1.0f, CLUSTER_SPAWN_BOOST, mask);
-	float prob = D * ((chosenSpecies == 0u) ? 1.0f : boost);
-	prob = (chosenSpecies == 0u) ? prob : saturate(prob * 1.15f);
-
-	prob = saturate(prob);
-
-	prob = saturate(prob);
+	// Carpet probability: just density
+	float prob = saturate(D);
 	if (prob <= 0.001f)
 		return false;
 
@@ -915,9 +882,11 @@ bool EvaluateSpawn(
 	if (th > prob)
 		return false;
 
-    // Map species -> variation -> type
-	uint varId = PickVariationUniform(chosenSpecies, seed ^ 0xBBBBu);
-	uint typeId = MapSpeciesVariationToTypeId(chosenSpecies, varId);
+	// Pick grass species from [0..NumBaseGrassSpecies-1]
+	uint grassSp = PickGrassSpecies(seed ^ 0x51EC7EEDu);
+
+	uint varId = PickVariationUniform(grassSp, seed ^ 0xBBBBu);
+	uint typeId = MapSpeciesVariationToTypeId(grassSp, varId);
 
 	if (typeId >= g_CB.NumGrassTypes)
 		typeId = typeId % max(g_CB.NumGrassTypes, 1u);
@@ -936,8 +905,8 @@ bool EvaluateSpawn(
 	float distSqr = dot(dxz, dxz);
 
 	uint lodIndex =
-        (distSqr < ctx.Lod0Sqr) ? 0u :
-        (distSqr < ctx.Lod1Sqr) ? 1u : 2u;
+		(distSqr < ctx.Lod0Sqr) ? 0u :
+		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
 
 	float scaleT = Rand01(seed ^ 0x5555u);
 	float scale = lerp(minScale, maxScale, scaleT);
@@ -960,18 +929,135 @@ bool EvaluateSpawn(
 	if (!GrassInstanceAabbInsideFrustum(posWS, scale))
 		return false;
 
-	outTypeId = typeId;
-	outLodIndex = lodIndex;
-	outPress01 = press01;
-	outScale = scale;
-	outYaw = yaw;
-	outPitch = pitch;
-	outBend01 = bend01;
-	outSeed8 = seed8;
-	outVariantId = variantId;
-	outAtlasIndex = atlasIndex;
-	outPosWS = posWS;
+	o.TypeId = typeId;
+	o.LodIndex = lodIndex;
+	o.Press01 = press01;
+	o.Scale = scale;
+	o.Yaw = yaw;
+	o.Pitch = pitch;
+	o.Bend01 = bend01;
+	o.Seed8 = seed8;
+	o.VariantId = variantId;
+	o.AtlasIndex = atlasIndex;
+	o.PosWS = posWS;
+	return true;
+}
 
+// -----------------------------------------------------------------------------
+// Spawn attempt: Flower (overlay clusters)
+// -----------------------------------------------------------------------------
+bool TrySpawnFlower(ChunkContext ctx, uint poolBase, uint sampleIndex, out SpawnOut o)
+{
+	o.TypeId = 0u;
+	o.LodIndex = 0u;
+	o.Press01 = 0.0f;
+	o.Scale = 0.0f;
+	o.Yaw = 0.0f;
+	o.Pitch = 0.0f;
+	o.Bend01 = 0.0f;
+	o.Seed8 = 0u;
+	o.VariantId = 0u;
+	o.AtlasIndex = 0u;
+	o.PosWS = float3(0, 0, 0);
+
+	PoolEntry p = g_PoolPositions[poolBase + sampleIndex];
+	if (isnan(p.Position.y))
+	{
+		o.PosWS = float3(0.0f, INVALID_NAN, 0.0f);
+		return false;
+	}
+
+	uint base = min(g_CB.NumBaseGrassSpecies, g_CB.NumSpecies);
+	if (g_CB.NumSpecies <= base)
+		return false;
+
+	float2 posXZ = p.Position.xz;
+
+	float D = SampleWorldDensity(posXZ, INSTANCE_DENSITY_MIP);
+	if (D <= DENSITY_DISABLE_THRESHOLD)
+		return false;
+
+	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u) ^ 0xF10A3C01u);
+
+	// Evaluate flower clusters
+	FlowerClusterOut cc = EvaluateFlowerClusters(posXZ);
+	if (cc.FlowerSpecies < base)
+		return false;
+
+	// Must be inside cluster mask (soft), but allow tiny sprinkle near edges
+	float mask = cc.ClusterMask01; // 0..1
+	float shaped = saturate(pow(mask, 0.85f));
+
+	// Global flower scale (tuning) + cluster boost
+	float prob = D * saturate(g_CB.FlowerDensityScale);
+	prob *= lerp(0.10f, 1.0f, shaped);
+	prob *= lerp(1.0f, FLOWER_CLUSTER_BOOST, shaped);
+	prob = saturate(prob);
+
+	if (prob <= 0.001f)
+		return false;
+
+	float th = StablePointThreshold01(posXZ, seed ^ 0xABCD1234u);
+	if (th > prob)
+		return false;
+
+	uint flowerSp = cc.FlowerSpecies;
+
+	uint varId = PickVariationUniform(flowerSp, seed ^ 0xB00B1Eu);
+	uint typeId = MapSpeciesVariationToTypeId(flowerSp, varId);
+
+	if (typeId >= g_CB.NumGrassTypes)
+		typeId = typeId % max(g_CB.NumGrassTypes, 1u);
+
+	float4 typeP = g_TypeParams0[typeId];
+	float minScale = typeP.x;
+	float maxScale = max(typeP.y, minScale);
+	float bendMin = typeP.z;
+	float bendMax = max(typeP.w, bendMin);
+
+	float press01 = saturate(SampleInteraction(posXZ));
+	float3 posWS = p.Position;
+
+	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	float2 dxz = posWS.xz - camXZ;
+	float distSqr = dot(dxz, dxz);
+
+	uint lodIndex =
+		(distSqr < ctx.Lod0Sqr) ? 0u :
+		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
+
+	float scaleT = Rand01(seed ^ 0x5555u);
+	float scale = lerp(minScale, maxScale, scaleT);
+
+	float yaw = Rand01(seed ^ 0x6666u) * GRASS_TWO_PI;
+
+	float3 terrainN = normalize(SampleTerrainNormalAtWorldXZLevel(posXZ, 0.0f));
+	float slope01 = saturate(1.0f - terrainN.y);
+	float align = saturate(slope01) * saturate(g_CB.NormalAlignStrength);
+
+	float2 yp = ComputeYawPitchFromNormal(terrainN, yaw);
+	float pitch = yp.y * align;
+
+	float bend01 = lerp(bendMin, bendMax, Rand01(seed ^ 0x8888u));
+
+	uint seed8 = MakeSeed8(seed ^ 0x1234u);
+	uint variantId = MakeVariantId(seed);
+	uint atlasIndex = MakeAtlasIndex(seed);
+
+	if (!GrassInstanceAabbInsideFrustum(posWS, scale))
+		return false;
+
+	o.TypeId = typeId;
+	o.LodIndex = lodIndex;
+	o.Press01 = press01;
+	o.Scale = scale;
+	o.Yaw = yaw;
+	o.Pitch = pitch;
+	o.Bend01 = bend01;
+	o.Seed8 = seed8;
+	o.VariantId = variantId;
+	o.AtlasIndex = atlasIndex;
+	o.PosWS = posWS;
 	return true;
 }
 
@@ -1018,7 +1104,7 @@ void UpdateChunkPoolsCS(uint3 tid : SV_DispatchThreadID)
 }
 
 // -----------------------------------------------------------------------------
-// Entry B) FillNewPoolsCS
+// Entry B) FillNewPoolsCS (stratified grid + small jitter)
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -1092,7 +1178,6 @@ void FillNewPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		float2 cell01 = (float2(ix, iz) + 0.5f.xx) / (float) gridDim;
 
 		float2 j01 = (Hash02_u2(uint2(ix, iz) ^ uint2(chunkSeed, seed)) - 0.5f.xx);
-		
 		float jitterCell = saturate(g_CB.Jitter) * 0.35f;
 
 		cell01 += j01 * (jitterCell / (float) gridDim);
@@ -1131,7 +1216,7 @@ void ClearSpeciesCountersCS(uint3 tid : SV_DispatchThreadID)
 }
 
 // -----------------------------------------------------------------------------
-// Entry B-2) CountInstancesFromPoolsCS
+// Entry B-2) CountInstancesFromPoolsCS (grass + flower)
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -1147,20 +1232,21 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint typeId, lodIndex;
-		float press01, scale, yaw, pitch, bend01;
-		uint seed8, variantId, atlasIndex;
-		float3 posWS;
+		SpawnOut so;
 
-		if (!EvaluateSpawn(ctx, base, s,
-                           typeId, lodIndex,
-                           press01, scale, yaw, pitch, bend01,
-                           seed8, variantId, atlasIndex,
-                           posWS))
-			continue;
+		// 1) Grass
+		if (TrySpawnGrass(ctx, base, s, so))
+		{
+			uint idx = so.TypeId * 3u + so.LodIndex;
+			InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
+		}
 
-		uint idx = typeId * 3u + lodIndex;
-		InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
+		// 2) Flower
+		if (TrySpawnFlower(ctx, base, s, so))
+		{
+			uint idx = so.TypeId * 3u + so.LodIndex;
+			InterlockedAdd(g_SpeciesLodCounts[idx], 1u);
+		}
 	}
 }
 
@@ -1201,7 +1287,7 @@ void PrefixSpeciesOffsetsCS(uint3 tid : SV_DispatchThreadID)
 }
 
 // -----------------------------------------------------------------------------
-// Entry C) BuildInstancesFromPoolsCS
+// Entry C) BuildInstancesFromPoolsCS (grass + flower)
 // -----------------------------------------------------------------------------
 [numthreads(256, 1, 1)]
 void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
@@ -1217,46 +1303,78 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 
 	for (uint s = tid.x; s < g_CB.SamplesPerChunk; s += 256u)
 	{
-		uint typeId, lodIndex;
-		float press01, scale, yaw, pitch, bend01;
-		uint seed8, variantId, atlasIndex;
-		float3 posWS;
+		SpawnOut so;
 
-		if (!EvaluateSpawn(ctx, base, s,
-                           typeId, lodIndex,
-                           press01, scale, yaw, pitch, bend01,
-                           seed8, variantId, atlasIndex,
-                           posWS))
-			continue;
+		// ---- helper lambda-like macro (manual) ----
+		// Build function body duplicated for grass/flower for speed + clarity.
+		// ------------------------------------------
 
-		uint meshId =
-            (lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
-            (lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-                               g_SpeciesLOD2MeshId[typeId];
-
-		WaveReserveMeshCounter_Grouped(meshId);
-
-		uint idx = typeId * 3u + lodIndex;
-
-		uint local = 0u;
-		InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);
-
-		uint globalIndex = g_SpeciesLodOffsets[idx] + local;
-
-		if (lodIndex == 0u)
+		// 1) Grass
+		if (TrySpawnGrass(ctx, base, s, so))
 		{
-			GrassMeshInstance inst = MakeGrassMeshInstance(posWS, scale, yaw, pitch, bend01, press01, variantId, seed8);
-			g_OutInstancesLOD0[globalIndex] = inst;
+			uint meshId =
+				(so.LodIndex == 0u) ? g_SpeciesLOD0MeshId[so.TypeId] :
+				(so.LodIndex == 1u) ? g_SpeciesLOD1MeshId[so.TypeId] :
+									  g_SpeciesLOD2MeshId[so.TypeId];
+
+			WaveReserveMeshCounter_Grouped(meshId);
+
+			uint idx = so.TypeId * 3u + so.LodIndex;
+
+			uint local = 0u;
+			InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);
+
+			uint globalIndex = g_SpeciesLodOffsets[idx] + local;
+
+			if (so.LodIndex == 0u)
+			{
+				GrassMeshInstance inst = MakeGrassMeshInstance(so.PosWS, so.Scale, so.Yaw, so.Pitch, so.Bend01, so.Press01, so.VariantId, so.Seed8);
+				g_OutInstancesLOD0[globalIndex] = inst;
+			}
+			else if (so.LodIndex == 1u)
+			{
+				GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(so.PosWS, so.Scale, so.Yaw, so.Bend01, so.Press01, so.VariantId, so.Seed8, 0u, 0u);
+				g_OutInstancesLOD1[globalIndex] = inst;
+			}
+			else
+			{
+				GrassBillboardInstance inst = MakeGrassBillboardInstance(so.PosWS, so.Scale, so.Yaw, so.AtlasIndex, so.Seed8);
+				g_OutInstancesLOD2[globalIndex] = inst;
+			}
 		}
-		else if (lodIndex == 1u)
+
+		// 2) Flower
+		if (TrySpawnFlower(ctx, base, s, so))
 		{
-			GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(posWS, scale, yaw, bend01, press01, variantId, seed8, 0u, 0u);
-			g_OutInstancesLOD1[globalIndex] = inst;
-		}
-		else
-		{
-			GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
-			g_OutInstancesLOD2[globalIndex] = inst;
+			uint meshId =
+				(so.LodIndex == 0u) ? g_SpeciesLOD0MeshId[so.TypeId] :
+				(so.LodIndex == 1u) ? g_SpeciesLOD1MeshId[so.TypeId] :
+									  g_SpeciesLOD2MeshId[so.TypeId];
+
+			WaveReserveMeshCounter_Grouped(meshId);
+
+			uint idx = so.TypeId * 3u + so.LodIndex;
+
+			uint local = 0u;
+			InterlockedAdd(g_SpeciesLodWriteCounters[idx], 1u, local);
+
+			uint globalIndex = g_SpeciesLodOffsets[idx] + local;
+
+			if (so.LodIndex == 0u)
+			{
+				GrassMeshInstance inst = MakeGrassMeshInstance(so.PosWS, so.Scale, so.Yaw, so.Pitch, so.Bend01, so.Press01, so.VariantId, so.Seed8);
+				g_OutInstancesLOD0[globalIndex] = inst;
+			}
+			else if (so.LodIndex == 1u)
+			{
+				GrassCrossPlaneInstance inst = MakeGrassCrossPlaneInstance(so.PosWS, so.Scale, so.Yaw, so.Bend01, so.Press01, so.VariantId, so.Seed8, 0u, 0u);
+				g_OutInstancesLOD1[globalIndex] = inst;
+			}
+			else
+			{
+				GrassBillboardInstance inst = MakeGrassBillboardInstance(so.PosWS, so.Scale, so.Yaw, so.AtlasIndex, so.Seed8);
+				g_OutInstancesLOD2[globalIndex] = inst;
+			}
 		}
 	}
 }

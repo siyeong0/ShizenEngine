@@ -20,10 +20,9 @@ namespace shz
 
     // ---------------------------------------------------------------------
     // GrassDesc
-    // - species 0 is reserved as BaseGrass (caller responsibility: add base first)
-    // - Weight: used for choosing the "cell species" among species[1..]
-    //   (base weight is ignored for that selection; base is used as fallback outside clusters)
-    // - Cluster params are used ONLY for non-base species to form 1~2 sub-clusters in a cell.
+    // - Same struct used for grass and flower.
+    // - For grass species: ClusterStrength should be 0 (ignored by grass spawn).
+    // - For flower species: ClusterStrength/Scale/Jitter shape macro-cell clusters.
     // ---------------------------------------------------------------------
     struct GrassDesc final
     {
@@ -35,8 +34,8 @@ namespace shz
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
-        float ClusterStrength = 0.0f; // 0..1, 0 disables (=> will behave as base-only)
-        float ClusterScale = 16.0f;   // meters (sub-cluster radius-ish)
+        float ClusterStrength = 0.0f; // 0..1
+        float ClusterScale = 16.0f;   // meters
         float ClusterJitter = 0.35f;  // 0..1
 
         std::vector<const StaticMeshRenderData*> Variations;
@@ -61,7 +60,16 @@ namespace shz
             const InteractionSystem& interaction);
 
         void ClearGrassDescs();
+
+        // -----------------------------------------------------------------
+        // A-style API: first 16 are grass, rest are flowers
+        // - AddGrassDesc: allowed until 16 (base carpet group)
+        // - AddFlowerDesc: adds after grass group (speciesId >= 16)
+        // NOTE: If you add <16 grasses, InstallPasses will auto-pad to 16
+        //       by duplicating species[0] with Weight=0 (keeps indices stable).
+        // -----------------------------------------------------------------
         uint32 AddGrassDesc(const GrassDesc& desc);
+        uint32 AddFlowerDesc(const GrassDesc& desc);
 
         uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
         uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); }
@@ -70,6 +78,8 @@ namespace shz
         static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
 
     private:
+        static constexpr uint32 NUM_BASE_GRASS_SPECIES = 16u;
+
         static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
         static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
@@ -80,7 +90,7 @@ namespace shz
         uint  m_SamplesPerChunk = 256;
 
         float m_LOD0Distance = 20.0f;
-        float m_LOD1Distance = 60.0f;
+        float m_LOD1Distance = 40.0f;
         float m_LodHysteresis = 1.0f;
 
         struct TypeIndirect final
@@ -114,6 +124,8 @@ namespace shz
 
         std::vector<GrassDesc> m_GrassDescs;
 
+        uint32 m_NumGrassSpecies = 0; // how many are grass (<=16)
+
         std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
         std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
         std::vector<uint32> m_TypeToSpecies;    // size = numTypes
@@ -128,6 +140,9 @@ namespace shz
 
         float m_DensityContrast = 0.28f;
         float m_DensityPow = 0.70f;
+
+        // Global tuning: overall flower amount (0..1)
+        float m_FlowerDensityScale = 0.12f;
 
         std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
     };

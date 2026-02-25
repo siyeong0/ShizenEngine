@@ -541,7 +541,7 @@ namespace shz
 					gd.MaxScale = 0.20f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Gras_small_017.fbx");
-					// addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
 
@@ -581,7 +581,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddFlowerDesc(gd);
 				}
 
 				// Orange flower
@@ -599,7 +599,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddFlowerDesc(gd);
 				}
 
 				// Lavender flower
@@ -621,7 +621,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_07.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_08.gltf");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddFlowerDesc(gd);
 				}
 
 				// Blue flower
@@ -636,22 +636,7 @@ namespace shz
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
-				}
-
-				// Bush
-				{
-					GrassDesc gd;
-					gd.Weight = 0.1f;   // rare-ish
-					gd.MinScale = 0.90f;
-					gd.MaxScale = 1.00f;
-					gd.ClusterStrength = 0.00f;   // small groups
-					gd.ClusterScale = 0.1f;
-					gd.ClusterJitter = 0.45f;
-
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Bush_A.fbx");
-
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddFlowerDesc(gd);
 				}
 			}
 
