@@ -20,25 +20,22 @@ namespace shz
 
     struct GrassDesc final
     {
-        // selection weight (relative) within its group (base or special)
+        // Selection weight (relative) within its group (base or special)
         float Weight = 1.0f;
 
-        // per-type scale / bend (shared across variations of this species)
+        // Per-type scale / bend (shared across variations of this species)
         float MinScale = 0.30f;
         float MaxScale = 0.35f;
 
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
-        // clustering (macro patch) - used only for SPECIAL
+        // Clustering (macro patch) - used only for SPECIAL in this shader
         float ClusterStrength = 0.0f; // 0..1, 0 disables
         float ClusterScale = 16.0f;
         float ClusterJitter = 0.35f; // 0..1
 
-        // SPECIAL-only: how much base grass is suppressed inside this special patch
-        float BaseSuppressInPatch = 0.65f; // 0..1
-
-        // internal classification
+        // Internal classification
         bool IsSpecial = false;
 
         std::vector<const StaticMeshRenderData*> Variations;
@@ -123,13 +120,13 @@ namespace shz
 
         std::vector<GrassDesc> m_GrassDescs;
 
-        // species -> variations -> type flattening (unchanged)
+        // Species -> variations -> type flattening
         std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
         std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
         std::vector<uint32> m_TypeToSpecies;    // size = numTypes
         std::vector<uint32> m_TypeToVariation;  // size = numTypes
 
-        // NEW: base/special group lists (speciesId values)
+        // Base/special group lists (speciesId values)
         std::vector<uint32> m_BaseSpeciesIds;
         std::vector<uint32> m_SpecialSpeciesIds;
 

@@ -232,6 +232,11 @@ struct GrassGenConstants
 	uint SamplesPerChunk;
 	int ChunkHalfExtent;
 
+	uint NumBaseSpecies; // number of base species
+	uint NumSpecialSpecies; // number of special species
+	float DensityContrast;
+	float DensityPow;
+	
 	uint ChunkVisibleDim; // dim = 2*ChunkHalfExtent
 	float ChunkSize;
 	float SpawnRadius;
@@ -246,13 +251,6 @@ struct GrassGenConstants
 	float LOD1Distance;
 	float LodHysteresis;
 	float _pad1;
-
-	float DensityContrast;
-	float DensityPow;
-
-	// NEW: base/special partition counts
-	uint NumBaseSpecies; // number of base species
-	uint NumSpecialSpecies; // number of special species
 
 	float2 InteractionOriginXZ;
 	float2 InteractionInvWorldSizeXZ;
