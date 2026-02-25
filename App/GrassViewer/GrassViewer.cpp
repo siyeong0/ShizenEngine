@@ -536,7 +536,7 @@ namespace shz
 				// Grass
 				{
 					GrassDesc gd;
-					gd.Weight = 0.4f;
+					gd.Weight = 0.5f;
 					gd.MinScale = 0.15f;
 					gd.MaxScale = 0.20f;
 
@@ -545,7 +545,34 @@ namespace shz
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddBaseGrass(gd);
+				}
+
+				// Ranunculus acris
+				{
+					GrassDesc gd;
+					gd.Weight = 0.1f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.19f;
+
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/13_Ranunculus_acris_big_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/13_Ranunculus_acris_medium_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/13_Ranunculus_acris_small_001.fbx");
+
+					m_pGrassSystem->AddBaseGrass(gd);
+				}
+
+				// plantago lanceolata
+				{
+					GrassDesc gd;
+					gd.Weight = 0.1f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.19f;
+
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/11_plantago_lanceolata_02_big_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/11_plantago_lanceolata_02_small_001.fbx");
+
+					m_pGrassSystem->AddBaseGrass(gd);
 				}
 
 				// Reed (tall, wetland-ish clumps)
@@ -564,80 +591,163 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
 
-				// Daisy flower (small, sprinkled, occasional mini-patches)
+				// Achillea millefolium 
 				{
 					GrassDesc gd;
 					gd.Weight = 0.15f;
-					gd.MinScale = 0.3f;
-					gd.MaxScale = 0.4f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.22f;
 					gd.ClusterStrength = 0.5f;
 					gd.ClusterScale = 1.4f;
 					gd.ClusterJitter = 0.75f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/01_Achillea_millefolium_high_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/01_Achillea_millefolium_low_002.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/01_Achillea_millefolium_mid_001.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
 
-				// Orange flower
+				// Anthriscus sylvestris
 				{
 					GrassDesc gd;
-					gd.Weight = 0.1f;   // rarer than daisies
-					gd.MinScale = 0.3f;
-					gd.MaxScale = 0.4f;
-					gd.ClusterStrength = 0.9f;
-					gd.ClusterScale = 4.0f;
-					gd.ClusterJitter = 0.2f;
+					gd.Weight = 0.15f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.22f;
+					gd.ClusterStrength = 0.5f;
+					gd.ClusterScale = 1.4f;
+					gd.ClusterJitter = 0.75f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_01.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_02.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/02_Anthriscus_sylvestris_01_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/02_Anthriscus_sylvestris_02_001.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
 
-				// Lavender flower
+				// Barbarea vulgaris
 				{
 					GrassDesc gd;
-					gd.Weight = 0.1f;
-					gd.MinScale = 0.4f;
-					gd.MaxScale = 0.5f;
-					gd.ClusterStrength = 0.9f;
-					gd.ClusterScale = 4.8f;
-					gd.ClusterJitter = 0.1f;
+					gd.Weight = 0.15f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.22f;
+					gd.ClusterStrength = 0.5f;
+					gd.ClusterScale = 1.4f;
+					gd.ClusterJitter = 0.75f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_01.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_02.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_03.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_04.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_05.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_06.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_07.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_08.gltf");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/03_barbarea_vulgaris_high_002.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/03_barbarea_vulgaris_low_002.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
 
-				// Blue flower
+				// Centaurea jacea
 				{
 					GrassDesc gd;
-					gd.Weight = 0.16f;   // very rare
-					gd.MinScale = 0.3f;
-					gd.MaxScale = 0.35f;
-					gd.ClusterStrength = 0.05f;
-					gd.ClusterScale = 0.2f;
-					gd.ClusterJitter = 0.85f;
+					gd.Weight = 0.15f;
+					gd.MinScale = 0.10f;
+					gd.MaxScale = 0.15f;
+					gd.ClusterStrength = 0.5f;
+					gd.ClusterScale = 1.4f;
+					gd.ClusterJitter = 0.75f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/04_centaurea_jacea_high_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/04_centaurea_jacea_Low_001.fbx");
 
-					m_pGrassSystem->AddGrassDesc(gd);
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
+
+				// Leucanthemum vulgare
+				{
+					GrassDesc gd;
+					gd.Weight = 0.15f;
+					gd.MinScale = 0.17f;
+					gd.MaxScale = 0.22f;
+					gd.ClusterStrength = 0.5f;
+					gd.ClusterScale = 1.4f;
+					gd.ClusterJitter = 0.75f;
+
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_big_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_medium_01_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_medium_02_001.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_small_001.fbx");
+
+					m_pGrassSystem->AddSpecialGrass(gd);
+				}
+
+				//// Orange flower
+				//{
+				//	GrassDesc gd;
+				//	gd.Weight = 0.1f;   // rarer than daisies
+				//	gd.MinScale = 0.3f;
+				//	gd.MaxScale = 0.4f;
+				//	gd.ClusterStrength = 0.9f;
+				//	gd.ClusterScale = 4.0f;
+				//	gd.ClusterJitter = 0.2f;
+
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_01.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_02.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
+
+				//	m_pGrassSystem->AddSpecialGrass(gd);
+				//}
+
+				//// Lavender flower
+				//{
+				//	GrassDesc gd;
+				//	gd.Weight = 0.1f;
+				//	gd.MinScale = 0.4f;
+				//	gd.MaxScale = 0.5f;
+				//	gd.ClusterStrength = 0.9f;
+				//	gd.ClusterScale = 4.8f;
+				//	gd.ClusterJitter = 0.1f;
+
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_01.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_02.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_03.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_04.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_05.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_06.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_07.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_08.gltf");
+
+				//	m_pGrassSystem->AddSpecialGrass(gd);
+				//}
+
+				//// Blue flower
+				//{
+				//	GrassDesc gd;
+				//	gd.Weight = 0.16f;   // very rare
+				//	gd.MinScale = 0.3f;
+				//	gd.MaxScale = 0.35f;
+				//	gd.ClusterStrength = 0.05f;
+				//	gd.ClusterScale = 0.2f;
+				//	gd.ClusterJitter = 0.85f;
+
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
+
+				//	m_pGrassSystem->AddSpecialGrass(gd);
+				//}
+
+				//// Daisy flower (small, sprinkled, occasional mini-patches)
+				//{
+				//	GrassDesc gd;
+				//	gd.Weight = 0.15f;
+				//	gd.MinScale = 0.3f;
+				//	gd.MaxScale = 0.4f;
+				//	gd.ClusterStrength = 0.5f;
+				//	gd.ClusterScale = 1.4f;
+				//	gd.ClusterJitter = 0.75f;
+
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
+				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
+
+				//	m_pGrassSystem->AddSpecialGrass(gd);
+				//}
 			}
 
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);

@@ -20,7 +20,7 @@ namespace shz
 
     struct GrassDesc final
     {
-        // selection weight (relative)
+        // selection weight (relative) within its group (base or special)
         float Weight = 1.0f;
 
         // per-type scale / bend (shared across variations of this species)
@@ -30,16 +30,16 @@ namespace shz
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
-        // clustering (macro patch)
+        // clustering (macro patch) - used only for SPECIAL
         float ClusterStrength = 0.0f; // 0..1, 0 disables
         float ClusterScale = 16.0f;
         float ClusterJitter = 0.35f; // 0..1
 
-        // NEW: special-first workflow flags
-        // - IsSpecial: participates in "macro patch winner" stage
-        // - BaseSuppressInPatch: how much base grass density is suppressed inside this patch
-        bool  IsSpecial = false;
-        float BaseSuppressInPatch = 0.65f; // 0..1 (1 => base almost removed inside patch)
+        // SPECIAL-only: how much base grass is suppressed inside this special patch
+        float BaseSuppressInPatch = 0.65f; // 0..1
+
+        // internal classification
+        bool IsSpecial = false;
 
         std::vector<const StaticMeshRenderData*> Variations;
 
@@ -63,13 +63,21 @@ namespace shz
             const InteractionSystem& interaction);
 
         void ClearGrassDescs();
-        uint32 AddGrassDesc(const GrassDesc& desc);
+
+        // NEW API
+        uint32 AddBaseGrass(const GrassDesc& desc);
+        uint32 AddSpecialGrass(const GrassDesc& desc);
 
         uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
         uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); }
 
+        uint32 GetNumBaseSpecies() const { return (uint32)m_BaseSpeciesIds.size(); }
+        uint32 GetNumSpecialSpecies() const { return (uint32)m_SpecialSpeciesIds.size(); }
+
     private:
         static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
+
+        void RebuildGroupTables(); // base/special id lists
 
     private:
         static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
@@ -116,10 +124,15 @@ namespace shz
 
         std::vector<GrassDesc> m_GrassDescs;
 
+        // species -> variations -> type flattening (unchanged)
         std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
         std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
         std::vector<uint32> m_TypeToSpecies;    // size = numTypes
         std::vector<uint32> m_TypeToVariation;  // size = numTypes
+
+        // NEW: base/special group lists (speciesId values)
+        std::vector<uint32> m_BaseSpeciesIds;
+        std::vector<uint32> m_SpecialSpeciesIds;
 
         float m_YOffset = 0.0f;
         float m_Jitter = 0.95f;

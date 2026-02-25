@@ -227,7 +227,7 @@ struct GrassBillboardInstance
 
 struct GrassGenConstants
 {
-	uint NumSpecies; // base species count
+	uint NumSpecies; // total species count (base + special)
 	uint NumGrassTypes; // flattened type count (sum variations)
 	uint SamplesPerChunk;
 	int ChunkHalfExtent;
@@ -249,8 +249,10 @@ struct GrassGenConstants
 
 	float DensityContrast;
 	float DensityPow;
-	float _pad2;
-	float _pad3;
+
+	// NEW: base/special partition counts
+	uint NumBaseSpecies; // number of base species
+	uint NumSpecialSpecies; // number of special species
 
 	float2 InteractionOriginXZ;
 	float2 InteractionInvWorldSizeXZ;
@@ -258,6 +260,7 @@ struct GrassGenConstants
 	uint2 InteractionTexelOrigin;
 	float2 InteractionInvFieldSize;
 };
+
 // ----------------------------------------------
 // Grass rendering constants
 // ----------------------------------------------

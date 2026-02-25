@@ -1,8 +1,11 @@
 // ============================================================================
 // GrassGenerateInstances.hlsl
-// - Voronoi cluster (cell -> 1 species) + round-ish mask
-// - FIX: axis-streak artifacts -> seed-based rotation + isotropic (decorrelated) domain warp
-// - Keeps your existing buffers/packing/prefix logic intact
+// - Base vs Special split
+//   * Base: always eligible everywhere, picked by base weights
+//   * Special: Voronoi cell chooses ONE special species, spawned by round-ish mask
+//   * Inside special clusters: base probability reduced by BaseSuppressInPatch
+// - Removed unused g_SpeciesFlags / g_TypeToSpecies requirements
+// - Keeps your buffers/packing/prefix logic intact
 // ============================================================================
 
 #include "Common.hlsli"
@@ -68,10 +71,19 @@ StructuredBuffer<uint> g_SpeciesLOD2MeshId;
 // Inputs
 Texture2D<float> g_InteractionField;
 
-// Species selection tables (inclusive prefix)
-StructuredBuffer<float> g_SpeciesWeightPrefix; // prefix sum of Weight (size >= NumSpecies)
+// -----------------------------------------------------------------------------
+// Species selection tables
+// -----------------------------------------------------------------------------
 
-// Species variation tables
+// Base species (subset) selection
+StructuredBuffer<float> g_BaseSpeciesWeightPrefix; // size >= NumBaseSpecies
+StructuredBuffer<uint> g_BaseSpeciesIds; // size >= NumBaseSpecies (maps subset index -> speciesId)
+
+// Special species (subset) selection (Voronoi cell -> 1 special species)
+StructuredBuffer<float> g_SpecialSpeciesWeightPrefix; // size >= NumSpecialSpecies
+StructuredBuffer<uint> g_SpecialSpeciesIds; // size >= NumSpecialSpecies
+
+// Species variation tables (global, unchanged)
 StructuredBuffer<uint> g_SpeciesVarOffsets; // size >= NumSpecies+1
 StructuredBuffer<uint> g_SpeciesVarCounts; // size >= NumSpecies
 StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat index -> typeId
@@ -79,8 +91,8 @@ StructuredBuffer<uint> g_SpeciesVarToTypeId; // flat index -> typeId
 // Per-type params (minScale,maxScale,bendMin,bendMax)
 StructuredBuffer<float4> g_TypeParams0;
 
-// Per-species clustering params (kept; used for “shape” tuning per chosen species)
-// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, UNUSED/Reserved)
+// Per-species clustering params
+// float4(ClusterStrength, ClusterScaleMeters, ClusterJitter01, BaseSuppressInPatch)
 StructuredBuffer<float4> g_SpeciesClusterParams;
 
 // -----------------------------------------------------------------------------
@@ -96,12 +108,12 @@ static const float DENSITY_DISABLE_THRESHOLD = 0.01f;
 static const float CHUNK_AABB_HALF_Y = 20.0f;
 
 // Voronoi boundary gap tuning
-static const float VC_GAP_ABS_MIN = 0.035f; // absolute gap width (noise space units)
-static const float VC_GAP_REL = 0.12f; // relative to strength -> sharper gap
+static const float VC_GAP_ABS_MIN = 0.035f;
+static const float VC_GAP_REL = 0.12f;
 
 // Spawn density tuning
-static const float CLUSTER_SPAWN_BOOST = 1.35f; // makes clusters less sparse
-static const float MIN_FILL_IN_CELL = 0.30f; // ensures some fill even near edges (0..1)
+static const float CLUSTER_SPAWN_BOOST = 1.35f;
+static const float MIN_FILL_IN_CELL = 0.30f;
 
 // -----------------------------------------------------------------------------
 // Hash / random
@@ -152,7 +164,6 @@ float2 Hash02(uint2 p)
 
 float2 Smooth2(float2 t)
 {
-	// smootherstep
 	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
@@ -164,11 +175,6 @@ float2 Rotate2D(float2 v, float a)
 	float s = sin(a);
 	float c = cos(a);
 	return float2(c * v.x - s * v.y, s * v.x + c * v.y);
-}
-
-float RandomAngle(uint seed)
-{
-	return Rand01(seed ^ 0x31415927u) * GRASS_TWO_PI;
 }
 
 // -----------------------------------------------------------------------------
@@ -197,8 +203,7 @@ float ValueNoise2D(float2 x, uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// FIX: Isotropic/Decorrelated domain warp
-// - Prevents “one-axis streak” artifacts from correlated warp channels.
+// Isotropic/Decorrelated domain warp
 // -----------------------------------------------------------------------------
 float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 {
@@ -217,7 +222,6 @@ float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 		uint so = WangHash(seed ^ (0x9E3779B9u * (uint) (o + 1)));
 
 		float a = Rand01(so ^ 0x1234u) * GRASS_TWO_PI;
-
 		float2 pr = Rotate2D(p * freq, a);
 
 		float nx = ValueNoise2D(pr + float2(11.13f, 7.77f), so ^ 0x1111u);
@@ -235,6 +239,7 @@ float2 DomainWarp2D_Isotropic(float2 x, float warpAmp, uint seed)
 
 	return x + w * (warpAmp * 0.35f);
 }
+
 // -----------------------------------------------------------------------------
 // WORLEY(Cellular) distance field + seed retrieval (Voronoi)
 // -----------------------------------------------------------------------------
@@ -242,8 +247,8 @@ struct WorleyResult
 {
 	float F1;
 	float F2;
-	uint2 SeedCell; // integer cell coordinate of nearest seed
-	float2 SeedPos; // nearest seed position in cell space
+	uint2 SeedCell;
+	float2 SeedPos;
 };
 
 WorleyResult WorleyF1F2_WithSeed(float2 x, uint seed)
@@ -482,19 +487,7 @@ uint WaveReserveMeshCounter_Grouped(uint meshId)
 }
 
 // -----------------------------------------------------------------------------
-// Species weights from prefix table
-// -----------------------------------------------------------------------------
-float GetSpeciesWeight(uint s)
-{
-	if (s == 0u)
-		return max(g_SpeciesWeightPrefix[0], 0.0f);
-	float a = g_SpeciesWeightPrefix[s - 1u];
-	float b = g_SpeciesWeightPrefix[s];
-	return max(b - a, 0.0f);
-}
-
-// -----------------------------------------------------------------------------
-// Variation mapping
+// Variation mapping (global species -> typeId)
 // -----------------------------------------------------------------------------
 uint PickVariationUniform(uint speciesId, uint seed)
 {
@@ -514,29 +507,26 @@ uint MapSpeciesVariationToTypeId(uint speciesId, uint varId)
 // -----------------------------------------------------------------------------
 float StablePointThreshold01(float2 worldXZ, uint seed)
 {
-	// cell-based stable threshold (no directional bias)
 	const float freq = 0.35f;
 	float2 g = worldXZ * freq;
 
 	int2 ig = int2(floor(g));
 	float2 f = frac(g);
 
-	// rotate local coords per-cell to avoid axis-aligned artifacts
 	uint h = Hash2i(ig, seed ^ 0xA53A9E37u);
 	float ang = Rand01(h ^ 0xBEEF1234u) * GRASS_TWO_PI;
 	float s = sin(ang), c = cos(ang);
+
 	float2 fr;
 	fr.x = c * (f.x - 0.5f) - s * (f.y - 0.5f);
 	fr.y = s * (f.x - 0.5f) + c * (f.y - 0.5f);
 	fr += 0.5f;
 
-	// hash threshold from cell + small smooth intra-cell variation (no dot with fixed axis)
 	uint2 cell = uint2(ig) ^ uint2(seed, seed * 1664525u);
 	float base = Hash01(cell);
 
-	// use radial-ish term (isotropic)
-	float r = saturate(length(fr - 0.5f.xx) * 1.41421356f); // 0 center .. 1 corners
-	float intra = 1.0f - r; // center slightly favored, but isotropic
+	float r = saturate(length(fr - 0.5f.xx) * 1.41421356f);
+	float intra = 1.0f - r;
 
 	return saturate(base * 0.85f + intra * 0.15f);
 }
@@ -642,73 +632,96 @@ uint MakeAtlasIndex(uint seed)
 }
 
 // -----------------------------------------------------------------------------
-// Voronoi cluster -> one species (weight-based), and round-ish mask in cell
+// Subset prefix picker (base / special)
 // -----------------------------------------------------------------------------
-uint PickSpeciesFromCluster(uint clusterHash)
+uint PickSubsetIndexFromPrefix(
+	StructuredBuffer<float> prefix,
+	uint subsetCount,
+	uint seed)
 {
-	uint num = max(g_CB.NumSpecies, 1u);
-	float total = g_SpeciesWeightPrefix[num - 1u];
-	if (total <= 1e-8f)
-	{
-		// fallback: uniform
-		return WangHash(clusterHash) % num;
-	}
+	uint n = max(subsetCount, 1u);
+	float total = prefix[n - 1u];
 
-	float r = Rand01(clusterHash ^ 0x13579BDFu) * total;
+	if (total <= 1e-8f)
+		return WangHash(seed) % n;
+
+	float r = Rand01(seed ^ 0x13579BDFu) * total;
 
 	[loop]
-	for (uint s = 0u; s < MAX_GRASS_SPECIES; ++s)
+	for (uint i = 0u; i < MAX_GRASS_SPECIES; ++i)
 	{
-		if (s >= num)
+		if (i >= n)
 			break;
-		if (r <= g_SpeciesWeightPrefix[s])
-			return s;
+		if (r <= prefix[i])
+			return i;
 	}
-	return num - 1u;
+	return n - 1u;
 }
 
-struct ClusterEvalOut
+uint PickBaseSpecies(uint seed)
 {
-	uint SpeciesId;
+	uint nb = max(g_CB.NumBaseSpecies, 1u);
+	uint idx = PickSubsetIndexFromPrefix(g_BaseSpeciesWeightPrefix, nb, seed ^ 0xA1B2C3D4u);
+	return g_BaseSpeciesIds[idx];
+}
+
+uint PickSpecialSpecies(uint seed)
+{
+	uint ns = g_CB.NumSpecialSpecies;
+	if (ns == 0u)
+		return 0u;
+
+	uint idx = PickSubsetIndexFromPrefix(g_SpecialSpeciesWeightPrefix, ns, seed ^ 0xDEADBEEFu);
+	return g_SpecialSpeciesIds[idx];
+}
+
+// -----------------------------------------------------------------------------
+// Special Voronoi cluster evaluation
+// -----------------------------------------------------------------------------
+struct SpecialClusterEval
+{
+	uint SpecialSpeciesId;
 	float Mask; // 0..1
-	float CellEdgeKeep; // 0..1 (0 near boundary)
+	float CellEdgeKeep; // 0..1
+	float BaseSuppress; // 0..1
 };
 
-ClusterEvalOut EvaluateVoronoiCluster(float2 worldXZ, uint seed /*unused*/)
+SpecialClusterEval EvaluateSpecialVoronoiCluster(float2 worldXZ)
 {
-	ClusterEvalOut o;
-	o.SpeciesId = 0u;
+	SpecialClusterEval o;
+	o.SpecialSpeciesId = 0u;
 	o.Mask = 0.0f;
 	o.CellEdgeKeep = 1.0f;
+	o.BaseSuppress = 0.0f;
+
+	// no special species -> no cluster
+	if (g_CB.NumSpecialSpecies == 0u)
+		return o;
 
 	const float MacroCellMeters = 6.0f;
 	uint vorSeed = WangHash(g_CB.SeedSalt ^ 0xCAFEBABEu);
 
-	// 0) "종 결정" 좌표: 절대 회전/워프 금지 (방향성 방지)
+	// identity space (no warp/rotation)
 	float2 x_id = (worldXZ - g_TerrainCB.WorldOriginXZ) / max(MacroCellMeters, 1e-3f);
 
-	// 1) Voronoi for identity
 	WorleyResult wr0 = WorleyF1F2_WithSeed(x_id, vorSeed);
-
 	uint clusterHash = Hash2u(wr0.SeedCell ^ uint2(vorSeed, vorSeed * 1664525u));
-	uint spId = PickSpeciesFromCluster(clusterHash);
 
+	// pick ONE special species per cell (stable)
+	uint spId = PickSpecialSpecies(clusterHash);
 	float4 cp = g_SpeciesClusterParams[spId];
+
 	float strength = saturate(cp.x);
 	float jitter01 = saturate(cp.z);
+	float suppress = saturate(cp.w);
 
-	// 2) "마스크/경계" 좌표: 여기서만 변형 (cell 고정 변형)
+	// mask space (cell-based transform)
 	uint cellSeed = WangHash(clusterHash ^ 0x9E3779B9u);
-
 	float2 x_mask = x_id;
 
-	// (중요) 전역 고정 회전 제거! 대신 "cell마다 다른 회전"만 사용
 	x_mask = Rotate2D(x_mask, Rand01(cellSeed ^ 0xABCDu) * GRASS_TWO_PI);
-
-	// cell 기반 워프 (같은 cell이면 동일 -> 클러스터 유지)
 	x_mask = DomainWarp2D_Isotropic(x_mask, jitter01 * 0.22f, cellSeed);
 
-	// 3) mask Voronoi는 변형 좌표에서 평가
 	WorleyResult wr = WorleyF1F2_WithSeed(x_mask, vorSeed);
 
 	float edge = saturate(wr.F2 - wr.F1);
@@ -720,17 +733,20 @@ ClusterEvalOut EvaluateVoronoiCluster(float2 worldXZ, uint seed /*unused*/)
 
 	float core = 1.0f - smoothstep(radius - softness, radius + softness, wr.F1);
 	float k = lerp(1.0f, 2.4f, strength);
-	float M = saturate(pow(saturate(core), k));
 
+	float M = saturate(pow(saturate(core), k));
 	M *= lerp(MIN_FILL_IN_CELL, 1.0f, edgeKeep);
 
-	o.SpeciesId = spId;
+	o.SpecialSpeciesId = spId;
 	o.Mask = saturate(M);
 	o.CellEdgeKeep = edgeKeep;
+	o.BaseSuppress = suppress;
+
 	return o;
 }
+
 // -----------------------------------------------------------------------------
-// EvaluateSpawn: Voronoi cell -> 1 species, spawn prob by mask
+// EvaluateSpawn: Special first, else Base with suppression inside clusters
 // -----------------------------------------------------------------------------
 bool EvaluateSpawn(
 	ChunkContext ctx,
@@ -776,23 +792,62 @@ bool EvaluateSpawn(
 
 	uint seed = WangHash(p.Seed ^ (sampleIndex * 0x9E3779B9u));
 
-	// 1) Voronoi cluster evaluation
-	ClusterEvalOut ce = EvaluateVoronoiCluster(posXZ, seed);
-	uint chosenSpecies = ce.SpeciesId;
+	// evaluate special cluster at this point (mask + suppress)
+	SpecialClusterEval ce = EvaluateSpecialVoronoiCluster(posXZ);
 
-	// 2) Spawn probability inside cell
-	// - D controls overall density
-	// - ce.Mask gives round-ish dense core and thinner edges
-	// - boost to avoid sparse cluster look
-	float prob = saturate(D * ce.Mask * CLUSTER_SPAWN_BOOST);
-	if (prob <= 0.001f)
-		return false;
+	// Interaction / position
+	float press01 = saturate(SampleInteraction(posXZ));
+	float3 posWS = p.Position;
 
+	// LOD
+	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
+	float2 dxz = posWS.xz - camXZ;
+	float distSqr = dot(dxz, dxz);
+
+	uint lodIndex =
+		(distSqr < ctx.Lod0Sqr) ? 0u :
+		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
+
+	// base threshold (stable per point)
 	float th = StablePointThreshold01(posXZ, seed ^ 0xC0FFEEu);
-	if (th > prob)
-		return false;
 
-	// Map species -> variation -> type
+	// ---------------------------------------------------------------------
+	// 1) SPECIAL spawn attempt (inside mask)
+	// ---------------------------------------------------------------------
+	bool spawnedSpecial = false;
+	uint chosenSpecies = 0u;
+
+	if (g_CB.NumSpecialSpecies > 0u && ce.Mask > 0.0001f)
+	{
+		float pSpecial = saturate(D * ce.Mask * CLUSTER_SPAWN_BOOST);
+
+		// slightly harder near boundaries
+		pSpecial *= lerp(0.85f, 1.0f, ce.CellEdgeKeep);
+
+		if (pSpecial > 0.001f && th <= pSpecial)
+		{
+			chosenSpecies = ce.SpecialSpeciesId;
+			spawnedSpecial = true;
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// 2) BASE spawn (everywhere), but reduced in special clusters
+	// ---------------------------------------------------------------------
+	if (!spawnedSpecial)
+	{
+		float reduce = saturate(ce.BaseSuppress * ce.Mask); // 0 outside cluster, high in core
+		float pBase = saturate(D * (1.0f - reduce));
+
+		if (pBase <= 0.001f || th > pBase)
+			return false;
+
+		chosenSpecies = PickBaseSpecies(seed);
+	}
+
+	// ---------------------------------------------------------------------
+	// Species -> variation -> type
+	// ---------------------------------------------------------------------
 	uint varId = PickVariationUniform(chosenSpecies, seed ^ 0xBBBBu);
 	uint typeId = MapSpeciesVariationToTypeId(chosenSpecies, varId);
 
@@ -804,17 +859,6 @@ bool EvaluateSpawn(
 	float maxScale = max(typeP.y, minScale);
 	float bendMin = typeP.z;
 	float bendMax = max(typeP.w, bendMin);
-
-	float press01 = saturate(SampleInteraction(posXZ));
-	float3 posWS = p.Position;
-
-	float2 camXZ = float2(g_FrameCB.CameraPosition.x, g_FrameCB.CameraPosition.z);
-	float2 dxz = posWS.xz - camXZ;
-	float distSqr = dot(dxz, dxz);
-
-	uint lodIndex =
-		(distSqr < ctx.Lod0Sqr) ? 0u :
-		(distSqr < ctx.Lod1Sqr) ? 1u : 2u;
 
 	float scaleT = Rand01(seed ^ 0x5555u);
 	float scale = lerp(minScale, maxScale, scaleT);
@@ -1020,10 +1064,10 @@ void CountInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s,
-		                   typeId, lodIndex,
-		                   press01, scale, yaw, pitch, bend01,
-		                   seed8, variantId, atlasIndex,
-		                   posWS))
+			typeId, lodIndex,
+			press01, scale, yaw, pitch, bend01,
+			seed8, variantId, atlasIndex,
+			posWS))
 			continue;
 
 		uint idx = typeId * 3u + lodIndex;
@@ -1090,16 +1134,16 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		float3 posWS;
 
 		if (!EvaluateSpawn(ctx, base, s,
-		                   typeId, lodIndex,
-		                   press01, scale, yaw, pitch, bend01,
-		                   seed8, variantId, atlasIndex,
-		                   posWS))
+			typeId, lodIndex,
+			press01, scale, yaw, pitch, bend01,
+			seed8, variantId, atlasIndex,
+			posWS))
 			continue;
 
 		uint meshId =
 			(lodIndex == 0u) ? g_SpeciesLOD0MeshId[typeId] :
 			(lodIndex == 1u) ? g_SpeciesLOD1MeshId[typeId] :
-			                   g_SpeciesLOD2MeshId[typeId];
+							   g_SpeciesLOD2MeshId[typeId];
 
 		WaveReserveMeshCounter_Grouped(meshId);
 
