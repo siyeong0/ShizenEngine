@@ -155,7 +155,7 @@ namespace shz
 			//tci.HeightOffset = 0.0f;
 			//tci.bCenterXZ = true;
 
-			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground037_2K-PNG";
+			tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Ground067_2K-PNG";
 			// tci.SoilMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel032_2K-PNG";
 			tci.RockyMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Rock030_4K-PNG";
 			tci.GravelMaterialPath = "C:/Dev/ShizenEngine/Assets/Materials/Gravel015_2K-PNG";
@@ -536,7 +536,7 @@ namespace shz
 				// Grass
 				{
 					GrassDesc gd;
-					gd.Weight = 0.5f;
+					gd.Weight = 0.6f;
 					gd.MinScale = 0.15f;
 					gd.MaxScale = 0.20f;
 
@@ -582,7 +582,7 @@ namespace shz
 					gd.MinScale = 0.30f;
 					gd.MaxScale = 0.35f;
 					gd.ClusterStrength = 0.90f;   // strong patches
-					gd.ClusterScale = 2.5f;   // big clumps
+					gd.ClusterScale = 1.5f;   // big clumps
 					gd.ClusterJitter = 0.25f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
@@ -598,11 +598,11 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.15f;
-					gd.MinScale = 0.17f;
-					gd.MaxScale = 0.22f;
-					gd.ClusterStrength = 0.5f;
+					gd.MinScale = 0.25f;
+					gd.MaxScale = 0.28f;
+					gd.ClusterStrength = 0.95f;
 					gd.ClusterScale = 1.4f;
-					gd.ClusterJitter = 0.75f;
+					gd.ClusterJitter = 0.15f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/01_Achillea_millefolium_high_001.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/01_Achillea_millefolium_low_002.fbx");
@@ -615,11 +615,11 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.15f;
-					gd.MinScale = 0.17f;
-					gd.MaxScale = 0.22f;
-					gd.ClusterStrength = 0.5f;
-					gd.ClusterScale = 1.4f;
-					gd.ClusterJitter = 0.75f;
+					gd.MinScale = 0.22f;
+					gd.MaxScale = 0.24f;
+					gd.ClusterStrength = 0.95f;
+					gd.ClusterScale = 0.9f;
+					gd.ClusterJitter = 0.15f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/02_Anthriscus_sylvestris_01_001.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/02_Anthriscus_sylvestris_02_001.fbx");
@@ -630,12 +630,12 @@ namespace shz
 				// Barbarea vulgaris
 				{
 					GrassDesc gd;
-					gd.Weight = 0.15f;
-					gd.MinScale = 0.17f;
+					gd.Weight = 0.20f;
+					gd.MinScale = 0.23f;
 					gd.MaxScale = 0.22f;
-					gd.ClusterStrength = 0.5f;
-					gd.ClusterScale = 1.4f;
-					gd.ClusterJitter = 0.75f;
+					gd.ClusterStrength = 0.80f;
+					gd.ClusterScale = 4.4f;
+					gd.ClusterJitter = 0.07f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/03_barbarea_vulgaris_high_002.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/03_barbarea_vulgaris_low_002.fbx");
@@ -647,11 +647,11 @@ namespace shz
 				{
 					GrassDesc gd;
 					gd.Weight = 0.15f;
-					gd.MinScale = 0.10f;
-					gd.MaxScale = 0.15f;
-					gd.ClusterStrength = 0.5f;
-					gd.ClusterScale = 1.4f;
-					gd.ClusterJitter = 0.75f;
+					gd.MinScale = 0.15f;
+					gd.MaxScale = 0.17f;
+					gd.ClusterStrength = 0.7f;
+					gd.ClusterScale = 5.4f;
+					gd.ClusterJitter = 0.05f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/04_centaurea_jacea_high_001.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/04_centaurea_jacea_Low_001.fbx");
@@ -665,9 +665,9 @@ namespace shz
 					gd.Weight = 0.15f;
 					gd.MinScale = 0.17f;
 					gd.MaxScale = 0.22f;
-					gd.ClusterStrength = 0.5f;
-					gd.ClusterScale = 1.4f;
-					gd.ClusterJitter = 0.75f;
+					gd.ClusterStrength = 0.99f;
+					gd.ClusterScale = 7.4f;
+					gd.ClusterJitter = 0.05f;
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_big_001.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/08_Leucanthemum_vulgare_02_medium_01_001.fbx");
