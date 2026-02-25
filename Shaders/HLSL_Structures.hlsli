@@ -231,11 +231,6 @@ struct GrassGenConstants
 	uint NumGrassTypes; // flattened type count (sum variations)
 	uint SamplesPerChunk;
 	int ChunkHalfExtent;
-	
-	uint NumBaseGrassSpecies;
-	float FlowerDensityScale;
-	float _padA;
-	float _padB;
 
 	uint ChunkVisibleDim; // dim = 2*ChunkHalfExtent
 	float ChunkSize;

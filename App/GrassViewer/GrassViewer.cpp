@@ -581,7 +581,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
 
-					m_pGrassSystem->AddFlowerDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				// Orange flower
@@ -599,7 +599,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
 
-					m_pGrassSystem->AddFlowerDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				// Lavender flower
@@ -621,7 +621,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_07.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_08.gltf");
 
-					m_pGrassSystem->AddFlowerDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 
 				// Blue flower
@@ -636,7 +636,7 @@ namespace shz
 
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
 
-					m_pGrassSystem->AddFlowerDesc(gd);
+					m_pGrassSystem->AddGrassDesc(gd);
 				}
 			}
 

@@ -18,25 +18,28 @@ namespace shz
     class InteractionSystem;
     struct StaticMeshRenderData;
 
-    // ---------------------------------------------------------------------
-    // GrassDesc
-    // - Same struct used for grass and flower.
-    // - For grass species: ClusterStrength should be 0 (ignored by grass spawn).
-    // - For flower species: ClusterStrength/Scale/Jitter shape macro-cell clusters.
-    // ---------------------------------------------------------------------
     struct GrassDesc final
     {
+        // selection weight (relative)
         float Weight = 1.0f;
 
+        // per-type scale / bend (shared across variations of this species)
         float MinScale = 0.30f;
         float MaxScale = 0.35f;
 
         float BendStrengthMin = 0.65f;
         float BendStrengthMax = 0.75f;
 
-        float ClusterStrength = 0.0f; // 0..1
-        float ClusterScale = 16.0f;   // meters
-        float ClusterJitter = 0.35f;  // 0..1
+        // clustering (macro patch)
+        float ClusterStrength = 0.0f; // 0..1, 0 disables
+        float ClusterScale = 16.0f;
+        float ClusterJitter = 0.35f; // 0..1
+
+        // NEW: special-first workflow flags
+        // - IsSpecial: participates in "macro patch winner" stage
+        // - BaseSuppressInPatch: how much base grass density is suppressed inside this patch
+        bool  IsSpecial = false;
+        float BaseSuppressInPatch = 0.65f; // 0..1 (1 => base almost removed inside patch)
 
         std::vector<const StaticMeshRenderData*> Variations;
 
@@ -60,16 +63,7 @@ namespace shz
             const InteractionSystem& interaction);
 
         void ClearGrassDescs();
-
-        // -----------------------------------------------------------------
-        // A-style API: first 16 are grass, rest are flowers
-        // - AddGrassDesc: allowed until 16 (base carpet group)
-        // - AddFlowerDesc: adds after grass group (speciesId >= 16)
-        // NOTE: If you add <16 grasses, InstallPasses will auto-pad to 16
-        //       by duplicating species[0] with Weight=0 (keeps indices stable).
-        // -----------------------------------------------------------------
         uint32 AddGrassDesc(const GrassDesc& desc);
-        uint32 AddFlowerDesc(const GrassDesc& desc);
 
         uint32 GetNumSpecies() const { return (uint32)m_GrassDescs.size(); }
         uint32 GetNumTypes()   const { return (uint32)m_TypeToSpecies.size(); }
@@ -78,8 +72,6 @@ namespace shz
         static inline uint32 DivUp(uint32 x, uint32 d) { return (x + d - 1u) / d; }
 
     private:
-        static constexpr uint32 NUM_BASE_GRASS_SPECIES = 16u;
-
         static constexpr uint64 MAX_NUM_GRASS_LOD0_INSTANCES = 1u << 18;
         static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
@@ -87,10 +79,10 @@ namespace shz
         uint  m_ChunkHalfExtent = 32;
         float m_ChunkSize = 4.0f;
 
-        uint  m_SamplesPerChunk = 256;
+        uint  m_SamplesPerChunk = 512;
 
         float m_LOD0Distance = 20.0f;
-        float m_LOD1Distance = 40.0f;
+        float m_LOD1Distance = 60.0f;
         float m_LodHysteresis = 1.0f;
 
         struct TypeIndirect final
@@ -124,8 +116,6 @@ namespace shz
 
         std::vector<GrassDesc> m_GrassDescs;
 
-        uint32 m_NumGrassSpecies = 0; // how many are grass (<=16)
-
         std::vector<uint32> m_SpeciesVarOffset; // size = numSpecies+1
         std::vector<uint32> m_SpeciesVarCount;  // size = numSpecies
         std::vector<uint32> m_TypeToSpecies;    // size = numTypes
@@ -140,9 +130,6 @@ namespace shz
 
         float m_DensityContrast = 0.28f;
         float m_DensityPow = 0.70f;
-
-        // Global tuning: overall flower amount (0..1)
-        float m_FlowerDensityScale = 0.12f;
 
         std::string m_GrassGenCS = "GrassGenerateInstances.hlsl";
     };
