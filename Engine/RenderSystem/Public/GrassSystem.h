@@ -83,7 +83,7 @@ namespace shz
         static constexpr uint64 MAX_NUM_GRASS_LOD1_INSTANCES = 1u << 20;
         static constexpr uint64 MAX_NUM_GRASS_LOD2_INSTANCES = 1u << 24;
 
-        uint  m_ChunkHalfExtent = 32;
+        uint  m_ChunkHalfExtent = 128;
         float m_ChunkSize = 4.0f;
 
         uint  m_SamplesPerChunk = 1024;
@@ -137,7 +137,7 @@ namespace shz
         float m_Jitter = 0.95f;
         float m_NormalAlignStrength = 0.75f;
 
-        float m_SpawnRadius = 128.0f;
+        float m_SpawnRadius = 512.0f;
         uint  m_SeedSalt = 0xA53A9E37u;
 
         float m_DensityContrast = 0.28f;

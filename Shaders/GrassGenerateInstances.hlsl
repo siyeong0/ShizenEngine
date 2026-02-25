@@ -1186,7 +1186,7 @@ void BuildInstancesFromPoolsCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThrea
 		}
 		else
 		{
-			GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale, yaw, atlasIndex, seed8);
+			GrassBillboardInstance inst = MakeGrassBillboardInstance(posWS, scale * 0.7, yaw, atlasIndex, seed8);
 			g_OutInstancesLOD2[globalIndex] = inst;
 		}
 	}
