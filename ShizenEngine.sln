@@ -50,8 +50,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine-Framework", "Engine\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D4CF4-FF88-49E2-B678-B242E569DF01}"
 	ProjectSection(SolutionItems) = preProject
-		Shaders\AmbientOcclusion.psh = Shaders\AmbientOcclusion.psh
 		Shaders\AOBilateralBlur.hlsl = Shaders\AOBilateralBlur.hlsl
+		Shaders\AOUpsample.hlsl = Shaders\AOUpsample.hlsl
 		Shaders\BilinearBlur.hlsl = Shaders\BilinearBlur.hlsl
 		Shaders\BxDF.hlsli = Shaders\BxDF.hlsli
 		Shaders\Common.hlsli = Shaders\Common.hlsli
@@ -68,6 +68,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{7D3D
 		Shaders\GrassGenerateInstances.hlsl = Shaders\GrassGenerateInstances.hlsl
 		Shaders\GrassMesh.psh = Shaders\GrassMesh.psh
 		Shaders\GrassMesh.vsh = Shaders\GrassMesh.vsh
+		Shaders\GTAO.hlsl = Shaders\GTAO.hlsl
 		Shaders\HLSL_Structures.hlsli = Shaders\HLSL_Structures.hlsli
 		Shaders\InteractionCompute.hlsl = Shaders\InteractionCompute.hlsl
 		Shaders\Lighting.psh = Shaders\Lighting.psh

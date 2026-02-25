@@ -40,7 +40,7 @@ struct FrameConstants
 	float3 LightDirWS;
 	
 	float3 LightColor;
-	float _pad2;
+	uint FunctionFlags;
 
 	float4x4 LightViewProj;
 };

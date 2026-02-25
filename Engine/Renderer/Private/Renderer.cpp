@@ -500,6 +500,8 @@ namespace shz
 			frameCB->LightDirWS = lightDirWs;
 			frameCB->LightColor = lightColor;
 			frameCB->LightIntensity = lightIntensity;
+
+			frameCB->FunctionFlags = m_FunctionFlags;
 		}
 
 		// ------------------------------------------------------------

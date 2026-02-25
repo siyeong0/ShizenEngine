@@ -1,95 +1,105 @@
+// ============================================================================
+// AOBilateralBlur.hlsl
+// Separable bilateral blur for HALF-res AO
+// - g_Src: half-res AO (R16_FLOAT SRV)
+// - g_Dst: half-res AO (R16_FLOAT UAV)
+// - g_Depth/g_Normal: full-res (sample at same uv)
+// ============================================================================
+
 #include "Common.hlsli"
 
-Texture2D<float> g_Src; // AO input (0..1)
-Texture2D<float> g_Depth; // D3D depth 0..1
-Texture2D<float4> g_Normal; // packed 0..1 (world)
+Texture2D<float> g_Src; // half-res AO
+Texture2D<float> g_Depth; // full-res depth 0..1
+Texture2D<float4> g_Normal; // full-res normal packed 0..1 (world)
 
-RWTexture2D<float> g_Dst;
+RWTexture2D<float> g_Dst; // half-res output AO
 
-// -----------------------------------------------------------------------------
 // Tunables
-// -----------------------------------------------------------------------------
-static const int AO_BLUR_RADIUS_PX = 4; // 2~6
-static const float AO_DEPTH_SIGMA = 1.5; // larger = blur across depth edges more
-static const float AO_NORMAL_SIGMA = 0.35; // larger = blur across normal edges more
+static const int KERNEL_RADIUS = 2; // 5 taps
+static const float SIGMA_SPATIAL = 1.25; // blur strength
+static const float SIGMA_DEPTH = 0.0025; // depth edge sensitivity (tune)
+static const float SIGMA_NDOT = 0.15; // normal edge sensitivity (tune)
 
-static float SpatialWeight(int x)
+static float Gaussian(float x, float sigma)
 {
-	const float r = (float) AO_BLUR_RADIUS_PX;
-	const float d = (float) (x * x);
-	return exp(-d / max(r * r, 1.0));
-}
-
-static float DepthWeight(float d0, float d1)
-{
-	float dz = abs(d1 - d0); // non-linear depth, still good as edge hint
-	return exp(-dz * (1.0 / max(AO_DEPTH_SIGMA, 1e-5)));
+	return exp(-0.5f * (x * x) / max(sigma * sigma, 1e-6f));
 }
 
 static float NormalWeight(float3 n0, float3 n1)
 {
 	float nd = saturate(dot(n0, n1));
-	float t = saturate((nd - (1.0 - AO_NORMAL_SIGMA)) / max(AO_NORMAL_SIGMA, 1e-5));
-	return t;
+    // penalize when normals differ
+	return exp(-(1.0f - nd) / max(SIGMA_NDOT, 1e-6f));
 }
 
-// Robust axis selection:
-// - BlurX build defines AO_BLUR_HORIZONTAL
-// - BlurY build defines AO_BLUR_VERTICAL
-// - If none defined, default to horizontal (safe fallback)
-static int2 AxisOffset(int i)
+static float DepthWeight(float d0, float d1)
 {
-#if defined(AO_BLUR_VERTICAL)
-	return int2(0, i);
-#else
-	return int2(i, 0);
-#endif
+	float dd = abs(d0 - d1);
+	return exp(-dd / max(SIGMA_DEPTH, 1e-6f));
 }
 
 [numthreads(8, 8, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 DTid : SV_DispatchThreadID)
 {
-	uint w = (uint) g_FrameCB.ViewportSize.x;
-	uint h = (uint) g_FrameCB.ViewportSize.y;
+	uint2 outSize;
+	g_Dst.GetDimensions(outSize.x, outSize.y);
 
-	if (dtid.x >= w || dtid.y >= h)
+	if (DTid.x >= outSize.x || DTid.y >= outSize.y)
 		return;
 
-	uint2 p = dtid.xy;
-	float2 uv0 = (float2(p) + 0.5) * g_FrameCB.InvViewportSize;
+	float2 uv = (float2(DTid.xy) + 0.5f) / float2(outSize);
 
-	float ao0 = g_Src.SampleLevel(g_PointClampSampler, uv0, 0);
-	float d0 = g_Depth.SampleLevel(g_PointClampSampler, uv0, 0);
-	float3 n0 = UnpackNormal01(g_Normal.SampleLevel(g_PointClampSampler, uv0, 0).xyz);
+	float centerAO = g_Src.SampleLevel(g_PointClampSampler, uv, 0);
 
-	float sumW = 0.0;
-	float sumA = 0.0;
+	float centerDepth = g_Depth.SampleLevel(g_PointClampSampler, uv, 0);
+	float3 centerN = UnpackNormal01(g_Normal.SampleLevel(g_PointClampSampler, uv, 0).xyz);
 
-	[loop]
-	for (int i = -AO_BLUR_RADIUS_PX; i <= AO_BLUR_RADIUS_PX; ++i)
+    // if sky, keep 1
+	if (centerDepth >= 0.999999f)
 	{
-		int2 of = AxisOffset(i);
-		int2 pi = int2((int) p.x + of.x, (int) p.y + of.y);
-
-		pi.x = clamp(pi.x, 0, (int) w - 1);
-		pi.y = clamp(pi.y, 0, (int) h - 1);
-
-		float2 uvi = (float2(pi) + 0.5) * g_FrameCB.InvViewportSize;
-
-		float a = g_Src.SampleLevel(g_LinearClampSampler, uvi, 0);
-		float d1 = g_Depth.SampleLevel(g_PointClampSampler, uvi, 0);
-		float3 n1 = UnpackNormal01(g_Normal.SampleLevel(g_PointClampSampler, uvi, 0).xyz);
-
-		float wS = SpatialWeight(i);
-		float wD = DepthWeight(d0, d1);
-		float wN = NormalWeight(n0, n1);
-
-		float wAll = wS * wD * wN;
-
-		sumW += wAll;
-		sumA += a * wAll;
+		g_Dst[DTid.xy] = 1.0f;
+		return;
 	}
 
-	float outAO = (sumW > 1e-6) ? (sumA / sumW) : ao0;
-	g_Dst[p] = outAO;
+	float sum = 0.0f;
+	float wsum = 0.0f;
+
+    // texel size in half-res
+	float2 texel = 1.0f / float2(outSize);
+
+#if defined(AO_BLUR_HORIZONTAL)
+    int2 axis = int2(1, 0);
+#elif defined(AO_BLUR_VERTICAL)
+    int2 axis = int2(0, 1);
+#else
+	int2 axis = int2(1, 0);
+#endif
+
+    [unroll]
+	for (int o = -KERNEL_RADIUS; o <= KERNEL_RADIUS; ++o)
+	{
+		int2 p = int2(DTid.xy) + axis * o;
+
+		p.x = clamp(p.x, 0, int(outSize.x) - 1);
+		p.y = clamp(p.y, 0, int(outSize.y) - 1);
+
+		float2 suv = (float2(p) + 0.5f) / float2(outSize);
+
+		float ao = g_Src.SampleLevel(g_PointClampSampler, suv, 0);
+
+		float d = g_Depth.SampleLevel(g_PointClampSampler, suv, 0);
+		float3 n = UnpackNormal01(g_Normal.SampleLevel(g_PointClampSampler, suv, 0).xyz);
+
+		float ws = Gaussian(float(o), SIGMA_SPATIAL);
+		float wd = DepthWeight(centerDepth, d);
+		float wn = NormalWeight(centerN, n);
+
+		float w = ws * wd * wn;
+
+		sum += ao * w;
+		wsum += w;
+	}
+
+	float outAO = (wsum > 1e-6f) ? (sum / wsum) : centerAO;
+	g_Dst[DTid.xy] = outAO;
 }

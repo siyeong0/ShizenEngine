@@ -1266,6 +1266,20 @@ namespace shz
 			}
 		}
 
+		if (ImGui::Begin("Functions", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			// Assuming FunctionFlags() returns a uint32 (bitfield) by value
+			uint32& flags = m_pRenderer->FunctionFlags();
+
+			if (ImGui::Button(((flags & (1u << 0)) != 0) ? "Function 0: ON" : "Function 0: OFF")) flags ^= (1u << 0);
+			if (ImGui::Button(((flags & (1u << 1)) != 0) ? "Function 1: ON" : "Function 1: OFF")) flags ^= (1u << 1);
+			if (ImGui::Button(((flags & (1u << 2)) != 0) ? "Function 2: ON" : "Function 2: OFF")) flags ^= (1u << 2);
+			if (ImGui::Button(((flags & (1u << 3)) != 0) ? "Function 3: ON" : "Function 3: OFF")) flags ^= (1u << 3);
+			if (ImGui::Button(((flags & (1u << 4)) != 0) ? "Function 4: ON" : "Function 4: OFF")) flags ^= (1u << 4);
+
+			ImGui::End();
+		}
+
 		ImGui::End();
 	}
 

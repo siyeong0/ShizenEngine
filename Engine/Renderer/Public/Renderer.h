@@ -269,6 +269,8 @@ namespace shz
 
 		TEXTURE_FORMAT GetSwapChainFormat() const { return m_pSwapChain->GetDesc().ColorBufferFormat; }
 
+		uint32& FunctionFlags() { return m_FunctionFlags; }
+
 	private:
 		void pushBarrier(IDeviceObject* pObj, RESOURCE_STATE from, RESOURCE_STATE to);
 
@@ -339,5 +341,7 @@ namespace shz
 		std::unordered_map<const IDeviceObject*, RESOURCE_STATE> m_ExternalStates;
 
 		bool m_bViewCBDirty = true;
+
+		uint32 m_FunctionFlags = 0;
 	};
 } // namespace shz

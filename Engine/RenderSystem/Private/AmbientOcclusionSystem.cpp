@@ -12,60 +12,83 @@ namespace shz
 {
 	void AmbientOcclusionSystem::Initialize(Renderer& renderer)
 	{
+		const uint32 fullW = renderer.GetWidth();
+		const uint32 fullH = renderer.GetHeight();
+
+		const uint32 halfW = (fullW + 1u) / 2u;
+		const uint32 halfH = (fullH + 1u) / 2u;
+
 		// ------------------------------------------------------------
-		// Pass0 output: raw AO (RTV)
+		// Half-res raw AO (UAV + SRV)
 		// ------------------------------------------------------------
 		{
 			TextureDesc td = {};
-			td.Name = "AmbientOcclusionMapRaw";
+			td.Name = "AmbientOcclusionMapHalfRaw";
 			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = renderer.GetWidth();
-			td.Height = renderer.GetHeight();
-			td.MipLevels = 1;
-			td.Format = TEX_FORMAT_R8_UNORM;
-			td.SampleCount = 1;
-			td.Usage = USAGE_DEFAULT;
-			td.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
-
-			renderer.AddTexture(STRING_HASH("AmbientOcclusionMapRaw"), td);
-		}
-
-		// ------------------------------------------------------------
-		// Pass1 output: blur X intermediate (UAV + SRV)
-		// ------------------------------------------------------------
-		{
-			TextureDesc td = {};
-			td.Name = "AmbientOcclusionMapBlurX";
-			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = renderer.GetWidth();
-			td.Height = renderer.GetHeight();
+			td.Width = halfW;
+			td.Height = halfH;
 			td.MipLevels = 1;
 
-			// NOTE:
-			// R8_UNORM UAV가 백엔드/드라이버에서 안 되면 TEX_FORMAT_R16_FLOAT 권장.
-			td.Format = TEX_FORMAT_R8_UNORM;
+			// UAV 호환/정밀도/필터링 안정성 때문에 R16_FLOAT 추천
+			td.Format = TEX_FORMAT_R16_FLOAT;
 
 			td.SampleCount = 1;
 			td.Usage = USAGE_DEFAULT;
 			td.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
 
-			renderer.AddTexture(STRING_HASH("AmbientOcclusionMapBlurX"), td);
+			renderer.AddTexture(STRING_HASH("AmbientOcclusionMapHalfRaw"), td);
 		}
 
 		// ------------------------------------------------------------
-		// Pass2 output: final AO (UAV + SRV)
+		// Half-res blur intermediate (UAV + SRV)
+		// ------------------------------------------------------------
+		{
+			TextureDesc td = {};
+			td.Name = "AmbientOcclusionMapHalfBlurX";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = halfW;
+			td.Height = halfH;
+			td.MipLevels = 1;
+			td.Format = TEX_FORMAT_R16_FLOAT;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+
+			renderer.AddTexture(STRING_HASH("AmbientOcclusionMapHalfBlurX"), td);
+		}
+
+		// ------------------------------------------------------------
+		// Half-res blur final (UAV + SRV)
+		// ------------------------------------------------------------
+		{
+			TextureDesc td = {};
+			td.Name = "AmbientOcclusionMapHalf";
+			td.Type = RESOURCE_DIM_TEX_2D;
+			td.Width = halfW;
+			td.Height = halfH;
+			td.MipLevels = 1;
+			td.Format = TEX_FORMAT_R16_FLOAT;
+			td.SampleCount = 1;
+			td.Usage = USAGE_DEFAULT;
+			td.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+
+			renderer.AddTexture(STRING_HASH("AmbientOcclusionMapHalf"), td);
+		}
+
+		// ------------------------------------------------------------
+		// Full-res final AO (UAV + SRV)
 		// ------------------------------------------------------------
 		{
 			TextureDesc td = {};
 			td.Name = "AmbientOcclusionMap";
 			td.Type = RESOURCE_DIM_TEX_2D;
-			td.Width = renderer.GetWidth();
-			td.Height = renderer.GetHeight();
+			td.Width = fullW;
+			td.Height = fullH;
 			td.MipLevels = 1;
 
-			// NOTE:
-			// R8_UNORM UAV가 백엔드/드라이버에서 안 되면 TEX_FORMAT_R16_FLOAT 권장.
-			td.Format = TEX_FORMAT_R8_UNORM;
+			// 최종도 R16_FLOAT로 두는게 합성/필터링에 유리
+			// (원하면 마지막에 R8_UNORM으로 변환 패스 추가 가능)
+			td.Format = TEX_FORMAT_R16_FLOAT;
 
 			td.SampleCount = 1;
 			td.Usage = USAGE_DEFAULT;
@@ -78,84 +101,79 @@ namespace shz
 	void AmbientOcclusionSystem::InstallPasses(Renderer& renderer)
 	{
 		// =====================================================================
-		// Pass 0: AmbientOcclusion Raw (Graphics) -> AmbientOcclusionMapRaw
+		// Pass 0: Half-res GTAO (Compute) -> AmbientOcclusionMapHalfRaw
 		// =====================================================================
 		renderer.AddPass(
-			"AmbientOcclusion",
-			EPassExecutionDomain::RenderPass,
+			"AmbientOcclusion.GTAO.HalfRes",
+			EPassExecutionDomain::OutsideRenderPass,
 			[](RenderPassBuilder& b)
 			{
-				b.DeclareTextureRTVWrite(STRING_HASH("AmbientOcclusionMapRaw"));
-
 				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
 
-				b.SetClearColor(STRING_HASH("AmbientOcclusionMapRaw"), 1.f, 1.f, 1.f, 1.f);
+				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMapHalfRaw"), RENDER_ACCESS_WRITE);
 			},
-			[this](RenderPassContext& ctx)
+			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pAOPSO, "AO PSO is null. (onCreated must have initialized it)");
-				ASSERT(m_pAOSRB, "AO SRB is null. (onCreated must have initialized it)");
+				ASSERT(m_pGTAOCSO, "GTAO CSO is null.");
+				ASSERT(m_pGTAOSRB, "GTAO SRB is null.");
 
-				auto bindTexturePS = [this](const char* name, ITextureView* srv)
+				auto bindTexCS = [this](const char* name, ITextureView* view)
 				{
-					if (auto var = m_pAOSRB->GetVariableByName(SHADER_TYPE_PIXEL, name))
-						var->Set(srv, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+					if (auto* var = m_pGTAOSRB->GetVariableByName(SHADER_TYPE_COMPUTE, name))
+						var->Set(view, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				};
 
-				bindTexturePS("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
-				bindTexturePS("g_GBufferNormal", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
+				bindTexCS("g_GBufferDepth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+				bindTexCS("g_GBufferNormal", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
+				bindTexCS("g_OutAO", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMapHalfRaw")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
-				pCtx->SetPipelineState(m_pAOPSO);
-				pCtx->CommitShaderResources(m_pAOSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+				pCtx->SetPipelineState(m_pGTAOCSO);
+				pCtx->CommitShaderResources(m_pGTAOSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				DrawAttribs da = {};
-				da.NumVertices = 3;
-				da.Flags = DRAW_FLAG_VERIFY_ALL;
-				pCtx->Draw(da);
+				const uint32 halfW = (renderer.GetWidth() + 1u) / 2u;
+				const uint32 halfH = (renderer.GetHeight() + 1u) / 2u;
+
+				DispatchComputeAttribs dispatch = {};
+				dispatch.ThreadGroupCountX = (halfW + AO_GROUP_SIZE_X - 1) / AO_GROUP_SIZE_X;
+				dispatch.ThreadGroupCountY = (halfH + AO_GROUP_SIZE_Y - 1) / AO_GROUP_SIZE_Y;
+				dispatch.ThreadGroupCountZ = 1;
+
+				pCtx->DispatchCompute(dispatch);
 			},
 				[this, &renderer]()
 			{
-				GraphicsPipelineStateCreateInfo psoCi = {};
-				psoCi.PSODesc.Name = "AmbientOcclusion PSO";
-				psoCi.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+				ShaderCreateInfo csCI = {};
+				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				csCI.EntryPoint = "main";
+				csCI.Desc.Name = "GTAO_CS";
+				csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+				csCI.Desc.UseCombinedTextureSamplers = false;
+				csCI.FilePath = m_GTAOCS.c_str();
 
-				GraphicsPipelineDesc& gp = psoCi.GraphicsPipeline;
-				gp.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-				gp.RasterizerDesc.CullMode = CULL_MODE_NONE;
-				gp.RasterizerDesc.FrontCounterClockwise = true;
-				gp.DepthStencilDesc.DepthEnable = false;
+				RefCntAutoPtr<IShader> cs;
+				renderer.CreateShader(csCI, &cs);
+				ASSERT(cs, "GTAO CS compile failed");
 
-				ShaderCreateInfo vsCI = {};
-				vsCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				vsCI.EntryPoint = "main";
-				vsCI.Desc.Name = "AO VS";
-				vsCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
-				vsCI.FilePath = m_FullscreenVS.c_str();
+				ComputePipelineStateCreateInfo psoCI = {};
+				psoCI.PSODesc.Name = "PSO_GTAO_CS";
+				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
 
-				ShaderCreateInfo psCI = {};
-				psCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-				psCI.EntryPoint = "main";
-				psCI.Desc.Name = "AO PS";
-				psCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
-				psCI.FilePath = m_AOPS.c_str();
-
-				renderer.CreateShader(vsCI, &psoCi.pVS);
-				renderer.CreateShader(psCI, &psoCi.pPS);
-
-				psoCi.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+				auto& rl = psoCI.PSODesc.ResourceLayout;
+				rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
 				ShaderResourceVariableDesc vars[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_GBufferDepth",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
-					{ SHADER_TYPE_PIXEL, "g_GBufferNormal", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_GBufferDepth",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_GBufferNormal", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_OutAO",         SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
 				};
-				psoCi.PSODesc.ResourceLayout.Variables = vars;
-				psoCi.PSODesc.ResourceLayout.NumVariables = _countof(vars);
+				rl.Variables = vars;
+				rl.NumVariables = _countof(vars);
 
 				SamplerDesc pointWrap =
 				{
@@ -175,40 +193,42 @@ namespace shz
 
 				ImmutableSamplerDesc samplers[] =
 				{
-					{ SHADER_TYPE_PIXEL, "g_PointWrapSampler",   pointWrap   },
-					{ SHADER_TYPE_PIXEL, "g_PointClampSampler",  pointClamp  },
-					{ SHADER_TYPE_PIXEL, "g_LinearClampSampler", linearClamp },
+					{ SHADER_TYPE_COMPUTE, "g_PointWrapSampler",   pointWrap  },
+					{ SHADER_TYPE_COMPUTE, "g_PointClampSampler",  pointClamp  },
+					{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
 				};
-				psoCi.PSODesc.ResourceLayout.ImmutableSamplers = samplers;
-				psoCi.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(samplers);
+				rl.ImmutableSamplers = samplers;
+				rl.NumImmutableSamplers = _countof(samplers);
 
-				m_pAOPSO = renderer.AcquirePipelineState(STRING_HASH("AmbientOcclusion"), psoCi);
-				ASSERT(m_pAOPSO, "AcquirePipelineState(AmbientOcclusion) failed.");
+				psoCI.pCS = cs;
 
-				m_pAOPSO->CreateShaderResourceBinding(&m_pAOSRB, true);
-				ASSERT(m_pAOSRB, "AO SRB create failed.");
+				m_pGTAOCSO = renderer.AcquirePipelineState(psoCI);
+				ASSERT(m_pGTAOCSO, "AcquireCompute(GTAO_CS) failed");
+
+				m_pGTAOCSO->CreateShaderResourceBinding(&m_pGTAOSRB, true);
+				ASSERT(m_pGTAOSRB, "GTAO SRB create failed");
 			});
 
 		// =====================================================================
-		// Pass 1: Bilateral Blur X (Compute) -> AmbientOcclusionMapBlurX
+		// Pass 1: Half-res Bilateral Blur X (Compute) -> AmbientOcclusionMapHalfBlurX
 		// =====================================================================
 		renderer.AddPass(
-			"AmbientOcclusion.BilateralBlurX",
+			"AmbientOcclusion.BlurX.HalfRes",
 			EPassExecutionDomain::OutsideRenderPass,
 			[](RenderPassBuilder& b)
 			{
-				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMapRaw"));
+				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMapHalfRaw"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
 
-				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMapBlurX"), RENDER_ACCESS_WRITE);
+				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMapHalfBlurX"), RENDER_ACCESS_WRITE);
 			},
 			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pBlurXCSO, "AO blur X CSO is null. (onCreated must have initialized it)");
-				ASSERT(m_pBlurXSRB, "AO blur X SRB is null. (onCreated must have initialized it)");
+				ASSERT(m_pBlurXCSO, "AO blur X CSO is null.");
+				ASSERT(m_pBlurXSRB, "AO blur X SRB is null.");
 
 				auto bindTexCS = [this](const char* name, ITextureView* view)
 				{
@@ -216,22 +236,22 @@ namespace shz
 						var->Set(view, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				};
 
-				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMapRaw")));
+				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMapHalfRaw")));
 				bindTexCS("g_Depth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
 				bindTexCS("g_Normal", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
-				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMapBlurX")));
+				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMapHalfBlurX")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
 				pCtx->SetPipelineState(m_pBlurXCSO);
 				pCtx->CommitShaderResources(m_pBlurXSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				const uint32 w = renderer.GetWidth();
-				const uint32 h = renderer.GetHeight();
+				const uint32 halfW = (renderer.GetWidth() + 1u) / 2u;
+				const uint32 halfH = (renderer.GetHeight() + 1u) / 2u;
 
 				DispatchComputeAttribs dispatch = {};
-				dispatch.ThreadGroupCountX = (w + BLUR_GROUP_SIZE_X - 1) / BLUR_GROUP_SIZE_X;
-				dispatch.ThreadGroupCountY = (h + BLUR_GROUP_SIZE_Y - 1) / BLUR_GROUP_SIZE_Y;
+				dispatch.ThreadGroupCountX = (halfW + BLUR_GROUP_SIZE_X - 1) / BLUR_GROUP_SIZE_X;
+				dispatch.ThreadGroupCountY = (halfH + BLUR_GROUP_SIZE_Y - 1) / BLUR_GROUP_SIZE_Y;
 				dispatch.ThreadGroupCountZ = 1;
 
 				pCtx->DispatchCompute(dispatch);
@@ -300,25 +320,25 @@ namespace shz
 			});
 
 		// =====================================================================
-		// Pass 2: Bilateral Blur Y (Compute) -> AmbientOcclusionMap (final)
+		// Pass 2: Half-res Bilateral Blur Y (Compute) -> AmbientOcclusionMapHalf
 		// =====================================================================
 		renderer.AddPass(
-			"AmbientOcclusion.BilateralBlurY",
+			"AmbientOcclusion.BlurY.HalfRes",
 			EPassExecutionDomain::OutsideRenderPass,
 			[](RenderPassBuilder& b)
 			{
-				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMapBlurX"));
+				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMapHalfBlurX"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
 				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
 
-				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMap"), RENDER_ACCESS_WRITE);
+				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMapHalf"), RENDER_ACCESS_WRITE);
 			},
 			[this, &renderer](RenderPassContext& ctx)
 			{
 				ASSERT(ctx.pImmediateContext, "Context is null.");
 				ASSERT(ctx.pRegistry, "Registry is null.");
-				ASSERT(m_pBlurYCSO, "AO blur Y CSO is null. (onCreated must have initialized it)");
-				ASSERT(m_pBlurYSRB, "AO blur Y SRB is null. (onCreated must have initialized it)");
+				ASSERT(m_pBlurYCSO, "AO blur Y CSO is null.");
+				ASSERT(m_pBlurYSRB, "AO blur Y SRB is null.");
 
 				auto bindTexCS = [this](const char* name, ITextureView* view)
 				{
@@ -326,22 +346,22 @@ namespace shz
 						var->Set(view, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
 				};
 
-				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMapBlurX")));
+				bindTexCS("g_Src", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMapHalfBlurX")));
 				bindTexCS("g_Depth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
 				bindTexCS("g_Normal", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
-				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMap")));
+				bindTexCS("g_Dst", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMapHalf")));
 
 				IDeviceContext* pCtx = ctx.pImmediateContext;
 
 				pCtx->SetPipelineState(m_pBlurYCSO);
 				pCtx->CommitShaderResources(m_pBlurYSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
-				const uint32 w = renderer.GetWidth();
-				const uint32 h = renderer.GetHeight();
+				const uint32 halfW = (renderer.GetWidth() + 1u) / 2u;
+				const uint32 halfH = (renderer.GetHeight() + 1u) / 2u;
 
 				DispatchComputeAttribs dispatch = {};
-				dispatch.ThreadGroupCountX = (w + BLUR_GROUP_SIZE_X - 1) / BLUR_GROUP_SIZE_X;
-				dispatch.ThreadGroupCountY = (h + BLUR_GROUP_SIZE_Y - 1) / BLUR_GROUP_SIZE_Y;
+				dispatch.ThreadGroupCountX = (halfW + BLUR_GROUP_SIZE_X - 1) / BLUR_GROUP_SIZE_X;
+				dispatch.ThreadGroupCountY = (halfH + BLUR_GROUP_SIZE_Y - 1) / BLUR_GROUP_SIZE_Y;
 				dispatch.ThreadGroupCountZ = 1;
 
 				pCtx->DispatchCompute(dispatch);
@@ -407,6 +427,112 @@ namespace shz
 
 				m_pBlurYCSO->CreateShaderResourceBinding(&m_pBlurYSRB, true);
 				ASSERT(m_pBlurYSRB, "AO blur Y SRB create failed");
+			});
+
+		// =====================================================================
+		// Pass 3: Bilateral Upsample (Compute) Half -> Full -> AmbientOcclusionMap
+		// =====================================================================
+		renderer.AddPass(
+			"AmbientOcclusion.Upsample",
+			EPassExecutionDomain::OutsideRenderPass,
+			[](RenderPassBuilder& b)
+			{
+				b.DeclareTextureSRVRead(STRING_HASH("AmbientOcclusionMapHalf"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBufferDepth"));
+				b.DeclareTextureSRVRead(STRING_HASH("GBuffer1_Normal"));
+
+				b.DeclareTextureUAV(STRING_HASH("AmbientOcclusionMap"), RENDER_ACCESS_WRITE);
+			},
+			[this, &renderer](RenderPassContext& ctx)
+			{
+				ASSERT(ctx.pImmediateContext, "Context is null.");
+				ASSERT(ctx.pRegistry, "Registry is null.");
+				ASSERT(m_pUpsampleCSO, "AO upsample CSO is null.");
+				ASSERT(m_pUpsampleSRB, "AO upsample SRB is null.");
+
+				auto bindTexCS = [this](const char* name, ITextureView* view)
+				{
+					if (auto* var = m_pUpsampleSRB->GetVariableByName(SHADER_TYPE_COMPUTE, name))
+						var->Set(view, SET_SHADER_RESOURCE_FLAG_ALLOW_OVERWRITE);
+				};
+
+				bindTexCS("g_AOHalf", ctx.pRegistry->GetTextureSRV(STRING_HASH("AmbientOcclusionMapHalf")));
+				bindTexCS("g_Depth", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBufferDepth")));
+				bindTexCS("g_Normal", ctx.pRegistry->GetTextureSRV(STRING_HASH("GBuffer1_Normal")));
+				bindTexCS("g_OutAO", ctx.pRegistry->GetTextureUAV(STRING_HASH("AmbientOcclusionMap")));
+
+				IDeviceContext* pCtx = ctx.pImmediateContext;
+
+				pCtx->SetPipelineState(m_pUpsampleCSO);
+				pCtx->CommitShaderResources(m_pUpsampleSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+				const uint32 fullW = renderer.GetWidth();
+				const uint32 fullH = renderer.GetHeight();
+
+				DispatchComputeAttribs dispatch = {};
+				dispatch.ThreadGroupCountX = (fullW + UPSAMPLE_GROUP_SIZE_X - 1) / UPSAMPLE_GROUP_SIZE_X;
+				dispatch.ThreadGroupCountY = (fullH + UPSAMPLE_GROUP_SIZE_Y - 1) / UPSAMPLE_GROUP_SIZE_Y;
+				dispatch.ThreadGroupCountZ = 1;
+
+				pCtx->DispatchCompute(dispatch);
+			},
+				[this, &renderer]()
+			{
+				ShaderCreateInfo csCI = {};
+				csCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+				csCI.EntryPoint = "main";
+				csCI.Desc.Name = "AO_Upsample_CS";
+				csCI.Desc.ShaderType = SHADER_TYPE_COMPUTE;
+				csCI.Desc.UseCombinedTextureSamplers = false;
+				csCI.FilePath = m_UpsampleCS.c_str();
+
+				RefCntAutoPtr<IShader> cs;
+				renderer.CreateShader(csCI, &cs);
+				ASSERT(cs, "AO upsample CS compile failed");
+
+				ComputePipelineStateCreateInfo psoCI = {};
+				psoCI.PSODesc.Name = "PSO_AO_Upsample";
+				psoCI.PSODesc.PipelineType = PIPELINE_TYPE_COMPUTE;
+
+				auto& rl = psoCI.PSODesc.ResourceLayout;
+				rl.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+				ShaderResourceVariableDesc vars[] =
+				{
+					{ SHADER_TYPE_COMPUTE, "g_AOHalf", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_Depth",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_Normal", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+					{ SHADER_TYPE_COMPUTE, "g_OutAO",  SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE },
+				};
+				rl.Variables = vars;
+				rl.NumVariables = _countof(vars);
+
+				SamplerDesc pointClamp =
+				{
+					FILTER_TYPE_POINT, FILTER_TYPE_POINT, FILTER_TYPE_POINT,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
+				SamplerDesc linearClamp =
+				{
+					FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR,
+					TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+				};
+
+				ImmutableSamplerDesc samplers[] =
+				{
+					{ SHADER_TYPE_COMPUTE, "g_PointClampSampler",  pointClamp  },
+					{ SHADER_TYPE_COMPUTE, "g_LinearClampSampler", linearClamp },
+				};
+				rl.ImmutableSamplers = samplers;
+				rl.NumImmutableSamplers = _countof(samplers);
+
+				psoCI.pCS = cs;
+
+				m_pUpsampleCSO = renderer.AcquirePipelineState(psoCI);
+				ASSERT(m_pUpsampleCSO, "AcquireCompute(AO_Upsample) failed");
+
+				m_pUpsampleCSO->CreateShaderResourceBinding(&m_pUpsampleSRB, true);
+				ASSERT(m_pUpsampleSRB, "AO upsample SRB create failed");
 			});
 	}
 } // namespace shz
