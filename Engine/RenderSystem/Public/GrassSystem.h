@@ -85,8 +85,8 @@ namespace shz
 
         uint  m_SamplesPerChunk = 1024;
 
-        float m_LOD0Distance = 20.0f;
-        float m_LOD1Distance = 60.0f;
+        float m_LOD0Distance = 15.0f;
+        float m_LOD1Distance = 45.0f;
         float m_LodHysteresis = 1.0f;
 
         struct TypeIndirect final

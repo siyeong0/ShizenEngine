@@ -1,10 +1,24 @@
+// ============================================================================
+// GrassCrossPlane_ImpostorFixedView.ps.hlsl
+// - Cross plane PS that samples *impostor atlas* material inputs
+// - Uses a single fixed impostor view index (36)
+// - Keeps your drying/erosion + root blend + velocity outputs
+// ============================================================================
+
 #define ADDITIONAL_PS_IN_FIELDS \
-	PS_IN_FIELD(float, Height01, 0)
+    PS_IN_FIELD(float, Height01, 0)
 
 #include "Common.hlsli"
 #include "PBRMaterial.hlsli"
 #include "GrassCommon.hlsli"
+#include "ImpostorCommon.hlsli"
 
+// -----------------------------------------------------------------------------
+// Fixed impostor view index
+// -----------------------------------------------------------------------------
+static const uint SHZ_IMPOSTOR_FIXED_VIEW_INDEX = 36u;
+
+// Edge distance for erosion (your existing workflow)
 Texture2D<float> g_EdgeDistance;
 
 // Drying only control
@@ -17,14 +31,36 @@ static const float SHZ_EROSION_NOISE_AMOUNT_FALLBACK = 0.12;
 static const float SHZ_DRY_HEIGHT0 = 0.05;
 static const float SHZ_DRY_HEIGHT1 = 0.15;
 
+// -----------------------------------------------------------------------------
+// Impostor sampling helpers (fixed view)
+// -----------------------------------------------------------------------------
+float3 GetNormalWS(float2 uvAtlas)
+{
+	float3 normalSample = g_NormalTex.Sample(g_LinearWrapSampler, uvAtlas).xyz;
+	float3 nOS = UnpackNormal01(normalSample);
+
+    // your convention fix
+	nOS.x = -nOS.x;
+	nOS.xy *= g_NormalScale;
+
+    // Camera basis in WS
+	float3 camR = normalize(g_FrameCB.InvView[0].xyz);
+	float3 camU = normalize(g_FrameCB.InvView[1].xyz);
+	float3 camF = normalize(g_FrameCB.InvView[2].xyz);
+
+    // Treat normal texture as camera-facing impostor space (R,U,-F)
+	float3 nWS = nOS.x * camR + nOS.y * camU + nOS.z * (-camF);
+	return normalize(nWS);
+}
+
 BASE_PS_MAIN_ENTRY()
 {
 	float4 svPos = GET_PSIN_POS();
 	float4 currClip = GET_PSIN_CURR_CLIP();
 	float4 prevClip = GET_PSIN_PREV_CLIP();
 	float3 worldPos = GET_PSIN_WORLD_POS();
-	float2 uv = GET_PSIN_UV();
-	float3 normalWS = GET_PSIN_WORLD_NORMAL();
+	float2 uvLocal = GET_PSIN_UV(); // local 0..1 on the card
+	float3 normalWS0 = GET_PSIN_WORLD_NORMAL();
 	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
 
 	float2 currUV = ClipToUV(currClip);
@@ -32,60 +68,68 @@ BASE_PS_MAIN_ENTRY()
 
 	float height01 = GET_PSIN_ADDITIONAL(Height01);
 
-	// -------------------------------------------------------------------------
-	// Material
-	// -------------------------------------------------------------------------
-	float3 baseColor = GetBaseColor(uv);
-	float alpha = GetOpacity(uv);
+    // -------------------------------------------------------------------------
+    // Material from impostor atlas (fixed view)
+    // -------------------------------------------------------------------------
+	
+	float2 uvAtlas = AtlasTileUV(uvLocal, SHZ_IMPOSTOR_FIXED_VIEW_INDEX);
+	
+	float3 baseColor = GetBaseColor(uvAtlas);
+	float alpha = GetOpacity(uvAtlas);
 
 	float coverage = ClipPixelCoverage(alpha, svPos);
 
-	float2 metallicRoughness = GetMetallicRoughness(uv);
+	float2 metallicRoughness = GetMetallicRoughness(uvAtlas);
 	float metallic = metallicRoughness.x;
 	float roughness = metallicRoughness.y;
 
-	float ao = GetAmbientOcclusion(uv);
-	float3 emissive = GetEmissive(uv);
-	float3 normal = GetNormal(uv, normalWS, tangentWS);
+	float ao = GetAmbientOcclusion(uvAtlas);
+	float3 emissive = GetEmissive(uvAtlas);
 
-	// -------------------------------------------------------------------------
-	// Erosion signal => color only
-	// -------------------------------------------------------------------------
+    // Normal: use impostor normal atlas (camera-basis WS)
+	float3 normalWS = GetNormalWS(uvAtlas);
+
+    // If you still want to bias toward card geom normal (optional), uncomment:
+    // normalWS = normalize(lerp(normalWS0, normalWS, 0.85f));
+
+    // -------------------------------------------------------------------------
+    // Erosion signal => color only (uses edge-distance in *local UV* space)
+    // -------------------------------------------------------------------------
 	float ePix = ComputeErosionEPix(
-		g_EdgeDistance,
-		uv,
-		g_GrassCB.ErosionStrength,
-		g_GrassCB.ErosionMaxDist,
-		g_GrassCB.ErosionSmoothness,
-		g_GrassCB.ErosionNoiseScale,
-		SHZ_EROSION_NOISE_AMOUNT_FALLBACK);
+        g_EdgeDistance,
+        uvLocal,
+        g_GrassCB.ErosionStrength,
+        g_GrassCB.ErosionMaxDist,
+        g_GrassCB.ErosionSmoothness,
+        g_GrassCB.ErosionNoiseScale,
+        SHZ_EROSION_NOISE_AMOUNT_FALLBACK);
 
 	float dryBase01 = saturate(ePix / max(DRY_PHASE_END, 1e-4));
 
-	// Optional: limit drying to upper part using Height01 ramp.
+    // Optional: limit drying to upper part using Height01 ramp.
 	float dryHeightMask = ComputeHeightRamp01(height01, SHZ_DRY_HEIGHT0, SHZ_DRY_HEIGHT1);
 	float dry01 = dryBase01 * dryHeightMask;
 
 	baseColor = ApplyGrassDrying(baseColor, dry01);
 	roughness = saturate(roughness + dry01 * g_GrassCB.DryRoughness);
 
-	// -------------------------------------------------------------------------
-	// Root blend (still uses original coverage)
-	// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Root blend (still uses original coverage)
+    // -------------------------------------------------------------------------
 	float blend = ComputeRootBlend(height01, coverage);
 	ApplyRootTerrainBlend(worldPos, blend, baseColor, ao);
 
-	// -------------------------------------------------------------------------
-	// GBuffer
-	// -------------------------------------------------------------------------
-	SET_PSOUT_ALBEDO(baseColor);
-	SET_PSOUT_OPACITY(alpha); // No erosion: keep original alpha
-	SET_PSOUT_NORMAL(normal);
-	SET_PSOUT_METALLIC(metallic);
-	SET_PSOUT_ROUGHNESS(roughness);
-	SET_PSOUT_AO(ao);
-	SET_PSOUT_ALPHACOVERAGE(coverage);
-	SET_PSOUT_EMISSIVE(emissive);
-	SET_PSOUT_VELOCITY(currUV - prevUV);
-	SET_PSOUT_SHADING_MODEL(FOLIAGE);
+    // -------------------------------------------------------------------------
+    // GBuffer
+    // -------------------------------------------------------------------------
+    SET_PSOUT_ALBEDO(baseColor);
+    SET_PSOUT_OPACITY(alpha);
+    SET_PSOUT_NORMAL(normalWS);
+    SET_PSOUT_METALLIC(metallic);
+    SET_PSOUT_ROUGHNESS(roughness);
+    SET_PSOUT_AO(ao);
+    SET_PSOUT_ALPHACOVERAGE(coverage);
+    SET_PSOUT_EMISSIVE(emissive);
+    SET_PSOUT_VELOCITY(currUV - prevUV);
+    SET_PSOUT_SHADING_MODEL(FOLIAGE);
 }

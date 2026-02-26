@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <unordered_set>
+#include <filesystem>
 
 #include "ThirdParty/imgui/imgui.h"
 #include "Engine/ImGui/Public/imGuIZMO.h"
@@ -188,467 +189,588 @@ namespace shz
 				m_pRenderer->RegisterMaterialTemplate("GrassBillboard", "GrassBillboard.vsh", "GrassBillboard.psh", MATERIAL_BLEND_MODE_MASKED);
 
 				auto uniform01 = [](StaticMeshLevel& mesh)
-					{
-						mesh.RecomputeBounds();
-						const Box& b = mesh.GetBoxBounds();
-						float yScale01 = 1.0f / (b.Max().y - b.Min().y);
-						mesh.ApplyUniformScale(yScale01);
-						mesh.MoveBottomToOrigin(true);
-					};
+				{
+					mesh.RecomputeBounds();
+					const Box& b = mesh.GetBoxBounds();
+					float yScale01 = 1.0f / (b.Max().y - b.Min().y);
+					mesh.ApplyUniformScale(yScale01);
+					mesh.MoveBottomToOrigin(true);
+				};
 
 				auto addGrassVariation = [&](GrassDesc& gd, const std::string& path)
+				{
+					// ---------------------------------------------
+					// Helpers
+					// ---------------------------------------------
+					auto SrgbToLinearFast = [](float c) -> float
 					{
-						// ---------------------------------------------
-						// Helpers
-						// ---------------------------------------------
-						auto SrgbToLinearFast = [](float c) -> float
-							{
-								// Accurate enough for dominant-color averaging; avoids pow() in hot path.
-								// If your pipeline already treats BaseColorTex as linear UNORM, set kAssumeSrgb=false below.
-								return (c <= 0.04045f) ? (c / 12.92f) : std::pow((c + 0.055f) / 1.055f, 2.4f);
-							};
+						// Accurate enough for dominant-color averaging; avoids pow() in hot path.
+						// If your pipeline already treats BaseColorTex as linear UNORM, set kAssumeSrgb=false below.
+						return (c <= 0.04045f) ? (c / 12.92f) : std::pow((c + 0.055f) / 1.055f, 2.4f);
+					};
 
-						auto LinearToSrgbFast = [](float c) -> float
-							{
-								return (c <= 0.0031308f) ? (c * 12.92f) : (1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f);
-							};
+					auto LinearToSrgbFast = [](float c) -> float
+					{
+						return (c <= 0.0031308f) ? (c * 12.92f) : (1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f);
+					};
 
-						struct AlphaInnerMaskResult
+					struct AlphaInnerMaskResult
+					{
+						Texture InnerDepthR8;  // R8_UNORM, outside=0, inside=edge->0 .. deep->1 (per component)
+						float3 DominantColor;  // 0..1 (linear by default)
+						uint32 InsidePixelCount = 0;
+					};
+
+					auto BuildAlphaInnerMaskR8_AndDominantColor = [&](
+						const Texture& srcRgba,
+						float alphaThreshold,
+						bool  kAssumeSrgb /*true: average in linear space*/) -> AlphaInnerMaskResult
+					{
+						const uint32 W = srcRgba.GetWidth();
+						const uint32 H = srcRgba.GetHeight();
+						const uint8* src = srcRgba.GetData();
+
+						ASSERT(W > 0 && H > 0, "Invalid src size.");
+						ASSERT(srcRgba.GetMips().size() > 0, "No mips in src.");
+						ASSERT(srcRgba.GetMips()[0].Data.size() >= size_t(W) * size_t(H) * 4ull, "Src data size mismatch.");
+
+						const float INF = 1e20f;
+
+						// 1D squared distance transform (Felzenszwalb/Huttenlocher)
+						auto edt1d = [&](const std::vector<float>& f, int n, std::vector<float>& d)
 						{
-							Texture InnerDepthR8;  // R8_UNORM, outside=0, inside=edge->0 .. deep->1 (per component)
-							float3 DominantColor;  // 0..1 (linear by default)
-							uint32 InsidePixelCount = 0;
+							std::vector<int>   v(n);
+							std::vector<float> z(n + 1);
+
+							int k = 0;
+							v[0] = 0;
+							z[0] = -INF;
+							z[1] = +INF;
+
+							auto sq = [](float x) { return x * x; };
+
+							for (int q = 1; q < n; ++q)
+							{
+								float s = 0.0f;
+								for (;;)
+								{
+									const int vk = v[k];
+									s = ((f[q] + sq(float(q))) - (f[vk] + sq(float(vk)))) / (2.0f * float(q - vk));
+									if (s > z[k]) break;
+									--k;
+								}
+								++k;
+								v[k] = q;
+								z[k] = s;
+								z[k + 1] = +INF;
+							}
+
+							k = 0;
+							for (int q = 0; q < n; ++q)
+							{
+								while (z[k + 1] < float(q)) ++k;
+								const int vk = v[k];
+								const float dx = float(q - vk);
+								d[q] = dx * dx + f[vk];
+							}
 						};
 
-						auto BuildAlphaInnerMaskR8_AndDominantColor = [&](
-							const Texture& srcRgba,
-							float alphaThreshold,
-							bool  kAssumeSrgb /*true: average in linear space*/) -> AlphaInnerMaskResult
+						// 2D EDT: distance to nearest "feature"
+						// binary: 0/1, targetOne==true => feature is 1 pixels, else feature is 0 pixels.
+						auto edt2d = [&](const std::vector<uint8>& binary, bool targetOne) -> std::vector<float>
+						{
+							// f = 0 at feature pixels, INF elsewhere
+							std::vector<float> f(W * H, INF);
+							for (uint32 y = 0; y < H; ++y)
 							{
-								const uint32 W = srcRgba.GetWidth();
-								const uint32 H = srcRgba.GetHeight();
-								const uint8* src = srcRgba.GetData();
+								for (uint32 x = 0; x < W; ++x)
+								{
+									const uint8 b = binary[y * W + x];
+									const bool isFeature = (b != 0) == targetOne;
+									if (isFeature) f[y * W + x] = 0.0f;
+								}
+							}
 
-								ASSERT(W > 0 && H > 0, "Invalid src size.");
-								ASSERT(srcRgba.GetMips().size() > 0, "No mips in src.");
-								ASSERT(srcRgba.GetMips()[0].Data.size() >= size_t(W) * size_t(H) * 4ull, "Src data size mismatch.");
+							// pass 1: columns
+							std::vector<float> g(W * H, INF);
+							{
+								std::vector<float> colF(H);
+								std::vector<float> colD(H);
+								for (uint32 x = 0; x < W; ++x)
+								{
+									for (uint32 y = 0; y < H; ++y) colF[y] = f[y * W + x];
+									edt1d(colF, int(H), colD);
+									for (uint32 y = 0; y < H; ++y) g[y * W + x] = colD[y];
+								}
+							}
 
-								const float INF = 1e20f;
-
-								// 1D squared distance transform (Felzenszwalb/Huttenlocher)
-								auto edt1d = [&](const std::vector<float>& f, int n, std::vector<float>& d)
-									{
-										std::vector<int>   v(n);
-										std::vector<float> z(n + 1);
-
-										int k = 0;
-										v[0] = 0;
-										z[0] = -INF;
-										z[1] = +INF;
-
-										auto sq = [](float x) { return x * x; };
-
-										for (int q = 1; q < n; ++q)
-										{
-											float s = 0.0f;
-											for (;;)
-											{
-												const int vk = v[k];
-												s = ((f[q] + sq(float(q))) - (f[vk] + sq(float(vk)))) / (2.0f * float(q - vk));
-												if (s > z[k]) break;
-												--k;
-											}
-											++k;
-											v[k] = q;
-											z[k] = s;
-											z[k + 1] = +INF;
-										}
-
-										k = 0;
-										for (int q = 0; q < n; ++q)
-										{
-											while (z[k + 1] < float(q)) ++k;
-											const int vk = v[k];
-											const float dx = float(q - vk);
-											d[q] = dx * dx + f[vk];
-										}
-									};
-
-								// 2D EDT: distance to nearest "feature"
-								// binary: 0/1, targetOne==true => feature is 1 pixels, else feature is 0 pixels.
-								auto edt2d = [&](const std::vector<uint8>& binary, bool targetOne) -> std::vector<float>
-									{
-										// f = 0 at feature pixels, INF elsewhere
-										std::vector<float> f(W * H, INF);
-										for (uint32 y = 0; y < H; ++y)
-										{
-											for (uint32 x = 0; x < W; ++x)
-											{
-												const uint8 b = binary[y * W + x];
-												const bool isFeature = (b != 0) == targetOne;
-												if (isFeature) f[y * W + x] = 0.0f;
-											}
-										}
-
-										// pass 1: columns
-										std::vector<float> g(W * H, INF);
-										{
-											std::vector<float> colF(H);
-											std::vector<float> colD(H);
-											for (uint32 x = 0; x < W; ++x)
-											{
-												for (uint32 y = 0; y < H; ++y) colF[y] = f[y * W + x];
-												edt1d(colF, int(H), colD);
-												for (uint32 y = 0; y < H; ++y) g[y * W + x] = colD[y];
-											}
-										}
-
-										// pass 2: rows
-										std::vector<float> d2(W * H, INF);
-										{
-											std::vector<float> rowF(W);
-											std::vector<float> rowD(W);
-											for (uint32 y = 0; y < H; ++y)
-											{
-												for (uint32 x = 0; x < W; ++x) rowF[x] = g[y * W + x];
-												edt1d(rowF, int(W), rowD);
-												for (uint32 x = 0; x < W; ++x) d2[y * W + x] = rowD[x]; // squared distance
-											}
-										}
-
-										return d2;
-									};
-
-								AlphaInnerMaskResult result = {};
-
-								// Build inside mask from alpha + accumulate dominant color in ONE pass
-								std::vector<uint8> inside(W * H, 0);
-
-								double sumR = 0.0;
-								double sumG = 0.0;
-								double sumB = 0.0;
-								uint32 count = 0;
-
+							// pass 2: rows
+							std::vector<float> d2(W * H, INF);
+							{
+								std::vector<float> rowF(W);
+								std::vector<float> rowD(W);
 								for (uint32 y = 0; y < H; ++y)
 								{
-									for (uint32 x = 0; x < W; ++x)
+									for (uint32 x = 0; x < W; ++x) rowF[x] = g[y * W + x];
+									edt1d(rowF, int(W), rowD);
+									for (uint32 x = 0; x < W; ++x) d2[y * W + x] = rowD[x]; // squared distance
+								}
+							}
+
+							return d2;
+						};
+
+						AlphaInnerMaskResult result = {};
+
+						// Build inside mask from alpha + accumulate dominant color in ONE pass
+						std::vector<uint8> inside(W * H, 0);
+
+						double sumR = 0.0;
+						double sumG = 0.0;
+						double sumB = 0.0;
+						uint32 count = 0;
+
+						for (uint32 y = 0; y < H; ++y)
+						{
+							for (uint32 x = 0; x < W; ++x)
+							{
+								const uint32 i = (y * W + x) * 4u;
+
+								const float a = float(src[i + 3u]) * (1.0f / 255.0f);
+								const bool isInside = (a >= alphaThreshold);
+
+								const uint32 idx = y * W + x;
+								inside[idx] = isInside ? 1u : 0u;
+
+								if (isInside)
+								{
+									float r = float(src[i + 0u]) * (1.0f / 255.0f);
+									float g = float(src[i + 1u]) * (1.0f / 255.0f);
+									float b = float(src[i + 2u]) * (1.0f / 255.0f);
+
+									if (kAssumeSrgb)
 									{
-										const uint32 i = (y * W + x) * 4u;
-
-										const float a = float(src[i + 3u]) * (1.0f / 255.0f);
-										const bool isInside = (a >= alphaThreshold);
-
-										const uint32 idx = y * W + x;
-										inside[idx] = isInside ? 1u : 0u;
-
-										if (isInside)
-										{
-											float r = float(src[i + 0u]) * (1.0f / 255.0f);
-											float g = float(src[i + 1u]) * (1.0f / 255.0f);
-											float b = float(src[i + 2u]) * (1.0f / 255.0f);
-
-											if (kAssumeSrgb)
-											{
-												r = SrgbToLinearFast(r);
-												g = SrgbToLinearFast(g);
-												b = SrgbToLinearFast(b);
-											}
-
-											sumR += double(r);
-											sumG += double(g);
-											sumB += double(b);
-											++count;
-										}
+										r = SrgbToLinearFast(r);
+										g = SrgbToLinearFast(g);
+										b = SrgbToLinearFast(b);
 									}
+
+									sumR += double(r);
+									sumG += double(g);
+									sumB += double(b);
+									++count;
 								}
+							}
+						}
 
-								result.InsidePixelCount = count;
+						result.InsidePixelCount = count;
 
-								if (count > 0)
-								{
-									const double inv = 1.0 / double(count);
-									result.DominantColor =
-										float3{
-											float(sumR * inv),
-											float(sumG * inv),
-											float(sumB * inv)
-									};
-								}
-								else
-								{
-									// fallback: mid-green if texture is empty/fully transparent
-									result.DominantColor = float3{ 0.15f, 0.35f, 0.15f };
-								}
-
-								// Distance-to-edge for INSIDE pixels:
-								// nearest OUTSIDE pixel distance => feature is outside==1 => inside==0
-								std::vector<float> distToOutside2 = edt2d(inside, /*targetOne*/ false);
-
-								// Connected component labeling on 'inside' to normalize per-leaf scale (8-neighborhood)
-								std::vector<int32> labels(W * H, -1);
-								std::vector<float> distPx(W * H, 0.0f);
-
-								for (uint32 idx = 0; idx < W * H; ++idx)
-								{
-									if (inside[idx] != 0)
-									{
-										distPx[idx] = std::sqrt(std::max(distToOutside2[idx], 0.0f));
-									}
-								}
-
-								std::vector<float> compMaxDist;
-								compMaxDist.reserve(256);
-
-								auto InBounds = [&](int x, int y) -> bool
-									{
-										return (x >= 0 && y >= 0 && x < int(W) && y < int(H));
-									};
-
-								static const int kDirs8[8][2] =
-								{
-									{ -1, -1 }, { 0, -1 }, { 1, -1 },
-									{ -1,  0 },           { 1,  0 },
-									{ -1,  1 }, { 0,  1 }, { 1,  1 },
-								};
-
-								int32 compId = 0;
-
-								std::vector<int32> queue;
-								queue.reserve(4096);
-
-								for (uint32 y0 = 0; y0 < H; ++y0)
-								{
-									for (uint32 x0 = 0; x0 < W; ++x0)
-									{
-										const uint32 idx0 = y0 * W + x0;
-										if (inside[idx0] == 0) continue;
-										if (labels[idx0] >= 0) continue;
-
-										float maxD = 0.0f;
-
-										labels[idx0] = compId;
-										queue.clear();
-										queue.push_back(int32(idx0));
-
-										for (size_t qi = 0; qi < queue.size(); ++qi)
-										{
-											const uint32 idx = uint32(queue[qi]);
-											maxD = std::max(maxD, distPx[idx]);
-
-											const int x = int(idx % W);
-											const int y = int(idx / W);
-
-											for (int k = 0; k < 8; ++k)
-											{
-												const int nx = x + kDirs8[k][0];
-												const int ny = y + kDirs8[k][1];
-												if (!InBounds(nx, ny)) continue;
-
-												const uint32 nidx = uint32(ny) * W + uint32(nx);
-												if (inside[nidx] == 0) continue;
-												if (labels[nidx] >= 0) continue;
-
-												labels[nidx] = compId;
-												queue.push_back(int32(nidx));
-											}
-										}
-
-										compMaxDist.push_back(maxD);
-										++compId;
-									}
-								}
-
-								// Output R8 "inner depth"
-								result.InnerDepthR8.SetFormat(TEX_FORMAT_R8_UNORM);
-								result.InnerDepthR8.GetMips().resize(1);
-								result.InnerDepthR8.GetMips()[0].Width = W;
-								result.InnerDepthR8.GetMips()[0].Height = H;
-								result.InnerDepthR8.GetMips()[0].Data.resize(size_t(W) * size_t(H));
-
-								for (uint32 y = 0; y < H; ++y)
-								{
-									for (uint32 x = 0; x < W; ++x)
-									{
-										const uint32 idx = y * W + x;
-
-										if (inside[idx] == 0)
-										{
-											result.InnerDepthR8.GetMips()[0].Data[idx] = 0u;
-											continue;
-										}
-
-										const int32 lid = labels[idx];
-										ASSERT(lid >= 0 && lid < int32(compMaxDist.size()), "Invalid component label.");
-
-										const float maxD = compMaxDist[size_t(lid)];
-										const float invMax = (maxD > 1e-6f) ? (1.0f / maxD) : 0.0f;
-
-										float v01 = std::clamp(distPx[idx] * invMax, 0.0f, 1.0f);
-										result.InnerDepthR8.GetMips()[0].Data[idx] = (uint8)std::clamp(v01 * 255.0f + 0.5f, 0.0f, 255.0f);
-									}
-								}
-
-								return result;
+						if (count > 0)
+						{
+							const double inv = 1.0 / double(count);
+							result.DominantColor =
+								float3{
+									float(sumR * inv),
+									float(sumG * inv),
+									float(sumB * inv)
 							};
-
-						// ---------------------------------------------
-						// Main
-						// ---------------------------------------------
-						StaticMesh grassMesh = {};
-
-						// Load once, reuse for LOD0/LOD1 builds
-						AssetRef<AssimpAsset> grassAssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
-						const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassAssimpRef);
-
-						float3 dominantColor = float3{ 0.15f, 0.35f, 0.15f };
-
-						// LOD0 : Mesh
+						}
+						else
 						{
-							StaticMeshLevel grassMeshLevel = {};
-							BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
-							uniform01(grassMeshLevel);
-
-							for (auto matId : grassMeshLevel.GetMaterialSlots())
-							{
-								Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-								mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
-								mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-								mat.SetCullMode(CULL_MODE_NONE);
-
-								const Texture& baseColorTex = *m_pAssetManager->LoadBlocking(mat.GetTextureAssetRef("g_BaseColorTex"));
-								ASSERT(baseColorTex.IsValid(), "BaseColor texture is invalid.");
-								ASSERT(baseColorTex.GetFormat() == TEX_FORMAT_RGBA8_UNORM, "BaseColor must be RGBA8_UNORM for inline alpha SDF build.");
-
-								const float alphaThreshold = 0.5f;
-
-								// Build inner mask + dominant color together
-								const bool kAssumeSrgb = false; // flip to false if you *know* g_BaseColorTex is already linear UNORM
-								AlphaInnerMaskResult build = BuildAlphaInnerMaskR8_AndDominantColor(baseColorTex, alphaThreshold, kAssumeSrgb);
-
-								ASSERT(build.InnerDepthR8.IsValid(), "Alpha inner-mask build failed.");
-								dominantColor = build.DominantColor;
-
-								// Upload R8 to GPU and bind as g_EdgeDistance
-								TextureDesc desc = {};
-								desc.Name = "Grass_AlphaInnerDepthR8";
-								desc.Type = RESOURCE_DIM_TEX_2D;
-								desc.Width = build.InnerDepthR8.GetWidth();
-								desc.Height = build.InnerDepthR8.GetHeight();
-								desc.MipLevels = 1;
-								desc.ArraySize = 1;
-								desc.Format = TEX_FORMAT_R8_UNORM;
-								desc.Usage = USAGE_IMMUTABLE;
-								desc.BindFlags = BIND_SHADER_RESOURCE;
-
-								TextureSubResData subRes = {};
-								subRes.pData = build.InnerDepthR8.GetData();
-								subRes.Stride = build.InnerDepthR8.GetWidth(); // R8: 1 byte/px
-
-								TextureData initData = {};
-								initData.NumSubresources = 1;
-								initData.pSubResources = &subRes;
-
-								static uint32 alphaInnerMaskIdx = 1;
-
-								const uint64 alphaInnerResId = STRING_HASH(
-									path + "_InnerDepthR8_" + std::to_string(alphaInnerMaskIdx++)
-								);
-
-								m_pRenderer->AddTexture(alphaInnerResId, desc, &initData);
-								mat.SetTextureResource("g_EdgeDistance", alphaInnerResId);
-							}
-
-							grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
+							// fallback: mid-green if texture is empty/fully transparent
+							result.DominantColor = float3{ 0.15f, 0.35f, 0.15f };
 						}
 
-						// LOD1 : Cross-plane
+						// Distance-to-edge for INSIDE pixels:
+						// nearest OUTSIDE pixel distance => feature is outside==1 => inside==0
+						std::vector<float> distToOutside2 = edt2d(inside, /*targetOne*/ false);
+
+						// Connected component labeling on 'inside' to normalize per-leaf scale (8-neighborhood)
+						std::vector<int32> labels(W * H, -1);
+						std::vector<float> distPx(W * H, 0.0f);
+
+						for (uint32 idx = 0; idx < W * H; ++idx)
 						{
-							StaticMeshLevel grassCrossMeshLevel = {};
-							BuildStaticMeshAsset(grassAssimp, &grassCrossMeshLevel, {}, "GrassCrossPlane", nullptr, m_pAssetManager.get());
-							uniform01(grassCrossMeshLevel);
-
-							for (auto matId : grassCrossMeshLevel.GetMaterialSlots())
+							if (inside[idx] != 0)
 							{
-								Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-								mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
-								mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
-								mat.SetCullMode(CULL_MODE_NONE);
+								distPx[idx] = std::sqrt(std::max(distToOutside2[idx], 0.0f));
 							}
-
-							grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
 						}
 
-						// LOD2 : Billboard
+						std::vector<float> compMaxDist;
+						compMaxDist.reserve(256);
+
+						auto InBounds = [&](int x, int y) -> bool
 						{
-							StaticMeshLevel grassBillboardMeshLevel = {};
+							return (x >= 0 && y >= 0 && x < int(W) && y < int(H));
+						};
 
-							const float2 scale = { 1.0f, 1.0f };
-							const float2 pivot = { 0.5f, 0.0f };
+						static const int kDirs8[8][2] =
+						{
+							{ -1, -1 }, { 0, -1 }, { 1, -1 },
+							{ -1,  0 },           { 1,  0 },
+							{ -1,  1 }, { 0,  1 }, { 1,  1 },
+						};
 
-							// Build quad mesh
+						int32 compId = 0;
+
+						std::vector<int32> queue;
+						queue.reserve(4096);
+
+						for (uint32 y0 = 0; y0 < H; ++y0)
+						{
+							for (uint32 x0 = 0; x0 < W; ++x0)
 							{
-								std::vector<float3> pos(4);
-								std::vector<float2> uv(4);
-								std::vector<uint32> idx = { 0, 1, 2, 0, 2, 3 };
+								const uint32 idx0 = y0 * W + x0;
+								if (inside[idx0] == 0) continue;
+								if (labels[idx0] >= 0) continue;
 
-								const float x0 = -pivot.x * scale.x;
-								const float x1 = (1.0f - pivot.x) * scale.x;
+								float maxD = 0.0f;
 
-								const float y0 = -pivot.y * scale.y;
-								const float y1 = (1.0f - pivot.y) * scale.y;
+								labels[idx0] = compId;
+								queue.clear();
+								queue.push_back(int32(idx0));
 
-								//  3 ---- 2
-								//  |      |
-								//  0 ---- 1
-								// UV: (0,0)=top-left, (1,1)=bottom-right
-								pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
-								pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
-								pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
-								pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
+								for (size_t qi = 0; qi < queue.size(); ++qi)
+								{
+									const uint32 idx = uint32(queue[qi]);
+									maxD = std::max(maxD, distPx[idx]);
 
-								grassBillboardMeshLevel.SetPositions(std::move(pos));
-								grassBillboardMeshLevel.SetTexCoords(std::move(uv));
-								grassBillboardMeshLevel.SetIndicesU32(std::move(idx));
+									const int x = int(idx % W);
+									const int y = int(idx / W);
 
-								StaticMeshLevel::Section sec = {};
-								sec.FirstIndex = 0;
-								sec.IndexCount = 6;
-								sec.BaseVertex = 0;
-								sec.MaterialSlot = 0;
-								grassBillboardMeshLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
+									for (int k = 0; k < 8; ++k)
+									{
+										const int nx = x + kDirs8[k][0];
+										const int ny = y + kDirs8[k][1];
+										if (!InBounds(nx, ny)) continue;
 
-								grassBillboardMeshLevel.RecomputeBounds();
+										const uint32 nidx = uint32(ny) * W + uint32(nx);
+										if (inside[nidx] == 0) continue;
+										if (labels[nidx] >= 0) continue;
+
+										labels[nidx] = compId;
+										queue.push_back(int32(nidx));
+									}
+								}
+
+								compMaxDist.push_back(maxD);
+								++compId;
 							}
+						}
 
-							MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("GrassBillboard", "GrassBillboard");
+						// Output R8 "inner depth"
+						result.InnerDepthR8.SetFormat(TEX_FORMAT_R8_UNORM);
+						result.InnerDepthR8.GetMips().resize(1);
+						result.InnerDepthR8.GetMips()[0].Width = W;
+						result.InnerDepthR8.GetMips()[0].Height = H;
+						result.InnerDepthR8.GetMips()[0].Data.resize(size_t(W) * size_t(H));
+
+						for (uint32 y = 0; y < H; ++y)
+						{
+							for (uint32 x = 0; x < W; ++x)
+							{
+								const uint32 idx = y * W + x;
+
+								if (inside[idx] == 0)
+								{
+									result.InnerDepthR8.GetMips()[0].Data[idx] = 0u;
+									continue;
+								}
+
+								const int32 lid = labels[idx];
+								ASSERT(lid >= 0 && lid < int32(compMaxDist.size()), "Invalid component label.");
+
+								const float maxD = compMaxDist[size_t(lid)];
+								const float invMax = (maxD > 1e-6f) ? (1.0f / maxD) : 0.0f;
+
+								float v01 = std::clamp(distPx[idx] * invMax, 0.0f, 1.0f);
+								result.InnerDepthR8.GetMips()[0].Data[idx] = (uint8)std::clamp(v01 * 255.0f + 0.5f, 0.0f, 255.0f);
+							}
+						}
+
+						return result;
+					};
+
+					// ---------------------------------------------
+					// Main
+					// ---------------------------------------------
+					StaticMesh grassMesh = {};
+
+					// Load once, reuse for LOD0/LOD1 builds
+					AssetRef<AssimpAsset> grassAssimpRef = m_pAssetManager->RegisterAsset<AssimpAsset>(path);
+					const AssimpAsset& grassAssimp = *m_pAssetManager->LoadBlocking(grassAssimpRef);
+
+					float3 dominantColor = float3{ 0.15f, 0.35f, 0.15f };
+
+					// LOD0 : Mesh
+					{
+						StaticMeshLevel grassMeshLevel = {};
+						BuildStaticMeshAsset(grassAssimp, &grassMeshLevel, {}, "GrassMesh", nullptr, m_pAssetManager.get());
+						uniform01(grassMeshLevel);
+
+						for (auto matId : grassMeshLevel.GetMaterialSlots())
+						{
 							Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-							mat.SetBlendMode(MATERIAL_BLEND_MODE_OPAQUE);
+							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD0"));
+							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
 							mat.SetCullMode(CULL_MODE_NONE);
 
-							mat.SetUint("g_MaterialFlags", 0);
+							const Texture& baseColorTex = *m_pAssetManager->LoadBlocking(mat.GetTextureAssetRef("g_BaseColorTex"));
+							ASSERT(baseColorTex.IsValid(), "BaseColor texture is invalid.");
+							ASSERT(baseColorTex.GetFormat() == TEX_FORMAT_RGBA8_UNORM, "BaseColor must be RGBA8_UNORM for inline alpha SDF build.");
 
-							// Use computed dominant color (linear 0..1)
-							mat.SetFloat4("g_BaseColorFactor", float4{ dominantColor.x, dominantColor.y, dominantColor.z, 1.0f });
+							const float alphaThreshold = 0.5f;
 
-							mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
-							mat.SetFloat("g_EmissiveIntensity", 0.0f);
-							mat.SetFloat("g_RoughnessFactor", 0.5f);
-							mat.SetFloat("g_NormalScale", 1.0f);
-							mat.SetFloat("g_OcclusionStrength", 1.0f);
-							mat.SetFloat("g_AlphaCutoff", 0.3f);
-							mat.SetFloat("g_MetallicFactor", 0.0f);
+							// Build inner mask + dominant color together
+							const bool kAssumeSrgb = false; // flip to false if you *know* g_BaseColorTex is already linear UNORM
+							AlphaInnerMaskResult build = BuildAlphaInnerMaskR8_AndDominantColor(baseColorTex, alphaThreshold, kAssumeSrgb);
 
-							mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
-							mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+							ASSERT(build.InnerDepthR8.IsValid(), "Alpha inner-mask build failed.");
+							dominantColor = build.DominantColor;
 
-							std::vector<MaterialId> materials = { matId };
-							grassBillboardMeshLevel.SetMaterialSlots(std::move(materials));
+							// Upload R8 to GPU and bind as g_EdgeDistance
+							TextureDesc desc = {};
+							desc.Name = "Grass_AlphaInnerDepthR8";
+							desc.Type = RESOURCE_DIM_TEX_2D;
+							desc.Width = build.InnerDepthR8.GetWidth();
+							desc.Height = build.InnerDepthR8.GetHeight();
+							desc.MipLevels = 1;
+							desc.ArraySize = 1;
+							desc.Format = TEX_FORMAT_R8_UNORM;
+							desc.Usage = USAGE_IMMUTABLE;
+							desc.BindFlags = BIND_SHADER_RESOURCE;
 
-							grassMesh.AddLevel(std::move(grassBillboardMeshLevel), 0.25f);
+							TextureSubResData subRes = {};
+							subRes.pData = build.InnerDepthR8.GetData();
+							subRes.Stride = build.InnerDepthR8.GetWidth(); // R8: 1 byte/px
+
+							TextureData initData = {};
+							initData.NumSubresources = 1;
+							initData.pSubResources = &subRes;
+
+							static uint32 alphaInnerMaskIdx = 1;
+
+							const uint64 alphaInnerResId = STRING_HASH(
+								path + "_InnerDepthR8_" + std::to_string(alphaInnerMaskIdx++)
+							);
+
+							m_pRenderer->AddTexture(alphaInnerResId, desc, &initData);
+							mat.SetTextureResource("g_EdgeDistance", alphaInnerResId);
 						}
 
-						gd.Variations.push_back(&m_pRenderer->CreateStaticMeshRenderData(grassMesh));
-					};
+						grassMesh.AddLevel(std::move(grassMeshLevel), 1.0f);
+					}
+
+					// LOD1 : Cross-plane 
+					{
+						StaticMeshLevel grassCrossMeshLevel = {};
+						{
+							std::vector<float3> pos(8);
+							std::vector<float2> uv(8);
+							std::vector<float3> normal(8);
+							std::vector<float3> tangent(8);
+							std::vector<uint32> idx;
+							idx.reserve(12);
+
+							// ---------------------------------------------------------------------
+							// Desired local quad:
+							//   X: [-0.5, +0.5]
+							//   Y: [ 0.0,  1.0]
+							//   Z: 0
+							// ---------------------------------------------------------------------
+							float quadSize = 1.0f;
+
+							const Box& b = grassMesh[0].GetBoxBounds();
+							const float h = (b.Max().y - b.Min().y);
+							const float yScale = (1.0f / h);
+
+							const float xExtent = (b.Max().x - b.Min().x);
+							const float zExtent = (b.Max().z - b.Min().z);
+							const float needWidth = std::max(xExtent, zExtent);
+
+							if (needWidth > 1.0f)
+							{
+								quadSize *= needWidth;
+							}
+
+							float x0 = -0.5f * quadSize;
+							float x1 = +0.5f * quadSize;
+							float y0 = -0.5f * quadSize + 0.5f;
+							float y1 = +0.5f * quadSize + 0.5f;
+
+							// ---------- Plane A (XY plane, facing +Z)
+							pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
+							pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
+							pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
+							pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
+
+							const float3 nA = float3{ 0.0f, 0.0f, 1.0f };
+							const float3 tA = float3{ 1.0f, 0.0f, 0.0f };
+							for (int i = 0; i < 4; ++i)
+							{
+								normal[i] = nA;
+								tangent[i] = tA;
+							}
+
+							idx.push_back(0); idx.push_back(1); idx.push_back(2);
+							idx.push_back(0); idx.push_back(2); idx.push_back(3);
+
+							// ---------- Plane B : rotate +90deg around Y (cross)
+							auto rotY90 = [](const float3& p) -> float3
+							{
+								// (x,z) -> (z,-x)
+								return float3{ p.z, p.y, -p.x };
+							};
+
+							pos[4] = rotY90(pos[0]); uv[4] = uv[0];
+							pos[5] = rotY90(pos[1]); uv[5] = uv[1];
+							pos[6] = rotY90(pos[2]); uv[6] = uv[2];
+							pos[7] = rotY90(pos[3]); uv[7] = uv[3];
+
+							const float3 nB = float3{ 1.0f, 0.0f, 0.0f };
+							const float3 tB = float3{ 0.0f, 0.0f, -1.0f };
+							for (int i = 4; i < 8; ++i)
+							{
+								normal[i] = nB;
+								tangent[i] = tB;
+							}
+
+							idx.push_back(4); idx.push_back(5); idx.push_back(6);
+							idx.push_back(4); idx.push_back(6); idx.push_back(7);
+
+							grassCrossMeshLevel.SetPositions(std::move(pos));
+							grassCrossMeshLevel.SetTexCoords(std::move(uv));
+							grassCrossMeshLevel.SetNormals(std::move(normal));
+							grassCrossMeshLevel.SetTangents(std::move(tangent));
+							grassCrossMeshLevel.SetIndicesU32(std::move(idx));
+
+							StaticMeshLevel::Section sec = {};
+							sec.FirstIndex = 0;
+							sec.IndexCount = 12;
+							sec.BaseVertex = 0;
+							sec.MaterialSlot = 0;
+							grassCrossMeshLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
+
+							grassCrossMeshLevel.RecomputeBounds();
+						}
+
+						MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("GrassCrossPlane", "GrassCrossPlane");
+						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+
+						mat.SetBlendMode(MATERIAL_BLEND_MODE_MASKED);
+						mat.SetCullMode(CULL_MODE_NONE);
+	
+						namespace fs = std::filesystem;
+
+						auto BuildImpostorAtlasPath = [](const std::string& meshPath, const std::string& suffix)
+						{
+							fs::path p(meshPath);
+
+							fs::path dir = p.parent_path();
+							std::string filename = p.stem().string(); 
+
+							fs::path atlasDir = dir / "Impostor Spritesheets";
+							fs::path atlasPath = atlasDir / (filename + suffix);
+
+							return atlasPath.string();
+						};
+
+						const std::string baseColorPath = BuildImpostorAtlasPath(path, "_albedo_spritesheet.png");
+						mat.SetTextureAssetRef("g_BaseColorTex", m_pAssetManager->RegisterAsset<Texture>(baseColorPath));
+						const std::string normalPath = BuildImpostorAtlasPath(path, "_normal_spritesheet.png");
+						mat.SetTextureAssetRef("g_NormalTex", m_pAssetManager->RegisterAsset<Texture>(normalPath));
+						mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_NORMAL);
+
+						mat.SetFloat4("g_BaseColorFactor", float4{ dominantColor.x, dominantColor.y, dominantColor.z, 1.0f });
+						mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
+						mat.SetFloat("g_EmissiveIntensity", 0.0f);
+						mat.SetFloat("g_RoughnessFactor", 0.5f);
+						mat.SetFloat("g_NormalScale", 1.0f);
+						mat.SetFloat("g_OcclusionStrength", 1.0f);
+						mat.SetFloat("g_AlphaCutoff", 0.5f);
+						mat.SetFloat("g_MetallicFactor", 0.0f);
+
+						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD1"));
+						mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+
+						std::vector<MaterialId> materials = { matId };
+						grassCrossMeshLevel.SetMaterialSlots(std::move(materials));
+
+						grassMesh.AddLevel(std::move(grassCrossMeshLevel), 0.5f);
+					}
+
+					// LOD2 : Billboard
+					{
+						StaticMeshLevel grassBillboardMeshLevel = {};
+
+						const float2 scale = { 1.0f, 1.0f };
+						const float2 pivot = { 0.5f, 0.0f };
+
+						// Build quad mesh
+						{
+							std::vector<float3> pos(4);
+							std::vector<float2> uv(4);
+							std::vector<uint32> idx = { 0, 1, 2, 0, 2, 3 };
+
+							const float x0 = -pivot.x * scale.x;
+							const float x1 = (1.0f - pivot.x) * scale.x;
+
+							const float y0 = -pivot.y * scale.y;
+							const float y1 = (1.0f - pivot.y) * scale.y;
+
+							//  3 ---- 2
+							//  |      |
+							//  0 ---- 1
+							// UV: (0,0)=top-left, (1,1)=bottom-right
+							pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
+							pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
+							pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
+							pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
+
+							grassBillboardMeshLevel.SetPositions(std::move(pos));
+							grassBillboardMeshLevel.SetTexCoords(std::move(uv));
+							grassBillboardMeshLevel.SetIndicesU32(std::move(idx));
+
+							StaticMeshLevel::Section sec = {};
+							sec.FirstIndex = 0;
+							sec.IndexCount = 6;
+							sec.BaseVertex = 0;
+							sec.MaterialSlot = 0;
+							grassBillboardMeshLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
+
+							grassBillboardMeshLevel.RecomputeBounds();
+						}
+
+						MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("GrassBillboard", "GrassBillboard");
+						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+						mat.SetBlendMode(MATERIAL_BLEND_MODE_OPAQUE);
+						mat.SetCullMode(CULL_MODE_NONE);
+
+						mat.SetUint("g_MaterialFlags", 0);
+
+						// Use computed dominant color (linear 0..1)
+						mat.SetFloat4("g_BaseColorFactor", float4{ dominantColor.x, dominantColor.y, dominantColor.z, 1.0f });
+
+						mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
+						mat.SetFloat("g_EmissiveIntensity", 0.0f);
+						mat.SetFloat("g_RoughnessFactor", 0.5f);
+						mat.SetFloat("g_NormalScale", 1.0f);
+						mat.SetFloat("g_OcclusionStrength", 1.0f);
+						mat.SetFloat("g_AlphaCutoff", 0.3f);
+						mat.SetFloat("g_MetallicFactor", 0.0f);
+
+						mat.SetBufferResource("g_GrassInstances", STRING_HASH("GrassInstanceBufferLOD2"));
+						mat.SetBufferResource("g_SpeciesLodOffsets", STRING_HASH("Grass_SpeciesLodOffsets"));
+
+						std::vector<MaterialId> materials = { matId };
+						grassBillboardMeshLevel.SetMaterialSlots(std::move(materials));
+
+						grassMesh.AddLevel(std::move(grassBillboardMeshLevel), 0.25f);
+					}
+
+					gd.Variations.push_back(&m_pRenderer->CreateStaticMeshRenderData(grassMesh));
+				};
 
 				// Grass
 				{
@@ -657,7 +779,7 @@ namespace shz
 					gd.MinScale = 0.15f;
 					gd.MaxScale = 0.20f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Gras_small_017.fbx");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_small_017.fbx");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_big_017.fbx");
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_big_002.fbx");
 					//addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/wild/Grass_long_dry_small_002.fbx");
@@ -708,7 +830,7 @@ namespace shz
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
 
-					m_pGrassSystem->AddSpecialGrass(gd);
+					// m_pGrassSystem->AddSpecialGrass(gd); TODO: IMPOSTOR TEXTURES
 				}
 
 				// Achillea millefolium 
@@ -1009,11 +1131,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
 			m_Camera.SetRotation(0.0f, 0.0f);
 
-			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
-			//m_Camera.SetRotation(-8.3f, -0.1f);
+			// m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
+			// m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
@@ -1297,38 +1419,38 @@ namespace shz
 		// Helpers (lambdas)
 		// -------------------------------------------------------------------------
 		auto loadTexture = [&](const std::string& path) -> const Texture&
-			{
-				AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>(path);
-				return *m_pAssetManager->LoadBlocking(ref);
-			};
+		{
+			AssetRef<Texture> ref = m_pAssetManager->RegisterAsset<Texture>(path);
+			return *m_pAssetManager->LoadBlocking(ref);
+		};
 
 		auto getPixelStrideBytes = [&](const Texture& tex) -> uint32
-			{
-				const TEXTURE_FORMAT fmt = tex.GetFormat();
-				const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
+		{
+			const TEXTURE_FORMAT fmt = tex.GetFormat();
+			const TextureFormatAttribs& a = GetTextureFormatAttribs(fmt);
 
-				// Diligent: ComponentSize = bytes per component, NumComponents = channels
-				const uint32 compSize = a.ComponentSize;
-				const uint32 numComp = (a.NumComponents > 0) ? a.NumComponents : 1;
-				return compSize * numComp;
-			};
+			// Diligent: ComponentSize = bytes per component, NumComponents = channels
+			const uint32 compSize = a.ComponentSize;
+			const uint32 numComp = (a.NumComponents > 0) ? a.NumComponents : 1;
+			return compSize * numComp;
+		};
 
 		auto getMip0 = [&](const Texture& tex) -> const TextureMip&
-			{
-				ASSERT(!tex.GetMips().empty(), "Texture has no mips.");
-				return tex.GetMips()[0];
-			};
+		{
+			ASSERT(!tex.GetMips().empty(), "Texture has no mips.");
+			return tex.GetMips()[0];
+		};
 
 		auto valueToBucket = [&](uint8 value) -> uint32
-			{
-				// 0: >200, 1: >=150, 2: >=100, 3: >=50, 4: >=1, else: skip
-				if (value > 200) return 0;
-				if (value >= 150) return 1;
-				if (value >= 100) return 2;
-				if (value >= 50)  return 3;
-				if (value >= 1)   return 4;
-				return 999;
-			};
+		{
+			// 0: >200, 1: >=150, 2: >=100, 3: >=50, 4: >=1, else: skip
+			if (value > 200) return 0;
+			if (value >= 150) return 1;
+			if (value >= 100) return 2;
+			if (value >= 50)  return 3;
+			if (value >= 1)   return 4;
+			return 999;
+		};
 
 		enum class ETreeSize : uint8
 		{
@@ -1339,189 +1461,189 @@ namespace shz
 			Sapling,
 			Count
 		};
-		
+
 		m_pRenderer->RegisterMaterialTemplate("Impostor", "Impostor.vsh", "Impostor.psh", MATERIAL_BLEND_MODE_MASKED);
 
 
 
 		auto loadTree = [&](const std::string& folderName) -> const StaticMeshRenderData*
+		{
+			const std::string basePath = "C:/Dev/ShizenEngine/Assets/Tree/pine_trees/";
+
+			StaticMesh treeMesh;
+			float screenSizeLod = 0.5f;
+			Box boxBounds;
+			Sphere sphereBounds;
+			for (uint lod = 0; lod < 3; ++lod)
 			{
-				const std::string basePath = "C:/Dev/ShizenEngine/Assets/Tree/pine_trees/";
+				std::string path = basePath + folderName + "/lod" + std::to_string(lod) + ".fbx";
+				const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(m_pAssetManager->RegisterAsset<AssimpAsset>(path));
+				StaticMeshLevel level;
+				BuildStaticMeshAsset(assimpAsset, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
+				treeMesh.AddLevel(std::move(level), screenSizeLod);
+				screenSizeLod *= 0.4f;
 
-				StaticMesh treeMesh;
-				float screenSizeLod = 0.5f;
-				Box boxBounds;
-				Sphere sphereBounds;
-				for (uint lod = 0; lod < 3; ++lod)
+				if (lod == 0)
 				{
-					std::string path = basePath + folderName + "/lod" + std::to_string(lod) + ".fbx";
-					const AssimpAsset& assimpAsset = *m_pAssetManager->LoadBlocking(m_pAssetManager->RegisterAsset<AssimpAsset>(path));
-					StaticMeshLevel level;
-					BuildStaticMeshAsset(assimpAsset, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
-					treeMesh.AddLevel(std::move(level), screenSizeLod);
-					screenSizeLod *= 0.4f;
+					boxBounds = treeMesh.GetLevels()[0].GetBounds().GetBox();
+					sphereBounds = treeMesh.GetLevels()[0].GetBounds().GetSphere();
+				}
+			}
 
-					if (lod == 0)
-					{
-						boxBounds = treeMesh.GetLevels()[0].GetBounds().GetBox();
-						sphereBounds = treeMesh.GetLevels()[0].GetBounds().GetSphere();
-					}
+			// Impostor
+			{
+				const Box b = boxBounds;
+				const float3 bMin = b.Min();
+				const float3 bMax = b.Max();
+
+				const float height = (bMax.y - bMin.y);
+
+				const float ex = 0.5f * (bMax.x - bMin.x);
+				const float ez = 0.5f * (bMax.z - bMin.z);
+
+				const float rXZ = std::sqrt(ex * ex + ez * ez);
+
+				const float padW = 1.0f;
+				const float padH = 1.0f;
+
+				const float quadW = 2.0f * rXZ * padW;
+				const float quadH = height * padH;
+
+				StaticMeshLevel impostorLevel;
+
+				const float2 scale = { quadW, quadH };
+				const float2 pivot = { 0.5f, 0.0f };
+
+				// Build quad mesh
+				{
+					std::vector<float3> pos(4);
+					std::vector<float2> uv(4);
+					std::vector<uint32> idx = { 0, 1, 2, 0, 2, 3 };
+
+					const float x0 = -pivot.x * scale.x;
+					const float x1 = (1.0f - pivot.x) * scale.x;
+
+					const float y0 = -pivot.y * scale.y;        // pivot.y=0 => 0
+					const float y1 = (1.0f - pivot.y) * scale.y;// => quadH
+
+					//  3 ---- 2
+					//  |      |
+					//  0 ---- 1
+					// UV: (0,0)=top-left, (1,1)=bottom-right
+					pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
+					pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
+					pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
+					pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
+
+					impostorLevel.SetPositions(std::move(pos));
+					impostorLevel.SetTexCoords(std::move(uv));
+					impostorLevel.SetIndicesU32(std::move(idx));
+
+					StaticMeshLevel::Section sec = {};
+					sec.FirstIndex = 0;
+					sec.IndexCount = 6;
+					sec.BaseVertex = 0;
+					sec.MaterialSlot = 0;
+					impostorLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
+
+					impostorLevel.RecomputeBounds();
 				}
 
-				// Impostor
+				MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TreeImpostorMaterial_" + folderName, "Impostor");
 				{
-					const Box b = boxBounds; 
-					const float3 bMin = b.Min();
-					const float3 bMax = b.Max();
+					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
+					mat.SetBlendMode(MATERIAL_BLEND_MODE_MASKED);
+					mat.SetCullMode(CULL_MODE_BACK);
 
-					const float height = (bMax.y - bMin.y);
+					const std::string baseColorPath = basePath + "Impostor Spritesheets/" + "Pine_" + folderName + "_albedo_spritesheet.png";
+					mat.SetTextureAssetRef("g_BaseColorTex", m_pAssetManager->RegisterAsset<Texture>(baseColorPath));
+					const std::string normalPath = basePath + "Impostor Spritesheets/" + "Pine_" + folderName + "_normal_spritesheet.png";
+					mat.SetTextureAssetRef("g_NormalTex", m_pAssetManager->RegisterAsset<Texture>(normalPath));
 
-					const float ex = 0.5f * (bMax.x - bMin.x);
-					const float ez = 0.5f * (bMax.z - bMin.z);
+					mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_NORMAL);
 
-					const float rXZ = std::sqrt(ex * ex + ez * ez);
-
-					const float padW = 1.0f;
-					const float padH = 1.0f;
-
-					const float quadW = 2.0f * rXZ * padW;
-					const float quadH = height * padH;
-
-					StaticMeshLevel impostorLevel;
-
-					const float2 scale = { quadW, quadH };
-					const float2 pivot = { 0.5f, 0.0f };
-
-					// Build quad mesh
-					{
-						std::vector<float3> pos(4);
-						std::vector<float2> uv(4);
-						std::vector<uint32> idx = { 0, 1, 2, 0, 2, 3 };
-
-						const float x0 = -pivot.x * scale.x;
-						const float x1 = (1.0f - pivot.x) * scale.x;
-
-						const float y0 = -pivot.y * scale.y;        // pivot.y=0 => 0
-						const float y1 = (1.0f - pivot.y) * scale.y;// => quadH
-
-						//  3 ---- 2
-						//  |      |
-						//  0 ---- 1
-						// UV: (0,0)=top-left, (1,1)=bottom-right
-						pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
-						pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
-						pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
-						pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
-
-						impostorLevel.SetPositions(std::move(pos));
-						impostorLevel.SetTexCoords(std::move(uv));
-						impostorLevel.SetIndicesU32(std::move(idx));
-
-						StaticMeshLevel::Section sec = {};
-						sec.FirstIndex = 0;
-						sec.IndexCount = 6;
-						sec.BaseVertex = 0;
-						sec.MaterialSlot = 0;
-						impostorLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
-
-						impostorLevel.RecomputeBounds();
-					}
-
-					MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("TreeImpostorMaterial_" + folderName, "Impostor");
-					{
-						Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-						mat.SetBlendMode(MATERIAL_BLEND_MODE_MASKED);
-						mat.SetCullMode(CULL_MODE_BACK);
-
-						const std::string baseColorPath = basePath + "Impostor Spritesheets/" + "Pine_" + folderName + "_albedo_spritesheet.png";
-						mat.SetTextureAssetRef("g_BaseColorTex", m_pAssetManager->RegisterAsset<Texture>(baseColorPath));
-						const std::string normalPath = basePath + "Impostor Spritesheets/" + "Pine_" + folderName + "_normal_spritesheet.png";
-						mat.SetTextureAssetRef("g_NormalTex", m_pAssetManager->RegisterAsset<Texture>(normalPath));
-
-						mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_NORMAL);
-
-						mat.SetFloat4("g_BaseColorFactor", float4{ 1.0f, 1.0f, 1.0f, 1.0f });
-						mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
-						mat.SetFloat("g_EmissiveIntensity", 0.0f);
-						mat.SetFloat("g_RoughnessFactor", 0.8f);
-						mat.SetFloat("g_NormalScale", 1.0f);
-						mat.SetFloat("g_OcclusionStrength", 1.0f);
-						mat.SetFloat("g_AlphaCutoff", 0.5f);
-						mat.SetFloat("g_MetallicFactor", 0.0f);
-					}
-
-					std::vector<MaterialId> materials = { matId };
-					impostorLevel.SetMaterialSlots(std::move(materials));
-
-					treeMesh.AddLevel(std::move(impostorLevel), screenSizeLod);
+					mat.SetFloat4("g_BaseColorFactor", float4{ 1.0f, 1.0f, 1.0f, 1.0f });
+					mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
+					mat.SetFloat("g_EmissiveIntensity", 0.0f);
+					mat.SetFloat("g_RoughnessFactor", 0.8f);
+					mat.SetFloat("g_NormalScale", 1.0f);
+					mat.SetFloat("g_OcclusionStrength", 1.0f);
+					mat.SetFloat("g_AlphaCutoff", 0.5f);
+					mat.SetFloat("g_MetallicFactor", 0.0f);
 				}
 
-				return &m_pRenderer->CreateStaticMeshRenderData(treeMesh);
-			};
+				std::vector<MaterialId> materials = { matId };
+				impostorLevel.SetMaterialSlots(std::move(materials));
+
+				treeMesh.AddLevel(std::move(impostorLevel), screenSizeLod);
+			}
+
+			return &m_pRenderer->CreateStaticMeshRenderData(treeMesh);
+		};
 
 		auto pickSizeByBucket = [&](uint32 bucket, std::mt19937& rng) -> ETreeSize
+		{
+			std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+			const float r = dist01(rng);
+
+			switch (bucket)
 			{
-				std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
-				const float r = dist01(rng);
+			case 0:
+				// Large 25% / Big 30% / Medium 25% / Small 15% / Sapling 5%
+				if (r < 0.25f) return ETreeSize::Large;
+				if (r < 0.55f) return ETreeSize::Big;
+				if (r < 0.80f) return ETreeSize::Medium;
+				if (r < 0.95f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				switch (bucket)
-				{
-				case 0:
-					// Large 25% / Big 30% / Medium 25% / Small 15% / Sapling 5%
-					if (r < 0.25f) return ETreeSize::Large;
-					if (r < 0.55f) return ETreeSize::Big;
-					if (r < 0.80f) return ETreeSize::Medium;
-					if (r < 0.95f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 1:
+				// Large 10% / Big 25% / Medium 40% / Small 20% / Sapling 5%
+				if (r < 0.10f) return ETreeSize::Large;
+				if (r < 0.35f) return ETreeSize::Big;
+				if (r < 0.75f) return ETreeSize::Medium;
+				if (r < 0.95f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 1:
-					// Large 10% / Big 25% / Medium 40% / Small 20% / Sapling 5%
-					if (r < 0.10f) return ETreeSize::Large;
-					if (r < 0.35f) return ETreeSize::Big;
-					if (r < 0.75f) return ETreeSize::Medium;
-					if (r < 0.95f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 2:
+				// Large 5% / Big 10% / Medium 50% / Small 25% / Sapling 10%
+				if (r < 0.05f) return ETreeSize::Large;
+				if (r < 0.15f) return ETreeSize::Big;
+				if (r < 0.65f) return ETreeSize::Medium;
+				if (r < 0.90f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 2:
-					// Large 5% / Big 10% / Medium 50% / Small 25% / Sapling 10%
-					if (r < 0.05f) return ETreeSize::Large;
-					if (r < 0.15f) return ETreeSize::Big;
-					if (r < 0.65f) return ETreeSize::Medium;
-					if (r < 0.90f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
+			case 3:
+				// Large 5% / Big 5% / Medium 25% / Small 50% / Sapling 15%
+				if (r < 0.05f) return ETreeSize::Large;
+				if (r < 0.10f) return ETreeSize::Big;
+				if (r < 0.35f) return ETreeSize::Medium;
+				if (r < 0.85f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
 
-				case 3:
-					// Large 5% / Big 5% / Medium 25% / Small 50% / Sapling 15%
-					if (r < 0.05f) return ETreeSize::Large;
-					if (r < 0.10f) return ETreeSize::Big;
-					if (r < 0.35f) return ETreeSize::Medium;
-					if (r < 0.85f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
-
-				case 4:
-					// Large 0% / Big 5% / Medium 15% / Small 30% / Sapling 50%
-					if (r < 0.05f) return ETreeSize::Big;
-					if (r < 0.20f) return ETreeSize::Medium;
-					if (r < 0.50f) return ETreeSize::Small;
-					return ETreeSize::Sapling;
-				default:
-					ASSERT(false, "Invalid bucket value.");
-					return ETreeSize::Medium;
-				}
-			};
+			case 4:
+				// Large 0% / Big 5% / Medium 15% / Small 30% / Sapling 50%
+				if (r < 0.05f) return ETreeSize::Big;
+				if (r < 0.20f) return ETreeSize::Medium;
+				if (r < 0.50f) return ETreeSize::Small;
+				return ETreeSize::Sapling;
+			default:
+				ASSERT(false, "Invalid bucket value.");
+				return ETreeSize::Medium;
+			}
+		};
 
 		auto pickScaleBySize = [&](ETreeSize size, std::mt19937& rng) -> float
+		{
+			switch (size)
 			{
-				switch (size)
-				{
-				case ETreeSize::Large: { std::uniform_real_distribution<float> d(0.90f, 1.15f); return d(rng); }
-				case ETreeSize::Big: { std::uniform_real_distribution<float> d(0.90f, 1.12f); return d(rng); }
-				case ETreeSize::Medium: { std::uniform_real_distribution<float> d(0.90f, 1.10f); return d(rng); }
-				case ETreeSize::Small: { std::uniform_real_distribution<float> d(0.90f, 1.08f); return d(rng); }
-				case ETreeSize::Sapling: { std::uniform_real_distribution<float> d(0.90f, 1.06f); return d(rng); }
-				default: return 1.0f;
-				}
-			};
+			case ETreeSize::Large: { std::uniform_real_distribution<float> d(0.90f, 1.15f); return d(rng); }
+			case ETreeSize::Big: { std::uniform_real_distribution<float> d(0.90f, 1.12f); return d(rng); }
+			case ETreeSize::Medium: { std::uniform_real_distribution<float> d(0.90f, 1.10f); return d(rng); }
+			case ETreeSize::Small: { std::uniform_real_distribution<float> d(0.90f, 1.08f); return d(rng); }
+			case ETreeSize::Sapling: { std::uniform_real_distribution<float> d(0.90f, 1.06f); return d(rng); }
+			default: return 1.0f;
+			}
+		};
 
 		auto addRenderOnlyStaticMeshEntity = [&](
 			const char* name,
@@ -1530,27 +1652,27 @@ namespace shz
 			const float3& rot,
 			const float3& scl,
 			bool bCastShadow) -> flecs::entity
-			{
-				flecs::entity e = ecs.entity();
-				e.set<CName>({ name });
+		{
+			flecs::entity e = ecs.entity();
+			e.set<CName>({ name });
 
-				CTransform tr = {};
-				tr.Position = pos;
-				tr.Rotation = rot;
-				tr.Scale = scl;
-				e.set<CTransform>(tr);
+			CTransform tr = {};
+			tr.Position = pos;
+			tr.Rotation = rot;
+			tr.Scale = scl;
+			e.set<CTransform>(tr);
 
-				CMeshRenderer mr = {};
-				mr.MeshRef = {};
-				mr.bCastShadow = bCastShadow;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					meshRD,
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					bCastShadow);
-				e.set<CMeshRenderer>(mr);
+			CMeshRenderer mr = {};
+			mr.MeshRef = {};
+			mr.bCastShadow = bCastShadow;
+			mr.RenderObjectHandle = m_pRenderScene->AddObject(
+				meshRD,
+				Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+				bCastShadow);
+			e.set<CMeshRenderer>(mr);
 
-				return e;
-			};
+			return e;
+		};
 
 		// -------------------------------------------------------------------------
 		// Physics Terrain: HeightFieldCollider + Static Rigidbody
@@ -1716,7 +1838,7 @@ namespace shz
 				lod0Box = lod0.GetBounds().GetBox();
 				lod0Sphere = lod0.GetBounds().GetSphere();
 
-				mesh.AddLevel(std::move(lod0), 0.5f); 
+				mesh.AddLevel(std::move(lod0), 0.5f);
 			}
 
 			// 2) Build impostor quad as LOD1 (bounds-based)
@@ -1811,9 +1933,6 @@ namespace shz
 
 			// 3) Create RD & spawn in scene
 			const StaticMeshRenderData& rd = m_pRenderer->CreateStaticMeshRenderData(mesh);
-
-			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
-			m_Camera.SetRotation(-8.3f, -0.1f);
 
 			addRenderOnlyStaticMeshEntity(
 				"Untitled_LOD0+ImpostorLOD1",
