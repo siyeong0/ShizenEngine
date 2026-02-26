@@ -553,7 +553,7 @@ float ClipPixelCoverage(float alpha, float4 svPos)
 	float coverage = saturate((alpha - cutoff) / (1.0 - cutoff));
 	//float t = DitherThreshold4x4((int2) SVPosToPixel(svPos));
 	//clip(coverage - t);
-	clip(coverage - 0.5);
+	clip(coverage - 0.3);
 
 	return coverage;
 }

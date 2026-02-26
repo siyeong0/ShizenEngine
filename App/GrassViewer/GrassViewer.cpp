@@ -660,7 +660,7 @@ namespace shz
 
 						mat.SetBlendMode(MATERIAL_BLEND_MODE_MASKED);
 						mat.SetCullMode(CULL_MODE_NONE);
-	
+
 						namespace fs = std::filesystem;
 
 						auto BuildImpostorAtlasPath = [](const std::string& meshPath, const std::string& suffix)
@@ -668,7 +668,7 @@ namespace shz
 							fs::path p(meshPath);
 
 							fs::path dir = p.parent_path();
-							std::string filename = p.stem().string(); 
+							std::string filename = p.stem().string();
 
 							fs::path atlasDir = dir / "Impostor Spritesheets";
 							fs::path atlasPath = atlasDir / (filename + suffix);
@@ -824,13 +824,12 @@ namespace shz
 					gd.ClusterScale = 1.5f;   // big clumps
 					gd.ClusterJitter = 0.25f;
 
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_01.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_02.gltf");
-					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_03.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_04.gltf");
 					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_05.gltf");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_06.gltf");
+					addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Reed_07.gltf");
 
-					// m_pGrassSystem->AddSpecialGrass(gd); TODO: IMPOSTOR TEXTURES
+					m_pGrassSystem->AddSpecialGrass(gd);
 				}
 
 				// Achillea millefolium 
@@ -915,78 +914,6 @@ namespace shz
 
 					m_pGrassSystem->AddSpecialGrass(gd);
 				}
-
-				//// Orange flower
-				//{
-				//	GrassDesc gd;
-				//	gd.Weight = 0.1f;   // rarer than daisies
-				//	gd.MinScale = 0.3f;
-				//	gd.MaxScale = 0.4f;
-				//	gd.ClusterStrength = 0.9f;
-				//	gd.ClusterScale = 4.0f;
-				//	gd.ClusterJitter = 0.2f;
-
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_01.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_02.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_03.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Orange_04.gltf");
-
-				//	m_pGrassSystem->AddSpecialGrass(gd);
-				//}
-
-				//// Lavender flower
-				//{
-				//	GrassDesc gd;
-				//	gd.Weight = 0.1f;
-				//	gd.MinScale = 0.4f;
-				//	gd.MaxScale = 0.5f;
-				//	gd.ClusterStrength = 0.9f;
-				//	gd.ClusterScale = 4.8f;
-				//	gd.ClusterJitter = 0.1f;
-
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_01.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_02.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_03.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_04.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_05.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_06.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_07.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Lavender_Flower_08.gltf");
-
-				//	m_pGrassSystem->AddSpecialGrass(gd);
-				//}
-
-				//// Blue flower
-				//{
-				//	GrassDesc gd;
-				//	gd.Weight = 0.16f;   // very rare
-				//	gd.MinScale = 0.3f;
-				//	gd.MaxScale = 0.35f;
-				//	gd.ClusterStrength = 0.05f;
-				//	gd.ClusterScale = 0.2f;
-				//	gd.ClusterJitter = 0.85f;
-
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/foliage_pack/SM_Flowers.fbx");
-
-				//	m_pGrassSystem->AddSpecialGrass(gd);
-				//}
-
-				//// Daisy flower (small, sprinkled, occasional mini-patches)
-				//{
-				//	GrassDesc gd;
-				//	gd.Weight = 0.15f;
-				//	gd.MinScale = 0.3f;
-				//	gd.MaxScale = 0.4f;
-				//	gd.ClusterStrength = 0.5f;
-				//	gd.ClusterScale = 1.4f;
-				//	gd.ClusterJitter = 0.75f;
-
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_01.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_02.gltf");
-				//	addGrassVariation(gd, "C:/Dev/ShizenEngine/Assets/Grass/GrassFieldPack/SM_Plant_Grass_Flower_Daisy_03.gltf");
-
-				//	m_pGrassSystem->AddSpecialGrass(gd);
-				//}
 			}
 
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
@@ -1131,11 +1058,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			m_Camera.SetRotation(0.0f, 0.0f);
+			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			//m_Camera.SetRotation(0.0f, 0.0f);
 
-			// m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
-			// m_Camera.SetRotation(-8.3f, -0.1f);
+			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
+			m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
@@ -1252,7 +1179,10 @@ namespace shz
 	{
 		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
 
-		if (ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		// -------------------------------------------------------------------------
+		// Settings Window
+		// -------------------------------------------------------------------------
+		if (ImGui::Begin("Settings##GrassViewerSettings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::gizmo3D("##LightDirection", m_GlobalLight.Direction, ImGui::GetTextLineHeight() * 10);
 			ImGui::ColorEdit3("##LightColor", reinterpret_cast<float*>(&m_GlobalLight.Color));
@@ -1314,8 +1244,8 @@ namespace shz
 				m_GrassSettings.InteractionWindFade = 0.95f;
 
 				// Erosion (start subtle)
-				m_GrassSettings.ErosionStrength = 0.0f;   // 0..1 progress
-				m_GrassSettings.ErosionNoiseScale = 16.0f; // 8..48 typical
+				m_GrassSettings.ErosionStrength = 0.0f;     // 0..1 progress
+				m_GrassSettings.ErosionNoiseScale = 16.0f;  // 8..48 typical
 				m_GrassSettings.ErosionSmoothness = 0.75f;
 				m_GrassSettings.ErosionMaxDist = 0.5f;
 
@@ -1327,17 +1257,17 @@ namespace shz
 			}
 
 			// Optional: Reset button
-			if (ImGui::Button("Reset Grass Defaults"))
+			if (ImGui::Button("Reset Grass Defaults##GrassViewer"))
 			{
 				s_InitGrassDefaults = false;
 			}
 
 			// 2) Wind
-			if (ImGui::CollapsingHeader("Wind", ImGuiTreeNodeFlags_DefaultOpen))
+			if (ImGui::CollapsingHeader("Wind##GrassViewer", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				// Direction as 2D vector (normalize on edit)
 				float dir[2] = { m_GrassSettings.WindDirXZ.x, m_GrassSettings.WindDirXZ.y };
-				if (ImGui::DragFloat2("Dir XZ", dir, 0.01f, -1.0f, 1.0f, "%.3f"))
+				if (ImGui::DragFloat2("Dir XZ##GrassViewer", dir, 0.01f, -1.0f, 1.0f, "%.3f"))
 				{
 					float2 d = float2{ dir[0], dir[1] };
 					const float len2 = d.x * d.x + d.y * d.y;
@@ -1345,63 +1275,67 @@ namespace shz
 					m_GrassSettings.WindDirXZ = d.Normalized();
 				}
 
-				ImGui::SliderFloat("Strength", &m_GrassSettings.WindStrength, 0.0f, 1.5f, "%.3f");
-				ImGui::SliderFloat("Speed", &m_GrassSettings.WindSpeed, 0.0f, 8.0f, "%.3f");
-				ImGui::SliderFloat("Frequency", &m_GrassSettings.WindFreq, 0.5f, 10.0f, "%.3f");
-				ImGui::SliderFloat("Gust", &m_GrassSettings.WindGust, 0.0f, 1.0f, "%.3f");
-				ImGui::SliderFloat("Max Bend", &m_GrassSettings.MaxBendAngle, 0.0f, 1.2f, "%.3f");
+				ImGui::SliderFloat("Strength##GrassViewer", &m_GrassSettings.WindStrength, 0.0f, 1.5f, "%.3f");
+				ImGui::SliderFloat("Speed##GrassViewer", &m_GrassSettings.WindSpeed, 0.0f, 8.0f, "%.3f");
+				ImGui::SliderFloat("Frequency##GrassViewer", &m_GrassSettings.WindFreq, 0.5f, 10.0f, "%.3f");
+				ImGui::SliderFloat("Gust##GrassViewer", &m_GrassSettings.WindGust, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Max Bend##GrassViewer", &m_GrassSettings.MaxBendAngle, 0.0f, 1.2f, "%.3f");
 
 				ImGui::TextDisabled("Tip: Strength 0.2~0.6, Speed 1~4, Freq 2~6 is a good baseline.");
 			}
 
 			// 3) Interaction
-			if (ImGui::CollapsingHeader("Interaction", ImGuiTreeNodeFlags_DefaultOpen))
+			if (ImGui::CollapsingHeader("Interaction##GrassViewer", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::SliderFloat("Bend Angle", &m_GrassSettings.InteractionBendAngle, 0.0f, 2.0f, "%.3f");
-				ImGui::SliderFloat("Sink", &m_GrassSettings.InteractionSink, 0.0f, 0.20f, "%.3f");
-				ImGui::SliderFloat("Wind Fade", &m_GrassSettings.InteractionWindFade, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Bend Angle##GrassViewer", &m_GrassSettings.InteractionBendAngle, 0.0f, 2.0f, "%.3f");
+				ImGui::SliderFloat("Sink##GrassViewer", &m_GrassSettings.InteractionSink, 0.0f, 0.20f, "%.3f");
+				ImGui::SliderFloat("Wind Fade##GrassViewer", &m_GrassSettings.InteractionWindFade, 0.0f, 1.0f, "%.3f");
 			}
 
 			// 4) Erosion + Drying
-			if (ImGui::CollapsingHeader("Erosion / Drying", ImGuiTreeNodeFlags_DefaultOpen))
+			if (ImGui::CollapsingHeader("Erosion / Drying##GrassViewer", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::SliderFloat("Erosion Strength", &m_GrassSettings.ErosionStrength, 0.0f, 1.0f, "%.3f");
-				ImGui::SliderFloat("Noise Scale", &m_GrassSettings.ErosionNoiseScale, 2.0f, 64.0f, "%.2f");
-				ImGui::SliderFloat("Smoothness", &m_GrassSettings.ErosionSmoothness, 0.01f, 1.0f, "%.3f");
-				ImGui::SliderFloat("MaxDist", &m_GrassSettings.ErosionMaxDist, 0.01f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Erosion Strength##GrassViewer", &m_GrassSettings.ErosionStrength, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Noise Scale##GrassViewer", &m_GrassSettings.ErosionNoiseScale, 2.0f, 64.0f, "%.2f");
+				ImGui::SliderFloat("Smoothness##GrassViewer", &m_GrassSettings.ErosionSmoothness, 0.01f, 1.0f, "%.3f");
+				ImGui::SliderFloat("MaxDist##GrassViewer", &m_GrassSettings.ErosionMaxDist, 0.01f, 1.0f, "%.3f");
 
 				ImGui::Separator();
 
 				float tint[3] = { m_GrassSettings.DryTint.x, m_GrassSettings.DryTint.y, m_GrassSettings.DryTint.z };
-				if (ImGui::ColorEdit3("Dry Tint", tint))
+				if (ImGui::ColorEdit3("Dry Tint##GrassViewer", tint))
 				{
-					// avoid (0,0,0) which kills the albedo
-					m_GrassSettings.DryTint = float3{ std::max(tint[0], 0.01f), std::max(tint[1], 0.01f), std::max(tint[2], 0.01f) };
+					m_GrassSettings.DryTint = float3{
+						std::max(tint[0], 0.01f),
+						std::max(tint[1], 0.01f),
+						std::max(tint[2], 0.01f)
+					};
 				}
 
-				ImGui::SliderFloat("Saturation Reduce", &m_GrassSettings.DrySaturationReduct, 0.0f, 1.0f, "%.3f");
-				ImGui::SliderFloat("Darken", &m_GrassSettings.DryDarken, 0.0f, 0.8f, "%.3f");
-				ImGui::SliderFloat("Roughness Add", &m_GrassSettings.DryRoughness, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Saturation Reduce##GrassViewer", &m_GrassSettings.DrySaturationReduct, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Darken##GrassViewer", &m_GrassSettings.DryDarken, 0.0f, 0.8f, "%.3f");
+				ImGui::SliderFloat("Roughness Add##GrassViewer", &m_GrassSettings.DryRoughness, 0.0f, 1.0f, "%.3f");
 
 				ImGui::TextDisabled("Suggested: Smoothness 0.04~0.10, NoiseScale 10~24.");
 				ImGui::TextDisabled("DryTint: warm yellow-brown, SatReduce 0.4~0.7, Darken 0.15~0.35.");
 			}
 		}
+		ImGui::End();
 
-		if (ImGui::Begin("Functions", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		// -------------------------------------------------------------------------
+		// Functions Window
+		// -------------------------------------------------------------------------
+		if (ImGui::Begin("Functions##GrassViewerFunctions", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			// Assuming FunctionFlags() returns a uint32 (bitfield) by value
+			// Assuming FunctionFlags() returns a uint32 (bitfield) BY REFERENCE
 			uint32& flags = m_pRenderer->FunctionFlags();
 
-			if (ImGui::Button(((flags & (1u << 0)) != 0) ? "Function 0: ON" : "Function 0: OFF")) flags ^= (1u << 0);
-			if (ImGui::Button(((flags & (1u << 1)) != 0) ? "Function 1: ON" : "Function 1: OFF")) flags ^= (1u << 1);
-			if (ImGui::Button(((flags & (1u << 2)) != 0) ? "Function 2: ON" : "Function 2: OFF")) flags ^= (1u << 2);
-			if (ImGui::Button(((flags & (1u << 3)) != 0) ? "Function 3: ON" : "Function 3: OFF")) flags ^= (1u << 3);
-			if (ImGui::Button(((flags & (1u << 4)) != 0) ? "Function 4: ON" : "Function 4: OFF")) flags ^= (1u << 4);
-
-			ImGui::End();
+			if (ImGui::Button(((flags & (1u << 0)) != 0) ? "Function 0: ON##F0" : "Function 0: OFF##F0")) flags ^= (1u << 0);
+			if (ImGui::Button(((flags & (1u << 1)) != 0) ? "Function 1: ON##F1" : "Function 1: OFF##F1")) flags ^= (1u << 1);
+			if (ImGui::Button(((flags & (1u << 2)) != 0) ? "Function 2: ON##F2" : "Function 2: OFF##F2")) flags ^= (1u << 2);
+			if (ImGui::Button(((flags & (1u << 3)) != 0) ? "Function 3: ON##F3" : "Function 3: OFF##F3")) flags ^= (1u << 3);
+			if (ImGui::Button(((flags & (1u << 4)) != 0) ? "Function 4: ON##F4" : "Function 4: OFF##F4")) flags ^= (1u << 4);
 		}
-
 		ImGui::End();
 	}
 
