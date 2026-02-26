@@ -870,7 +870,7 @@ namespace shz
 					GrassDesc gd;
 					gd.Weight = 0.20f;
 					gd.MinScale = 0.23f;
-					gd.MaxScale = 0.22f;
+					gd.MaxScale = 0.24f;
 					gd.ClusterStrength = 0.80f;
 					gd.ClusterScale = 4.4f;
 					gd.ClusterJitter = 0.07f;
@@ -1058,11 +1058,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			//m_Camera.SetRotation(0.0f, 0.0f);
+			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			m_Camera.SetRotation(0.0f, 0.0f);
 
-			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
-			m_Camera.SetRotation(-8.3f, -0.1f);
+			//m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
+			//m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
@@ -1748,133 +1748,122 @@ namespace shz
 		}
 
 		// -------------------------------------------------------------------------
-		// Test asset: untitled.fbx as LOD0, generated impostor as LOD1
-		// screenSize: 0.5 / 0.45
-		// -------------------------------------------------------------------------
+	// Dynamic helmets (DamagedHelmet) + sphere collider
+	// -------------------------------------------------------------------------
 		{
-			const std::string baseAssetPath = "C:/Dev/ShizenEngine/Assets/";
-			const std::string fbxPath = baseAssetPath + "untitled.fbx";
+			const std::string helmetPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/DamagedHelmet.gltf";
 
-			// 1) Build StaticMesh with LOD0
-			StaticMesh mesh;
+			// 1) Load mesh once
+			StaticMesh mesh = {};
+			float baseRadiusOS = 0.5f;
 
-			// Load LOD0
-			Box lod0Box = {};
-			Sphere lod0Sphere = {};
 			{
-				const AssimpAsset& assimpAsset =
-					*m_pAssetManager->LoadBlocking(m_pAssetManager->RegisterAsset<AssimpAsset>(fbxPath));
+				AssetRef<AssimpAsset> ref = m_pAssetManager->RegisterAsset<AssimpAsset>(helmetPath);
+				const AssimpAsset& assimp = *m_pAssetManager->LoadBlocking(ref);
 
-				StaticMeshLevel lod0;
-				BuildStaticMeshAsset(assimpAsset, &lod0, {}, "DefaultLit", nullptr, m_pAssetManager.get());
-				lod0.RecomputeBounds();
+				StaticMeshLevel level = {};
+				BuildStaticMeshAsset(assimp, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
+				level.RecomputeBounds();
 
-				lod0Box = lod0.GetBounds().GetBox();
-				lod0Sphere = lod0.GetBounds().GetSphere();
+				baseRadiusOS = level.GetBounds().GetSphere().Radius();
+				if (!(baseRadiusOS > 1e-6f)) baseRadiusOS = 0.5f;
 
-				mesh.AddLevel(std::move(lod0), 0.5f);
+				mesh.AddLevel(std::move(level), 1.0f);
 			}
 
-			// 2) Build impostor quad as LOD1 (bounds-based)
+			const StaticMeshRenderData& meshRD = m_pRenderer->CreateStaticMeshRenderData(mesh);
+
+			auto addDynamicHelmetEntity = [&](
+				const char* name,
+				const StaticMeshRenderData& inMeshRD,
+				const float3& pos,
+				const float3& rot,
+				const float3& scl,
+				float radiusWS) -> flecs::entity
 			{
-				// LOD0 bounds assumed in local space
-				const float3 bMin = lod0Box.Min();
-				const float3 bMax = lod0Box.Max();
+				flecs::entity e = ecs.entity();
+				e.set<CName>({ name });
 
-				const float height = (bMax.y - bMin.y);
+				// Transform
+				CTransform tr = {};
+				tr.Position = pos;
+				tr.Rotation = rot;
+				tr.Scale = scl;
+				e.set<CTransform>(tr);
 
-				const float ex = 0.5f * (bMax.x - bMin.x);
-				const float ez = 0.5f * (bMax.z - bMin.z);
-				const float rXZ = std::sqrt(ex * ex + ez * ez);
+				// Render
+				CMeshRenderer mr = {};
+				mr.MeshRef = {};
+				mr.bCastShadow = true;
+				mr.RenderObjectHandle = m_pRenderScene->AddObject(
+					inMeshRD,
+					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+					true);
+				e.set<CMeshRenderer>(mr);
 
-				// padding (tune)
-				const float padW = 1.10f;
-				const float padH = 1.05f;
+				// Physics (Dynamic)
+				CRigidbody rb = {};
+				rb.BodyType = ERigidbodyType::Dynamic;
+				rb.Layer = 1;                 // 0=NonMoving, 1=Moving
+				rb.Mass = 5.0f;               // debug: 좀 무겁게
+				rb.LinearDamping = 0.02f;
+				rb.AngularDamping = 0.02f;
+				rb.bAllowSleeping = false;    // 중요: 잠들어서 멈춘 듯 보이는 거 제거
+				rb.bEnableGravity = true;
+				rb.bStartActive = true;
+				e.set<CRigidbody>(rb);
 
-				const float quadW = 2.0f * rXZ * padW;
-				const float quadH = height * padH;
+				// Collider
+				CSphereCollider sc = {};
+				sc.Radius = std::max(radiusWS, 0.05f);
+				sc.Center = float3{ 0, 0, 0 };
+				sc.bIsSensor = false;
+				e.set<CSphereCollider>(sc);
 
-				StaticMeshLevel impostorLevel;
-
-				const float2 scale = { quadW, quadH };
-				const float2 pivot = { 0.5f, 0.5f };
-
-				// Build quad mesh
+				// 여기서 Body가 생성됐는지 즉시 확인 (observer가 정상 동작하면 바로 생성돼야 함)
+				// (flecs OnSet observer가 같은 프레임/즉시 실행되는 구조라는 전제)
 				{
-					std::vector<float3> pos(4);
-					std::vector<float2> uv(4);
-					std::vector<uint32> idx = { 0, 1, 2, 0, 2, 3 };
-
-					const float x0 = -pivot.x * scale.x;
-					const float x1 = (1.0f - pivot.x) * scale.x;
-
-					const float y0 = -pivot.y * scale.y;         // pivot.y=0 => 0
-					const float y1 = (1.0f - pivot.y) * scale.y; // => quadH
-
-					//  3 ---- 2
-					//  |      |
-					//  0 ---- 1
-					// UV: (0,0)=top-left, (1,1)=bottom-right
-					pos[0] = float3{ x0, y0, 0.0f }; uv[0] = float2{ 0.0f, 1.0f };
-					pos[1] = float3{ x1, y0, 0.0f }; uv[1] = float2{ 1.0f, 1.0f };
-					pos[2] = float3{ x1, y1, 0.0f }; uv[2] = float2{ 1.0f, 0.0f };
-					pos[3] = float3{ x0, y1, 0.0f }; uv[3] = float2{ 0.0f, 0.0f };
-
-					impostorLevel.SetPositions(std::move(pos));
-					impostorLevel.SetTexCoords(std::move(uv));
-					impostorLevel.SetIndicesU32(std::move(idx));
-
-					StaticMeshLevel::Section sec = {};
-					sec.FirstIndex = 0;
-					sec.IndexCount = 6;
-					sec.BaseVertex = 0;
-					sec.MaterialSlot = 0;
-					impostorLevel.SetSections(std::vector<StaticMeshLevel::Section>{ sec });
-
-					impostorLevel.RecomputeBounds();
+					CRigidbody& rbNow = e.get_mut<CRigidbody>();
+					ASSERT(rbNow.BodyHandle != 0, "Dynamic helmet body was not created (BodyHandle==0). Check Physics.CreateBody observer / fixed pipeline.");
 				}
 
-				// Material: "Impostor"
-				MaterialId matId = MaterialManager::GetInstance()->CreateMaterial("ImpostorMaterial_Untitled", "Impostor");
-				{
-					Material& mat = MaterialManager::GetInstance()->GetMaterial(matId);
-					mat.SetBlendMode(MATERIAL_BLEND_MODE_MASKED);
-					mat.SetCullMode(CULL_MODE_BACK);
+				return e;
+			};
 
-					const std::string impBase = baseAssetPath + "Impostor Spritesheets/";
-					const std::string baseColorPath = impBase + "Suzanne_albedo_spritesheet.png";
-					const std::string normalPath = impBase + "Suzanne_normal_spritesheet.png";
+			// 2) Spawn
+			std::mt19937 rng(424242);
 
-					mat.SetTextureAssetRef("g_BaseColorTex", m_pAssetManager->RegisterAsset<Texture>(baseColorPath));
-					mat.SetTextureAssetRef("g_NormalTex", m_pAssetManager->RegisterAsset<Texture>(normalPath));
+			std::uniform_real_distribution<float> distX(-10.0f, 10.0f);
+			std::uniform_real_distribution<float> distZ(-10.0f, 10.0f);
+			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+			std::uniform_real_distribution<float> distHeightAdd(50.0f, 60.0f);
+			std::uniform_real_distribution<float> distScale(0.8f, 1.2f);
 
-					mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_NORMAL);
+			for (int i = 0; i < 100; ++i)
+			{
+				const float x = distX(rng);
+				const float z = distZ(rng);
 
-					mat.SetFloat4("g_BaseColorFactor", float4{ 1, 1, 1, 1 });
-					mat.SetFloat3("g_EmissiveFactor", float3{ 1, 1, 1 });
-					mat.SetFloat("g_EmissiveIntensity", 0.0f);
-					mat.SetFloat("g_RoughnessFactor", 0.8f);
-					mat.SetFloat("g_NormalScale", 1.0f);
-					mat.SetFloat("g_OcclusionStrength", 1.0f);
-					mat.SetFloat("g_AlphaCutoff", 0.5f);
-					mat.SetFloat("g_MetallicFactor", 0.0f);
-				}
+				const float terrainY = m_pTerrainSystem->SampleWorldHeight(x, z);
+				const float y = terrainY + distHeightAdd(rng);
 
-				impostorLevel.SetMaterialSlots(std::vector<MaterialId>{ matId });
+				const float yaw = distYaw(rng);
 
-				mesh.AddLevel(std::move(impostorLevel), 0.4f);
+				const float s = distScale(rng);
+				const float3 scl = { s, s, s };
+
+				const float radiusWS = baseRadiusOS * s;
+
+				addDynamicHelmetEntity(
+					"Helmet",
+					meshRD,
+					{ x, y, z },
+					{ 0.0f, yaw, 0.0f },
+					scl,
+					radiusWS);
 			}
 
-			// 3) Create RD & spawn in scene
-			const StaticMeshRenderData& rd = m_pRenderer->CreateStaticMeshRenderData(mesh);
-
-			addRenderOnlyStaticMeshEntity(
-				"Untitled_LOD0+ImpostorLOD1",
-				rd,
-				{ 477.0f, 360.0f, -2230.0f },
-				{ 0.0f, 0.0f, 0.0f },
-				{ 1.0f, 1.0f, 1.0f },
-				true);
+			std::cout << "Spawned helmets: 100\n";
 		}
 	}
 } // namespace shz

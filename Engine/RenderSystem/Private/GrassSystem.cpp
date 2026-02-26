@@ -106,8 +106,6 @@ namespace shz
             ASSERT(gd.ClusterScale >= 0.0f, "ClusterScale must be >= 0");
             ASSERT(gd.ClusterJitter >= 0.0f, "ClusterJitter must be >= 0");
 
-            ASSERT(gd.BaseSuppressInPatch >= 0.0f && gd.BaseSuppressInPatch <= 1.0f, "BaseSuppressInPatch must be in [0..1]");
-
             for (auto* pMesh : gd.Variations) ASSERT(pMesh, "Variation mesh is null.");
         }
 
@@ -1219,7 +1217,6 @@ namespace shz
         ASSERT(d.ClusterStrength >= 0.0f, "ClusterStrength must be >= 0");
         ASSERT(d.ClusterScale >= 0.0f, "ClusterScale must be >= 0");
         ASSERT(d.ClusterJitter >= 0.0f, "ClusterJitter must be >= 0");
-        ASSERT(d.BaseSuppressInPatch >= 0.0f && d.BaseSuppressInPatch <= 1.0f, "BaseSuppressInPatch in [0..1]");
 
         m_GrassDescs.push_back(d);
         return (uint32)(m_GrassDescs.size() - 1u);
