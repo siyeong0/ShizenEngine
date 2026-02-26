@@ -682,12 +682,12 @@ namespace shz
 						mat.SetTextureAssetRef("g_NormalTex", m_pAssetManager->RegisterAsset<Texture>(normalPath));
 						mat.SetUint("g_MaterialFlags", hlsl::MAT_HAS_BASECOLOR | hlsl::MAT_HAS_NORMAL);
 
-						mat.SetFloat4("g_BaseColorFactor", float4{ dominantColor.x, dominantColor.y, dominantColor.z, 1.0f });
+						mat.SetFloat4("g_BaseColorFactor", float4{ 1.0f, 1.0f, 1.0f, 1.0f });
 						mat.SetFloat3("g_EmissiveFactor", float3{ 1.0f, 1.0f, 1.0f });
 						mat.SetFloat("g_EmissiveIntensity", 0.0f);
 						mat.SetFloat("g_RoughnessFactor", 0.5f);
 						mat.SetFloat("g_NormalScale", 1.0f);
-						mat.SetFloat("g_OcclusionStrength", 1.0f);
+						mat.SetFloat("g_OcclusionStrength", 0.5f);
 						mat.SetFloat("g_AlphaCutoff", 0.5f);
 						mat.SetFloat("g_MetallicFactor", 0.0f);
 

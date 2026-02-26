@@ -104,7 +104,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	// ------------------------------------------------------------
 	float ssao = g_AmbientOcclusionMap.Sample(g_LinearClampSampler, uv);
 	float aoCombined = saturate(aoMaterial * ssao);
-	
+
 	// ------------------------------------------------------------
 	// Shadow (CSM + contact shadow)
 	// ------------------------------------------------------------
@@ -182,7 +182,7 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	
 	if (g_FrameCB.FunctionFlags & 1 << 0)
 	{
-		OutColor = float4(baseColor, 1.0);
+		OutColor = float4(emissive, 1.0);
 	}
 	
 	if (g_FrameCB.FunctionFlags & 1 << 1)
@@ -192,16 +192,21 @@ void main(in PSInput PSIn, out float4 OutColor : SV_TARGET0)
 	
 	if (g_FrameCB.FunctionFlags & 1 << 2)
 	{
-		OutColor = float4(shadowCSM.xxx, 1.0);
+		OutColor = float4(metallic.xxx, 1.0);
 	}
 	
 	if (g_FrameCB.FunctionFlags & 1 << 2)
 	{
-		OutColor = float4(contactShadow.xxx, 1.0);
+		OutColor = float4(roughness.xxx, 1.0);
 	}
 	
 	if (g_FrameCB.FunctionFlags & 1 << 3)
 	{
-		OutColor = float4(ssao.xxx, 1.0);
+		OutColor = float4(aoCombined.xxx, 1.0);
+	}
+	
+	if (g_FrameCB.FunctionFlags & 1 << 4)
+	{
+		OutColor = float4(shadowFinal.xxx, 1.0);
 	}
 }
