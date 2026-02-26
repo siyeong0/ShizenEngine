@@ -234,7 +234,7 @@ namespace shz
 			m_pCommandList->DiscardResource(pResource, pRegion);
 		}
 
-#ifdef SHZUSE_PIX
+#ifdef SHZ_USE_PIX
 		void PixBeginEvent(const Char* Name, const float* pColor);
 		void PixEndEvent();
 		void PixSetMarker(const Char* Label, const float* pColor);

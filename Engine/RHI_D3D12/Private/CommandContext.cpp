@@ -41,7 +41,7 @@
 #include "CommandListManager.hpp"
 #include "D3D12TypeConversions.hpp"
 
-#ifdef SHZUSE_PIX
+#ifdef SHZ_USE_PIX
 
 #    if defined(SHZ_DEBUG) && !defined(USE_PIX)
  // PIX instrumentation is only enabled if one of the preprocessor symbols
@@ -49,7 +49,7 @@
 #        define USE_PIX
 #    endif
 
-#    include "include/WinPixEventRuntime/pix3.h"
+#include <pix3.h>
 #endif
 
 namespace shz
@@ -476,7 +476,7 @@ namespace shz
 			FlushResourceBarriers();
 	}
 
-#ifdef SHZUSE_PIX
+#ifdef SHZ_USE_PIX
 	inline UINT ConvertColor(const float* pColor)
 	{
 		if (pColor == nullptr)
@@ -501,6 +501,6 @@ namespace shz
 	{
 		PIXSetMarker(m_pCommandList.p, ConvertColor(pColor), Label);
 	}
-#endif // SHZUSE_PIX
+#endif // SHZ_USE_PIX
 
 } // namespace shz

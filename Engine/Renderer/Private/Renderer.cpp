@@ -723,6 +723,8 @@ namespace shz
 				UpdateViewConstantBuffer(view);
 			}
 
+			m_pImmediateContext->InsertDebugLabel((pass.Name + " begin").c_str());
+
 			if (pass.eDomain == EPassExecutionDomain::RenderPass && pass.pRHIRenderpass)
 			{
 				m_PassCtx.pRHIRenderPass = pass.pRHIRenderpass;
@@ -761,6 +763,8 @@ namespace shz
 					pass.EndLambda(m_PassCtx);
 				}
 			}
+
+			m_pImmediateContext->InsertDebugLabel((pass.Name + " end").c_str());
 		}
 	}
 

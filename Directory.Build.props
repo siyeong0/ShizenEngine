@@ -50,6 +50,7 @@
 				D3D12_SUPPORTED;
 				PROFILING;
 				NOMINMAX;
+				SHZ_USE_PIX;
 				_CRT_SECURE_NO_WARNINGS;
 
 				JPH_DEBUG_RENDERER;
@@ -60,7 +61,12 @@
 			</PreprocessorDefinitions>
 
 			<!-- Additional include directories (project convention) -->
-			<AdditionalIncludeDirectories>$(_SolutionRoot);$(ProjectDir);$(ProjectDir)Public;$(ProjectDir)Private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<AdditionalIncludeDirectories>
+				$(_SolutionRoot);$(ProjectDir);
+				$(ProjectDir)Public;
+				$(ProjectDir)Private;
+				%(AdditionalIncludeDirectories)
+			</AdditionalIncludeDirectories>
 
 			<!-- Recommended build settings -->
 			<MultiProcessorCompilation>true</MultiProcessorCompilation>
