@@ -1405,7 +1405,7 @@ namespace shz
 			const std::string basePath = "C:/Dev/ShizenEngine/Assets/Tree/pine_trees/";
 
 			StaticMesh treeMesh;
-			float screenSizeLod = 1.0f;
+			float screenSizeLod = 4.0f;
 			Box boxBounds;
 			Sphere sphereBounds;
 			for (uint lod = 0; lod < 3; ++lod)
@@ -1415,7 +1415,7 @@ namespace shz
 				StaticMeshLevel level;
 				BuildStaticMeshAsset(assimpAsset, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
 				treeMesh.AddLevel(std::move(level), screenSizeLod);
-				screenSizeLod *= 0.6f;
+				screenSizeLod *= 0.15f;
 
 				if (lod == 0)
 				{
