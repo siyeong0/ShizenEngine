@@ -1058,11 +1058,11 @@ namespace shz
 			m_ViewFamily.Views.clear();
 			m_ViewFamily.Views.push_back({});
 
-			m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
-			m_Camera.SetRotation(0.0f, 0.0f);
+			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
+			//m_Camera.SetRotation(0.0f, 0.0f);
 
-			//m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
-			//m_Camera.SetRotation(-8.3f, -0.1f);
+			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
+			m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);
 			m_Camera.SetSpeedUpScales(5.0f, 5.0f);
@@ -1405,7 +1405,7 @@ namespace shz
 			const std::string basePath = "C:/Dev/ShizenEngine/Assets/Tree/pine_trees/";
 
 			StaticMesh treeMesh;
-			float screenSizeLod = 0.5f;
+			float screenSizeLod = 1.0f;
 			Box boxBounds;
 			Sphere sphereBounds;
 			for (uint lod = 0; lod < 3; ++lod)
@@ -1415,7 +1415,7 @@ namespace shz
 				StaticMeshLevel level;
 				BuildStaticMeshAsset(assimpAsset, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
 				treeMesh.AddLevel(std::move(level), screenSizeLod);
-				screenSizeLod *= 0.4f;
+				screenSizeLod *= 0.6f;
 
 				if (lod == 0)
 				{
@@ -1747,123 +1747,123 @@ namespace shz
 			std::cout << "Spawned trees: " << spawned << "\n";
 		}
 
-		// -------------------------------------------------------------------------
-	// Dynamic helmets (DamagedHelmet) + sphere collider
-	// -------------------------------------------------------------------------
-		{
-			const std::string helmetPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/DamagedHelmet.gltf";
+		//// -------------------------------------------------------------------------
+		//// Dynamic helmets (DamagedHelmet) + sphere collider
+		//// -------------------------------------------------------------------------
+		//{
+		//	const std::string helmetPath = "C:/Dev/ShizenEngine/Assets/Assimp/Basic/DamagedHelmet/DamagedHelmet.gltf";
 
-			// 1) Load mesh once
-			StaticMesh mesh = {};
-			float baseRadiusOS = 0.5f;
+		//	// 1) Load mesh once
+		//	StaticMesh mesh = {};
+		//	float baseRadiusOS = 0.5f;
 
-			{
-				AssetRef<AssimpAsset> ref = m_pAssetManager->RegisterAsset<AssimpAsset>(helmetPath);
-				const AssimpAsset& assimp = *m_pAssetManager->LoadBlocking(ref);
+		//	{
+		//		AssetRef<AssimpAsset> ref = m_pAssetManager->RegisterAsset<AssimpAsset>(helmetPath);
+		//		const AssimpAsset& assimp = *m_pAssetManager->LoadBlocking(ref);
 
-				StaticMeshLevel level = {};
-				BuildStaticMeshAsset(assimp, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
-				level.RecomputeBounds();
+		//		StaticMeshLevel level = {};
+		//		BuildStaticMeshAsset(assimp, &level, {}, "DefaultLit", nullptr, m_pAssetManager.get());
+		//		level.RecomputeBounds();
 
-				baseRadiusOS = level.GetBounds().GetSphere().Radius();
-				if (!(baseRadiusOS > 1e-6f)) baseRadiusOS = 0.5f;
+		//		baseRadiusOS = level.GetBounds().GetSphere().Radius();
+		//		if (!(baseRadiusOS > 1e-6f)) baseRadiusOS = 0.5f;
 
-				mesh.AddLevel(std::move(level), 1.0f);
-			}
+		//		mesh.AddLevel(std::move(level), 1.0f);
+		//	}
 
-			const StaticMeshRenderData& meshRD = m_pRenderer->CreateStaticMeshRenderData(mesh);
+		//	const StaticMeshRenderData& meshRD = m_pRenderer->CreateStaticMeshRenderData(mesh);
 
-			auto addDynamicHelmetEntity = [&](
-				const char* name,
-				const StaticMeshRenderData& inMeshRD,
-				const float3& pos,
-				const float3& rot,
-				const float3& scl,
-				float radiusWS) -> flecs::entity
-			{
-				flecs::entity e = ecs.entity();
-				e.set<CName>({ name });
+		//	auto addDynamicHelmetEntity = [&](
+		//		const char* name,
+		//		const StaticMeshRenderData& inMeshRD,
+		//		const float3& pos,
+		//		const float3& rot,
+		//		const float3& scl,
+		//		float radiusWS) -> flecs::entity
+		//	{
+		//		flecs::entity e = ecs.entity();
+		//		e.set<CName>({ name });
 
-				// Transform
-				CTransform tr = {};
-				tr.Position = pos;
-				tr.Rotation = rot;
-				tr.Scale = scl;
-				e.set<CTransform>(tr);
+		//		// Transform
+		//		CTransform tr = {};
+		//		tr.Position = pos;
+		//		tr.Rotation = rot;
+		//		tr.Scale = scl;
+		//		e.set<CTransform>(tr);
 
-				// Render
-				CMeshRenderer mr = {};
-				mr.MeshRef = {};
-				mr.bCastShadow = true;
-				mr.RenderObjectHandle = m_pRenderScene->AddObject(
-					inMeshRD,
-					Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
-					true);
-				e.set<CMeshRenderer>(mr);
+		//		// Render
+		//		CMeshRenderer mr = {};
+		//		mr.MeshRef = {};
+		//		mr.bCastShadow = true;
+		//		mr.RenderObjectHandle = m_pRenderScene->AddObject(
+		//			inMeshRD,
+		//			Matrix4x4::TRS(tr.Position, tr.Rotation, tr.Scale),
+		//			true);
+		//		e.set<CMeshRenderer>(mr);
 
-				// Physics (Dynamic)
-				CRigidbody rb = {};
-				rb.BodyType = ERigidbodyType::Dynamic;
-				rb.Layer = 1;                 // 0=NonMoving, 1=Moving
-				rb.Mass = 5.0f;               // debug: 좀 무겁게
-				rb.LinearDamping = 0.02f;
-				rb.AngularDamping = 0.02f;
-				rb.bAllowSleeping = false;    // 중요: 잠들어서 멈춘 듯 보이는 거 제거
-				rb.bEnableGravity = true;
-				rb.bStartActive = true;
-				e.set<CRigidbody>(rb);
+		//		// Physics (Dynamic)
+		//		CRigidbody rb = {};
+		//		rb.BodyType = ERigidbodyType::Dynamic;
+		//		rb.Layer = 1;                 // 0=NonMoving, 1=Moving
+		//		rb.Mass = 5.0f;               // debug: 좀 무겁게
+		//		rb.LinearDamping = 0.02f;
+		//		rb.AngularDamping = 0.02f;
+		//		rb.bAllowSleeping = false;    // 중요: 잠들어서 멈춘 듯 보이는 거 제거
+		//		rb.bEnableGravity = true;
+		//		rb.bStartActive = true;
+		//		e.set<CRigidbody>(rb);
 
-				// Collider
-				CSphereCollider sc = {};
-				sc.Radius = std::max(radiusWS, 0.05f);
-				sc.Center = float3{ 0, 0, 0 };
-				sc.bIsSensor = false;
-				e.set<CSphereCollider>(sc);
+		//		// Collider
+		//		CSphereCollider sc = {};
+		//		sc.Radius = std::max(radiusWS, 0.05f);
+		//		sc.Center = float3{ 0, 0, 0 };
+		//		sc.bIsSensor = false;
+		//		e.set<CSphereCollider>(sc);
 
-				// 여기서 Body가 생성됐는지 즉시 확인 (observer가 정상 동작하면 바로 생성돼야 함)
-				// (flecs OnSet observer가 같은 프레임/즉시 실행되는 구조라는 전제)
-				{
-					CRigidbody& rbNow = e.get_mut<CRigidbody>();
-					ASSERT(rbNow.BodyHandle != 0, "Dynamic helmet body was not created (BodyHandle==0). Check Physics.CreateBody observer / fixed pipeline.");
-				}
+		//		// 여기서 Body가 생성됐는지 즉시 확인 (observer가 정상 동작하면 바로 생성돼야 함)
+		//		// (flecs OnSet observer가 같은 프레임/즉시 실행되는 구조라는 전제)
+		//		{
+		//			CRigidbody& rbNow = e.get_mut<CRigidbody>();
+		//			ASSERT(rbNow.BodyHandle != 0, "Dynamic helmet body was not created (BodyHandle==0). Check Physics.CreateBody observer / fixed pipeline.");
+		//		}
 
-				return e;
-			};
+		//		return e;
+		//	};
 
-			// 2) Spawn
-			std::mt19937 rng(424242);
+		//	// 2) Spawn
+		//	std::mt19937 rng(424242);
 
-			std::uniform_real_distribution<float> distX(-10.0f, 10.0f);
-			std::uniform_real_distribution<float> distZ(-10.0f, 10.0f);
-			std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
-			std::uniform_real_distribution<float> distHeightAdd(50.0f, 60.0f);
-			std::uniform_real_distribution<float> distScale(0.8f, 1.2f);
+		//	std::uniform_real_distribution<float> distX(-10.0f, 10.0f);
+		//	std::uniform_real_distribution<float> distZ(-10.0f, 10.0f);
+		//	std::uniform_real_distribution<float> distYaw(0.0f, TWO_PI);
+		//	std::uniform_real_distribution<float> distHeightAdd(50.0f, 60.0f);
+		//	std::uniform_real_distribution<float> distScale(0.8f, 1.2f);
 
-			for (int i = 0; i < 100; ++i)
-			{
-				const float x = distX(rng);
-				const float z = distZ(rng);
+		//	for (int i = 0; i < 100; ++i)
+		//	{
+		//		const float x = distX(rng);
+		//		const float z = distZ(rng);
 
-				const float terrainY = m_pTerrainSystem->SampleWorldHeight(x, z);
-				const float y = terrainY + distHeightAdd(rng);
+		//		const float terrainY = m_pTerrainSystem->SampleWorldHeight(x, z);
+		//		const float y = terrainY + distHeightAdd(rng);
 
-				const float yaw = distYaw(rng);
+		//		const float yaw = distYaw(rng);
 
-				const float s = distScale(rng);
-				const float3 scl = { s, s, s };
+		//		const float s = distScale(rng);
+		//		const float3 scl = { s, s, s };
 
-				const float radiusWS = baseRadiusOS * s;
+		//		const float radiusWS = baseRadiusOS * s;
 
-				addDynamicHelmetEntity(
-					"Helmet",
-					meshRD,
-					{ x, y, z },
-					{ 0.0f, yaw, 0.0f },
-					scl,
-					radiusWS);
-			}
+		//		addDynamicHelmetEntity(
+		//			"Helmet",
+		//			meshRD,
+		//			{ x, y, z },
+		//			{ 0.0f, yaw, 0.0f },
+		//			scl,
+		//			radiusWS);
+		//	}
 
-			std::cout << "Spawned helmets: 100\n";
-		}
+		//	std::cout << "Spawned helmets: 100\n";
+		//}
 	}
 } // namespace shz
