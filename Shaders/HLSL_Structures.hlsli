@@ -19,6 +19,10 @@ struct FrameConstants
 	float4x4 InvView;
 	float4x4 InvProj;
 	float4x4 InvViewProj;
+	
+	float4x4 PrevView;
+	float4x4 PrevProj;
+	float4x4 PrevViewProj;
 
 	float4 FrustumPlanesWS[6];
 
@@ -344,6 +348,38 @@ struct InteractionDispatch
 	uint StampIndex;
 	uint Mode;
 	uint2 _Pad;
+};
+
+// ----------------------------------------------
+// Volumetric fog
+// ----------------------------------------------
+struct FogConstants
+{
+	// ---- Density / scattering model ----
+	float BaseDensity; // [1/m] base density (homogeneous baseline)
+	float DensityScale; // multiplier
+	float ExtinctionScale; // sigmaT = density * ExtinctionScale  (unitless scale)
+	float Albedo; // 0..1, sigmaS = sigmaT * Albedo
+
+	float AnisotropyG; // 0..0.95 (HG phase)
+	float PhaseBoost; // optional artistic boost (1 = physical-ish)
+	float _pad0;
+	float _pad1;
+
+	float3 FogColor; // tint for scattered light
+	float MaxDistance; // meters: stop contributing beyond this
+
+	// ---- Height fog (optional) ----
+	float BaseHeight; // meters
+	float HeightFalloff; // 1/meters (0 disables)
+	float HeightFogStart; // meters above baseHeight where falloff starts (0 ok)
+	float _pad2;
+
+	// ---- Temporal / jitter ----
+	float TemporalAlpha; // 0..1 (EMA weight of history)
+	float HistoryRejectThreshold; // threshold for rejecting history (T or radiance)
+	float JitterStrength; // 0..1 (froxel t jitter)
+	float _pad3;
 };
 
 #endif // HLSL_STRUCTURES_HLSLI

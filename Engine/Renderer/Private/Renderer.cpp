@@ -468,6 +468,10 @@ namespace shz
 			frameCB->InvProj = view.ProjMatrix.Inversed();
 			frameCB->InvViewProj = view.ViewProjMatrix.Inversed();
 
+			frameCB->PrevView = view.PrevViewMatrix;
+			frameCB->PrevProj = view.PrevProjMatrix;
+			frameCB->PrevViewProj = view.PrevViewProjMatrix;
+
 			frameCB->FrustumPlanesWS[0] = frustumMain.NearPlane;
 			frameCB->FrustumPlanesWS[1] = frustumMain.FarPlane;
 			frameCB->FrustumPlanesWS[2] = frustumMain.TopPlane;

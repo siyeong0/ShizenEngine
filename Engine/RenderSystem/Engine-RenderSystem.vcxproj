@@ -164,6 +164,7 @@
     <ClInclude Include="Public\ContactShadowSystem.h" />
     <ClInclude Include="Public\ShadowSystem.h" />
     <ClInclude Include="Public\TerrainSystem.h" />
+    <ClInclude Include="Public\VolumetricFogSystem.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -184,6 +185,7 @@
     <ClCompile Include="Private\ContactShadowSystem.cpp" />
     <ClCompile Include="Private\ShadowSystem.cpp" />
     <ClCompile Include="Private\TerrainSystem.cpp" />
+    <ClCompile Include="Private\VolumetricFogSystem.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

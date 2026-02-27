@@ -1064,7 +1064,7 @@ namespace shz
 			//m_Camera.SetPos(float3(0.0f, m_pTerrainSystem->SampleWorldHeight(0.0f, 0.0f) + 1.0f, 0.0f));
 			//m_Camera.SetRotation(0.0f, 0.0f);
 
-			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f }); // 845.0f, m_pTerrainSystem->SampleWorldHeight(845.0f, -2014.0f) + 1.0f, -2014.0f
+			m_Camera.SetPos({ 477.0f, 360.0f, -2227.0f });
 			m_Camera.SetRotation(-8.3f, -0.1f);
 
 			m_Camera.SetMoveSpeed(3.0f);

@@ -22,6 +22,7 @@
 #include "Engine/RenderSystem/Public/GrassSystem.h"
 #include "Engine/RenderSystem/Public/TerrainSystem.h"
 #include "Engine/RenderSystem/Public/InteractionSystem.h"
+#include "Engine/RenderSystem/Public/VolumetricFogSystem.h"
 
 namespace shz
 {
@@ -67,9 +68,9 @@ namespace shz
 		std::unique_ptr<PhysicsSystem> m_pPhysicsSystem;
 
 		std::unique_ptr<TerrainSystem> m_pTerrainSystem;
-
 		std::unique_ptr<GrassSystem> m_pGrassSystem;
 		std::unique_ptr<InteractionSystem> m_pInteractionSystem;
+		std::unique_ptr<VolumetricFogSystem> m_pVolumetricFogSystem;
 
 		ViewportState m_Viewport = {};
 		ViewFamily m_ViewFamily = {};
@@ -81,6 +82,7 @@ namespace shz
 		float m_Speed = 3.0f;
 
 		hlsl::GrassRenderConstants m_GrassSettings;
+		hlsl::FogConstants m_FogSettings;
 
 		// Profiling
 		double m_UpdateMs = 0.0;
