@@ -1,10 +1,3 @@
-// ============================================================================
-// GrassCrossPlane_ImpostorFixedView.ps.hlsl
-// - Cross plane PS that samples *impostor atlas* material inputs
-// - Uses a single fixed impostor view index (36)
-// - Keeps your drying/erosion + root blend + velocity outputs
-// ============================================================================
-
 #define ADDITIONAL_PS_IN_FIELDS \
     PS_IN_FIELD(float, Height01, 0)
 
@@ -18,32 +11,45 @@
 // -----------------------------------------------------------------------------
 static const uint SHZ_IMPOSTOR_FIXED_VIEW_INDEX = 36u;
 
-// Edge distance for erosion (your existing workflow)
+// Edge distance for erosion (local UV space)
 Texture2D<float> g_EdgeDistance;
 
 // Drying only control
 static const float DRY_PHASE_END = 0.6;
 
-// Fallbacks (use g_GrassCB.* if you have them)
+// Fallbacks
 static const float SHZ_EROSION_NOISE_AMOUNT_FALLBACK = 0.12;
 
 // Height ramp for drying influence
 static const float SHZ_DRY_HEIGHT0 = 0.05;
 static const float SHZ_DRY_HEIGHT1 = 0.15;
 
+float3 NormalOS_To_WS(float3 nOS, float3 nWS, float3 tWS)
+{
+	nWS = NormalizeSafe3(nWS, float3(0, 1, 0));
+	tWS = NormalizeSafe3(tWS, float3(1, 0, 0));
+	float3 bWS = NormalizeSafe3(cross(nWS, tWS), float3(0, 0, 1));
+
+    // Ensure orthonormality (Gram-Schmidt)
+	tWS = NormalizeSafe3(tWS - nWS * dot(tWS, nWS), float3(1, 0, 0));
+	bWS = NormalizeSafe3(cross(nWS, tWS), float3(0, 0, 1));
+
+    // nOS components are along (T, B, N)
+	float3 outWS = nOS.x * tWS + nOS.y * bWS + nOS.z * nWS;
+	return NormalizeSafe3(outWS, nWS);
+}
+
 float3 DitherNormalWS(float3 normalWS, float2 uv, float strength)
 {
 	float n = frac(sin(dot(uv * 173.3, float2(12.9898, 78.233))) * 43758.5453);
 
-    // -1~1
-	float a = n * 6.2831853; // angle
+	float a = n * PI * 2.0; // angle
 	float r = (n * 2.0 - 1.0) * strength;
 
 	float3 up = abs(normalWS.y) < 0.999 ? float3(0, 1, 0) : float3(1, 0, 0);
 	float3 t = normalize(cross(up, normalWS));
 	float3 b = cross(normalWS, t);
 
-    // cone perturb
 	float3 perturbed =
         normalWS +
         t * (cos(a) * r) +
@@ -57,10 +63,11 @@ BASE_PS_MAIN_ENTRY()
 	float4 svPos = GET_PSIN_POS();
 	float4 currClip = GET_PSIN_CURR_CLIP();
 	float4 prevClip = GET_PSIN_PREV_CLIP();
+
 	float3 worldPos = GET_PSIN_WORLD_POS();
 	float2 uvLocal = GET_PSIN_UV(); // local 0..1 on the card
-	float3 normalWS = -GET_PSIN_WORLD_NORMAL();
-	float3 tangentWS = GET_PSIN_WORLD_TANGENT();
+	float3 cardN_WS = -GET_PSIN_WORLD_NORMAL();
+	float3 cardT_WS = -GET_PSIN_WORLD_TANGENT();
 
 	float2 currUV = ClipToUV(currClip);
 	float2 prevUV = ClipToUV(prevClip);
@@ -70,9 +77,8 @@ BASE_PS_MAIN_ENTRY()
     // -------------------------------------------------------------------------
     // Material from impostor atlas (fixed view)
     // -------------------------------------------------------------------------
-	
 	float2 uvAtlas = AtlasTileUV(uvLocal, SHZ_IMPOSTOR_FIXED_VIEW_INDEX);
-	
+
 	float3 baseColor = GetBaseColor(uvAtlas);
 	float alpha = GetOpacity(uvAtlas);
 
@@ -85,8 +91,17 @@ BASE_PS_MAIN_ENTRY()
 	float ao = GetAmbientOcclusion(uvAtlas);
 	float3 emissive = GetEmissive(uvAtlas);
 
-	normalWS = normalize(normalWS + float3(0, 1, 0) * 0.25);
-	normalWS = DitherNormalWS(normalWS, worldPos.xz, 0.15);
+    // -------------------------------------------------------------------------
+    // Normal: ObjectSpace(from atlas) -> WorldSpace(using card basis)
+    // -------------------------------------------------------------------------
+	float3 normalOS = UnpackNormal01(g_NormalTex.Sample(g_LinearClampSampler, uvAtlas).rgb); // -1..1
+
+    // Convert OS->WS using card basis (T,B,N)
+	float3 normalWS = NormalOS_To_WS(normalOS, cardN_WS, cardT_WS);
+
+    // Optional artistic bias (keep your original "uplift" + dither)
+	normalWS = normalize(normalWS + float3(0, 1, 0) * 0.40);
+	normalWS = DitherNormalWS(normalWS, worldPos.xz, 0.35);
 
     // -------------------------------------------------------------------------
     // Erosion signal => color only (uses edge-distance in *local UV* space)

@@ -5,8 +5,18 @@
 #include "GrassCommon.hlsli"
 
 StructuredBuffer<uint> g_SpeciesLodOffsets;
-
 StructuredBuffer<GrassCrossPlaneInstance> g_GrassInstances;
+
+static const float SHZ_PI = 3.14159265359;
+static const float SHZ_TWO_PI = 6.28318530718;
+
+float WrapAnglePI(float a)
+{
+	a = fmod(a + SHZ_PI, SHZ_TWO_PI);
+	if (a < 0)
+		a += SHZ_TWO_PI;
+	return a - SHZ_PI;
+}
 
 BASE_VS_MAIN_ENTRY(InstanceID)
 {
@@ -38,13 +48,49 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 
 	float pressHard = smoothstep(0.05f, 0.25f, saturate(press));
 	float keepBase = 1.0f - pressHard;
-
+	
 	// Yaw only (geometry orientation)
 	p = ApplyYaw(p, yaw);
 	n = ApplyYaw(n, yaw);
 	t = ApplyYaw(t, yaw);
+	
+	// Camera elevation-based pitch tilt 
+	{
+		float3 camPosWS = g_FrameCB.CameraPosition.xyz;
 
-	// Tip weight (drive wind/interaction to affect tip more than root)
+		float3 v = camPosWS - posWS;
+		float vLen2 = dot(v, v);
+		if (vLen2 > EPS)
+		{
+			float3 viewDirWS = v * rsqrt(vLen2);
+			float3 upWS = float3(0, 1, 0);
+
+			float3 viewDirXZ = float3(viewDirWS.x, 0.0f, viewDirWS.z);
+			float xzLen2 = dot(viewDirXZ, viewDirXZ);
+
+			if (xzLen2 > 1e-6f)
+			{
+				viewDirXZ *= rsqrt(xzLen2);
+
+				float3 tiltAxisWS = NormalizeSafe3(cross(upWS, viewDirXZ), float3(1, 0, 0));
+
+				float elev = asin(clamp(viewDirWS.y, -1.0f, 1.0f));
+				float a01 = saturate(abs(elev) / (0.5f * PI)); // 0..1
+
+				const float tiltMax = 1.0;
+				float tilt = tiltMax * a01;
+
+				float s = (viewDirWS.y >= 0.0f) ? 1.0f : -1.0f;
+
+				// Apply to position only
+				p = RotateAroundAxis(p, tiltAxisWS, -tilt * s);
+				//n = RotateAroundAxis(n, tiltAxisWS, -tilt * s);
+				//t = RotateAroundAxis(t, tiltAxisWS, -tilt * s);
+			}
+		}
+	}
+
+	// Tip weight
 	float height01 = saturate(vertexPosition.y);
 	float wTip = height01 * height01;
 	wTip = wTip * wTip;
@@ -68,9 +114,7 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 		wTip,
 		seed8);
 
-	// -------------------------------------------------------------------------
-	// Flatten to ground (interaction) - affects geometry, NOT UV
-	// -------------------------------------------------------------------------
+	// Flatten to ground (interaction) - geometry only
 	float3 root = float3(0.0f, 0.0f, 0.0f);
 
 	float targetFlat = max(g_GrassCB.InteractionBendAngle, 0.0f);
@@ -85,9 +129,10 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 
 	p.y -= pressHard * g_GrassCB.InteractionSink;
 
-	// World translate & output
+	// World translate
 	p += posWS;
 
+	// Output
 	float3 worldNormal = NormalizeSafe3(n, float3(0.0f, 1.0f, 0.0f));
 	float3 worldTangent = NormalizeSafe3(t, float3(1.0f, 0.0f, 0.0f));
 
@@ -95,6 +140,5 @@ BASE_VS_MAIN_ENTRY(InstanceID)
 	SET_VSOUT_UV(vertexUV);
 	SET_VSOUT_WORLD_NORMAL(worldNormal);
 	SET_VSOUT_WORLD_TANGENT(worldTangent);
-	
 	SET_VSOUT_ADDITIONAL(Height01, height01);
 }
