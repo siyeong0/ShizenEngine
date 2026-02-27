@@ -380,6 +380,11 @@ struct FogConstants
 	float HistoryRejectThreshold; // threshold for rejecting history (T or radiance)
 	float JitterStrength; // 0..1 (froxel t jitter)
 	float _pad3;
+	
+	float HistoryClampExpand; // e.g. 0.02 ~ 0.08
+	float TemporalVelocityScale; // e.g. 400.0
+	float _pad4;
+	float _pad5;
 };
 
 #endif // HLSL_STRUCTURES_HLSLI

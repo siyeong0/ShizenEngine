@@ -75,7 +75,9 @@ namespace shz
 
 			fogCB.TemporalAlpha = 0.12f;
 			fogCB.HistoryRejectThreshold = 0.20f;
-			fogCB.JitterStrength = 0.35f; // 0.25~0.55
+			fogCB.JitterStrength = 0.35f;
+			fogCB.HistoryClampExpand = 0.04f;
+			fogCB.TemporalVelocityScale = 400.0f;
 
 			renderer.UpdateBuffer(STRING_HASH("FogConstantsCB"), fogCB);
 		}

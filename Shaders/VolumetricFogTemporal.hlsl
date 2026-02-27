@@ -1,9 +1,9 @@
 #include "VolumetricFogCommon.hlsli"
 
-Texture3D<float4> g_Integrated; // curr (rgb=L, a=T)
-Texture3D<float4> g_HistoryPrev; // prev history (rgb=L, a=T)
+Texture3D<float4> g_Integrated; // curr (rgb=L, a=T or sigma-integrated output)
+Texture3D<float4> g_HistoryPrev; // prev history (rgb=L, a=...)
 
-RWTexture3D<float4> g_OutFinal; // final (rgb=L, a=T)
+RWTexture3D<float4> g_OutFinal; // final (rgb=L, a=...)
 RWTexture3D<float4> g_HistoryCurr; // store history
 
 // ------------------------------------------------------------
@@ -28,12 +28,26 @@ float ComputeViewZFromWorld(float3 worldPos, float4x4 view)
 	return max(vp.z, 1e-4);
 }
 
-float4 HistoryRejectFilter(float4 curr, float4 prev, float thr)
+bool OutOf01(float2 uv)
 {
-	if (abs(curr.a - prev.a) > thr)
-		return curr;
+	return any(uv < 0.0) || any(uv > 1.0);
+}
 
+// Depth/Extinction-based reject (네가 prev.a에 뭘 저장하는지에 따라 thr 튜닝)
+float4 HistoryRejectFilter(float4 curr, float4 prev, float thrA)
+{
+	if (abs(curr.a - prev.a) > thrA)
+		return curr;
 	return prev;
+}
+
+// Velocity-adaptive alpha: 움직임 클수록 history 덜 믿기
+float ComputeAdaptiveAlpha(float baseAlpha, float2 uvCurr, float2 uvPrev, float velScale)
+{
+	float2 v = (uvCurr - uvPrev);
+	float vel = length(v); // in UV units
+	float k = exp(-vel * velScale); // 0..1
+	return saturate(baseAlpha * k);
 }
 
 [numthreads(8, 8, 1)]
@@ -45,23 +59,21 @@ void main(uint3 tid : SV_DispatchThreadID)
 	if (tid.x >= w || tid.y >= h || tid.z >= z)
 		return;
 
-	const float3 uvw = FroxelUVW(tid, w, h, z);
+	float3 uvw = FroxelUVW(tid, w, h, z);
 
-	// Current sample
+    // Current sample
 	float4 curr = g_Integrated.SampleLevel(g_LinearClampSampler, uvw, 0);
 
-	// ------------------------------------------------------------
-	// Reproject: current froxel center -> world -> prev UV + prev T
-	// ------------------------------------------------------------
-	const float2 uvCurr = uvw.xy;
-	const float tCurr = uvw.z;
+    // -------------------------------------------------------------------------
+    // Reproject: current froxel center -> world -> prev UV + prev T
+    // -------------------------------------------------------------------------
+	float2 uvCurr = uvw.xy;
+	float tCurr = uvw.z;
 
 	float3 worldPos = WorldPosFromFroxel(uvCurr, tCurr);
 
-	// Prev clip position
 	float4 prevClip = mul(float4(worldPos, 1.0), g_FrameCB.PrevViewProj);
 
-	// Behind camera or invalid
 	if (prevClip.w <= 1e-6)
 	{
 		g_OutFinal[tid] = curr;
@@ -72,21 +84,15 @@ void main(uint3 tid : SV_DispatchThreadID)
 	float2 prevNDC = prevClip.xy / prevClip.w;
 	float2 prevUV = prevNDC * 0.5 + 0.5;
 
-	// Screen clamp/reject
-	// - clamp로 가면 테두리 smear가 생기고,
-	// - reject로 가면 빠른 이동에서 약간 noise가 생김.
-	// 보통 reject가 더 안전.
-	if (any(prevUV < 0.0) || any(prevUV > 1.0))
+	if (OutOf01(prevUV))
 	{
 		g_OutFinal[tid] = curr;
 		g_HistoryCurr[tid] = curr;
 		return;
 	}
 
-	// Prev viewZ -> prevT
 	float prevViewZ = ComputeViewZFromWorld(worldPos, g_FrameCB.PrevView);
 
-	// MaxDistance 적용(Scatter/Integrate에서 이미 했더라도 temporal에서 한 번 더 방어)
 	if (g_FogCB.MaxDistance > 0.0 && prevViewZ >= g_FogCB.MaxDistance)
 	{
 		g_OutFinal[tid] = curr;
@@ -95,9 +101,6 @@ void main(uint3 tid : SV_DispatchThreadID)
 	}
 
 	float prevT = TFromViewZ(prevViewZ);
-
-	// Volume bounds
-	// (t는 0..1이지만, log mapping 때문에 near 근처에서 민감할 수 있음)
 	if (prevT < 0.0 || prevT > 1.0)
 	{
 		g_OutFinal[tid] = curr;
@@ -105,14 +108,38 @@ void main(uint3 tid : SV_DispatchThreadID)
 		return;
 	}
 
-	// Sample history with reprojection coords
 	float4 prev = g_HistoryPrev.SampleLevel(g_LinearClampSampler, float3(prevUV, prevT), 0);
 
-	// History reject
+    // -------------------------------------------------------------------------
+    // Reject (depth/σT)
+    // -------------------------------------------------------------------------
 	prev = HistoryRejectFilter(curr, prev, g_FogCB.HistoryRejectThreshold);
 
-	// EMA blend
-	float alpha = saturate(g_FogCB.TemporalAlpha);
+    // -------------------------------------------------------------------------
+    // Neighborhood clamp (variance clip)
+    // - clamp history inside current neighborhood range to suppress shimmer/smear
+    // -------------------------------------------------------------------------
+	float2 invWH = 1.0 / float2(w, h);
+	float invZ = 1.0 / (float) z;
+
+	float3 nMinRGB, nMaxRGB;
+	float nMinA, nMaxA;
+	GatherNeighborhoodMinMax_3x3x1(
+        g_Integrated, g_LinearClampSampler, uvw, invWH, invZ,
+        nMinRGB, nMaxRGB, nMinA, nMaxA);
+
+    // Expand clamp box a bit
+	prev = NeighborhoodClampHistory(prev, nMinRGB, nMaxRGB, nMinA, nMaxA, g_FogCB.HistoryClampExpand);
+
+    // -------------------------------------------------------------------------
+    // Velocity-adaptive EMA alpha
+    // - fast camera motion -> reduce history weight
+    // -------------------------------------------------------------------------
+	float baseAlpha = saturate(g_FogCB.TemporalAlpha);
+
+    // velScale: 튜닝 포인트 (UV 기준). 보통 200~800 사이가 무난.
+	float alpha = ComputeAdaptiveAlpha(baseAlpha, uvCurr, prevUV, g_FogCB.TemporalVelocityScale);
+
 	float4 outv = lerp(curr, prev, alpha);
 
 	g_OutFinal[tid] = outv;

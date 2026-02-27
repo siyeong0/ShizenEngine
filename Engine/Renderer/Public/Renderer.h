@@ -115,6 +115,8 @@ namespace shz
 		bool Initialize(const RendererCreateInfo& createInfo);
 		void Cleanup();
 
+		void InstallPasses();
+
 		void BeginFrame();
 		void Render(RenderScene& scene, const ViewFamily& viewFamily);
 		void EndFrame();

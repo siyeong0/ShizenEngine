@@ -13,18 +13,39 @@ void main(uint3 tid : SV_DispatchThreadID)
 	if (tid.x >= w || tid.y >= h || tid.z >= z)
 		return;
 
+	// -------------------------------------------------------------------------
+	// 1) Base UV at froxel center
+	// -------------------------------------------------------------------------
 	float2 uv = (float2(tid.x, tid.y) + 0.5) / float2(w, h);
 
-	// Slice center in t-space
-	float tCenter = ((float) tid.z + 0.5) / (float) z;
-
-	// Per-froxel jitter on t to reduce banding (temporal helps)
+	// -------------------------------------------------------------------------
+	// 2) Frame jitter (Halton) in UV space
+	//    - This is the big stabilizer: "frame-regular" jitter like TAA
+	//    - Strength unit: pixels
+	// -------------------------------------------------------------------------
 	if (g_FogCB.JitterStrength > 0.0)
 	{
-		uint seed = tid.x * 73856093u ^ tid.y * 19349663u ^ tid.z * 83492791u ^ (uint) g_FrameCB.FrameIndex;
-		float j = HashToUNorm01(seed) - 0.5;
-		tCenter += j * (g_FogCB.JitterStrength / (float) z);
-		tCenter = saturate(tCenter);
+		float2 j01 = GetHaltonJitter01(g_FrameCB.FrameIndex);
+		float2 jUV = (j01 * g_FogCB.JitterStrength) / float2(w, h);
+		uv += jUV;
+		uv = saturate(uv);
+	}
+
+	// -------------------------------------------------------------------------
+	// 3) Slice center in t-space
+	// -------------------------------------------------------------------------
+	float tCenter = ((float) tid.z + 0.5) / (float) z;
+
+	// -------------------------------------------------------------------------
+	// 4) Per-froxel jitter on t (spatial noise)
+	//    - Reduces banding within the volume grid
+	//    - Keep it smaller than 1 slice
+	// -------------------------------------------------------------------------
+	if (g_FogCB.JitterStrength > 0.0)
+	{
+		float n = InterleavedGradientNoise(float2(tid.xy) + 0.5, g_FrameCB.FrameIndex); // [0..1)
+		float jt = (n - 0.5) * (g_FogCB.JitterStrength / (float) z);
+		tCenter = saturate(tCenter + jt);
 	}
 
 	float viewZ = ViewZFromT(tCenter);
@@ -42,12 +63,10 @@ void main(uint3 tid : SV_DispatchThreadID)
 	float density = ComputeFogDensity(worldPos);
 
 	// Extinction/scattering coefficients
-	// sigmaT = density * ExtinctionScale
 	float sigmaT = density * g_FogCB.ExtinctionScale;
-	// sigmaS = sigmaT * Albedo  (stable, physically interpretable)
 	float sigmaS = sigmaT * saturate(g_FogCB.Albedo);
 
-	// Directional light (your FrameCB convention)
+	// Directional light (FrameCB convention)
 	float3 L = normalize(-g_FrameCB.LightDirWS);
 
 	// View direction at cell (towards camera)
@@ -57,7 +76,7 @@ void main(uint3 tid : SV_DispatchThreadID)
 	float cosTheta = dot(L, -V);
 	float phase = PhaseHG(cosTheta, saturate(g_FogCB.AnisotropyG));
 
-	// Shadow visibility (same as Lighting.psh)
+	// Shadow visibility
 	float3 ddxWP = 0;
 	float3 ddyWP = 0;
 	float3 viewPos = mul(float4(worldPos, 1.0), g_FrameCB.View).xyz;
@@ -65,7 +84,7 @@ void main(uint3 tid : SV_DispatchThreadID)
 	FilteredShadow sh = FilterShadowMapCSM(worldPos, ddxWP, ddyWP, viewPos.z, true);
 	float vis = sh.LightAmount;
 
-	// Light radiance (주의: 너 Lighting.psh에서 LightColor^2 쓰는 이유가 sRGB->linear이면 OK)
+	// Light radiance (if LightColor is sRGB packed, squaring is one hacky way)
 	float3 lightRadiance = g_FrameCB.LightColor * g_FrameCB.LightColor * g_FrameCB.LightIntensity;
 
 	// Scatter per unit length (radiance density)

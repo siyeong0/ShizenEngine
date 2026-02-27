@@ -306,15 +306,6 @@ namespace shz
 		m_pContactShadowSystem->Initialize(*this);
 		m_pAmbientOcclusionSystem->Initialize(*this);
 
-		m_pDepthPrepassSystem->InstallPasses(*this);
-		m_pGBufferSystem->InstallPasses(*this);
-		m_pShadowSystem->InstallPasses(*this);
-		m_pLightingSystem->InstallPasses(*this);
-		m_pPostProcessSystem->InstallPasses(*this);
-		m_pIndirectArgsSystem->InstallPasses(*this);
-		m_pContactShadowSystem->InstallPasses(*this);
-		m_pAmbientOcclusionSystem->InstallPasses(*this);
-
 		Material::RegisterTemplateLibrary(&m_TemplateLibrary);
 		RegisterMaterialTemplate("DefaultLit", "GBuffer.vsh", "GBuffer.psh", MATERIAL_BLEND_MODE_MASKED);
 
@@ -358,6 +349,18 @@ namespace shz
 		m_pImmediateContext.Release();
 		m_pDeferredContexts.clear();
 		m_pDevice.Release();
+	}
+
+	void Renderer::InstallPasses()
+	{
+		m_pDepthPrepassSystem->InstallPasses(*this);
+		m_pGBufferSystem->InstallPasses(*this);
+		m_pShadowSystem->InstallPasses(*this);
+		m_pLightingSystem->InstallPasses(*this);
+		m_pPostProcessSystem->InstallPasses(*this);
+		m_pIndirectArgsSystem->InstallPasses(*this);
+		m_pContactShadowSystem->InstallPasses(*this);
+		m_pAmbientOcclusionSystem->InstallPasses(*this);
 	}
 
 	void Renderer::BeginFrame()

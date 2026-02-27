@@ -918,6 +918,7 @@ namespace shz
 				}
 			}
 
+			m_pRenderer->InstallPasses();
 			m_pInteractionSystem->InstallPasses(*m_pRenderer, *m_pTerrainSystem);
 			m_pGrassSystem->InstallPasses(*m_pRenderer, *m_pRenderScene, *m_pInteractionSystem);
 			m_pVolumetricFogSystem->InstallPasses(*m_pRenderer);
@@ -1353,6 +1354,8 @@ namespace shz
 				m_FogSettings.TemporalAlpha = 0.12f;
 				m_FogSettings.HistoryRejectThreshold = 0.20f;
 				m_FogSettings.JitterStrength = 0.35f;
+				m_FogSettings.HistoryClampExpand = 0.04f;
+				m_FogSettings.TemporalVelocityScale = 400.0f;
 			};
 
 			if (!s_InitFogDefaults)
@@ -1413,8 +1416,10 @@ namespace shz
 				ImGui::SliderFloat("TemporalAlpha##Fog", &m_FogSettings.TemporalAlpha, 0.0f, 0.5f, "%.3f");
 				ImGui::SliderFloat("HistoryReject##Fog", &m_FogSettings.HistoryRejectThreshold, 0.0f, 1.0f, "%.3f");
 				ImGui::SliderFloat("JitterStrength##Fog", &m_FogSettings.JitterStrength, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("HistoryClampExpand##Fog",&m_FogSettings.HistoryClampExpand,0.0f, 0.1f, "%.3f");
+				ImGui::SliderFloat("TemporalVelocityScale##Fog",&m_FogSettings.TemporalVelocityScale,0.0f, 1200.0f, "%.1f");
 
-				ImGui::TextDisabled("Tip: TemporalAlpha 0.08~0.15, Reject 0.15~0.30, Jitter 0.4~0.7.");
+				ImGui::TextDisabled("Tip: Alpha 0.08~0.15, Reject 0.15~0.30, Jitter 0.4~0.7, Clamp 0.02~0.06, VelScale 300~800.");
 			}
 		}
 		ImGui::End();

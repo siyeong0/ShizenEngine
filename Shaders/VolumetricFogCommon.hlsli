@@ -17,7 +17,7 @@ float GetCameraNear()
 }
 float GetCameraFar()
 {
-	return max(g_FrameCB.FarPlane, GetCameraNear() + 1.0);
+	return min(g_FogCB.MaxDistance, g_FrameCB.FarPlane);
 }
 
 // Exponential distribution: viewZ(t) = near * (far/near)^t
@@ -87,6 +87,92 @@ float ComputeFogDensity(float3 worldPos)
 	}
 
 	return max(density, 0.0);
+}
+
+// Returns [-0.5..0.5] jitter in pixels (you scale by strength and divide by resolution)
+float2 GetHaltonJitter01(uint frameIndex)
+{
+	float2 h = HALTON_SEQUENCE[frameIndex & (MAX_HALTON_SEQUENCE - 1)];
+	return (h - 0.5); // [-0.5..0.5]
+}
+
+// -----------------------------------------------------------------------------
+// Interleaved gradient noise (stable, cheap) -> [0..1)
+// Good for per-froxel jitter
+// -----------------------------------------------------------------------------
+float InterleavedGradientNoise(float2 pix, uint frame)
+{
+    // Common tiny hash; stable and fast
+	float3 p = float3(pix, (float) frame);
+	float n = frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+	return n;
+}
+
+// -----------------------------------------------------------------------------
+// Neighborhood clamp (variance clip) for temporal stabilization
+// - Compute min/max in a small neighborhood of CURRENT volume
+// - Clamp history to [min,max] to prevent history from drifting/smearing
+// -----------------------------------------------------------------------------
+void GatherNeighborhoodMinMax_3x3x1(
+    Texture3D<float4> tex,
+    SamplerState samp,
+    float3 uvw,
+    float2 invWH,
+    float invZ,
+    out float3 outMinRGB,
+    out float3 outMaxRGB,
+    out float outMinA,
+    out float outMaxA)
+{
+	outMinRGB = float3(1e9, 1e9, 1e9);
+	outMaxRGB = float3(-1e9, -1e9, -1e9);
+	outMinA = 1e9;
+	outMaxA = -1e9;
+
+    // 3x3 in XY, same Z (cheap + 효과 좋음)
+    [unroll]
+	for (int oy = -1; oy <= 1; ++oy)
+	{
+        [unroll]
+		for (int ox = -1; ox <= 1; ++ox)
+		{
+			float3 u = uvw;
+			u.x += (float) ox * invWH.x;
+			u.y += (float) oy * invWH.y;
+
+			float4 v = tex.SampleLevel(samp, u, 0);
+			outMinRGB = min(outMinRGB, v.rgb);
+			outMaxRGB = max(outMaxRGB, v.rgb);
+			outMinA = min(outMinA, v.a);
+			outMaxA = max(outMaxA, v.a);
+		}
+	}
+}
+
+float4 NeighborhoodClampHistory(
+    float4 history,
+    float3 minRGB, float3 maxRGB,
+    float minA, float maxA,
+    float clampExpand) // e.g. 0.02~0.08
+{
+    // Expand a little to avoid over-clamping (sparkle)
+	float3 center = 0.5 * (minRGB + maxRGB);
+	float3 halfR = 0.5 * (maxRGB - minRGB);
+	halfR += clampExpand;
+
+	float aCenter = 0.5 * (minA + maxA);
+	float aHalf = 0.5 * (maxA - minA) + clampExpand;
+
+	float3 lo = center - halfR;
+	float3 hi = center + halfR;
+
+	float alo = aCenter - aHalf;
+	float ahi = aCenter + aHalf;
+
+	float4 outv = history;
+	outv.rgb = clamp(outv.rgb, lo, hi);
+	outv.a = clamp(outv.a, alo, ahi);
+	return outv;
 }
 
 #endif // HLSL_VOLUMETRIC_FOG_COMMON_HLSLI
